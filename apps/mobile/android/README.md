@@ -45,7 +45,7 @@ flowchart LR
 - A frame is a `RawFrame` in I420 layout. `frames` holds the newest frame only. A frame with an odd width or height, or with fewer bytes than its size needs, is dropped with one log line.
 - While a session runs, the device of the snapshot comes from the session. After the session, it comes from the device list of the SDK again.
 - `attachMotion`, `attachInputs`, and `attachSpeech` add a capability to a started session. `touches` and `transcripts` give their data.
-- The motion samples have a thread of their own. `headSink` gets each sample with a gyroscope reading and its arrival time on that thread, with no queue. `gyro` and `motionRows` are flows for the probe: each holds 2048 samples, and a reader that is so far behind misses the newest sample. `motionHealth` gives the state of the watchdog. See "Head gestures".
+- The motion samples have a thread of their own. `headSink` gets each sample with a gyroscope reading and its arrival time on that thread. `gyro` and `motionRows` are flows for the probe: each holds 2048 samples, and a reader that is so far behind misses the newest sample. `motionHealth` gives the state of the watchdog. See "Head gestures".
 - A capability that stops with no request from the app starts again 750 ms later, at most 3 times in a row, and only if the session still runs then. `Revival` in `core` holds the count.
 - Motion that runs and gives no sample for 10 seconds is stopped and started again. See "Head gestures".
 - A stop waits until the stream is 1 second old. A stop at the start of a stream ended the app process in the video decoder of the SDK (DAT 1.0.1).
@@ -310,11 +310,13 @@ No recording of a real nod with these glasses exists yet. Each number below come
 
 ```mermaid
 flowchart TD
-    Sdk[Motion of the DAT SDK: 30 Hz, keeps 256 samples] --> Collector[Collector on the motion thread, in DatLink]
-    Collector --> Stats[MotionStats: one log line each 3 s]
-    Collector --> Dog[MotionWatchdog: FLOWING or STALLED]
-    Collector --> Flows[gyro and motionRows for the probe: 2048 samples each]
-    Collector --> Head[HeadInput]
+    Sdk[Motion of the DAT SDK: 30 Hz, keeps 256 samples] --> Collector[Collector in DatLink: notes the arrival time]
+    Collector --> Queue[Queue with no limit]
+    Queue --> Thread[Motion thread]
+    Thread --> Stats[MotionStats: one log line each 3 s]
+    Thread --> Dog[MotionWatchdog: FLOWING or STALLED]
+    Thread --> Flows[gyro and motionRows for the probe: 2048 samples each]
+    Thread --> Head[HeadInput]
     Head --> Clock[GlassesClock: the time of the sample on the phone clock]
     Clock --> Window{Taken after the line of the prompt ended, and inside the head window?}
     Window -- no --> Ignored[Ignored]
@@ -328,8 +330,10 @@ flowchart TD
 
 ### The path of a sample
 
-- The collector of `Motion.samples` runs on one thread of its own, the motion thread. It calls `HeadInput` for each sample, in the order of the SDK, with no queue between them.
-- The SDK keeps 256 samples and drops the oldest one when its reader is behind (DAT 1.0.1, read in the classes of the SDK). So the work for one sample is short: some sums, and a log line only for a decision.
+- The SDK keeps 256 samples and drops the oldest one when its reader is behind (DAT 1.0.1, read in the classes of the SDK). After a stall it gives more than 256 samples at once.
+- So the collector of `Motion.samples` does one thing on a background thread: it puts each sample with its arrival time into a queue with no limit.
+- The motion thread takes the samples from the queue, in the order of the SDK, and calls `HeadInput` for each one. The app drops no sample on this path.
+- If the SDK drops samples before the collector takes them, the step between two sample times shows it: see `timeGapMs` in "Log lines".
 - Before this change the app kept 64 samples and the main thread read them. After a stall the glasses send hundreds of samples at once, so the app lost samples.
 - `gyro` and `motionRows` are for the probe. A sample that one of them cannot take counts as `dropped` in the log line of the motion samples.
 - The answer of `HeadInput` goes to the main thread, which sends the intent.

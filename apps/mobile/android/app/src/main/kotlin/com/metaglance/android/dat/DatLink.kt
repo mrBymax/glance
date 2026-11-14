@@ -82,6 +82,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -161,7 +162,7 @@ class DatLink(
 
     /**
      * Gets each motion sample with a gyroscope reading, and the phone time at which it arrived. It runs on the
-     * motion thread, in the order of the SDK, with no queue between the SDK and this call. So it must return fast.
+     * motion thread, in the order of the SDK.
      */
     @Volatile
     var headSink: ((HeadSample, Long) -> Unit)? = null
@@ -177,8 +178,7 @@ class DatLink(
         private set
     private var stillCaptures = 0
 
-    // One thread, so the samples keep their order. The work for one sample is short: the SDK keeps 256 samples and
-    // drops the oldest one when its reader is behind.
+    // One thread, so the samples keep their order.
     private val motionThread = Dispatchers.Default.limitedParallelism(1)
 
     @Volatile
@@ -560,6 +560,9 @@ class DatLink(
         _faults.tryEmit(DatFault(area, name))
     }
 
+    /** A motion sample with the phone time at which the collector got it. */
+    private class ArrivedSample(val sample: MotionSample, val arrivalMs: Long)
+
     private fun MotionSample.toRow(): MotionRow {
         val a = accelerometer
         val g = gyroscope
@@ -622,6 +625,13 @@ class DatLink(
 
         /** True from a restart of the watchdog until Motion reports `STARTED` again. */
         private var motionRestarting = false
+
+        /**
+         * The samples between the collector and the motion thread, with no limit. The SDK keeps 256 samples and
+         * drops the oldest one when its reader is behind, and after a stall it gives more than 256 at once. So
+         * the collector only moves a sample into this queue, and the work for a sample comes after it.
+         */
+        private val arrived = Channel<ArrivedSample>(Channel.UNLIMITED)
 
         private var inputs: Inputs? = null
         private var inputsScope: CoroutineScope? = null
@@ -773,8 +783,14 @@ class DatLink(
                     motion = added
                     motionSampleCount = 0
                     // The samples flow has no replay, so its collector comes first. It subscribes on this thread,
-                    // and then it runs on the motion thread.
-                    runScope.launch(motionThread, CoroutineStart.UNDISPATCHED) { added.samples.collect { onMotionSample(it) } }
+                    // and then it runs on a background thread.
+                    runScope.launch(Dispatchers.Default, CoroutineStart.UNDISPATCHED) {
+                        added.samples.collect { sample ->
+                            val queued = arrived.trySend(ArrivedSample(sample, SystemClock.elapsedRealtime()))
+                            if (queued.isFailure) synchronized(motionLock) { motionStats.onDropped() }
+                        }
+                    }
+                    runScope.launch(motionThread) { for (item in arrived) onMotionSample(item.sample, item.arrivalMs) }
                     runScope.subscribe { added.state.collect { onMotionState(added, it) } }
                     runScope.subscribe { added.errors.collect { error -> error?.let { fault(DatFault.Area.MOTION, it) } } }
                     runScope.launch {
@@ -795,8 +811,7 @@ class DatLink(
         }
 
         // Runs on the motion thread.
-        private fun onMotionSample(sample: MotionSample) {
-            val arrivalMs = SystemClock.elapsedRealtime()
+        private fun onMotionSample(sample: MotionSample, arrivalMs: Long) {
             motionSampleCount += 1
             val gyro = sample.gyroscope?.let { GyroSample(sample.timestampNs, it.x, it.y, it.z) }
             val rowTaken = _motionRows.tryEmit(sample.toRow())
