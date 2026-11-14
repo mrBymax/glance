@@ -34,6 +34,7 @@ it('shows the section headings in the order of the page', () => {
     'One loop for every place.',
     'What you can build with it.',
     'The first demo: a store you shop with your eyes.',
+    'The same loop, in the lens.',
     'Built to be built on.',
     'Why a look and a nod.',
     'The team',
@@ -48,6 +49,19 @@ it('presents the bus ticket among the use cases, and marks only the checkout as 
   expect(within(useCases).getByRole('heading', { name: 'Buy a bus ticket' })).toBeInTheDocument();
   expect(within(useCases).getAllByText('Demo')).toHaveLength(1);
   expect(within(useCases).getByText('Demo').closest('li')).toHaveTextContent('Pay at a checkout');
+});
+
+it('shows the display mock as a still with a text alternative, and loads no frame before the section is near', () => {
+  renderPage();
+  const display = screen.getByRole('region', { name: 'The same loop, in the lens.' });
+  expect(display).toHaveTextContent('This is a mock of that display');
+  const steps = within(display).getAllByRole('listitem').map((item) => item.textContent ?? '');
+  expect(steps).toHaveLength(7);
+  expect(steps[1]).toMatch(/^Rye bread, 500 g, 2\.60 EUR\. Add to cart\?/);
+  expect(steps[2]).toMatch(/After a nod: Added: Rye bread/);
+  expect(display.querySelector('img[src*="hud-still-"]')).not.toBeNull();
+  expect(display.querySelector('iframe')).toBeNull();
+  expect(within(display).getByRole('button', { name: 'Pause the mock' })).toBeInTheDocument();
 });
 
 it('states no test dates or failures', () => {
