@@ -9,7 +9,9 @@ import com.metaglance.core.barcode.CodeRead
 import com.metaglance.core.barcode.LabelPolicy
 import com.metaglance.core.contract.BarcodeSource
 import com.metaglance.core.frame.FrameHeader
+import com.metaglance.core.image.DamageLog
 import com.metaglance.core.image.FaceResult
+import com.metaglance.core.image.FrameDamage
 import com.metaglance.core.image.FramePrep
 import com.metaglance.core.image.I420
 import com.metaglance.core.image.Pace
@@ -32,6 +34,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  * One scan of the frame gives the kiosk code and the product barcode. A barcode region that did not decode is
  * read again in a larger scale, and then with OCR for the digits under the bars. `BarcodeVote` decides when a
  * product code is reported, and `LabelPolicy` decides when a still photo must read the code.
+ *
+ * A damaged frame (`FrameDamage`) is a frame with no product code and no barcode region, because the scanner
+ * reports the blocks of such a frame as regions. It is never uploaded. Its kiosk code counts: the scan runs in
+ * each case, and a QR code that decodes to a kiosk text is not a product of the blocks.
  *
  * `gate` returns the reason to skip an upload, or null. `onKioskText` gets the full code text, for example
  * `GL1 K3X7`, when the dwell rule reports it. `onBarcode` gets a product code when the vote reports it.
@@ -61,6 +67,7 @@ class FramePipeline(
     private val labelRequested = AtomicBoolean()
     private val stillGaveCode = AtomicBoolean()
     private val picker = SharpestFramePicker<RawFrame>()
+    private val damageLog = DamageLog()
     private var seq = 0
     private var lastSkip: UploadSkip? = null
     private val failedSteps = HashSet<String>()
@@ -68,13 +75,15 @@ class FramePipeline(
     /** Call it for each frame, on one background thread. It blocks while ML Kit reads the frame. */
     fun onFrame(frame: RawFrame) {
         val nowMs = SystemClock.elapsedRealtime()
+        val damaged = FrameDamage.isDamaged(frame.i420, frame.width, frame.height)
+        damageLog.onFrame(nowMs, damaged)?.let(log)
         // The one NV21 copy of the frame. The steps for a region read the Y plane of the frame itself.
         val hits = reading("code scan", emptyList()) { scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height) }
         val kioskCodes = hits.filter { it.isQr }.mapNotNull { hit -> hit.text?.let(KioskCode::parse)?.let { SeenCode(it, hit.areaPx) } }
         dwell.onFrame(nowMs, kioskCodes)?.let { onKioskText(KioskCode.format(it)) }
-        readProduct(nowMs, frame, hits.filterNot { it.isQr })
+        readProduct(nowMs, frame, if (damaged) emptyList() else hits.filterNot { it.isQr })
 
-        val picked = picker.offer(nowMs, frame, Sharpness.of(frame.i420, frame.width, frame.height)) ?: return
+        val picked = picker.offer(nowMs, frame, Sharpness.of(frame.i420, frame.width, frame.height), damaged) ?: return
 
         val skip = gate()
         if (skip != lastSkip) {
@@ -104,6 +113,7 @@ class FramePipeline(
     fun onLabelStillCode() = stillGaveCode.set(true)
 
     fun close() {
+        log(damageLog.totalLine)
         scanner.close()
         digits.close()
     }
