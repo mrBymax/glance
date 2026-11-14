@@ -1,0 +1,7 @@
+{
+  "loop": false,
+  "lengthMs": 600000,
+  "steps": [
+    { "atMs": 1500, "forMs": 598500, "result": { "status": "identified", "productId": "oat-drink-1l" } }
+  ]
+}
