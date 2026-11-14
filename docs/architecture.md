@@ -1,5 +1,9 @@
 # Architecture
 
+## The protocol and the demo
+
+Meta Glance is a protocol with four parts: the Glance code that a place shows, the session, the spoken confirmation, and the nod. `docs/protocol.md` describes the protocol and what a place must implement. The store is the first demo of it, and the checkout of that store is the one place that exists. This file describes the store demo in detail. The part "Steps of a checkout" is the protocol at work, and each other part belongs to the store.
+
 This file describes the parts of Meta Glance that exist and work on the branch `feat/barcode-lookup`, which starts from `feat/overnight-build`. The design, with the parts that do not exist yet, is in `docs/superpowers/specs/2026-11-13-meta-glance-design.md`. The design of the barcode scan is `docs/superpowers/specs/2026-11-14-barcode-lookup-design.md`.
 
 Each name in this file is a name in the code. Each message type is a schema in `packages/shared/src`.
