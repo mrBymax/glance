@@ -160,6 +160,9 @@ class DatLink(
 
     private var initialized = false
 
+    /** Counts the calls of `initialize`. An answer to a permission check of an earlier count is out of date. */
+    private var initializeCount = 0
+
     /** True after `initialize` started the SDK, or found MockDeviceKit enabled. */
     val ready: Boolean get() = initialized
 
@@ -178,6 +181,7 @@ class DatLink(
      */
     fun initialize(bluetoothGranted: Boolean) {
         val mock = MockDeviceKit.getInstance(app).isEnabled
+        initializeCount += 1
         _snapshot.update { it.copy(bluetoothGranted = bluetoothGranted, mock = mock) }
         if (!mock) {
             if (!bluetoothGranted) {
@@ -232,8 +236,12 @@ class DatLink(
     /** Reads the camera permission and the microphone permission from the SDK. */
     suspend fun refreshPermissions() {
         if (!requireInitialized("permissions")) return
+        val count = initializeCount
         for (permission in Permission.entries) {
-            onPermissionResult(permission, Wearables.checkPermissionStatus(permission))
+            val result = Wearables.checkPermissionStatus(permission)
+            // The check suspends. A change between mock glasses and the SDK in that time makes its answer wrong.
+            if (count != initializeCount) return
+            onPermissionResult(permission, result)
         }
     }
 
