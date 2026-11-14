@@ -51,6 +51,14 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
 
         /** 0 while no stroke is open. */
         var dir = 0
+
+        /**
+         * The start of the movement of the open stroke, or of the last one. A movement is each stroke from one rest
+         * of `holdMs` to the next one. The rate is near 0 at each reversal for some samples, which is no rest.
+         * With no rest since the first sample, the movement started before the first sample.
+         */
+        var movementStartMs = 0.0
+        private var rested = false
         private var anchor = 0.0
 
         /** Not a number before the first sample. */
@@ -68,7 +76,10 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
         fun step(tMs: Double, w: Double, dtS: Double): List<Stroke> {
             val closed = ArrayList<Stroke>(2)
             // A head that moves at the first sample starts its stroke there, in the time of the samples.
-            if (anchorMs.isNaN()) anchorMs = tMs - dtS * MS_PER_S
+            if (anchorMs.isNaN()) {
+                anchorMs = tMs - dtS * MS_PER_S
+                movementStartMs = anchorMs
+            }
             angle += w * dtS
             if (dir == 0) {
                 if (abs(w) < config.restRadS) {
@@ -80,6 +91,8 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
                 }
                 if (abs(angle - anchor) >= config.minStrokeRad) {
                     dir = sign(angle - anchor).toInt()
+                    if (rested) movementStartMs = anchorMs
+                    rested = false
                     extreme = angle
                     extremeMs = tMs
                 }
@@ -104,6 +117,7 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
             }
             val quietSince = if (abs(w) < config.settleRadS) quietSinceMs ?: tMs else null
             quietSinceMs = quietSince
+            if (quietSince != null && tMs - quietSince >= config.holdMs) rested = true
             if (dir != 0 && quietSince != null && tMs - quietSince >= config.holdMs) {
                 closed.add(Stroke(anchor, angle, peak, anchorMs, quietSince, ClosedBy.SETTLE))
                 anchor = angle
@@ -126,6 +140,14 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
     /** False from a gesture until the head was quiet again. */
     private var armed = true
     private var quietUntilMs = 0.0
+
+    /**
+     * The time from the start of the movement of the last reported gesture to its report, in the time of the samples.
+     * The movement starts at the last rest of `holdMs` on the axis of the gesture, or before the first sample
+     * when the head had no rest since then. So for a shake of many strokes, this time starts at the first stroke.
+     */
+    var lastGestureMs = 0L
+        private set
 
     /** For a sample with no accelerometer reading. */
     fun onSample(sample: GyroSample): HeadGesture? = onSample(HeadSample(sample, null))
@@ -236,6 +258,7 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
 
     private fun report(gesture: HeadGesture, first: Stroke, second: Stroke, nowMs: Double, angle: Double, fault: Rejected?) {
         val nod = gesture == HeadGesture.NOD
+        if (fault == null) lastGestureMs = (nowMs - (if (nod) pitch else yaw).movementStartMs).roundToLong()
         onReport(
             GestureReport(
                 gesture, fault, first.amp, second.amp, first.peak, second.peak, (nowMs - first.startMs).roundToLong(), abs(angle - first.startAngle),

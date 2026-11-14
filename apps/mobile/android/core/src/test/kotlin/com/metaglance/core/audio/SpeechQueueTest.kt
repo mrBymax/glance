@@ -178,15 +178,35 @@ class SpeechQueueTest {
         assertEquals(emptyList<String>(), done)
     }
 
-    @Test fun `stopPrompt does nothing for a line of another prompt and for a line that waits`() {
+    @Test fun `stopPrompt does nothing for a line of another prompt`() {
         q.onSpeak(speak("a"))
         q.onSpeak(speak("p", promptId = "p-0001"))
-        assertFalse(q.stopPrompt("p-0001"))
         assertFalse(q.stopPrompt("p-0002"))
         assertEquals(0, player.stopCount)
         player.finish()
         player.finish()
         assertEquals(listOf("p-0001"), done)
+    }
+
+    // The pay prompt after a cart change waits behind the line "Added" or "Removed". The shopper can answer it then.
+    @Test fun `stopPrompt for a prompt line that waits stops the line in front of it, drops the prompt line, and plays the next line`() {
+        q.onSpeak(speak("added"))
+        q.onSpeak(speak("p", Priority.HIGH, promptId = "p-0001"))
+        q.onSpeak(speak("paid"))
+        clock = 800
+        assertTrue(q.stopPrompt("p-0001"))
+        assertEquals(1, player.stopCount)
+        assertEquals(listOf("added", "paid"), played)
+        player.finish()
+        assertEquals(emptyList<String>(), done)
+        assertEquals(emptyList<String>(), started)
+    }
+
+    @Test fun `a prompt line with interrupt starts at once when a line with no prompt plays`() {
+        q.onSpeak(speak("added"))
+        q.onSpeak(speak("p", interrupt = true, promptId = "p-0001"))
+        assertEquals(listOf("added", "p"), played)
+        assertEquals(listOf("p-0001"), started)
     }
 
     @Test fun `clear stops the line, drops each waiting line, and reports no prompt`() {

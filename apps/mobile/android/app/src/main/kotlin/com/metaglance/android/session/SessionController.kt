@@ -51,6 +51,7 @@ import com.metaglance.core.contract.StillPurpose
 import com.metaglance.core.frame.FrameHeader
 import com.metaglance.core.frame.FrameKind
 import com.metaglance.core.gesture.GestureReport
+import com.metaglance.core.gesture.HeadGesture
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.gesture.HeadSample
@@ -98,6 +99,7 @@ import com.metaglance.core.state.StopCauses
 import com.metaglance.core.state.StopFacts
 import java.io.File
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
@@ -882,6 +884,7 @@ class SessionController(
     /**
      * A nod or a shake that the detector took as the answer to a prompt. The sound tells the shopper at once.
      * A line of the prompt that still plays stops, so the line of the server that answers the gesture is next.
+     * It is the same for each prompt: the shopper never waits for the end of a line to nod or to shake.
      */
     private fun onHeadAnswer(intent: DeviceToServer.Intent) {
         val yes = intent.kind == IntentKind.YES
@@ -1309,7 +1312,7 @@ class SessionController(
 
     private fun newHeadInput(): HeadInput {
         val config = HeadGestureConfig.of(store.sensitivity, ProbeDecisions.PITCH_AXIS, ProbeDecisions.PITCH_DOWN_SIGN, ProbeDecisions.YAW_AXIS)
-        // The detector gets samples only in a head window. So each line of it is about the answer to a prompt.
+        // The detector gets samples only in a head window and in the 300 ms before it. So each line of it is about the answer to a prompt.
         return HeadInput(HeadGestureDetector(config, headTrace::onCandidate), prompts, headTrace)
     }
 
@@ -1347,6 +1350,10 @@ class SessionController(
         override fun onClose(promptId: String) {
             log("head window closed: prompt $promptId, $samples samples")
             if (recording) motionRecorder.onClose(promptId)
+        }
+
+        override fun onEarly(promptId: String, gesture: HeadGesture, earlyMs: Long) {
+            log("head gesture dropped: prompt $promptId, the ${gesture.name.lowercase(Locale.US)} started $earlyMs ms before the head window")
         }
     }
 

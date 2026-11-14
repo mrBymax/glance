@@ -14,25 +14,36 @@ import kotlin.math.min
 
 /** Sees the head windows and their samples, for the log and for a recorder. Each call runs inside a call of [HeadInput]. */
 interface HeadWindowListener {
-    /** The head window of a prompt started. Its samples count from `openMs`, which can be later than this call. */
+    /** The head window of a prompt started. A gesture counts when it starts at `openMs` or later, which can be later than this call. */
     fun onOpen(promptId: String, openMs: Long)
 
-    /** The detector got this sample. `arrivalMs` is the phone time at which the sample arrived. */
+    /**
+     * The detector got this sample. `arrivalMs` is the phone time at which the sample arrived. The first samples
+     * can be from the [HeadInput.LEAD_IN_MS] before `openMs`.
+     */
     fun onSample(sample: HeadSample, arrivalMs: Long)
 
     /** No other sample of this head window follows. */
     fun onClose(promptId: String)
+
+    /** The detector found a gesture that started `earlyMs` before the head window opened. It is no answer. */
+    fun onEarly(promptId: String, gesture: HeadGesture, earlyMs: Long) {}
 }
 
 /**
  * Turns a nod or a shake into a yes or a no, while a prompt has its head window open.
  *
- * The head window is in the time of the samples: a sample counts when the glasses took it after the window opened
- * and before the window ended. So a nod whose samples arrive seconds late still counts, up to [LATE_MS] after the
- * window, and a movement before the window never counts.
+ * The head window is in the time of the samples: a gesture counts when the glasses took its samples after the
+ * window opened and before the window ended. So a nod whose samples arrive seconds late still counts, up to
+ * [LATE_MS] after the window.
  *
- * `PromptTracker.headPrompt` gives the time at which the window opens: for a product prompt while its line still
- * plays, and for a pay prompt at the end of its line. The length of the window counts from the end of the line.
+ * A movement that started before the window never counts. The detector also gets the samples of the [LEAD_IN_MS]
+ * before the window, so it knows a head that already moves when the window opens. A gesture is no answer when
+ * its movement started before the window: a head that moves when the window opens must come to rest before
+ * its gesture. Without this rule, the rest of a slow look down and the look back up were a nod.
+ *
+ * `PromptTracker.headPrompt` gives the time at which the window opens: for each prompt while its line still
+ * plays. The length of the window counts from the end of the line.
  *
  * The time of the window does not run while it is blocked: while the motion samples are stalled, and while a
  * still photo is taken, which stalls them. A block adds [MAX_EXTRA_MS] to a window at most. Blocked time before
@@ -69,11 +80,16 @@ class HeadInput(
     fun onSample(sample: HeadSample, arrivalMs: Long, profile: Profile): DeviceToServer.Intent? {
         val takenMs = clock.phoneMs(sample.gyro.tNs, arrivalMs)
         val w = follow(profile) ?: return null
-        if (w.closed || takenMs < w.openMs) return null
+        if (w.closed || takenMs < w.openMs - LEAD_IN_MS) return null
         val end = endMs(w, arrivalMs)
         if (end != null && (takenMs >= end || arrivalMs >= end + LATE_MS)) return null
         listener?.onSample(sample, arrivalMs)
         val gesture = detector.onSample(sample) ?: return null
+        val earlyMs = w.openMs - (takenMs - detector.lastGestureMs)
+        if (earlyMs > 0) {
+            listener?.onEarly(w.promptId, gesture, earlyMs)
+            return null
+        }
         w.answered = true
         val yesGesture = if (profile.yesGesture == YesGesture.NOD) HeadGesture.NOD else HeadGesture.SHAKE
         val kind = if (gesture == yesGesture) IntentKind.YES else IntentKind.NO
@@ -141,7 +157,7 @@ class HeadInput(
             return w
         }
         if (w != null && !w.closed) close(w)
-        // A movement that started before the window, or in the window of another prompt, is no answer.
+        // A movement in the window of another prompt is no answer.
         detector.reset()
         return prompt?.let { Window(it.promptId, it.openMs, it.doneMs, profile.headWindowMs) }.also {
             window = it
@@ -168,6 +184,12 @@ class HeadInput(
     }
 
     companion object {
+        /**
+         * The detector gets the samples of this time before the window opens. The detector calls a head at rest
+         * after 250 ms with no movement (`holdMs`), so a head that is at rest in this time can nod when the window opens.
+         */
+        const val LEAD_IN_MS = 300L
+
         /** A sample that the glasses took inside the window counts when it arrives this long after the window, at most. */
         const val LATE_MS = 6000L
 

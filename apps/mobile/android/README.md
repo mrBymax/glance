@@ -671,7 +671,7 @@ flowchart TD
     Thread --> Flows[gyro and motionRows for the probe: 2048 samples each]
     Thread --> Head[HeadInput]
     Head --> Clock[GlassesClock: the time of the sample on the phone clock]
-    Clock --> Window{Taken inside the head window of the prompt?}
+    Clock --> Window{Taken inside the head window of the prompt, or in the 300 ms before it?}
     Window -- no --> Ignored[Ignored]
     Window -- yes --> Axes[HeadAxes: pitch rate and yaw rate from gravity]
     Axes --> Detector[HeadGestureDetector]
@@ -696,21 +696,25 @@ flowchart TD
 
 A head gesture counts only in the head window of a prompt. The window ends `headWindowMs` of the profile after the end of the line of the prompt: 8 seconds, 15 seconds, or no limit.
 
-- The window of a product prompt opens 1200 ms after its line starts to play on the phone (`PromptTracker.EARLY_OPEN_MS`). The shopper of the test of 2026-11-14 nodded at the name of the product, seconds before the line ended, and those nods did not count. In the first 1200 ms the head still moves with the hand that lifts the product.
-- The start of a line is the moment `SpeechQueue` gives it to the player. The clip then loads, so the voice starts some time later. Nobody measured that time.
-- The window of a pay prompt opens when its line ended. A movement during the line must not confirm a payment.
+- The shopper never waits for the end of a line to nod or to shake. The window of each prompt opens 300 ms after its line arrived on the phone (`PromptTracker.EARLY_OPEN_MS`), while the line plays. The server sends two kinds of prompt, the product prompt (for a new product and for a product in the cart) and the pay prompt, and both have this window. The line of a spot check and the line of the fingerprint check are no prompts, so no head gesture answers them.
+- A person needs 200 ms or more to react to a sound. So a gesture that starts in the first 300 ms is no answer to the line: it is the movement that lifts the product, or the turn to the kiosk. The value was 1200 ms for a product prompt before, and a pay prompt opened its window when its line ended.
+- A gesture counts only when its movement started in the window. The detector also gets the samples of the 300 ms before the window (`HeadInput.LEAD_IN_MS`), so it knows a head that already moves when the window opens. A movement is each stroke from one rest of 250 ms to the next one (`holdMs`). A head that moves when the window opens must come to rest before its gesture. The log has `head gesture dropped` for a gesture that started too early.
+- Measured with synthetic samples at the level `normal`, with a detector that starts when the window opens and has no such rule: a look down and back with strokes of 500 to 700 ms and 0.40 to 0.55 rad, which started up to 180 ms before the line, was a nod with a window that opened after 300 ms. With a window that opened after 600 ms or more, no movement with strokes of 150 to 700 ms was a nod. A rule that read only the first stroke of a pair was not enough: a shake with strokes of 600 ms that started 280 ms before the line was a no, because its second and third stroke started in the window. With the rule, a test of `HeadInputTest` plays 1104 movements down and back and 1104 shakes that start in the 1500 ms before the line, and none is an answer. The four recordings of 2026-11-14 give the same 9 nods with the rule. They start when a window opened, so they hold no movement from the start of a line.
+- A line with interrupt starts to play when it arrives: `SpeechQueue` gives it to the player. The clip then loads, so the voice starts some time later. Nobody measured that time. Each product prompt and the first pay prompt of a checkout interrupt.
+- One prompt line does not interrupt: the pay prompt with the new total after a cart change during a checkout. It waits behind the line "Added" or "Removed", which answers the cart change. Its window opens 300 ms after it arrived all the same, so a nod or a shake during the line in front of it answers the pay prompt.
 - With the sound off no line plays. Each window then opens when the prompt is finished, which is at once.
-- When a head gesture answers a prompt whose line still plays, the app stops the line at once: `SpeechQueue.stopPrompt` stops the player with no fade. The answer sound plays, and the line of the server that answers the gesture is the next line. The app sends no `prompt.done` for the stopped line, because the server already has the answer.
+- When a head gesture answers a prompt whose line still plays, the app stops the line at once: `SpeechQueue.stopPrompt` stops the player with no fade. If the line of the prompt waits, it stops the line in front of it and drops the line of the prompt. The answer sound plays, and the line of the server that answers the gesture is the next line. The app sends no `prompt.done` for the stopped line, because the server already has the answer.
+- A nod or a shake during a line that is no prompt, with no prompt open, does nothing: no window is open, and the detector gets no sample.
 - A line that an interrupt removed never reports its end. Its window ends 20 seconds plus the head window after the start of the line.
 - The window is in the time of the samples. `timestampNs` of a sample is on the clock of the glasses. `GlassesClock` keeps the offset to the clock of the phone: the smallest value of arrival time minus sample time in the DAT session.
-- A sample counts when the glasses took it after the window opened and before the window ended. A sample that the glasses took before the window opened never counts, also when it arrives after that time.
+- A gesture counts when the glasses took its samples after the window opened and before the window ended. A movement that started before the window opened never counts, also when its samples arrive after that time.
 - A sample of the window that arrives late still counts, up to 6 seconds after the end of the window (`HeadInput.LATE_MS`). The stalls of 2026-11-14 took 3 to 12 seconds, so a nod in a long stall can still arrive too late.
 - The time of the window does not run while it is blocked: while the watchdog says `STALLED`, and while the glasses take a still. A block adds 15 seconds to one window at most (`HeadInput.MAX_EXTRA_MS`). Blocked time before the end of the line adds nothing, because the length of the window counts from that end. A block that starts after the end of a window does not open it again.
 - So a prompt whose line ends during a still gets its full head window after the still.
 - A prompt that arrives during a still, or in the stall after it, keeps its head window open through the stall, and the samples of the stall count when they arrive. In the session of 2026-11-14 the line of `p-0003` started 2.8 seconds into a still, and no motion sample arrived for 6.7 seconds. The head window of `p-0003` did not run out: it closed with 0 samples because the server replaced the prompt with `p-0004` for the same product, 33 ms before the samples of the stall arrived. The server keeps such a prompt now (rule R1 in `apps/server/README.md`). Two tests of `HeadInputTest` replay the times of that log with the prompt kept: the nod in the stall is a yes, and the window has its full length after the stall.
 - A new window starts the detector from rest. A movement that started in the window of another prompt is no answer.
 - The window stays open after an answer, until the server ends the prompt or a new prompt replaces it. The server decides if an answer counts.
-- The server has no head window of its own (rule R4 in `apps/server`). It takes a head answer while the prompt is current, up to the head window plus `MAX_EXTRA_MS` plus `LATE_MS` after `prompt.done` on its clock: the last time at which this class can send the answer. For a product prompt with no `prompt.done` yet, it counts that time from the start of the prompt. `HEAD_MAX_EXTRA_MS` and `HEAD_LATE_MS` in `apps/server/src/sessions/answers.ts` repeat the two values, so change them together.
+- The server has no head window of its own (rule R4 in `apps/server`). It takes a head answer while the prompt is current, up to the head window plus `MAX_EXTRA_MS` plus `LATE_MS` after `prompt.done` on its clock: the last time at which this class can send the answer. For a prompt with no `prompt.done` yet, it counts that time from the start of the prompt. `HEAD_MAX_EXTRA_MS` and `HEAD_LATE_MS` in `apps/server/src/sessions/answers.ts` repeat the two values, so change them together.
 
 ### The pitch and the yaw of the head
 
@@ -833,7 +837,7 @@ A still photo stalls the motion samples: in the log of 2026-11-14 a still took 2
 
 `HeadInput.holdsStills` is true while a prompt waits for a head answer:
 
-- From the start of the line of a prompt to its end. A line that never reports its end counts for 20 seconds. The head window of a product prompt opens in that time.
+- From the start of the line of a prompt to its end. A line that never reports its end counts for 20 seconds. The head window of the prompt opens in that time.
 - Then to the first head answer, to the event that ends the prompt, or to the end of the head window. With no head window in the profile, it is 30 seconds after the line.
 - It is false when `headGestures` of the profile is false.
 
@@ -879,12 +883,13 @@ Each line has the tag `Glance`. Read them with `adb logcat -s Glance`.
 | `motion stalled: no sample for <ms> ms` | The flow becomes `STALLED` | |
 | `motion stall <ms> ms, burst <n>` | The first samples after a stall arrived | The time with no sample, and the samples that then arrived together |
 | `motion restart <n> of 3: no sample for <ms> ms` | The watchdog starts Motion again | |
-| `head window open: prompt <id>, in <ms> ms` | The line of a product prompt started, or the line of a pay prompt ended | `<ms>`: the time until the samples count. 1200 for a product prompt, and 0 for a pay prompt. |
-| `head window closed: prompt <id>, <n> samples` | The prompt ended, or 6 seconds after the end of the window | `<n>`: the samples that the detector got |
+| `head window open: prompt <id>, in <ms> ms` | The line of a prompt arrived | `<ms>`: the time until a gesture can start. 300 for a line that plays, and 0 with the sound off. |
+| `head window closed: prompt <id>, <n> samples` | The prompt ended, or 6 seconds after the end of the window | `<n>`: the samples that the detector got, with those of the 300 ms before the window |
+| `head gesture dropped: prompt <id>, the nod started <ms> ms before the head window`, `... the shake started ...` | The detector found a gesture whose movement started before the window opened | The line `nod accepted` or `shake accepted` of the detector is before it. The app sends no intent. |
 | `nod accepted: strokes <a> and <b> rad, peaks <p> and <q> rad/s, <ms> ms, net <n> rad, other axis <o> rad and <r> rad/s` | The detector reports a gesture in a head window | The two strokes, their top rates, the time from the start, the angle between the start and the head now, and the range and the top rate of the other axis |
 | `nod rejected (<reason>): ...`, `shake rejected (<reason>): ...` | A pair of opposite strokes ended and was no gesture | The same numbers, and the first rule that failed |
 | `head answer yes: prompt <id>, <ms> ms after the start of its line, <ms> ms after the first candidate`, `head answer no: ...` | The app sends the intent | The first candidate is the first stroke pair of the head window, accepted or rejected. A long time after it is an answer that needed many nods. `no time`: the line did not play, or the head window has no pair. |
-| `prompt line stopped: prompt <id>` | A head gesture answered a prompt whose line still played | |
+| `prompt line stopped: prompt <id>` | A head gesture answered a prompt whose line still played, or still waited behind another line | |
 | `<second look, reference> still waits: a prompt waits for its answer` | A still must wait | |
 | `<second look, reference> still dropped: it waited too long for a prompt` | The wait took longer than its limit | |
 | `label still dropped: the request is stale` | A `still.request` waited behind a prompt to its answer or its end, or it was 3 seconds old | See "No still while a prompt waits". |
@@ -951,8 +956,8 @@ A stroke with no opposite stroke after it gives no line. So a nod that is too sm
 - How the glasses group the samples of a flow with no stall. If more than 500 ms pass between two groups, the watchdog says `STALLED` in a normal flow. `arrivalGapMs` and `burst` show it.
 - Whether a restart of Motion ends a stall.
 - The delay of the answer sound on the glasses.
-- The server takes a head answer for a product prompt by the ID of the prompt alone, also before `prompt.done` (rule R4 in `apps/server/README.md`). Only tests of the rules cover that. Two cases still reject an answer that the phone accepted: the product prompt ended on the server, 18 seconds after the last result with its product. A nod on the pay prompt came with no report of the kiosk code in the last 3 seconds.
-- The head window that opens 1200 ms after the start of the line, and the stop of the line at a head answer. Only tests with synthetic samples and a fake player cover them. The time between the start of a line in `SpeechQueue` and the first sound is not known.
+- The server takes a head answer for a product prompt by the ID of the prompt alone, also before `prompt.done` (rule R4 in `apps/server/README.md`). It takes a head answer for the pay prompt before `prompt.done` too, with the kiosk code in view. Only tests of the rules cover that. Two cases still reject an answer that the phone accepted: the product prompt ended on the server, 18 seconds after the last result with its product. A nod on the pay prompt came with no report of the kiosk code in the last 3 seconds.
+- The head window of each prompt that opens 300 ms after its line arrived, the rule for a movement that started before the window, and the stop of the line at a head answer. Only tests with synthetic samples and a fake player cover them, and no session with the glasses ran with them. The time between the start of a line in `SpeechQueue` and the first sound is not known. If real sessions show `head answer` lines for movements that were no answer, raise `EARLY_OPEN_MS`. If they show `head gesture dropped` lines for nods that were an answer, the rule for the rest before a gesture is too strict.
 - The instrumented tests did not run after these changes: they need the test phone.
 
 ### Checks of the head gestures with the glasses
@@ -963,7 +968,7 @@ Do them in this order. Each step needs the log of the phone: `adb logcat -s Glan
 2. Open "Glance Probe". Start a session, tap `Motion`, and keep the head at rest for 30 seconds. Read the `motion samples=` lines: `new` near 90, `arrivalGapMs` below 500, and `timeGapMs` near 33 are a good flow. Write down `burst`: it is the number of samples that the glasses send together.
 3. Tap `Axis test` and nod for 4 seconds. Then tap it again and shake the head. The strongest axis of the nod must be the pitch axis of `ProbeDecisions` (y), and the strongest axis of the shake its yaw axis (x). If not, write the measured axes into `ProbeDecisions`.
 4. Tap `Gesture test`. Make 10 nods and 10 shakes with a rest between them. Then look to the sides, look down at a product, and walk for 2 minutes. Write down the counts and each `rejected` line of a gesture that did not count.
-5. Start a session in "Glance" against a server. Answer 5 prompts with one nod each after the line ended, and 5 with one nod at the name of the product. Each one must give the sound `added` at once and one time, `head answer yes` in the log, and the "Added" line of the server with no second sound. A nod during the line must stop the line: the log has `prompt line stopped`. Write down the two times of each `head answer` line.
+5. Start a session in "Glance" against a server. Answer 5 prompts with one nod each after the line ended, and 5 with one nod at the name of the product. Each one must give the sound `added` at once and one time, `head answer yes` in the log, and the "Added" line of the server with no second sound. A nod during the line must stop the line: the log has `prompt line stopped`. Do the same at a kiosk code: nod at the first words of the pay prompt in one checkout, and shake in another one. The first must pay, and the second must cancel. Write down the two times of each `head answer` line, and each `head gesture dropped` line.
 6. Answer 10 prompts with a shake. Each one must give the sound `removed` and `head answer no`.
 7. Let 5 prompts pass with no answer while the head looks around and at the product. The log must have no `head answer` line.
 8. Hold a barcode in view while a prompt waits. The log must have no `still` line between `head window open` and the answer, and no `label still asked` line in the first second after the answer. After the answer it has `label still dropped: the region waited behind a prompt`.

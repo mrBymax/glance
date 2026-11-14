@@ -14,18 +14,16 @@ class HeadPrompt(val promptId: String, val openMs: Long, val doneMs: Long)
  * A prompt is a spoken line with a prompt ID. It is finished when its line ended, and it is current until
  * the server ends it or a new prompt replaces it.
  *
- * A head gesture can answer a product prompt while its line still plays, from [EARLY_OPEN_MS] after the start of
- * the line. A pay prompt takes a head gesture only after its line: a movement during the line must not pay.
+ * A head gesture can answer each prompt while its line still plays, from [EARLY_OPEN_MS] after the line arrived.
+ * The shopper never waits for the end of a line to nod or to shake. The server sends a product prompt and a pay
+ * prompt, and this class makes no difference between them.
  *
  * Each function can run on each thread: the main thread gives the prompts, and the motion thread reads them.
  */
 class PromptTracker {
     private var latestId: String? = null
 
-    /** The ID of the last product prompt: the event `glance.pending` names it. */
-    private var productId: String? = null
-
-    /** The time when the line of the latest prompt arrived. null when the caller gave no time. */
+    /** The time when the line of the latest prompt arrived. null when the caller gave no time: its window then opens at the end of the line. */
     private var latestSpokenMs: Long? = null
 
     /** The time when the line of the latest prompt started to play. null while it waits, and for a line with no sound. */
@@ -62,7 +60,6 @@ class PromptTracker {
 
     @Synchronized
     fun onEvent(event: ServerEvent) {
-        if (event is ServerEvent.GlancePending) productId = event.promptId
         val ends = when (event) {
             is ServerEvent.GlanceCleared -> event.promptId == latestId
             is ServerEvent.CheckoutCancelled, is ServerEvent.CheckoutPaid, is ServerEvent.CheckoutFailed -> true
@@ -74,7 +71,6 @@ class PromptTracker {
     @Synchronized
     fun reset() {
         latestId = null
-        productId = null
         latestSpokenMs = null
         latestStartMs = null
         latestDoneMs = null
@@ -94,20 +90,18 @@ class PromptTracker {
     fun currentPromptId(): String? = if (latestDoneMs != null && !latestEnded) latestId else null
 
     /**
-     * Rule R4: the prompt of the head window that `HeadInput` keeps. A product prompt is here from the start of
-     * its line, and each other prompt when it is finished.
+     * Rule R4: the prompt of the head window that `HeadInput` keeps. A prompt is here from the arrival of its line.
+     * A line with interrupt starts to play when it arrives. A line that waits behind another line is here too,
+     * so a nod during the line in front of it answers the prompt.
      */
     @Synchronized
     fun headPrompt(): HeadPrompt? {
         val id = latestId ?: return null
         if (latestEnded) return null
         val done = latestDoneMs
-        val start = latestStartMs
-        if (id == productId && start != null) {
-            val early = start + EARLY_OPEN_MS
-            return HeadPrompt(id, if (done == null) early else min(early, done), done ?: (start + MAX_LINE_MS))
-        }
-        return done?.let { HeadPrompt(id, it, it) }
+        val arrived = latestSpokenMs ?: latestStartMs ?: return done?.let { HeadPrompt(id, it, it) }
+        val early = arrived + EARLY_OPEN_MS
+        return HeadPrompt(id, if (done == null) early else min(early, done), done ?: ((latestStartMs ?: arrived) + MAX_LINE_MS))
     }
 
     /** The time when the line of this prompt started to play, for the log. null for a replaced prompt and for a line that did not start. */
@@ -126,10 +120,11 @@ class PromptTracker {
 
     companion object {
         /**
-         * The head window of a product prompt opens this long after the start of its line. A shopper who nods at
-         * the name of the product is later than this, and the movement of the head that lifts the product is over.
+         * The head window of each prompt opens this long after its line arrived. A person needs 200 ms or more to
+         * react to a sound, so a gesture that starts earlier is no answer to the line: it is the movement that
+         * lifts the product, or the turn to the kiosk. `HeadInput` drops a gesture that started before the window.
          */
-        const val EARLY_OPEN_MS = 1200L
+        const val EARLY_OPEN_MS = 300L
         private const val MAX_LINE_MS = 20_000L
     }
 }

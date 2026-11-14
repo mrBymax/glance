@@ -68,11 +68,13 @@ class SpeechQueue(
     }
 
     /**
-     * Stops the line of this prompt at once, if it plays now, and starts the next line. It reports no prompt:
-     * the shopper answered the prompt before its line ended. Returns true when it stopped a line.
+     * Stops the line of this prompt at once, if it plays now, and starts the next line. If the line of the prompt
+     * waits, it drops that line and stops the line in front of it. It reports no prompt: the shopper answered
+     * the prompt before its line ended. Returns true when it stopped a line.
      */
     fun stopPrompt(promptId: String): Boolean {
-        if (current?.promptId != promptId) return false
+        val waited = waiting.removeAll { it.promptId == promptId }
+        if (current?.promptId != promptId && !waited) return false
         stopCurrent()
         startNext()
         return true

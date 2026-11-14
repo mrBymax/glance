@@ -23,37 +23,64 @@ class PromptTrackerTest {
         it.onLineStart(id, startMs)
     }
 
-    @Test fun `a product prompt is the head prompt from the start of its line, and opens 1200 ms later`() {
+    @Test fun `a product prompt is the head prompt from the start of its line, and opens 300 ms later`() {
         val t = productPrompt("p-0001", 1000)
         assertEquals("p-0001", t.headPrompt()?.promptId)
-        assertEquals(2200L, t.headPrompt()?.openMs)
+        assertEquals(1300L, t.headPrompt()?.openMs)
         // The line ends 20 seconds after its start at the latest.
         assertEquals(21_000L, t.headPrompt()?.doneMs)
         assertNull(t.currentPromptId())
         t.onPromptDone("p-0001", 7000)
-        assertEquals(2200L, t.headPrompt()?.openMs)
+        assertEquals(1300L, t.headPrompt()?.openMs)
         assertEquals(7000L, t.headPrompt()?.doneMs)
         assertEquals(1000L, t.lineStartMs("p-0001"))
         assertNull(t.lineStartMs("p-0002"))
     }
 
-    @Test fun `a product prompt with a line shorter than 1200 ms opens at the end of the line`() {
+    @Test fun `a prompt with a line shorter than 300 ms opens at the end of the line`() {
         val t = productPrompt("p-0001", 1000)
-        t.onPromptDone("p-0001", 1800)
-        assertEquals(1800L, t.headPrompt()?.openMs)
+        t.onPromptDone("p-0001", 1200)
+        assertEquals(1200L, t.headPrompt()?.openMs)
     }
 
-    @Test fun `a product prompt whose line waits for another line opens nothing`() {
+    // The shopper must not wait for the end of a line to pay or to cancel.
+    @Test fun `a pay prompt opens 300 ms after the start of its line`() {
         val t = PromptTracker()
-        t.onEvent(pending("p-0001"))
-        t.onPromptSpoken("p-0001", 1000)
-        assertNull(t.headPrompt())
-        t.onLineStart("p-0002", 1500)
-        assertNull(t.headPrompt())
+        t.onEvent(ServerEvent.CheckoutOffered("p-0002", kiosk, 449, 3, false))
+        t.onPromptSpoken("p-0002", 1000)
+        t.onLineStart("p-0002", 1000)
+        assertEquals("p-0002", t.headPrompt()?.promptId)
+        assertEquals(1300L, t.headPrompt()?.openMs)
+        assertEquals(21_000L, t.headPrompt()?.doneMs)
+        t.onPromptDone("p-0002", 6000)
+        assertEquals(1300L, t.headPrompt()?.openMs)
+        assertEquals(6000L, t.headPrompt()?.doneMs)
+    }
+
+    @Test fun `a prompt with no event that names its kind opens 300 ms after the start of its line`() {
+        val t = PromptTracker()
+        t.onPromptSpoken("p-0003", 1000)
+        t.onLineStart("p-0003", 1000)
+        assertEquals(1300L, t.headPrompt()?.openMs)
+    }
+
+    // A pay prompt that follows a cart change waits behind the line "Added" or "Removed", which has no prompt.
+    @Test fun `a prompt whose line waits behind another line opens 300 ms after it arrived`() {
+        val t = PromptTracker()
+        t.onEvent(ServerEvent.CheckoutOffered("p-0002", kiosk, 449, 3, false))
+        t.onPromptSpoken("p-0002", 1000)
+        assertEquals(1300L, t.headPrompt()?.openMs)
+        assertEquals(21_000L, t.headPrompt()?.doneMs)
+        t.onLineStart("p-0009", 1500)
+        assertEquals(21_000L, t.headPrompt()?.doneMs)
+        // The start of the line keeps the time at which the window opened, so the window stays the same one.
+        t.onLineStart("p-0002", 3000)
+        assertEquals(1300L, t.headPrompt()?.openMs)
+        assertEquals(23_000L, t.headPrompt()?.doneMs)
     }
 
     // With the sound off no line plays, and the queue reports the prompt at once.
-    @Test fun `a product prompt with no line opens when it is finished`() {
+    @Test fun `a prompt with no line opens when it is finished`() {
         val t = PromptTracker()
         t.onEvent(pending("p-0001"))
         t.onPromptSpoken("p-0001", 1000)
@@ -61,25 +88,14 @@ class PromptTrackerTest {
         assertEquals(1000L, t.headPrompt()?.openMs)
     }
 
-    // A movement during the line must not confirm a payment.
-    @Test fun `a pay prompt opens only when its line ended`() {
-        val t = PromptTracker()
-        t.onEvent(ServerEvent.CheckoutOffered("p-0002", kiosk, 449, 3, false))
-        t.onPromptSpoken("p-0002", 1000)
-        t.onLineStart("p-0002", 1000)
-        assertNull(t.headPrompt())
-        t.onPromptDone("p-0002", 6000)
-        assertEquals(6000L, t.headPrompt()?.openMs)
-        assertEquals(6000L, t.headPrompt()?.doneMs)
-    }
-
-    @Test fun `a repeat of a product prompt opens again 1200 ms after the new start of its line`() {
+    @Test fun `a repeat of a prompt opens again 300 ms after its line arrived again`() {
         val t = productPrompt("p-0001", 1000)
         t.onPromptDone("p-0001", 7000)
         t.onPromptSpoken("p-0001", 9000)
-        assertNull(t.headPrompt())
-        t.onLineStart("p-0001", 9100)
-        assertEquals(10_300L, t.headPrompt()?.openMs)
+        assertEquals(9300L, t.headPrompt()?.openMs)
+        t.onLineStart("p-0001", 9000)
+        assertEquals(9300L, t.headPrompt()?.openMs)
+        assertEquals(29_000L, t.headPrompt()?.doneMs)
     }
 
     @Test fun `a cleared product prompt opens nothing while its line plays`() {
@@ -88,7 +104,8 @@ class PromptTrackerTest {
         assertNull(t.headPrompt())
     }
 
-    @Test fun `a prompt that still plays opens nothing`() {
+    // The app gives the time of each line. With no time, the window opens when the line ended.
+    @Test fun `a prompt whose line has no arrival time opens nothing while it plays`() {
         val t = PromptTracker()
         t.onPromptSpoken("p-0001")
         assertNull(t.headPrompt())
