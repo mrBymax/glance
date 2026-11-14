@@ -773,6 +773,7 @@ class SessionController(
                     is LabelOutcome.Code -> {
                         log("label still $size: code ${outcome.read.code} ${outcome.read.source.name.lowercase()}, $took")
                         send(DeviceToServer.BarcodeSeen(outcome.read.code, outcome.read.source))
+                        framePipeline?.onLabelStillCode()
                     }
                     is LabelOutcome.Upload -> {
                         val still = outcome.still

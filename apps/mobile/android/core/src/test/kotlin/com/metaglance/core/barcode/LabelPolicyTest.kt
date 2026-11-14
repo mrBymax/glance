@@ -60,4 +60,44 @@ class LabelPolicyTest {
     @Test fun `a request while a code is accepted gives no still`() {
         assertFalse(LabelPolicy().onFrame(0, regionInView = true, codeAccepted = true, requested = true))
     }
+
+    @Test fun `a region asks for no other still after a still gave its code, while it stays in view`() {
+        val policy = LabelPolicy()
+        assertEquals(listOf(2500), policy.stills(0..3000 step 100))
+        policy.onStillCode()
+        assertEquals(emptyList<Int>(), policy.stills(3100..20000 step 100))
+    }
+
+    @Test fun `a region that comes back after a still with a code asks for a still again`() {
+        val policy = LabelPolicy()
+        assertEquals(listOf(2500), policy.stills(0..3000 step 100))
+        policy.onStillCode()
+        policy.stills(3100..6000 step 100)
+        policy.stills(6100..6700 step 100, region = false)
+        assertEquals(listOf(9300), policy.stills(6800..12000 step 100))
+    }
+
+    @Test fun `a request of the server gives a still also after a still gave a code`() {
+        val policy = LabelPolicy()
+        assertEquals(listOf(2500), policy.stills(0..3000 step 100))
+        policy.onStillCode()
+        assertTrue(policy.onFrame(8500, regionInView = true, codeAccepted = false, requested = true))
+    }
+
+    @Test fun `a still with no code keeps the region rule`() {
+        assertEquals(listOf(2500, 8500, 14500), LabelPolicy().stills(0..15000 step 100))
+    }
+
+    @Test fun `asks for no still while no upload can go out, and then at once`() {
+        val policy = LabelPolicy()
+        val stills = (0..4000 step 100).filter { policy.onFrame(it.toLong(), regionInView = true, codeAccepted = false, canUpload = it >= 3500) }
+        assertEquals(listOf(3500), stills)
+    }
+
+    @Test fun `a request while no upload can go out is dropped`() {
+        val policy = LabelPolicy()
+        assertFalse(policy.onFrame(0, regionInView = false, codeAccepted = false, requested = true, canUpload = false))
+        assertFalse(policy.onFrame(100, regionInView = false, codeAccepted = false))
+        assertTrue(policy.onFrame(200, regionInView = false, codeAccepted = false, requested = true))
+    }
 }

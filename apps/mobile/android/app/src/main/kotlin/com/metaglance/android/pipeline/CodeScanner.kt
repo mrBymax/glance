@@ -7,6 +7,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.metaglance.core.barcode.Gtin
+import com.metaglance.core.barcode.ProductHit
 import com.metaglance.core.image.RectPx
 
 /**
@@ -21,6 +22,9 @@ class CodeHit(val text: String?, val format: Int, val box: RectPx?) {
     /** The code for `barcode.seen`, or null: a QR code, a region, and a text with a wrong check digit give null. */
     val productCode: String?
         get() = if (format in CodeScanner.PRODUCT_FORMATS) text?.let { Gtin.fromDecoder(it, upcE = format == Barcode.FORMAT_UPC_E) } else null
+
+    /** The hit for the rules of `core`, which know no ML Kit type. */
+    fun toProductHit() = ProductHit(productCode, box)
 
     val formatName: String
         get() = when (format) {

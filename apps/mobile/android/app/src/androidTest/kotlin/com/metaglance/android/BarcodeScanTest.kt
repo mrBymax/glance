@@ -94,6 +94,20 @@ class BarcodeScanTest : FakeServerTestCase() {
         assertEquals(StreamStatus.STREAMING, native.stream)
     }
 
+    // The frames cannot read the blurred bars, so without this rule the region would ask for the same still again.
+    @Test
+    fun aStillWithACodeEndsTheStillsOfItsRegion() {
+        startSession(TestClips.BLURRED)
+        useStillImage(TestClips.BARCODE_IMAGE)
+
+        val report = waitFor("barcode.seen goes out", LABEL_MS, ::state) { traffic.sent<DeviceToServer.BarcodeSeen>() }
+        assertEquals(DeviceToServer.BarcodeSeen(TestClips.BARCODE_TEXT, BarcodeSource.BARCODE), report)
+        // Longer than the 6 seconds between two stills.
+        Thread.sleep(NEXT_STILL_MS)
+        assertEquals(1, barcodes().size)
+        assertEquals(emptyList<TrafficRecorder.Frame>(), labels())
+    }
+
     @Test
     fun aStillRequestGivesALabelFrameWhenThePhoneReadsNoCode() {
         startSession()
@@ -165,6 +179,7 @@ class BarcodeScanTest : FakeServerTestCase() {
         const val LABEL_MS = 15_000L
         const val WATCH_MS = 6_000L
         const val QUIET_MS = 4_000L
+        const val NEXT_STILL_MS = 8_000L
         const val MIN_JPEG_BYTES = 1000
     }
 }

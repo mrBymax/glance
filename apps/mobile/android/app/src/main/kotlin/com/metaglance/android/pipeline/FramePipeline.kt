@@ -4,9 +4,9 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import com.metaglance.core.barcode.BarcodeRegion
 import com.metaglance.core.barcode.BarcodeVote
+import com.metaglance.core.barcode.CodeChoice
 import com.metaglance.core.barcode.CodeRead
 import com.metaglance.core.barcode.LabelPolicy
-import com.metaglance.core.barcode.TextRows
 import com.metaglance.core.contract.BarcodeSource
 import com.metaglance.core.frame.FrameHeader
 import com.metaglance.core.image.FaceResult
@@ -57,10 +57,11 @@ class FramePipeline(
     private val label = LabelPolicy()
     private val ocrPace = Pace(OCR_EVERY_MS)
     private val labelRequested = AtomicBoolean()
+    private val stillGaveCode = AtomicBoolean()
     private val picker = SharpestFramePicker<RawFrame>()
     private var seq = 0
     private var lastSkip: UploadSkip? = null
-    private var scanFailed = false
+    private val failedSteps = HashSet<String>()
 
     /** Call it for each frame, on one background thread. It blocks while ML Kit reads the frame. */
     fun onFrame(frame: RawFrame) {
@@ -97,15 +98,18 @@ class FramePipeline(
     /** The server asked for a still with `still.request`. The next frame gives the request to the label policy. */
     fun requestLabelStill() = labelRequested.set(true)
 
+    /** The phone read a code in the label still. The next frame tells the label policy. */
+    fun onLabelStillCode() = stillGaveCode.set(true)
+
     fun close() {
         scanner.close()
         digits.close()
     }
 
     private fun readProduct(nowMs: Long, frame: RawFrame, hits: List<CodeHit>) {
-        // The shopper holds one product up, so the largest code is the one to read.
-        val decoded = hits.filter { it.productCode != null }.maxByOrNull { it.areaPx }?.productCode
-        val region = if (decoded != null) null else BarcodeRegion.largest(hits.mapNotNull { it.box }.filter(BarcodeRegion::isLinear))
+        val productHits = hits.map { it.toProductHit() }
+        val decoded = CodeChoice.decoded(productHits)
+        val region = if (decoded != null) null else CodeChoice.region(productHits)
         val read = when {
             decoded != null -> CodeRead(decoded, BarcodeSource.BARCODE)
             region != null -> readRegion(nowMs, frame, region)
@@ -113,7 +117,10 @@ class FramePipeline(
         }
         if (read != null && !vote.accepted) log("barcode read ${read.code} ${read.source.name.lowercase()}")
         vote.onFrame(nowMs, read)?.let(onBarcode)
-        if (label.onFrame(nowMs, decoded != null || region != null, vote.accepted, labelRequested.getAndSet(false))) onLabelStill()
+        if (stillGaveCode.getAndSet(false)) label.onStillCode()
+        // A frame that waits in the socket is no reason to drop a still.
+        val canUpload = gate().let { it == null || it == UploadSkip.STILL_SENDING }
+        if (label.onFrame(nowMs, decoded != null || region != null, vote.accepted, labelRequested.getAndSet(false), canUpload)) onLabelStill()
     }
 
     /** The second and the third way to read a code: the region in a larger scale, then the digits under the bars. */
@@ -125,8 +132,7 @@ class FramePipeline(
         if (!ocrPace.tryRun(nowMs)) return null
         val withDigits = BarcodeRegion.forDigits(region, frame.width, frame.height) ?: return null
         val words = reading("digit read", emptyList()) { frame.regionBitmap(withDigits).use { digits.read(it) } }
-        // Two codes in one region are a text that the rules cannot read.
-        return TextRows.codes(words).singleOrNull()?.let { CodeRead(it, BarcodeSource.OCR) }
+        return CodeChoice.ofWords(words)
     }
 
     private fun <T> Bitmap.use(read: (Bitmap) -> T): T = try {
@@ -137,10 +143,10 @@ class FramePipeline(
 
     /** A step of ML Kit that fails is a frame with no code. The upload of the frame does not depend on it. */
     private fun <T> reading(step: String, fallback: T, read: () -> T): T = try {
-        read().also { scanFailed = false }
+        read().also { failedSteps -= step }
     } catch (e: ExecutionException) {
-        if (!scanFailed) log("$step failed: ${e.cause?.message ?: e.message}")
-        scanFailed = true
+        // One line for each row of failures of a step.
+        if (failedSteps.add(step)) log("$step failed: ${e.cause?.message ?: e.message}")
         fallback
     }
 
