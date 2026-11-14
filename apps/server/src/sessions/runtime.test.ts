@@ -241,3 +241,20 @@ it('fails a payment that a restart cut off, and keeps the cart', async () => {
   expect(again.state.phase).toBe('shopping');
   expect(again.snapshot().cart.totalCents).toBe(189);
 });
+it('ends a checkout that a restart cut off, so the kiosk is free and the shopper starts again at the code', async () => {
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
+  session.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
+  await session.settled();
+  expect((await store.getSession(session.id))!.checkout!.step).toBe('offered');
+  const again = (await new SessionRegistry(deps).get(session.id))!;
+  expect(again.state).toMatchObject({ phase: 'shopping', checkout: null, prompt: null });
+  expect(again.snapshot()).toMatchObject({ kiosk: null, prompt: null, cart: { totalCents: 189 } });
+  // The pay prompt of the old process cannot pay.
+  again.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
+  expect(startPayment).not.toHaveBeenCalled();
+  // The code starts a new checkout with a new prompt.
+  again.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
+  expect(again.state.checkout).toMatchObject({ step: 'offered' });
+  expect(again.state.prompt!.id).toBe('p-0003');
+});

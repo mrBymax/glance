@@ -235,7 +235,7 @@ sequenceDiagram
 - The payment is a mock. No money moves. After `PAYMENT_DELAY_MS` the server writes an order (`ord-` plus 8 hex characters, `method: "demo"`) and gives the rules the result.
 - A kiosk that registered with `failPayment: true` declines each payment and makes no order. The cart stays.
 - A second yes while the payment runs has no effect, so one checkout makes one order.
-- The store keeps each kiosk. After a restart of the server, no session holds a kiosk, and a shopper starts the checkout again at the code.
+- The store keeps each kiosk. After a restart of the server, no session holds a kiosk. A session that was in a checkout loads with no checkout, and its shopper starts again at the code.
 - If the server stops while a payment waits, that payment fails when the session loads again. No order exists for it.
 - The `spotCheck` value of a kiosk is stored and has no effect yet.
 
@@ -380,6 +380,7 @@ sequenceDiagram
 
 - `create` makes the session ID with `randomUUID()` and the token from 24 random bytes, and writes the first record.
 - `get` looks in the memory first and then in the store. So a phone that connects again after a restart of the server finds its session and its cart.
+- A stored session with an open checkout comes back with no checkout and no pay prompt. Its kiosk is free after the restart, so the shopper looks at the code again. The cart stays.
 - A stored session with a payment that the restart cut off gets a failed payment. The cart stays.
 - One timer sends a `tick` each second to each session in the phase `shopping` or `checkout`. The rules that depend on time alone need it.
 - The speak counter starts again at `s-1` after a restart, and the captions of the old process are gone.
