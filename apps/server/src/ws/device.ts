@@ -26,6 +26,8 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
   onFrame: FrameHandler;
   /** Runs when a phone has its snapshot and listens to the events of the session. */
   onOpen: (session: SessionRuntime) => void;
+  /** Gets the text of each QR code that the phone reports. */
+  onKioskSeen: (session: SessionRuntime, text: string) => void;
 }): void {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
   /** Each open socket, with false when it sent no pong since the last ping. */
@@ -145,8 +147,10 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
       case 'speech.final':
         onSpeech(session, message);
         return;
-      // No kiosk and no fingerprint check exist yet.
       case 'kiosk.seen':
+        deps.onKioskSeen(session, message.text);
+        return;
+      // No fingerprint check exists yet.
       case 'biometric.result':
         return;
     }

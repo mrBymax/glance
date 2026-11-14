@@ -1,11 +1,15 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import { formatKioskCode } from '@glance/shared';
 import { EventBus } from './bus';
 import type { CatalogIndex } from './catalog/catalog';
 import type { Clock } from './clock';
 import type { Config } from './config';
 import type { Store } from './db/store';
+import { registerKioskRoutes } from './http/kiosks';
 import { registerSessionRoutes } from './http/sessions';
 import { registerSpeechRoutes } from './http/speech';
+import { KioskService } from './kiosk/kiosks';
+import { createPayments } from './kiosk/payment';
 import { ScriptPlayer, readFakeScript } from './recognition/fake';
 import type { Recognizer } from './recognition/gemini';
 import { createFrameHandler } from './recognition/intake';
@@ -39,8 +43,12 @@ declare module 'fastify' {
     sessions: SessionRegistry;
     bus: EventBus;
     clips: ClipCache;
+    kiosks: KioskService;
   }
 }
+
+/** The kiosk that the fake server has from its start. A printed "GL1 K3X7" code then starts a checkout. */
+const FAKE_KIOSK = { name: 'Checkout 3', store: 'Demo Market', code: 'K3X7' };
 
 const ERROR_NAMES: Record<number, string> = { 400: 'bad_request', 401: 'unauthorized', 404: 'not_found' };
 
@@ -95,6 +103,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   const bus = new EventBus();
   const clips = new ClipCache(config.speechCacheDir, deps.store);
+  const kiosks = new KioskService({ store: deps.store, bus, clock: deps.clock });
+  const payments = createPayments({ store: deps.store, clock: deps.clock, kiosks, delayMs: config.paymentDelayMs });
   const sessions = new SessionRegistry({
     clock: deps.clock,
     catalog: deps.catalog,
@@ -109,15 +119,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       publicBaseUrl: () => config.publicBaseUrl,
       log: (line) => app.log.warn(line),
     }),
-    // No payment exists yet.
-    startPayment: () => undefined,
-    afterStep: () => undefined,
+    startPayment: payments,
+    afterStep: (session, before) => kiosks.sync(session, before),
   });
   app.decorate('bus', bus);
   app.decorate('sessions', sessions);
   app.decorate('clips', clips);
+  app.decorate('kiosks', kiosks);
   sessions.startTicks();
-  app.closers.add(() => sessions.stop());
+  app.closers.add(() => {
+    sessions.stop();
+    payments.cancelAll();
+    kiosks.stop();
+  });
 
   app.get('/healthz', async () => ({
     ok: true,
@@ -127,7 +141,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }));
 
   // With fake recognition, one script player stands for the frames and the recognition calls of each session.
-  const player = fakeScript === null ? null : new ScriptPlayer({ script: fakeScript, clock: deps.clock, onKiosk: () => undefined });
+  const player = fakeScript === null ? null : new ScriptPlayer({
+    script: fakeScript,
+    clock: deps.clock,
+    onKiosk: (session, which) => {
+      const kiosk = which === 'newest' ? kiosks.newest() : kiosks.byCode(which);
+      if (kiosk) kiosks.sight(session, formatKioskCode(kiosk.code));
+    },
+  });
   if (player) app.closers.add(() => player.stopAll());
   const logFrame: FrameHandler = (_session, { header, jpeg }) => {
     app.log.info(
@@ -148,12 +169,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     publicBaseUrl: () => config.publicBaseUrl,
     // A browser client with no phone gets a fake device, and then hears "Camera on".
     onEventsOpen: (session) => player?.start(session, { fakeDevice: !session.connected }),
+    onDelete: (sessionId) => kiosks.release(sessionId),
   });
+  registerKioskRoutes(app, { kiosks });
   registerSpeechRoutes(app, { cache: clips, fake: config.fakeSpeech });
   registerDeviceSocket(app, {
     onFrame: player ? logFrame : deps.onFrame ?? recognize ?? (() => undefined),
     onOpen: (session) => player?.start(session, { fakeDevice: false }),
+    onKioskSeen: (session, text) => kiosks.sight(session, text),
   });
+
+  await kiosks.load();
+  // A store that outlives the process already has the kiosk after the first start.
+  if (player && !kiosks.byCode(FAKE_KIOSK.code)) {
+    await kiosks.register({ name: FAKE_KIOSK.name, store: FAKE_KIOSK.store }, FAKE_KIOSK.code);
+  }
 
   return app;
 }

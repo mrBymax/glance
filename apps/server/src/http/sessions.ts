@@ -24,6 +24,8 @@ export function registerSessionRoutes(app: FastifyInstance, deps: {
   publicBaseUrl: () => string;
   /** Runs when a client opens the events stream of a live session, after the stream listens to the bus. */
   onEventsOpen: (session: SessionRuntime) => void;
+  /** Runs when a client deletes a session, before the session stops. */
+  onDelete: (sessionId: string) => void;
 }): void {
   const badRequest = (reply: FastifyReply) => reply.code(400).send({ error: 'bad_request' });
 
@@ -108,6 +110,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: {
   app.delete('/api/sessions/:id', async (request: SessionRequest, reply) => {
     const session = await find(request, reply);
     if (!session) return reply;
+    deps.onDelete(session.id);
     session.end();
     await app.sessions.remove(session.id);
     return reply.code(204).send();

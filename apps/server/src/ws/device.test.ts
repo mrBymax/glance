@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { CreateSessionResponseSchema, type ServerToDevice } from '@glance/shared';
+import { CreateSessionResponseSchema, type ServerToDevice, formatKioskCode } from '@glance/shared';
 import { NO_RESULT } from '../recognition/result';
-import { KIOSK, STREAMING } from '../sessions/harness';
+import { STREAMING } from '../sessions/harness';
 import type { SessionRuntime } from '../sessions/runtime';
 import type { RuleInputBody } from '../sessions/types';
 import { type TestApp, type TestPhone, connectPhone, testApp, upgradeStatus } from '../testing';
@@ -105,14 +105,15 @@ it('the word remove takes back the last add when no prompt is current', async ()
 it('the word add never pays, and the word pay does', async () => {
   session.dispatch(seeOat);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
-  session.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
+  const kiosk = await t.app.kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
+  phone.send({ t: 'kiosk.seen', text: formatKioskCode(kiosk.code) });
   phone.send({ t: 'prompt.done', promptId: 'p-0002' });
   phone.send({ t: 'speech.final', text: 'add', confidence: 0.9, locale: 'en-US' });
   phone.send({ t: 'intent', kind: 'help', source: 'phone' });
   await phone.next((m) => m.t === 'speak' && m.text.startsWith('Hold a product up'));   // the server read both messages
   expect(session.state.checkout!.step).toBe('offered');
   phone.send({ t: 'speech.final', text: 'pay', confidence: 0.9, locale: 'en-US' });
-  await vi.waitFor(() => expect(session.state.checkout!.step).toBe('paying'));
+  await vi.waitFor(() => expect(session.state.phase).toBe('paid'));
 });
 it('the word pay never adds a product', async () => {
   session.dispatch(seeOat);
@@ -121,7 +122,7 @@ it('the word pay never adds a product', async () => {
   await serverReadAll();
   expect(session.state.cart.items).toEqual([]);
 });
-it('drops kiosk.seen and biometric.result for now', async () => {
+it('drops kiosk.seen for a code that no kiosk has, and biometric.result', async () => {
   phone.send({ t: 'kiosk.seen', text: 'GL1 K3X7' });
   phone.send({ t: 'biometric.result', ok: true });
   await serverReadAll();
