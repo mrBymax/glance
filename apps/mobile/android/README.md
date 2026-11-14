@@ -13,7 +13,7 @@ The app has three screens. Each one has its own icon on the phone.
 - "Glance Mock" is `MockMenuActivity`: the menu of mock mode, in each build. See "Mock mode for seats without glasses".
 - "Glance Probe" is `ProbeActivity`, in the debug build only: a list of buttons above a log. It writes each log line to Logcat with the tag `Glance`, and to `Android/data/com.metaglance.android/files/probe/probe-<start time>.log` on the phone.
 
-The debug APK has about 155 MB, because it holds the ML Kit models for 4 processor types and the libraries of the DAT SDK. The text recognition model is about 43 MB of it.
+The debug APK has about 211 MB, because it holds the ML Kit models and the MediaPipe library for 4 processor types, and the libraries of the DAT SDK. The text recognition model is about 43 MB of it, and the MediaPipe library with the model of the held crop is about 53 MB.
 
 ## Parts
 
@@ -22,7 +22,7 @@ flowchart LR
     Page[Page in the WebView] <--> Bridge[WebBridge]
     Bridge <--> Session[SessionController]
     Session --> Link[DatLink]
-    Session --> Pipeline[FramePipeline with CodeScanner, DigitReader, and FaceFinder]
+    Session --> Pipeline[FramePipeline with CodeScanner, DigitReader, HeldFinder, and FaceFinder]
     Session --> Queue[SpeechQueue with ExoLinePlayer]
     Session <--> Socket[DeviceSocket]
     Service[SessionService: foreground service, wake lock, notification] -- "runs while sessionActive" --> Session
@@ -190,7 +190,7 @@ Rules of `SessionController`:
 - The frames of the stream and the stills share one upload number, `seq`, which counts up for the life of the app process.
 - With the socket down for 3 seconds, the phone voice says "Connection lost. Your cart is safe. Glances are paused."
 - With the media volume at 0, no line plays, and each prompt is reported at once.
-- `FramePipeline` scans each frame for a kiosk code and for the barcode of a product, and selects the sharpest frame of each 150 ms that is not damaged. See "The barcode of a product" and "Damaged frames". `FaceFinder` looks for faces in that frame with ML Kit, on the phone. The upload is the full frame with each face pixelated, as a JPEG of quality 80 with a long side of 768 pixels at most: 432 x 768 for a stream of 720 x 1280 and for the default stream of 504 x 896, and 360 x 640 for a stream of 360 x 640. Until 2026-11-14 the upload was the center of the frame (80 percent of the width, 70 percent of the height). That crop cut off a product that the shopper held at chest height: in the test of that day the can was at the lower edge of several frames. The full frame shows more of the room and of the people in it, and face detection is the one guard for them. Its header has `blurred: true`. If face detection fails, the frame is dropped. The app writes no frame to storage.
+- `FramePipeline` scans each frame for a kiosk code and for the barcode of a product, and selects the sharpest frame of each 150 ms that is not damaged. See "The barcode of a product" and "Damaged frames". With the setting `Held crop` on, which is the default, the upload is the crop around the product in the hand, or the full frame one time each second. See "The crop of the held product". The rest of this rule describes the full frame. `FaceFinder` looks for faces in that frame with ML Kit, on the phone. The upload is the full frame with each face pixelated, as a JPEG of quality 80 with a long side of 768 pixels at most: 432 x 768 for a stream of 720 x 1280 and for the default stream of 504 x 896, and 360 x 640 for a stream of 360 x 640. Until 2026-11-14 the upload was the center of the frame (80 percent of the width, 70 percent of the height). That crop cut off a product that the shopper held at chest height: in the test of that day the can was at the lower edge of several frames. The full frame shows more of the room and of the people in it, and face detection is the one guard for them. Its header has `blurred: true`. If face detection fails, the frame is dropped. The app writes no frame to storage.
 - The app plays each line of the server one time, with the sound of the line. It plays one sound by itself: the answer sound of a head gesture, `added` for a yes and `removed` for a no, at the moment the app sends the answer. The line that answers the gesture then plays with no sound, so one answer gives one sound. See "Head gestures". A still, a label upload, and a barcode report play no sound. `apps/server/README.md` lists each sound and each vibration of a line with its trigger, in "A guard for the voice".
 - `ExoLinePlayer` plays the sound of a line, then its clip. A clip that does not load, that does not start in 3 seconds, or whose address is not an address, is replaced by the phone voice. The speech rate of the profile changes the clip, not the sound.
 
@@ -296,8 +296,8 @@ The still photo:
 - The still also needs `StillPolicy`, which it shares with the sharp second look: one capture at a time, and one start each 5 seconds. With a still gap below 5000 ms, the limit of `StillPolicy` is the still gap.
 - `LabelStill` reads the still on the phone first, with the scanner and with OCR. A code of the decoder counts with its check digit, because one still has no second image that can agree. It does not count when the digits under its bars give another code: ML Kit read blurred bars as a wrong code with a right check digit in one test image. Such a still goes to the server. With no decoded code, the digits count when the still holds exactly one code. With no region in the still, only 12 or 13 digits count, because 8 digits in a photo can be a date.
 - A still with a code gives `barcode.seen`, and the still stays on the phone.
-- A still with no code goes to the server as a frame with `kind: label` and `blurred: true`: the full photo with no crop, each face pixelated, a long side of 1600 pixels at most, and JPEG quality 85. If face detection fails, the still is dropped.
-- Each 10 seconds the frame path logs `frame path: scan <n>x mean <ms> max <ms> ms, product ..., faces ..., pixelate ..., jpeg ...`: the time of the code scan and the product read of each frame, and of the face detection, the crop with pixelation, and the JPEG of each upload.
+- A still with no code goes to the server as a frame with `kind: label` and `blurred: true`: the full photo with no crop, each face pixelated, a long side of 1600 pixels at most, and JPEG quality 85. If face detection fails, the still is dropped. With the held crop on, a still in which the detector finds a region goes out as the crop around that region. See "The crop of the held product".
+- Each 10 seconds the frame path logs `frame path: scan <n>x mean <ms> max <ms> ms, product ..., faces ..., pixelate ..., jpeg ...`: the time of the code scan and the product read of each frame, and of the face detection, the crop with pixelation, and the JPEG of each upload. With the held crop on, the line also has the detector time and the counts of the crop. See "Log lines" in "The crop of the held product".
 - A capture that gives no photo (`capture error CaptureFailed`, after about 10 seconds) stops frames and motion samples for that time. After one, the app takes no still by itself for 45 seconds and logs `still failed: no new still for 45 s`. A reference picture that a person asks for does not wait. Measured on 2026-11-14 with the stream at 360 x 640: three failed captures in 40 seconds, each with a motion stall of 11 to 14 seconds.
 - The log line `label still asked: region <box> in <w>x<h>` or `label still asked: server request` says why the phone takes a still.
 
@@ -376,6 +376,7 @@ The app asks the glasses for a frame size and a frame rate. A person can change 
 | The frame size | `Stream quality: <name> <width> x <height>` | `glance.streamQuality` | `HIGH` | `HIGH` 720 x 1280, `MEDIUM` 504 x 896, `LOW` 360 x 640 |
 | The frames each second | `Stream frame rate: <n>` | `glance.streamFps` | `7` | 2, 7, 15, 24, 30 |
 | The still of the sharp second look | `Second look still: <off or on>` | `glance.secondLookStill` | `false` | `false`, `true` |
+| The crop of the held product | `Held crop: <on or off>` | `glance.heldCrop` | `true` | `true`, `false`. See "The crop of the held product". |
 
 1. Open "Glance Mock" and go to the group `Stream`, at the end of the list.
 2. Tap an item. Each tap goes to the next value, and from the last value to the first.
@@ -393,16 +394,17 @@ What follows the settings:
 
 | Part | 720 x 1280 | 504 x 896 | 360 x 640 |
 |---|---|---|---|
-| The upload: the full frame, with a long side of 768 pixels at most and no scale up | 432 x 768 | 432 x 768 | 360 x 640 |
+| The upload of a frame with no region, and each upload with the held crop off: the full frame, with a long side of 768 pixels at most and no scale up | 432 x 768 | 432 x 768 | 360 x 640 |
+| The upload of a frame with a region: the crop, with no scale. The median of the measurement | 298 x 598 | 224 x 364 | not measured |
 | The scale of the upload | 0.6 | 0.86 | 1 |
 | The largest region of a barcode that did not decode (`BarcodeRegion.fits`) | 360 x 384 | 252 x 268 | 180 x 192 |
 | The smallest face that `FaceFinder` asks ML Kit for: 5 percent of the width | 36 pixels | 25 pixels | 18 pixels |
 
 - The crop of before sent a stream of 504 x 896 with no scale, as 402 x 626. The full frame of that stream is scaled by 0.86, so a product has 14 percent fewer pixels on each side. A stream of 360 x 640 loses none. Nobody measured what the full frame does to recognition: the saved frames of each test are crops. A long side of 896 pixels (`FrameGeometry.outputSize`) would send the default stream with no scale, for about 1.4 times the pixels of each upload.
 - At 2 frames each second, one missed frame is a gap of 1000 ms. A rule that must last over one missed frame has a gap of 2.5 frame times at least (`StreamSetup.gapMs`): 1250 ms at 2 frames each second for the kiosk dwell (600 ms at the other rates), the barcode vote (1000 ms), the region of the label still (600 ms), and the frame flow of the motion watchdog (1000 ms).
-- The window of an upload is 150 ms (`Timing.uploadEveryMs`). At 2 and at 7 frames each second, most windows have one frame, so the phone uploads almost each frame that is not damaged: 6.5 frames each second from a stream of 7. A window starts where the last one ended, and not at its first frame. A window of 300 ms that started at its first frame gave one upload each 400 ms in the test of 2026-11-14, because a frame each 143 ms never falls on the end of such a window.
+- The window of an upload is 150 ms (`Timing.uploadEveryMs`). At 2 and at 7 frames each second, most windows have one frame, so the phone uploads almost each frame that is not damaged: 6.5 frames each second from a stream of 7. With the held crop on, this holds for the frames with a region. With no region, one full frame goes out each second. A window starts where the last one ended, and not at its first frame. A window of 300 ms that started at its first frame gave one upload each 400 ms in the test of 2026-11-14, because a frame each 143 ms never falls on the end of such a window.
 - The smallest crop of a region is 16 pixels at each size, and the second scan scales a crop 2 or 3 times at each size. So a barcode must be nearer to the glasses at a smaller frame size.
-- The instrumented tests ask for 720 x 1280 at 7 frames each second (`TestStreamRule`), because their clips and their checks are for that stream.
+- The instrumented tests ask for 720 x 1280 at 7 frames each second (`TestStreamRule`), because their clips and their checks are for that stream. The rule also sets the held crop to off, because no clip shows a product in a hand. `HeldCropTest` sets it to on with `HeldCropRule`.
 
 What nobody measured:
 
@@ -475,6 +477,181 @@ What nobody measured:
 - A scene with a pattern of 16 pixels in both directions, for example a tiled wall at one distance. It can read as damage while the head is still.
 - The time of the measure on a phone.
 - The pipeline with a damaged frame on a phone: no instrumented test gives it one. Each frame of the test clips has a score below 1, measured with a decoder on the build computer.
+
+## The crop of the held product
+
+The phone scaled each stream frame to a long side of 768 pixels before the upload. A can in the hand is then about 90 pixels wide, and 84 percent of the uploads of 2026-11-14 showed nothing in a hand. With the held crop, the phone looks for the product in each frame and uploads the part of the frame around it, with the pixels of the stream.
+
+```mermaid
+flowchart TD
+    F[Frame of the stream, I420, 720 x 1280 or 504 x 896] --> D{Damaged?}
+    D -- yes --> K[Code scan for the kiosk code only. No detector, no upload.]
+    D -- no --> S[Code scan on the full frame: kiosk code, barcode, digits]
+    S --> H[HeldFinder: the frame at 360 x 640 through EfficientDet-Lite0]
+    H --> R{HeldRegion.choose: a box of a product class that fills 3 to 50 percent of the frame?}
+    R -- yes --> P1[Picker: preferred, sharpness inside the region]
+    R -- no --> P2[Picker: sharpness of the full frame]
+    P1 --> W[The frame of the 150 ms window: one with a region wins]
+    P2 --> W
+    W --> G{Upload gate open?}
+    G -- no --> X[No upload]
+    G -- yes --> V{Region in the picked frame?}
+    V -- yes --> C[Crop: the region with 30 percent more on each side, cut from the frame with no scale, JPEG quality 92]
+    C --> CX[Context image: the full frame at 216 x 384, JPEG quality 70]
+    CX --> U1[Upload with view crop, the crop rectangle, the source size, and contextBytes]
+    V -- no --> T{1000 ms since the last upload?}
+    T -- no --> X
+    T -- yes --> FU[Full frame, long side 768, JPEG quality 80, with view full]
+    FA[Face detection on the full frame, before each upload] -.-> C
+    FA -.-> CX
+    FA -.-> FU
+```
+
+### The detector
+
+`HeldFinder` runs the object detector of MediaPipe Tasks with the model EfficientDet-Lite0 (8 bit, 320 x 320 pixels, the 80 classes of COCO). The model file is in the APK, at `assets/held/efficientdet_lite0.tflite`, and the detector uses no network.
+
+| Part | Value | Source |
+|---|---|---|
+| Library | `com.google.mediapipe:tasks-vision:1.0.0`, Apache 2.0 | https://dl.google.com/android/maven2/com/google/mediapipe/tasks-vision/maven-metadata.xml |
+| Model | `efficientdet_lite0.tflite`, 4 602 795 bytes, SHA-256 `0720bf247bd76e6594ea28fa9c6f7c5242be774818997dbbeffc4da460c723bb`, Apache 2.0 | https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/latest/efficientdet_lite0.tflite, licence at https://www.kaggle.com/models/tensorflow/efficientdet |
+| Time of one frame in the documentation | 29.31 ms on the CPU of a Pixel 6 | https://developers.google.com/edge/mediapipe/solutions/vision/object_detector |
+| Time of one frame on the build computer | 23.7 ms at the median, 26.3 ms at the 90th percentile, 6150 frames | measured on 2026-11-14 with the Python package `mediapipe` 1.2.3 |
+| Size of the debug APK | 157.3 MB before, 210.8 MB after | `app-debug.apk`, which holds the libraries of 4 processor types |
+| Size for one phone | 11.0 MB for `libmediapipe_tasks_jni.so` (arm64-v8a) and 4.6 MB for the model | the APK listing |
+
+- The version 1.0.0 is not the newest one. From 1.1.0 the library brings `litertlm-android` with a native library of 22 MB, which the object detector does not use.
+- The model knows no hand and no "can". A can in a hand gets the class `cup` or `bottle`. So the detector finds cans, bottles, cups, and the food classes. It does not find a box, a bag, or a pack. For these the full frame of each second is the path.
+- `HeldRegion` in `core` has the rules. A box counts with a score of 0.15, a class of `HeldRegion.LABELS`, and an area of 3 to 50 percent of the frame. The largest such box is the region.
+- The size is the rule for "held". A product at the length of an arm fills more of the frame than a product on a table: the boxes of the held can were 18 to 27 percent of the frame width, and 90 percent of the cans on the tables were below 15 percent.
+- The phone is no judge of "held". A product on a near table or shelf gets a region too. The server model decides, with the context image.
+- A detector that does not start, or that fails on a frame, turns the held crop off for that stream. The log has `held crop off: the detector did not start: <message>` or `held crop off: the detector failed: <message>`, and each window uploads its full frame again.
+
+Why this detector. Each number is of 2026-11-14, from the saved uploads of the glasses, with the Python runtime of MediaPipe on the build computer. 146 frames have a label by eye: 117 with a product in a hand, 29 with none. 88 of the 117 have a box of the held product from the observe call of the server.
+
+| Detector | Frames with a product in a hand that get a region | Region on the held product, of 88 | Frames with nothing in a hand that get a region | Time of a frame on the build computer |
+|---|---|---|---|---|
+| MediaPipe Hand Landmarker (`hand_landmarker.task`), a hand at a confidence of 0.1 | 11 of 117 | 0: of 8 hands in frames with a box, none held the product | 9 of 29 | 25.8 ms |
+| MediaPipe Object Detector, EfficientDet-Lite0 8 bit, with the rule of `HeldRegion` | 65 of 117 | 52, and 3 on another object | 12 of 29 | 23.7 ms |
+| The same model as 16 bit float | 63 of 117, with a rule of that day | 40, and 17 on another object | 9 of 29 | 32.2 ms |
+| EfficientDet-Lite2 8 bit | 56 of 117, with a rule of that day | 44, and 5 on another object | 14 of 29 | 61.3 ms |
+| SSD MobileNetV2 | 39 of 117, with a rule of that day | 34, and 2 on another object | 10 of 29 | 22.1 ms |
+| Mobile Object Localizer v1, with no classes | a box on the product in 46 of 88, at a score of 0.19 among 10 boxes of each frame | no rule divides them | the same 10 boxes | 5.7 ms |
+| ML Kit Object Detection and Tracking 17.0.2 | not measured: it runs on Android only | | | |
+
+- The Hand Landmarker does not find a hand that holds a can in these frames. Its model card says: "Not appropriate for: ... Predicting hand landmarks with gloves or occlusions. For example when the hand is holding objects" (https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Hand%20Tracking%20(Lite_Full)%20with%20Fairness%20Oct%202021.pdf).
+- ML Kit Object Detection was not selected, and no measurement is behind that. Its guide says that the stream mode "might need to process 30 or more frames" before the first object, which is 4 seconds at 7 frames each second, and that it finds "the most prominent object" (https://developers.google.com/ml-kit/vision/object-detection/android). In these frames the most prominent object is a laptop. The Mobile Object Localizer of the table is a public model of the same kind, with no classes, and its boxes did not tell the held product from the other objects.
+- The rows "with a rule of that day" used a width of 14 percent in place of the area. They compare the models, and their numbers are not those of the rule of the app.
+- A white balance, a gamma change, a gray image, and a detector image of a part of the frame gave fewer regions on the product than the frame as it is, or more regions on other objects.
+- The detector image has a long side of 640 pixels, made with one sample for each pixel. With that image the model gave 53 regions on the product, against 50 with the saved frame. At 320 pixels it gave 44.
+
+What the rule of the app gives in the saved sessions:
+
+| Set | Frames with a region |
+|---|---|
+| 267 uploads that the server named (`identified`) | 130, 49 percent |
+| 430 uploads with `ambiguous` or `unsure` | 246, 57 percent |
+| 3203 uploads with `none` | 833, 26 percent |
+| All 6150 saved uploads of 11 sessions | 1844, 30 percent |
+| 14 appearances of a store item in a hand | 7 have a region in the first second, 10 in the first 3 seconds, and 1 has none |
+
+- The upload rule on the 11 sessions gives 1844 crops and 923 full frames for 6150 uploads of before: 45 percent of the model calls.
+- The detector misses about half of the frames of a held can, and whole appearances of the purple can before a purple room. For these the full frame of each second is the path, as for a product with no class.
+
+### The crop
+
+- `HeldRegion.crop` adds 30 percent of the region on each side. With that margin the crop held the box of the observe call in 52 of 55 frames, and 40 percent added none.
+- The short side of a crop is half of its long side at least, and 224 pixels at least. A crop that reaches over an edge moves into the frame and keeps its size. Each value is even.
+- `FramePrep.prepare(frame, faces, crop)` cuts the crop from the I420 frame with no scale. A crop of a stream of 720 x 1280 is cut from 720 x 1280.
+- The JPEG has the quality 92, against 80 for a full frame.
+- Face detection runs on the full frame, as before, and not on the crop: it finds a face that the crop cuts. The part of each face inside the crop is pixelated, also the 20 percent margin of a face that ends beside the crop. A frame with no result of face detection is dropped.
+- The context image is the full frame with a long side of 384 pixels (216 x 384) and JPEG quality 70, with the same faces pixelated. It goes out in the message of the crop, behind the crop. See "Why a crop carries the full frame".
+
+Measured on the 140 frames with a region that the server saved at the size of the stream:
+
+| Stream frame | Crop: smallest, median, largest | JPEG of the crop: median, largest | Width of the can box in the crop | Width of the same box in an upload of before |
+|---|---|---|---|---|
+| 720 x 1280 | 262 x 376, 298 x 598, 350 x 700 | 36.6 kB, 51.1 kB | 152 pixels | 91 pixels |
+| 504 x 896 | 224 x 224, 224 x 364, 304 x 608 | 18.2 kB, 29.1 kB | 101 pixels | 86 pixels |
+
+- So a crop of a 720 x 1280 stream has 2.8 times the pixels on the can, and a crop of a 504 x 896 stream has 1.4 times.
+- The context image had about 13 kB.
+
+### The uploads
+
+`HeldUploads` in `core` selects the view of each picked frame.
+
+- A frame with a region goes out as a crop, in each window of 150 ms.
+- With no region, the full frame goes out when the last upload is 1000 ms old. It is the safety net for a product that the detector does not find.
+- The 1000 ms count from the last upload of each view. So no full frame comes between two crops of a held product: the server wants 2 equal results in a row, and a full frame with a small can would end the row.
+- `SharpestFramePicker` prefers a frame with a region in its window. The sharpness of such a frame is that of the region.
+- The header of an upload has `view` (`crop` or `full`), `crop` (the rectangle in frame pixels, for a crop), `source` (the size of the frame), and `contextBytes` (for a crop). `packages/shared/src/frame.ts` has the contract.
+- The barcode, the digits under it, and the kiosk code are read on the phone, in the full frame of each frame. They need no upload and no product in a hand. So a checkout works with no upload at all.
+- A label still and a still of the second look go through the same detector. A still with a region goes out as the crop around it, at the size of the photo, with JPEG quality 92 and with no context image. A still with no region goes out as before. The phone reads the barcode of a label still in the full photo first. A reference still is always the full photo.
+
+### Why a crop carries the full frame
+
+Measured on 2026-11-14 with `gemini-3.5-flash-lite` and the crops that the rule cuts from the saved frames. See "A crop of the phone" in `apps/server/README.md` for the table.
+
+- With a crop alone, the frame call said `held` true for 4 of 12 crops of an object that no hand held, and it named a product in one of them at a confidence of 0.9. The full frame of the same moments gave `none` 12 times.
+- With the full frame at 216 x 384 before the crop, 2 of the 12 were `held` true, both as `unsure`, and none had a name.
+- The context image costs about 13 kB in each crop upload, 410 prompt tokens, and no time that 27 calls can show.
+
+### The setting
+
+| Setting | Item of "Glance Mock" | Key of `local.properties` | Default | Values |
+|---|---|---|---|---|
+| The held crop | `Held crop: <on or off>` | `glance.heldCrop` | `true` | `true`, `false` |
+
+- The item is in the group `Stream`. Each tap switches it. The app reads the value at each camera start and logs `held crop: on` or `held crop: off`. A running camera keeps its value.
+- The app keeps the value over a restart. The key of `local.properties` sets the value of the build, and from the first tap the value of the menu wins.
+- With `off`, the app uploads the full frame of each window, with no view in the header, and it does not load the detector: the uploads of before the held crop.
+- `HeldRegion` in `core` holds the default, the texts, and each number of the rule. The probe screen runs with no crop.
+
+### Log lines
+
+Each line has the tag `Glance`.
+
+| Line | When |
+|---|---|
+| `held crop: on` or `held crop: off` | Each camera start |
+| `frame path: scan <n>x mean <ms> max <ms> ms, product ..., detector <n>x mean <ms> max <ms> ms, faces ..., pixelate ..., jpeg ..., context ..., held <n> of <m> frames, crop <n>x, full <n>x, median crop <w>x<h>` | Each 10 seconds. `detector` is the time of `HeldFinder` for a frame. `held` is the number of frames with a region of the frames that went through the detector. `crop` and `full` count the uploads. The median crop is absent with no crop. |
+| `first crop: seq=<n> <w>x<h> at <x>,<y> of <W>x<H>, <n> bytes, context <n> bytes` | The first crop of a stream |
+| `held crop off: the detector did not start: <message>` | The model did not load |
+| `held crop off: the detector failed: <message>` | The detector threw on a frame |
+| `held crop: the detector failed on a still: <message>` | The still then goes out as before |
+
+### What was measured, and what nobody measured
+
+Measured, on the build computer, with the saved uploads of 2026-11-14: the detectors of the table, the rule, the margin, the sizes and the bytes of a crop, and the effect of a crop on the frame call.
+
+Nobody measured, as of 2026-11-14:
+
+- The app on a phone. No instrumented test ran after this change, and nobody held a product before the glasses with it.
+- The time of the detector on the test phone, and what it does to the frame rate of the pipeline thread. The thread already spends about 12 ms on the code scan of a frame and 60 to 80 ms on the face detection of an upload, and a frame arrives each 143 ms.
+- Whether the Android runtime of MediaPipe 1.0.0 gives the boxes of the Python runtime 1.2.3. Both read the same model file.
+- The detector on the I420 frames. The numbers are from uploads of 288 x 448 to 720 x 1280 pixels after JPEG quality 80.
+- Whether the server names more products from a crop of the stream. The crops of the measurement come from saved uploads, most of them 288 or 402 pixels wide, so they have fewer pixels than a crop of the phone. In that measurement the crop named fewer cans than the full frame.
+- Another room, another light, and a real shelf. A shelf of bottles near the shopper gives regions with nothing in a hand, and a bottle on the shelf can be larger than the product in the hand.
+- A product that is no can: a box, a bag, a pack of paper cups. The one appearance of the paper cups got 2 regions in 15 frames.
+
+### Checks with the glasses
+
+Run one session with `Held crop: on` and the server with `SAVE_FRAMES`, and the same walk with `Held crop: off`.
+
+| Check | Expected, or what to write down |
+|---|---|
+| Read `held crop: on` and the `frame path` lines. | Write down the mean and the longest time of `detector`. Above 40 ms, the detector is too slow for each frame. |
+| Compare the line `frame <w>x<h> #<n> fps=<rate>` of `DatLink` with the count of `scan` in a `frame path` line. | With `scan` below 60 runs in 10 seconds at 7 frames each second, the pipeline thread drops frames. Write down both numbers with the crop on and off. |
+| Hold a can up for 5 seconds, 5 times. | Write down `held <n> of <m> frames` of the `frame path` lines of that time, and the time from the can in view to the line `first crop` or to the next crop in the server log. |
+| The same with a bottle, a box, and a bag. | Write down which ones get a region. |
+| Read `median crop <w>x<h>` at each stream size, and the `stream size` lines. | About 300 x 600 at 720 x 1280, and about 224 x 364 at 504 x 896. |
+| Look at the saved files `<seq>.crop.jpg` and `<seq>.context.jpg` of the server. | The crop shows the product and the fingers. Each face in both files is pixelated. No crop is a picture of blocks. |
+| Hold each Kili can up with its front to the glasses, with the crop on and with the crop off. | Write down for each can and each setting: the results of the server log (`identified`, `ambiguous`, `unsure`), and whether the voice names the can from the stream, with no still. This is the answer to "does the crop help". |
+| Put a can on the table, 40 cm from the glasses, and look at it for 5 seconds with nothing in the hand. | The server log has `view=crop` frames with the status `none`, and the voice says nothing. A name is a failure of the `held` rule: write down the saved crop. |
+| Look at a kiosk QR code with nothing in the hand, with a cart. | The pay prompt comes as before. The log of the app has `kiosk.seen`, and the server gets one full frame each second. |
+| Show the barcode of a product with the crop on. | `barcode.seen` goes out as before. |
+| Tap `Held crop: on` to `off`, start the camera again. | The log has `held crop: off`, no `detector` step is in the `frame path` line, and the server log has no `view=`. |
 
 ## Head gestures
 
@@ -803,7 +980,8 @@ flowchart LR
     Frame[frame: FrameCodec] --> Contract
     Kiosk[kiosk: KioskCode, KioskDwell] --> Contract
     Barcode[barcode: Gtin, BarcodeVote, LabelPolicy, LabelTiming, BarcodeRegion, TextRows] --> Contract
-    Image[image: Sharpness, FrameDamage, DamageLog, SharpestFramePicker, StreamSetup, UploadGate, FrameGeometry, Pixelate, FramePrep, I420, StillPolicy, WaitingStills, Pace] --> Contract
+    Image[image: Sharpness, FrameDamage, DamageLog, SharpestFramePicker, StreamSetup, UploadGate, FrameGeometry, Pixelate, FramePrep, HeldRegion, I420, StillPolicy, WaitingStills, Pace] --> Contract
+    Image --> Frame
     Barcode --> Image
     Gesture[gesture: HeadGestureDetector, HeadAxes, GestureReport, GyroScript, MotionCsv]
     Audio[audio: SpeechQueue, AnswerSoundOnce] --> Contract
@@ -818,7 +996,7 @@ flowchart LR
 | Package | Content |
 |---|---|
 | `contract` | The Kotlin mirror of `packages/shared`: one file for each TypeScript file, with the same type names and field names. `GlanceJson` is the one JSON format. `Codec` encodes and decodes the messages, and returns null for a message that it does not know. `Profiles.applyPatch` sets the keys of a profile patch, and changes nothing for a patch that does not decode or that leaves the limits of `ProfileSchema`. |
-| `frame` | `FrameCodec` builds and reads the binary frame message: a 4-byte header length, the JSON header, the JPEG. |
+| `frame` | `FrameCodec` builds and reads the binary frame message: a 4-byte header length, the JSON header, the JPEG, and for a crop its context image. The header says what the JPEG shows of the source image: `view`, `crop`, `source`, and `contextBytes`. |
 | `kiosk` | `KioskCode` parses the QR text `GL1 <code>`. `KioskDwell` reports a kiosk code after 1500 ms in view, then one time each second. |
 | `barcode` | `Gtin` holds the rules of `gtin.ts` in `packages/shared` for the digits of a product barcode: the GS1 check digit, the UPC-A form of a UPC-E code, the 13-digit form, and the codes of one store. `Gtin.digitRuns` finds each code of 8, 12, or 13 digits with a right check digit in an OCR text, also when the text has the digits in groups such as `8 076809 513753` or in neighbouring text elements. It reads 8 digits as EAN-8, never as UPC-E. `Gtin.fromDecoder` gives the code of a decoder as the phone sends it. `BarcodeVote` reports a code when frames agree on it, then one time each second. `LabelPolicy` says when a still must read a barcode. `LabelTiming` holds the two times of that policy that a person can set, with their limits, and reads the text of a settings field. `BarcodeRegion` gives the crops around a region that did not decode, and says if a box has the form of a product barcode. `TextRows` puts the words of an OCR result into rows and finds the codes in them. |
 | `image` | `Sharpness` and `SharpestFramePicker` select the sharpest frame of each 150 ms that is not damaged. `FrameDamage` tells a frame of decoder blocks, and `DamageLog` counts these frames for the log. `StreamSetup` has the frame sizes and the frame rates that the app can ask of the glasses. `UploadGate` gives the reason to skip an upload. `FrameGeometry` and `FramePrep` crop and scale a frame to a long side of 768 pixels at most. `FrameGeometry.mapBox` maps a face box into the output and never makes it smaller. `Pixelate` covers a box that is 20 percent larger on each side with blocks of one color. A block has one sixth of the box width, and 8 pixels at least. `I420.cropScaleToArgb` converts with BT.709 limited range. `I420.cropLumaToArgb` gives a crop of the Y plane as gray pixels in a larger scale. `StillPolicy` limits the still photos: one at a time, and one start each 5 seconds. `WaitingStills` keeps a still that waits for the answer to a prompt. `Pace` limits a slow step, for example OCR, to one run in a given time. |
@@ -903,7 +1081,7 @@ The top line of the menu shows `NativeState` and `DeviceState` as JSON, live. Th
 | Force | `Meta AI missing`, `Update required`, `Stream error BATTERY_LOW`, `Stream error THERMAL_HOT`. MockDeviceKit has no call for these states, so the debug hooks of `DatLink` make them. |
 | App | `Server URL`. `Drop server link 10 s`: the socket closes and connects again after 10 seconds. `Sensitivity: gentle, normal, firm` for the head gestures. `Use placeholder page`. |
 | Barcode | `Barcode wait (ms)`, `Still gap (ms)`, and `Save barcode waits`: the two times of the label still, from the next camera start. They also count for real glasses. See "The two times of the label still". |
-| Stream | `Stream quality` and `Stream frame rate`: what the app asks of the camera stream, from the next camera start. `Second look still`: the still for a `glance.ambiguous` event, off by default. Each tap goes to the next value. They also count for real glasses. See "The stream settings". |
+| Stream | `Stream quality` and `Stream frame rate`: what the app asks of the camera stream, from the next camera start. `Held crop`: the upload of the crop around the product in the hand, on by default. See "The crop of the held product". `Second look still`: the still for a `glance.ambiguous` event, off by default. Each tap goes to the next value. They also count for real glasses. See "The stream settings". |
 
 The states of the app, and the items that make each one:
 
@@ -984,12 +1162,14 @@ flowchart LR
 | `BarcodeScanTest` | The barcode of a product, with the clips of `make-clips.mjs` and the fake server of the app. The sharp code gives `barcode.seen` with the source `barcode`, then 3 to 5 reports in 3.3 seconds. The digits with no bars, and the sharp digits under blurred bars, never give another code than their own. The kiosk clip gives `kiosk.seen`, no `barcode.seen`, and no still. The blurred bars give one frame with `kind: label`, and no code. With blurred bars in the stream and the sharp code as the still, the phone sends one `barcode.seen` and takes no other still. The command `label` gives a label frame, or `barcode.seen` when the still holds a code that the phone reads. Two commands within one second give one still, and a `label` right after `amb` gives none, with the second look still on. |
 | `LabelStillTest` | `LabelStill.read` with no glasses and no server. ML Kit reads the code of `barcode.png`, the blurred bars of `barcode-blurred.png` are one region with no text and the still goes to the server, and `scene.png` becomes a frame of 720 x 1280 pixels. With hits and words that the test gives: a photo of 3000 x 4000 pixels becomes 1200 x 1600 with no crop, a failed face detection drops the still, the digits under a region count and the digits of another product do not, and with no region only 12 or 13 digits count. |
 | `StillPhotoPrepareTest` | `StillPhoto.prepare` with no glasses and no server: a photo of 3000 x 4000 pixels becomes a JPEG of 1234 x 1440 pixels, the face box that the test gives is pixelated, and the stripes outside it stay. A photo with no result of face detection is dropped. |
-| `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items, the Barcode fields, the Stream items, and the item of the second look still change the stored settings. |
+| `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items, the Barcode fields, the Stream items, the item of the second look still, and the item of the held crop change the stored settings. |
 | `HapticsTest` | The vibrations of a session, with the fake server of the app and no message of the page: a product prompt gives `prompt`, the add gives `added`, the command `slow` gives `error`, and the command `rest` gives `cameraOff`. With `haptics: false` no vibration plays. |
 | `VolumeKeysTest` | The volume keys with `mainYes: key`: volume up on a product prompt sends `intent yes` with the source `key` and adds the product, volume down sends `intent no`, and the media volume stays at 0. A key that stays down sends one yes. Before the first prompt, after the prompt ended, and with the head as the main yes, the app does not take the key. |
 | `TouchpadInputTest` | The touchpad of the mock glasses: a double tap after a product prompt sends `intent yes` with the source `touch` and the prompt ID, and the server adds the product. A double tap before the first prompt carries no ID and adds nothing. A swipe sends `intent repeat`, and the server sends the line of the prompt again. |
 | `VoiceCommandsTest` | The speech results of the mock glasses: a final "add" after a product prompt goes out as `speech.final`, and the server adds the product. A result that is not final sends nothing, and "skip" skips the product. With the microphone denied, `mainYes: voice` and the intent `ask` each make the app ask for the permission, and Speech starts in the running session. With a denied request, the head stays the main yes. |
 | `FaceFinderTest` | ML Kit face detection runs on the phone, and an image with no face gives an empty list. |
+| `HeldFinderTest` | The detector of the held crop: the model of the APK loads, a gray frame has no region, and a region of the scene image is inside the image. No test image shows a product in a hand. It did not run yet: it needs the test phone. |
+| `HeldCropTest` | The held crop with the fake server of the app (`HeldCropRule`): with no region, the full frame goes out one time each second with `view: full` and the size of the frame, a crop has its place and its context image, and the kiosk code and the barcode still go out. It did not run yet: it needs the test phone. |
 | `PhoneUiPageTest` | The phone UI in the WebView. The setup test clicks through the steps: link the glasses, a denied and then an allowed camera, and the start, which opens the session screen. The test runner grants the notification permission, so the notification step does not show. The card test reads the product card of a prompt and the cart after `Add`. Both are skipped for an APK with no build of the phone UI. The setup test is skipped for a phone UI with no setup screen. |
 
 `SpineTest`, `DeviceStatesTest`, `VolumeKeysTest`, `TouchpadInputTest`, `VoiceCommandsTest`, `PhoneUiPageTest`, and the prompt tests of `PlaceholderPageTest` need the server of `apps/server` with both fake switches at `BuildConfig.SERVER_URL`. They read `GET /healthz` first, and they fail if recognition or speech is real.
@@ -1032,7 +1212,7 @@ Rules of the script and of the tests:
 - `PaymentPromptTest` shows the biometric prompt of Android on the test phone for about one second, two times. No test puts a finger on the sensor: see "Checks with the glasses or with sound".
 - The log of each server is in `<temp folder>/glance-integration`. The log of the fake server of the app ends with `-app-fake.log`.
 - The tests run with `GlanceTestRunner`. It stops the Bluetooth prompt at the start of "Glance", it takes each vibration in place of the phone, and it grants the notification permission on Android 13 or later. So the phone stays quiet, and no prompt waits for a tap. `BluetoothPromptTest` turns the prompt on for itself and taps its deny button.
-- Each test with a stream has `TestStreamRule`: the app asks for 720 x 1280 at 7 frames each second in the test, and the stream settings of the phone are back after it.
+- Each test with a stream has `TestStreamRule`: the app asks for 720 x 1280 at 7 frames each second in the test, with the held crop off, and the stream settings of the phone are back after it.
 - `VolumeKeysTest` sends a volume key through the input system of Android only when the app must take it. For a key that Android must get, the test calls `MainActivity.onKeyDown` and reads the result, because the real key changes the media volume of the phone. If the volume is not 0 at the end of a test, the test sets it to 0 again.
 - The media volume is 0, so no line plays, and no test on the phone reaches the mute time of a line. `SpeechQueueTest` and `VoiceInputTest` of `core` check that rule. Check it by ear with sound: see "Checks with the glasses or with sound".
 - No test sends `setup.openUpdate`, because the SDK opens the Meta AI app for it.
@@ -1170,6 +1350,7 @@ Git ignores `local.properties`. Each key is optional, and each one is also a Gra
 | `glance.streamQuality` | `HIGH` | The frame size that the app asks of the glasses, as `BuildConfig.STREAM_QUALITY`: `HIGH` (720 x 1280), `MEDIUM` (504 x 896), or `LOW` (360 x 640). Another value stops the build. See "The stream settings". |
 | `glance.streamFps` | `7` | The frames each second that the app asks for, as `BuildConfig.STREAM_FPS`: 2, 7, 15, 24, or 30. The app takes the nearest of these for another number. A value that is no whole number stops the build. |
 | `glance.secondLookStill` | `false` | `true` makes the app take a still for each `glance.ambiguous` event, as `BuildConfig.SECOND_LOOK_STILL`. Another value than `true` or `false` stops the build. See "The second look still". |
+| `glance.heldCrop` | `true` | `false` makes the app upload the full frame of each window, as before the held crop, as `BuildConfig.HELD_CROP`. Another value than `true` or `false` stops the build. See "The crop of the held product". |
 | `glance.demoStoreFile` | `glance-demo.jks` | The keystore of the demo build, as a path from the folder `app` |
 | `glance.demoStorePassword` | empty | The password of the keystore |
 | `glance.demoKeyAlias` | `glance-demo` | The name of the key in the keystore |

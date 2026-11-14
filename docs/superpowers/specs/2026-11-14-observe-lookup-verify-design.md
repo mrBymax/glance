@@ -248,7 +248,17 @@ How a hybrid `ProductSearch` would look, as a plan and not as code:
 
 ## The next step on the phone
 
-This part is not built. The server measurement gives its reasons.
+This part was not built when this document was written. The server measurement gives its reasons.
+
+Update of 2026-11-14, later that day: the gate and the crop are built, as the setting `Held crop` of the Android app. The numbers below were estimates, and the measurement of the build gave others:
+
+- The detector is the object detector of MediaPipe Tasks with EfficientDet-Lite0. The hand landmarks found a hand in 11 of 117 frames with a product in a hand. ML Kit object detection was not measured.
+- The gate gives 45 percent of the frame calls of before, and not 16 percent: the detector also finds the cans on the tables, and one full frame goes out each second.
+- A crop has 2.8 times the pixels on the can for a stream of 720 x 1280 and 1.4 times for a stream of 504 x 896, against the upload of 432 x 768. The "3 to 6 times" below compare with an upload of 288 pixels.
+- The header has `view`, `crop`, `source`, and `contextBytes`. A crop carries the whole frame in a small size, because the frame call lost `held` with a crop alone.
+- No crop of the stream was measured. With crops of the saved uploads, the frame call named fewer cans than with the full frame.
+
+See "The crop of the held product" in `apps/mobile/android/README.md` and "A crop of the phone" in `apps/server/README.md`.
 
 The cost of a frame call for each frame:
 

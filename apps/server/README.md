@@ -223,7 +223,7 @@ sequenceDiagram
 | `references.ts` | `createFrameReferences`: the parts of the reference pictures that each frame call starts with, and `createPictureUploader` |
 | `worker.ts` | `RecognitionWorker`: the calls of one session |
 | `intake.ts` | `createFrameHandler`: one worker for each session, between the device socket and the rules |
-| `save.ts` | `createFrameSaver`: the writer of the `SAVE_FRAMES` switch |
+| `save.ts` | `createFrameSaver`: the writer of the `SAVE_FRAMES` switch. It names a crop and its context image |
 | `fake.ts` | The script file and `ScriptPlayer` of fake recognition |
 | `replay.ts` | `listFrames`, `replayFrames`, `summarize`, and `formatTable` of the replay tool |
 | `liveReport.ts` | The function `report_view` of a Gemini Live session, its instruction, and the answer that a call gives. Only `scripts/live-probe.ts` uses it |
@@ -235,7 +235,7 @@ The request:
 - The answer is JSON with the field `held`, the six fields of spec section 11.1, and the field `code`. Its schema lets `productId` and `candidates` take only the IDs of the catalog and of the store items. With no ID at all, `productId` can only be `null`.
 - `held` is the first field. It is true when a hand holds a product and presents it to the camera. It is false for a frame with no product, and for a product that stands on a table or a shelf, or that another person holds. The instruction makes `identified` and `ambiguous` valid only with `held` true, and asks for the larger and nearer product when a hand holds two. See "The product in the hand".
 - `code` is `{ visible, digits }`: the barcode of the frame, as the model sees it. See "The model also reads the code".
-- The text part is `Exclude: none.` or `Exclude: <id>, <id>.`, with the products that the shopper skipped in the last 10 seconds (R9).
+- The text part is `Exclude: none.` or `Exclude: <id>, <id>.`, with the products that the shopper skipped in the last 10 seconds (R9). For a crop of the phone, the line `View: crop.` comes before it, and the request can hold the whole frame before the crop. See "A crop of the phone".
 - With reference pictures, the request starts with them, and the instruction gets their rules. See "Reference pictures in a frame call".
 - The call makes one attempt, with a time limit of 4 seconds. The SDK default is 5 attempts.
 - `GEMINI_MEDIA_RESOLUTION=low` asks for the low resolution for a stream frame. A still keeps the default.
@@ -337,6 +337,68 @@ The voice names only the product that the shopper holds. A table behind the hand
 - The field `held` makes the model say where the product is, before it names it. `normalizeResult` turns an answer with `held` false into `none`.
 - The rules do the rest: one result by sight never opens a prompt and never replaces one. See R1 and R2 in "Rules".
 - A second form of the answer was measured and is not used: the field `heldDescription` before `held`, one short phrase about the thing in the hand. It named no more products, it gave one wrong name in 25 frames, and the median call took 150 ms more. The phrases showed what the model sees in a frame of 288 x 448 pixels: "a blurred can held in a hand", and "showing its barcode side" for a front.
+
+### A crop of the phone
+
+A phone with the held crop on looks for the product in the hand with an object detector, and uploads the part of the frame around it. `apps/mobile/android/README.md` has the phone side, in "The crop of the held product". The header of a frame says what the image is.
+
+| Header field | Content |
+|---|---|
+| `view` | `crop` for a crop, `full` for the whole frame. A phone that does not crop sends none |
+| `crop` | The place of the crop in the stream frame, in pixels of that frame |
+| `source` | The size of the stream frame |
+| `contextBytes` | The byte count of the context image of a crop: the whole frame at 216 x 384 pixels, as a second JPEG at the end of the message |
+
+- A phone with the crop on sends a crop for each frame with a region, up to one each 150 ms, and the full frame one time each second with no region. So the server gets fewer frames: 45 percent of the frames of before, in the 11 sessions of 2026-11-14.
+- The detector of the phone knows no hand. A crop can show a product that stands on a table. The server stays the judge of `held`.
+- For a crop, the text of the request starts with the line `View: crop.`, before the exclude line. A full frame has no such line: its request is that of a phone that does not crop.
+- A crop with a context image goes out as two images: the text `The whole frame`, the context image at the low media resolution, the text `The crop`, and the crop. With reference pictures, they come first.
+- `agents/recognition.md` and `agents/observe.md` have the section "The image". It says: decide `held` in the whole frame, read the product in the crop, and never name a product from the whole frame. For a crop with no whole frame, `held` needs a finger, a thumb, or a part of a hand on the product. In a crop the aim hint `farther` is not valid, and `closer` is for print that is too small to read.
+- The frame log line ends with the view, the crop, the source size, and the bytes of the context image: `frame seq=<n> w=<w> h=<h> blurred=true kind=frame bytes=<n> view=crop crop=<w>x<h>@<x>,<y> source=<W>x<H> context=<n>`. `bytes` counts the crop alone.
+- `SAVE_FRAMES` writes a crop to `<seq>.crop.jpg` and its context image to `<seq>.context.jpg`. A full frame keeps the name `<seq>.jpg`.
+- The worker, the order of the results, the rule that wants 2 equal results in a row, the reference pictures, and the label path did not change. A crop is a frame for each of them.
+- A still with a region arrives as a crop with no context image. A label frame goes to the label call as before.
+- The observe pipeline gets the same parts: the observe call sends the whole frame, the crop, and the line `View: crop.`. The `box` of its answer is then a box in the crop.
+
+Measured on 2026-11-14 with `gemini-3.5-flash-lite`, 4 store items with 3 reference pictures each, and the 146 labeled frames of "The observe pipeline". The phone rule gives a crop for 77 of them. Each crop was cut from the saved upload, so it has the pixels of that upload and not those of the stream: 46 of the 65 crops with a store item come from uploads of 288 or 402 pixels in width. The measurement shows what "less background" does. It does not show what "more pixels" does.
+
+The 65 frames with a store item in a hand and a region:
+
+| Upload | Right name | Wrong name | `ambiguous` with the item | `ambiguous` without it | `unsure` | `none` | Median |
+|---|---|---|---|---|---|---|---|
+| Full frame, the instruction of before (a run of the same day) | 16 | 0 | 24 | 3 | 12 | 10 | 1237 ms |
+| Full frame, the new instruction | 16 | 1 | 22 | 4 | 14 | 8 | 1240 ms |
+| Crop alone | 10 | 2 | 28 | 7 | 9 | 9 | 1539 ms |
+
+The 12 frames with nothing in a hand and a region, which is a crop of an object on a table or of a hand on a keyboard:
+
+| Upload | `held` true | Answers |
+|---|---|---|
+| Full frame, both instructions | 0 | 12 `none` |
+| Crop alone | 4 | 8 `none`, 2 `unsure`, 1 `ambiguous`, 1 wrong name at a confidence of 0.9 |
+| Crop with the whole frame at 216 x 384 | 2 | 10 `none`, 2 `unsure` |
+
+15 frames with a store item that the server saved at the size of the stream (720 x 1280 or 504 x 896), so the crop has the pixels of the stream:
+
+| Upload | Right name | Wrong name | `ambiguous` with the item | `ambiguous` without it | `unsure` | `none` | Median | Prompt tokens |
+|---|---|---|---|---|---|---|---|---|
+| Full frame at the size of the stream, the new instruction | 3 | 1 | 5 | 3 | 1 | 2 | 1289 ms | 6891 |
+| Crop alone | 1 | 2 | 4 | 4 | 2 | 2 | 1565 ms | 6877 |
+| Crop with the whole frame | 1 | 1 | 6 | 1 | 5 | 1 | 1420 ms | 7290 |
+
+- A crop from a saved upload did not help the frame call. It named 10 cans where the full frame named 16, and it gave more `ambiguous` answers.
+- The 15 frames at the size of the stream show no gain either. Their full frame also had the size of the stream, which the phone of before did not send: it scaled each frame to 432 x 768. The compare that counts, a crop of the stream against an upload of 432 x 768, was not measured.
+- With a crop alone the model lost `held`: 4 of 12 crops of an object that no hand held were `held` true, and one got a name. So a crop carries the whole frame. With it, no such crop got a name. 12 frames are few.
+- The new instruction changed no result of a full frame beyond the spread of two runs: 17 right names in 111 frames with a store item in both runs, and 28 `none` in 29 frames with nothing in a hand in both.
+- The context image costs 410 prompt tokens.
+- The observe call on 50 of the crops, alone: `held` as the label says in 43, the same as for the full frames. It read some print in 9 crops, against 14 full frames, and a brand in 2 crops, against none. One of the 2 brands is on no store item.
+- Vendor calls of this measurement: 300 `generateContent` calls (146 full frames, 77 crops, 27 crops with the whole frame, 50 observe calls), and 48 uploads of reference pictures to the Files API. No ElevenLabs call.
+
+What nobody measured:
+
+- A crop that the phone cut from the stream. One session with the new app and `SAVE_FRAMES` gives such crops, and the same walk with `Held crop: off` gives the frames to compare.
+- The rules with a stream of crops and one full frame each second: the 2 results in a row, the look-alike line, and the request for a still.
+- The observe pipeline with the whole frame before the crop.
 
 ### Measured: the product in the hand, and items that look alike
 
@@ -696,8 +758,9 @@ The same two functions as an MCP server:
 
 Without `SAVE_FRAMES` the server stores no frame of a shop. A frame lives in memory from its socket message to the end of its recognition call. The server writes no such frame to disk, to the store, or to a log.
 
-- A log line about a frame holds its sequence number, its width and height, the `blurred` value, its kind, and its byte count. It holds no bytes of the image. With real recognition this line has the `debug` level.
+- A log line about a frame holds its sequence number, its width and height, the `blurred` value, its kind, and its byte count. For a frame of a phone that crops, it also holds the view, the crop, the source size, and the byte count of the context image. It holds no bytes of the image. With real recognition this line has the `debug` level.
 - `SAVE_FRAMES=<directory>` is for the test set of the recognition model. The server then writes each frame that it accepts to `<directory>/<sessionId>/<seq>.jpg`. A frame with a sequence number that the folder already holds replaces the older file.
+- A crop of the phone gets the name `<seq>.crop.jpg`, and its context image the name `<seq>.context.jpg`. Each file is the JPEG as the phone sent it.
 - With `REQUIRE_BLUR=1`, the server writes no frame with `blurred: false`, with real and with fake recognition.
 - The switch also works with fake recognition, which makes no recognition call. So the team can collect frames with no cost.
 - A write that fails gets the log line `frame not saved. seq=<n> <message> session=<id>`, and the recognition call goes on.
@@ -1939,7 +2002,7 @@ The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2.
 - One phone holds a session. A second socket for the same session takes over, and the server closes the older one. No message goes to both.
 - `intent`, `prompt.done`, `device.state`, `cart.edit`, and `profile.set` go to the rules. After `profile.set` the phone gets a new `snapshot`.
 - `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished. Each other text becomes the input `question`.
-- A binary message is a frame. A frame that decodes goes to the recognition worker of the session, or to the log line of fake recognition. A frame with the kind `label` goes to the label reader, or to the reference pictures when the session has a mark. The server logs a frame that does not decode and drops it.
+- A binary message is a frame. Its header can say that the JPEG is a crop, and the message can hold a context image behind the JPEG. See "A crop of the phone". A frame that decodes goes to the recognition worker of the session, or to the log line of fake recognition. A frame with the kind `label` goes to the label reader, or to the reference pictures when the session has a mark. The server logs a frame that does not decode and drops it.
 - The server logs and drops a text message that is no `DeviceToServer`. The socket stays open.
 - `kiosk.seen` goes to the kiosk service. `biometric.result` goes to the rules.
 - `barcode.seen` goes to the lookup of a barcode, and its outcome goes to the rules.

@@ -115,7 +115,7 @@ Facts that the diagram does not show:
 | Page | Android app | `window.GlanceNative.postMessage(json)` | `PageToNative` |
 | Android app | Page | `window.__glanceReceive(json)` | `NativeToPage` |
 | Android app | Server | Text message on the device socket | `DeviceToServer` |
-| Android app | Server | Binary message on the device socket | A frame: 4 bytes with the header length, a `FrameHeader` as JSON, and a JPEG. The kind of the header is `frame`, `still`, or `label` |
+| Android app | Server | Binary message on the device socket | A frame: 4 bytes with the header length, a `FrameHeader` as JSON, and a JPEG. The kind of the header is `frame`, `still`, or `label`. The header of a phone with the held crop also has `view` (`crop` or `full`), `crop` (the place of a crop in the source image), `source` (the size of that image), and `contextBytes`: the byte count of a second JPEG at the end of the message, the whole frame in a small size |
 | Server | Android app | Text message on the device socket | `ServerToDevice` |
 | Android app, browser | Server | `POST /api/sessions` | `CreateSessionRequest`, answer `CreateSessionResponse` |
 | Android app, browser, mirror page, Display HUD | Server | `GET /api/sessions/:id` | Answer `SessionSnapshot` |
@@ -148,10 +148,11 @@ sequenceDiagram
   participant Clips as Speech clips
 
   Glasses->>App: video frames
-  Note over App: FramePipeline selects the sharpest frame of each 150 ms
-  App->>Socket: binary frame with FrameHeader and JPEG
+  Note over App: HeldFinder finds the region of the product in the hand
+  Note over App: FramePipeline selects the sharpest frame of each 150 ms, one with a region first
+  App->>Socket: binary frame with a FrameHeader of the view crop, the JPEG of the crop, and the JPEG of the whole frame at 216 x 384
   Socket->>Worker: submit(frame)
-  Worker->>Gemini: generateContent with the JPEG and the exclude line
+  Worker->>Gemini: generateContent with the whole frame, the crop, the view line, and the exclude line
   Gemini-->>Worker: JSON answer
   Note over Worker: normalizeResult checks the answer
   Worker->>Runtime: dispatch(recognition, status identified)
@@ -188,7 +189,10 @@ A shopper who waits for the end of the line gets the old order: the app sends `p
 
 Rules of this path:
 
-- The phone uploads one frame each 150 ms at most. The JPEG has the quality 80 and a long side of 768 pixels at most. It is the center of the camera frame (80 percent of the width, 70 percent of the height), and the phone pixelates each face in it before the upload.
+- The phone uploads one frame each 150 ms at most, and it pixelates each face in an upload first. With the setting `Held crop` of the app on, which is the default, an object detector on the phone looks for a product in a hand in each frame.
+- A frame with a region goes out as a crop: the region with 30 percent more on each side, cut from the stream frame with no scale, as a JPEG of quality 92. The same message holds the context image, the whole frame at 216 x 384 pixels. The frame call gets both images, and the instruction says: decide `held` in the whole frame, and read the product in the crop.
+- A frame with no region goes out as the full frame, with a long side of 768 pixels at most and the quality 80, one time each second. With the setting off, the full frame of each window goes out, with no `view` in its header.
+- Measured on 2026-11-14 on the saved uploads of that day: the detector finds a region in about half of the frames with a can in a hand, and in 26 percent of the frames that the server answered with `none`. The phone rule gives 45 percent of the model calls of before. A crop of a 720 x 1280 stream has 2.8 times the pixels on the can, and a crop of a 504 x 896 stream 1.4 times. See "The crop of the held product" in `apps/mobile/android/README.md` and "A crop of the phone" in `apps/server/README.md`.
 - The upload stops while the socket is down, while an earlier frame is not sent yet, and while the glasses are off the face.
 - The recognition worker runs up to 8 calls at the same time for each session (`RECOGNITION_CONCURRENCY`). Each call starts with the reference pictures of the store items, up to 3 for each item (`RECOGNITION_REFERENCES`). With no free call, the newest frame waits. A call that takes 4 seconds is dropped. The rules get the results in the order of the frames: the worker drops the result of an older frame that arrives after the result of a newer frame.
 - `RECOGNITION_PIPELINE=observe` selects a second pipeline behind the same worker: a frame call holds no store data, a search of the store list follows, and a verify call names the product. The default is `frame`. See "The observe pipeline" in `apps/server/README.md`.
@@ -675,6 +679,7 @@ Checks that nobody did:
 - No replay of a frame set has run with the real recognition service, and no test has run the store tests against a MongoDB server.
 - One test with Ray-Ban Meta glasses ran on 2026-11-14. The stream fell to 504 x 896, and the scanner of the phone read no code at the length of an arm. A label still took 2.3 to 2.9 seconds and its label call 1.5 to 2.3 seconds. The distance at which the phone reads a code is still not known.
 - The changes after that test have not run with the real glasses or the real model: the item that the label call chooses, the store items in the recognition instruction, the still for an unknown product, the size limit of a barcode region, and the barcode wait of 1000 ms.
+- The held crop has not run on a phone. Its detector and its rule were measured on the build computer, with the saved uploads of 2026-11-14. In that measurement the frame call named fewer cans from a crop than from the full frame, with crops that have fewer pixels than a crop of the phone. Nobody measured a crop of the stream. See "The crop of the held product" in `apps/mobile/android/README.md`.
 - The changes after the session of 2026-11-14 at 22:34 have not run with the real glasses or the real model: the prompt that stays when its product comes back, the label call with no line after a failure, the label frame that the server drops for a named product, the reference pictures of a label call as files, the second look still as a setting, and the label still that the phone drops behind a prompt. Tests of the rules replay the times of that session.
 - The head gestures after their rework have only synthetic tests. This holds for the rules of the detector for a nod and a shake, and for the head window in the time of the samples. It also holds for the watchdog of the motion samples with its restart of Motion, and for the gate that holds a still while a prompt waits. One session of 2026-11-14 gave log lines of real nods, and the rule for the other axis of a gesture comes from them. A later session of that day gave four motion recordings with nods of two persons, and the axis map of the glasses comes from them: `MotionReplayTest` replays them. No recording of a shake or of a walk exists.
 - These changes after that session have tests of their rules only, and no session with the glasses ran with them: the head window that opens while the line of a product prompt plays, the stop of that line at a head answer, the head answer that counts by the ID of its prompt (R4), the clips of the answer lines that the server makes in advance, and the one answer sound.

@@ -30,7 +30,7 @@ flowchart LR
 | `allergens.ts`, `profile.ts`, `catalog.ts`, `cart.ts` | `Profile`, `ProfilePatch`, `Product`, `ProductRef`, `Cart` |
 | `events.ts`, `snapshot.ts` | `ServerEvent`, `SessionSnapshot` |
 | `device.ts` | `DeviceToServer`, `ServerToDevice` |
-| `frame.ts` | `encodeFrame`, `decodeFrame` for the binary frame message. The header has the kind `frame`, `still`, or `label`. |
+| `frame.ts` | `encodeFrame`, `decodeFrame` for the binary frame message. The header has the kind `frame`, `still`, or `label`. For a phone that crops, it also says what the JPEG shows: `view`, `crop`, `source`, and `contextBytes`. See "The frame message". |
 | `gtin.ts` | `hasGs1CheckDigit`, `expandUpcE`, `normalizeGtin`, `isStoreInternalGtin`. The rules for the digits of a product barcode. |
 | `bridge.ts` | `PageToNative`, `NativeToPage`, `NativeState`, `GlanceBridge` |
 | `rest.ts` | The bodies and the answers of the REST calls, and `KioskEvent` |
@@ -68,9 +68,29 @@ When you add a variant to a union, add one valid example to the folder of that u
 | `server-to-device` | `ServerToDeviceSchema` | 7 |
 | `bridge-page-to-native` | `PageToNativeSchema` | 12 |
 | `bridge-native-to-page` | `NativeToPageSchema` | 4 |
+| `frame-headers` | `FrameHeaderSchema` | 5 |
 | `rest` | the schema with the name of the file | 8 |
 
 `src/fixtures.test.ts` validates each file. The tests of this package count the files, and the Kotlin tests of Plan 2 will count them too. Update each count when you add a file.
+
+## The frame message
+
+A frame is a binary message on the device socket: 4 bytes with the header length, the header as JSON, and the JPEG.
+
+| Header field | Content |
+|---|---|
+| `seq`, `ts`, `w`, `h`, `blurred` | The upload number, the capture time, the size of the JPEG, and `false` for a frame with no face detection |
+| `kind` | `frame` (the default), `still`, or `label` |
+| `view` | `crop`: the JPEG is a part of the source image, around an object that the phone found. `full`: the whole source image. A phone that does not crop sends no view |
+| `crop` | `{ x, y, w, h }`: the place of a crop in the source image, in source pixels |
+| `source` | `{ w, h }`: the size of the stream frame or of the still photo, before the phone cropped or scaled it |
+| `contextBytes` | The byte count of the context image |
+
+- A crop can carry a context image: a second JPEG behind the first one, with the whole source image in a small size. `encodeFrame(header, jpeg, context)` writes it and sets `contextBytes`. `decodeFrame` returns it as `context`.
+- The four fields are optional. A server of before drops them, because a schema drops each key that it does not know. It reads a message with a context image as one JPEG, and a JPEG reader stops at the end of the first image. Nobody ran such a server against a phone that crops.
+- A phone of before sends none of the four, and `decodeFrame` returns no `context`.
+- A view that the schema does not know fails the message, as a kind does.
+- `fixtures/frame-headers` has one header for each case. The Kotlin `FrameCodec` reads and writes the same fields.
 
 ## Checks
 
