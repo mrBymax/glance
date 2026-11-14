@@ -86,6 +86,9 @@ export const EN = {
   deleteConfirm: 'Delete',
   deleteCancel: 'Keep',
   language: 'Language',
+  productData: 'Product data: Open Food Facts (ODbL)',
+  productDataLink: 'Open website',
+  productDataLinkLabel: 'Open website of Open Food Facts',
 
   allergens: 'Allergens',
   diet: 'Diet',
@@ -253,6 +256,9 @@ export const IT: Strings = {
   deleteConfirm: 'Elimina',
   deleteCancel: 'Mantieni',
   language: 'Lingua',
+  productData: 'Dati dei prodotti: Open Food Facts (ODbL)',
+  productDataLink: 'Apri il sito',
+  productDataLinkLabel: 'Apri il sito di Open Food Facts',
 
   allergens: 'Allergeni',
   diet: 'Dieta',

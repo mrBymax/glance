@@ -10,6 +10,7 @@ import { VStack } from '@astryxdesign/core/VStack';
 import { EU_ALLERGENS, LANGS, type Profile } from '@glance/shared';
 import { useState } from 'react';
 import { useUi } from '../bridge/BridgeContext';
+import { BrowserBridge } from '../bridge/browserBridge';
 import { LANGUAGE_NAMES } from '../text/strings';
 
 /** Five steps in place of a slider: the thumb of the Astryx Slider is below 48 px. */
@@ -20,6 +21,9 @@ const MAIN_YES = ['head', 'touch', 'voice', 'phone', 'key'] as const;
 const TOGGLES = ['headGestures', 'haptics'] as const;
 const DIETS = ['vegan', 'vegetarian'] as const;
 const IN_VIEW = 'inView';
+
+/** The Open Database License asks for this attribution where the data shows. */
+export const OPEN_FOOD_FACTS_URL = 'https://openfoodfacts.org';
 
 function nearestRate(rate: number): number {
   return SPEECH_RATES.reduce<number>((best, value) => (Math.abs(value - rate) < Math.abs(best - rate) ? value : best), SPEECH_RATES[0]);
@@ -41,9 +45,11 @@ function Choice(props: { label: string; value: string; options: readonly Option[
 
 export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
   const { isOpen, onClose } = props;
-  const { state, strings, send, dispatch, setProfile } = useUi();
+  const { state, strings, bridge, send, dispatch, setProfile } = useUi();
   const { profile } = state;
   const [isDeleteOpen, setDeleteOpen] = useState(false);
+  // A browser page that goes to another address loses its session. The WebView needs no target: the app opens the link outside.
+  const outside = bridge instanceof BrowserBridge ? { target: '_blank', rel: 'noopener noreferrer' } : {};
 
   // A list reports all its values. The patch holds only the key that changed.
   const onSwitches = (keys: readonly ('headGestures' | 'haptics' | 'vegan' | 'vegetarian')[]) => (values: string[]) => {
@@ -162,6 +168,13 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
             <Heading level={2}>{strings.privacyTitle}</Heading>
             <Text>{strings.privacyText}</Text>
             <Button label={strings.deleteData} variant="destructive" size="lg" width="100%" onClick={() => setDeleteOpen(true)} />
+          </VStack>
+          <VStack gap={3}>
+            <Text>{strings.productData}</Text>
+            <Button label={strings.productDataLinkLabel} size="lg" width="100%" href={OPEN_FOOD_FACTS_URL} {...outside}>
+              {/* The full name is cut at a font scale of 200 percent. */}
+              {strings.productDataLink}
+            </Button>
           </VStack>
         </VStack>
       </BottomSheet>

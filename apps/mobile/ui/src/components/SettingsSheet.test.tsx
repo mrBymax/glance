@@ -1,11 +1,16 @@
 import { DEFAULT_PROFILE } from '@glance/shared';
-import { screen, within } from '@testing-library/react';
+import { Theme } from '@astryxdesign/core/theme';
+import { render, screen, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
+import { defaultThemeSlug, themes } from '../astryx-themes';
+import { AndroidBridge } from '../bridge/androidBridge';
+import { BridgeProvider } from '../bridge/BridgeContext';
 import type { BrowserBridge } from '../bridge/browserBridge';
 import { eventMessage } from '../debug/fixtures';
 import { SessionScreen } from '../screens/SessionScreen';
 import { renderWithUi } from '../test/render';
 import { uncoveredTouchTargets } from '../test/touchTargets';
+import { OPEN_FOOD_FACTS_URL, SettingsSheet } from './SettingsSheet';
 
 const open = async (options?: Parameters<typeof renderWithUi>[1]) => {
   const ui = renderWithUi(<SessionScreen />, options);
@@ -53,6 +58,47 @@ it('states what Glance stores', async () => {
   const { sheet } = await open();
   expect(sheet.getByRole('heading', { level: 2, name: 'Privacy' })).toBeInTheDocument();
   expect(sheet.getByText(/never stores it/)).toBeInTheDocument();
+});
+it('names the source of the product data, with a link to it', async () => {
+  const { sheet } = await open();
+  expect(OPEN_FOOD_FACTS_URL).toBe('https://openfoodfacts.org');
+  expect(sheet.getByText('Product data: Open Food Facts (ODbL)')).toBeInTheDocument();
+  const link = sheet.getByRole('link', { name: 'Open website of Open Food Facts' });
+  expect(link).toHaveAttribute('href', OPEN_FOOD_FACTS_URL);
+  expect(link).toHaveTextContent(/^Open website$/);
+});
+it('names the source of the product data in Italian', async () => {
+  const { user } = renderWithUi(<SessionScreen />, { messages: [{ t: 'profile', profile: { ...DEFAULT_PROFILE, lang: 'it' } }] });
+  await user.click(screen.getByRole('button', { name: 'Impostazioni' }));
+  const sheet = within(screen.getByRole('dialog', { name: 'Impostazioni' }));
+  expect(sheet.getByText('Dati dei prodotti: Open Food Facts (ODbL)')).toBeInTheDocument();
+  const link = sheet.getByRole('link', { name: 'Apri il sito di Open Food Facts' });
+  expect(link).toHaveAttribute('href', OPEN_FOOD_FACTS_URL);
+  expect(link).toHaveTextContent(/^Apri il sito$/);
+});
+it('puts the source of the product data after each other control of the sheet', async () => {
+  const { sheet } = await open();
+  const link = sheet.getByRole('link', { name: 'Open website of Open Food Facts' });
+  const controls = [...sheet.getAllByRole('button'), ...sheet.getAllByRole('radio'), ...sheet.getAllByRole('checkbox')];
+  for (const control of controls) expect(control.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(sheet.getByText('Product data: Open Food Facts (ODbL)').compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+it('opens the source in a new tab of a browser, so that the session stays', async () => {
+  const { sheet } = await open();
+  const link = sheet.getByRole('link', { name: 'Open website of Open Food Facts' });
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+});
+it('gives the link no target in the WebView, where the app opens it outside', () => {
+  const bridge = new AndroidBridge({ GlanceNative: { postMessage: () => undefined } });
+  render(
+    <Theme theme={themes[defaultThemeSlug]}>
+      <BridgeProvider bridge={bridge}><SettingsSheet isOpen onClose={() => undefined} /></BridgeProvider>
+    </Theme>,
+  );
+  const link = screen.getByRole('link', { name: 'Open website of Open Food Facts' });
+  expect(link).toHaveAttribute('href', OPEN_FOOD_FACTS_URL);
+  expect(link).not.toHaveAttribute('target');
 });
 it('asks before it deletes the data', async () => {
   const { bridge, user, sheet } = await open({ messages: [eventMessage('cart.updated')] });

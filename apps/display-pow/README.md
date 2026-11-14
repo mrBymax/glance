@@ -80,6 +80,7 @@ A live session uses three paths of the server, each with `?token=<token>`:
 - The HUD shows no sign of a lost stream. The last state stays on the screen until the stream opens again. Then the HUD gets the snapshot.
 - The gap of `.content-inset` is `calc(var(--uit-spacing-large) + var(--uit-spacing-xsmall))`. The structure check of the toolkit rejects each other gap for a stack with labels and text. The class `fact-group` keeps each label near its values.
 - With a caption of two lines, the status region scrolls. The product and the total stay in view at 600 x 600.
+- A product name wraps. The name of a scanned product comes from Open Food Facts and can have 80 characters. With such a name the title takes three lines, and the price, the warning, the prompt, the total, and both buttons stay in view at 600 x 600. The caption is then below the fold of the status region. Chrome measured this in live mode with a fake stream, for a name with one word of 33 characters also.
 - `openLive` opens the stream first. It gets the snapshot after each open of the stream, so a reconnect gives a fresh state. An event that arrives while the snapshot is on its way is applied one more time after the snapshot.
 - The HUD ignores a message that is not JSON, and an event type that `@glance/shared` does not know.
 - A `glance.cleared` clears the product only if its prompt ID is the ID of the pending product.
