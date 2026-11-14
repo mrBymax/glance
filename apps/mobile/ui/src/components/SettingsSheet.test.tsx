@@ -1,12 +1,16 @@
 import { DEFAULT_PROFILE } from '@glance/shared';
-import { screen, within } from '@testing-library/react';
+import { Theme } from '@astryxdesign/core/theme';
+import { render, screen, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
+import { defaultThemeSlug, themes } from '../astryx-themes';
+import { AndroidBridge } from '../bridge/androidBridge';
+import { BridgeProvider } from '../bridge/BridgeContext';
 import type { BrowserBridge } from '../bridge/browserBridge';
 import { eventMessage } from '../debug/fixtures';
 import { SessionScreen } from '../screens/SessionScreen';
 import { renderWithUi } from '../test/render';
 import { uncoveredTouchTargets } from '../test/touchTargets';
-import { OPEN_FOOD_FACTS_URL } from './SettingsSheet';
+import { OPEN_FOOD_FACTS_URL, SettingsSheet } from './SettingsSheet';
 
 const open = async (options?: Parameters<typeof renderWithUi>[1]) => {
   const ui = renderWithUi(<SessionScreen />, options);
@@ -71,6 +75,23 @@ it('names the source of the product data in Italian', async () => {
   const link = sheet.getByRole('link', { name: 'Apri il sito di Open Food Facts' });
   expect(link).toHaveAttribute('href', OPEN_FOOD_FACTS_URL);
   expect(link).toHaveTextContent(/^Apri il sito$/);
+});
+it('opens the source in a new tab of a browser, so that the session stays', async () => {
+  const { sheet } = await open();
+  const link = sheet.getByRole('link', { name: 'Open website of Open Food Facts' });
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+});
+it('gives the link no target in the WebView, where the app opens it outside', () => {
+  const bridge = new AndroidBridge({ GlanceNative: { postMessage: () => undefined } });
+  render(
+    <Theme theme={themes[defaultThemeSlug]}>
+      <BridgeProvider bridge={bridge}><SettingsSheet isOpen onClose={() => undefined} /></BridgeProvider>
+    </Theme>,
+  );
+  const link = screen.getByRole('link', { name: 'Open website of Open Food Facts' });
+  expect(link).toHaveAttribute('href', OPEN_FOOD_FACTS_URL);
+  expect(link).not.toHaveAttribute('target');
 });
 it('asks before it deletes the data', async () => {
   const { bridge, user, sheet } = await open({ messages: [eventMessage('cart.updated')] });
