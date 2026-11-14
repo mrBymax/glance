@@ -448,7 +448,7 @@ A frame with the kind `label` is the still of a barcode that the phone could not
 - The answer is `digits` (a list of digit runs), `brand`, `name`, `packSize`, and `confidence`. An answer that fails the schema counts as an empty one.
 - `matchLabel` in `src/label/match.ts` selects the store item. Free text of the model never becomes a product by itself:
   1. Digits count with a right check digit and an item of the store list. Two codes of two items give no product.
-  2. Else the brand and the name must select exactly one item. The answer must hold each word of the brand of the item, at least half of the words of its name, and each number of its name, with no regard to case and accents. So "Spaghetti n.3" never selects "Spaghetti n.5". This way also needs a confidence of `RECOGNITION_MIN_CONFIDENCE` or more.
+  2. Else the brand and the name must select exactly one item. The brand, the name, and the pack size of the answer must together hold each word of the brand of the item, each word of its name, and each number of its name. The compare has no regard to case and accents, and words of 1 or 2 letters do not count. So "Pesto alla calabrese" never selects "Pesto alla genovese", and "Spaghetti n.3" never selects "Spaghetti n.5". This way also needs a confidence of `RECOGNITION_MIN_CONFIDENCE` or more.
   3. Between items with one brand and one name, the pack size selects. Two matches or none give no product.
 - A match goes through the lookup of `barcode.seen`, with the source `label`.
 - With no match, and when the call fails or is late, the voice says "I cannot read this code. Hold it closer.", at most one time each 10 seconds.

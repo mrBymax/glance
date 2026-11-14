@@ -36,9 +36,9 @@ it('gives no product for two codes of two items', () => {
 it('a right code wins over the brand and the name', () => {
   expect(match({ digits: ['8076800195057'], brand: 'De Cecco', name: 'Spaghetti n.12' })).toBe('8076800195057');
 });
-it('matches one item by each word of its brand and half of the words of its name', () => {
+it('matches one item by each word of its brand and each word of its name', () => {
   expect(match({ brand: 'Barilla', name: 'Pesto alla Genovese' })).toBe('8076809513753');
-  expect(match({ brand: 'BARILLA', name: 'pesto genovese con basilico' })).toBe('8076809513753');
+  expect(match({ brand: 'BARILLA', name: 'genovese pesto alla, con basilico fresco' })).toBe('8076809513753');
   expect(match({ brand: 'De Cecco', name: 'Spaghetti n° 12' })).toBe('8001250120120');
   expect(match({ brand: null, name: 'San Pellegrino acqua minerale naturale' })).toBe('8002270014901');
 });
@@ -47,17 +47,36 @@ it('compares with no case and no accent', () => {
   expect(matchLabel(read({ brand: 'ESTATHE', name: 'Te al Limone' }), accent, 0.6)).toBe('8002270014901');
 });
 it('needs each word of the brand', () => {
-  expect(match({ brand: 'Cecco', name: 'Spaghetti n.12' })).toBeNull();
   expect(match({ brand: 'Pellegrino', name: 'Acqua minerale' })).toBeNull();
+  expect(match({ brand: 'De Cecco', name: 'Pesto alla genovese' })).toBeNull();
 });
-it('needs half of the words of the name', () => {
+it('needs each word of the name, so another type of one product line gives no product', () => {
+  expect(match({ brand: 'Barilla', name: 'Pesto alla calabrese' })).toBeNull();
+  expect(match({ brand: 'Barilla', name: 'Pesto genovese' })).toBeNull();
   expect(match({ brand: 'Barilla', name: 'Pesto rosso' })).toBeNull();
   expect(match({ brand: 'Barilla', name: 'Fusilli' })).toBeNull();
 });
+it('ignores the words of 1 or 2 letters of the brand and of the name', () => {
+  expect(match({ brand: 'Cecco', name: 'Spaghetti 12' })).toBe('8001250120120');
+  const short: StoreItem[] = [{ gtin: '8002270014901', priceCents: 89, name: 'Tè al limone', brand: 'Estathé' }];
+  expect(matchLabel(read({ brand: 'Estathe', name: 'Limone' }), short, 0.6)).toBe('8002270014901');
+});
+it('needs each word of a brand or a name that has only short words', () => {
+  const short: StoreItem[] = [{ gtin: '8002270014901', priceCents: 89, name: 'Tè', brand: 'LU' }];
+  expect(matchLabel(read({ brand: 'LU', name: 'Tè' }), short, 0.6)).toBe('8002270014901');
+  expect(matchLabel(read({ brand: 'LU', name: 'Biscotti' }), short, 0.6)).toBeNull();
+  expect(matchLabel(read({ brand: 'Bahlsen', name: 'Tè' }), short, 0.6)).toBeNull();
+});
+it('reads the words also in the pack size of the answer', () => {
+  const passata: StoreItem[] = [{ gtin: '8002270014901', priceCents: 129, name: 'Passata 700 g', brand: 'Mutti' }];
+  expect(matchLabel(read({ brand: 'Mutti', name: 'Passata' }), passata, 0.6)).toBeNull();
+  expect(matchLabel(read({ brand: 'Mutti', name: 'Passata', packSize: '700 g' }), passata, 0.6)).toBe('8002270014901');
+});
 it('gives no product when two items match', () => {
-  // "Pesto alla genovese" shares 2 of its 3 words with "Pesto alla siciliana".
-  const two: StoreItem[] = [...items, { gtin: '8076809523509', priceCents: 289, name: 'Pesto alla siciliana', brand: 'Barilla', packSize: '190 g' }];
+  // The answer holds each word of both names.
+  const two: StoreItem[] = [...items, { gtin: '8076809523509', priceCents: 289, name: 'Pesto', brand: 'Barilla', packSize: '190 g' }];
   expect(matchLabel(read({ brand: 'Barilla', name: 'Pesto alla genovese' }), two, 0.6)).toBeNull();
+  expect(matchLabel(read({ brand: 'Barilla', name: 'Pesto alla genovese', packSize: '190 g' }), two, 0.6)).toBeNull();
 });
 it('needs each number of the name of the item, so another size or type of one product line gives no product', () => {
   expect(match({ brand: 'Barilla', name: 'Spaghetti n.3' })).toBeNull();
