@@ -55,7 +55,7 @@ async function kioskReader(kiosk: CreateKioskResponse): Promise<KioskReader> {
 }
 
 /** A shopper with one oat drink, a kiosk, and a reader on the kiosk stream. `request` goes into the kiosk request. */
-async function checkoutReady(request: { failPayment?: boolean } = {}): Promise<Shopper & { kiosk: CreateKioskResponse; kioskEvents: KioskReader }> {
+async function checkoutReady(request: { failPayment?: boolean; spotCheck?: boolean } = {}): Promise<Shopper & { kiosk: CreateKioskResponse; kioskEvents: KioskReader }> {
   const kiosk = CreateKioskResponseSchema.parse(await (await post('/api/kiosks', { name: 'Checkout 3', store: 'Demo Market', ...request })).json());
   return { ...(await shopperWithOatDrink()), kiosk, kioskEvents: await kioskReader(kiosk) };
 }
@@ -264,4 +264,19 @@ it('a second yes during the payment makes one order', async () => {
   phone.send({ t: 'intent', kind: 'yes', source: 'phone', promptId });
   await phone.next(isEvent('checkout.paid'));
   expect(await t.store.listOrders(session.id)).toHaveLength(1);
+});
+it('a kiosk with spotCheck asks for one product, and gives the pay prompt after the shopper showed it', async () => {
+  const { phone, session, kiosk, kioskEvents } = await checkoutReady({ spotCheck: true });
+  expect(await kioskEvents.next()).toMatchObject({ state: 'idle' });
+  phone.send({ t: 'kiosk.seen', text: formatKioskCode(kiosk.code) });
+  expect(await phone.next(isEvent('checkout.spotcheck'))).toMatchObject({ event: { product: { id: 'oat-drink-1l' } } });
+  expect(await phone.next((m) => m.t === 'speak' && m.text === 'Quick check. Show me the oat drink.')).toMatchObject({ promptId: null });
+  expect(await kioskEvents.next()).toMatchObject({ state: 'spotcheck', totalCents: 189, cart: { totalCents: 189 } });
+  expect(session.state.prompt).toBeNull();
+  session.dispatch(seeOat);
+  await phone.next((m) => m.t === 'speak' && m.text === 'Thank you.');
+  expect(await kioskEvents.next()).toMatchObject({ state: 'connected', totalCents: 189 });
+  const promptId = await seeCode(phone, kiosk.code);
+  phone.send({ t: 'intent', kind: 'yes', source: 'phone', promptId });
+  expect(await phone.next(isEvent('checkout.paid'))).toMatchObject({ event: { totalCents: 189 } });
 });

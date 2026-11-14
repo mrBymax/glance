@@ -228,7 +228,7 @@ The Android app has two sessions. The server session holds the cart and has the 
 
 ## Steps of a checkout
 
-A checkout exists while `SessionState.checkout` is not null. Its `step` is `offered`, `suspended`, `biometric`, or `paying`. The phase of the session is `checkout` for that time.
+A checkout exists while `SessionState.checkout` is not null. Its `step` is `spotcheck`, `offered`, `suspended`, `biometric`, or `paying`. The phase of the session is `checkout` for that time.
 
 ```mermaid
 stateDiagram-v2
@@ -244,11 +244,16 @@ stateDiagram-v2
   offered --> [*]: empty cart, code out of view for 30 seconds, camera stopped, or stop intent
   suspended --> [*]: empty cart, code out of view for 30 seconds, camera stopped, or stop intent
   paying --> [*]: payment.result
+  [*] --> spotcheck: kiosk.seen for a free kiosk with spotCheck, cart has items, no product prompt
+  spotcheck --> suspended: identified result for the product of the spot check
+  spotcheck --> [*]: empty cart, code out of view for 30 seconds, camera stopped, or stop intent
 ```
 
 | Step | Event to the session clients | View of the kiosk page |
 |---|---|---|
 | A checkout starts | `session.state` with the phase `checkout`, then `checkout.offered` with a new prompt ID | `connected`, with the cart and the total |
+| A checkout starts at a kiosk with `spotCheck` | `session.state` with the phase `checkout`, then `checkout.spotcheck` with the product to show. The line is "Quick check. Show me the rye bread." | `spotcheck`, with the cart and the total |
+| The shopper shows that product | none. The line is "Thank you." The next `kiosk.seen` gives `checkout.offered` | `connected` |
 | `offered` again | `checkout.offered` with a new prompt ID and the new total | `connected` |
 | `suspended` | `checkout.suspended`, then `glance.pending` for the product | `connected` |
 | `biometric` | none. The phone gets the line "Over fifty euros. Confirm with your fingerprint on the phone." and then the message `biometric.request` | `connected` |
@@ -267,11 +272,11 @@ stateDiagram-v2
 - While the step is `paying`, no answer, no undo, no cart edit, and no stop intent has an effect.
 - After a no on the pay prompt, and after a failed payment, the kiosk is muted until its code has left the view. So the shopper looks away and back to start again.
 - A failed payment keeps the cart. A kiosk that registered with `failPayment: true` declines each payment.
+- A kiosk that registered with `spotCheck: true` starts its checkout in the step `spotcheck`. The product to show is the cart line with the highest unit price. Until an `identified` result names that product, no pay prompt exists. Another product in view gets its usual prompt, and the step stays. If the product leaves the cart, the server asks for another one with a new `checkout.spotcheck`.
 
 ## Parts that do not exist yet
 
 - No path of the server checks the token of a session or of a kiosk.
-- The server never sends the event `checkout.spotcheck`.
 - The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
 - The Android app has no handler for `biometric.request` and sends no `biometric.result`. So a checkout above 50 EUR ends after 30 seconds with no payment.
 - The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.

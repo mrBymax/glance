@@ -21,6 +21,7 @@ export type Line =
   | { key: 'checkout.empty' } | { key: 'checkout.busy' } | { key: 'checkout.cancelled' } | { key: 'checkout.failed' }
   | { key: 'checkout.paid'; totalCents: number }
   | { key: 'checkout.biometric' }
+  | { key: 'spotcheck.ask'; product: Product } | { key: 'spotcheck.thanks' }
   | { key: 'info.total'; itemCount: number; totalCents: number }
   | { key: 'info.cart'; items: { product: Product; qty: number }[]; more: boolean; totalCents: number }
   | { key: 'info.help' }
@@ -34,9 +35,15 @@ export type PromptState =
   | { id: string; kind: 'product'; mode: 'new' | 'inCart'; productId: string; doneAt: number | null }
   | { id: string; kind: 'pay'; kioskId: string; doneAt: number | null };
 
-/** biometric: the shopper said yes to a total above the limit, and the phone checks the fingerprint. */
+/**
+ * spotcheck: the kiosk asked for a spot check, and the voice waits for one product of the cart. No pay prompt exists yet.
+ * biometric: the shopper said yes to a total above the limit, and the phone checks the fingerprint.
+ * suspended with suspendedBy null: the next report of the code gives the pay prompt.
+ */
 export type CheckoutState = {
-  kiosk: KioskRef; step: 'offered' | 'suspended' | 'biometric' | 'paying'; suspendedBy: string | null;
+  kiosk: KioskRef; step: 'spotcheck' | 'offered' | 'suspended' | 'biometric' | 'paying'; suspendedBy: string | null;
+  /** The product that the shopper must show in the step spotcheck. null in each other step. */
+  spotProductId: string | null;
 };
 
 /** The rule numbers in the comments are those of spec section 6.2. Each time is a clock value in milliseconds. */

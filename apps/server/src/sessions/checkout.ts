@@ -1,4 +1,4 @@
-import { EMPTY_CART, type Receipt, TIMING } from '@glance/shared';
+import { EMPTY_CART, type Product, type Receipt, TIMING, toProductRef } from '@glance/shared';
 import { say } from './say';
 import { type Turn, emit, emitSessionState, itemCount, nextPromptId, speak } from './turn';
 import type { RuleInput, SessionState } from './types';
@@ -47,9 +47,49 @@ export function onKioskSeen(turn: Turn, input: Extract<RuleInput, { type: 'kiosk
     return;
   }
   s.phase = 'checkout';
-  s.checkout = { kiosk, step: 'offered', suspendedBy: null };
+  const spotProduct = input.spotCheck ? spotCheckProduct(turn) : null;
+  s.checkout = { kiosk, step: spotProduct ? 'spotcheck' : 'offered', suspendedBy: null, spotProductId: null };
   emitSessionState(turn);
-  offer(turn, true);
+  if (spotProduct) askSpotCheck(turn, spotProduct);
+  else offer(turn, true);
+}
+
+/** The cart line with the highest unit price. The first line wins a tie. null when the catalog holds no product of the cart. */
+function spotCheckProduct(turn: Turn): Product | null {
+  let best: Product | null = null;
+  let bestCents = -1;
+  for (const item of turn.s.cart.items) {
+    if (item.unitPriceCents <= bestCents) continue;
+    const product = turn.ctx.catalog.get(item.productId);
+    if (!product) continue;
+    best = product;
+    bestCents = item.unitPriceCents;
+  }
+  return best;
+}
+
+function askSpotCheck(turn: Turn, product: Product): void {
+  const { s } = turn;
+  s.checkout!.spotProductId = product.id;
+  emit(turn, { type: 'checkout.spotcheck', product: toProductRef(product, s.profile.lang) });
+  speak(turn, say({ key: 'spotcheck.ask', product }));
+}
+
+/**
+ * For an identified product. True when it is the product of the spot check, which then gets no prompt.
+ * The step `suspended` with no product lets the next report of the code give the pay prompt.
+ */
+export function passSpotCheck(turn: Turn, productId: string): boolean {
+  const { s } = turn;
+  const checkout = s.checkout;
+  if (checkout?.step !== 'spotcheck' || checkout.spotProductId !== productId) return false;
+  checkout.step = 'suspended';
+  checkout.suspendedBy = null;
+  checkout.spotProductId = null;
+  // No prompt for the shown product until it has left the view.
+  if (!s.muted.includes(productId)) s.muted.push(productId);
+  speak(turn, say({ key: 'spotcheck.thanks' }));
+  return true;
 }
 
 function onCheckoutKioskSeen(turn: Turn, newAppearance: boolean): void {
@@ -93,10 +133,10 @@ function offer(turn: Turn, interrupt: boolean): void {
   speak(turn, say({ key: 'checkout.offer', kiosk, itemCount: count, totalCents }, { promptId: id, interrupt }));
 }
 
-/** R17, for the prompt of a product that the shopper holds up during a checkout. */
+/** R17, for the prompt of a product that the shopper holds up during a checkout. A spot check stays open. */
 export function suspendCheckoutFor(turn: Turn, productId: string): void {
   const checkout = turn.s.checkout;
-  if (!checkout || checkout.step === 'paying' || checkout.step === 'biometric') return;
+  if (!checkout || checkout.step === 'paying' || checkout.step === 'biometric' || checkout.step === 'spotcheck') return;
   if (checkout.step === 'offered') emit(turn, { type: 'checkout.suspended' });
   checkout.step = 'suspended';
   checkout.suspendedBy = productId;
@@ -108,16 +148,27 @@ export function suspendCheckoutFor(turn: Turn, productId: string): void {
  */
 export function afterCartChange(turn: Turn): void {
   const { s } = turn;
-  const step = s.checkout?.step;
-  if (step !== 'offered' && step !== 'suspended') return;
+  const checkout = s.checkout;
+  const step = checkout?.step;
+  if (!checkout || (step !== 'offered' && step !== 'suspended' && step !== 'spotcheck')) return;
   if (s.cart.items.length > 0) {
     // A suspended checkout gets its prompt with the new total when the code is in view again (R17).
     if (step === 'offered') offer(turn, false);
+    // The shopper cannot show a product that left the cart, so the spot check asks for another one.
+    if (step === 'spotcheck' && !s.cart.items.some((item) => item.productId === checkout.spotProductId)) {
+      const product = spotCheckProduct(turn);
+      if (product) {
+        askSpotCheck(turn, product);
+      } else {
+        checkout.step = 'suspended';
+        checkout.spotProductId = null;
+      }
+    }
     return;
   }
   endCheckout(turn);
-  // The shopper holds a product up. The next report of the code gives the line for an empty cart.
-  if (step === 'suspended') return;
+  // The shopper holds a product up, or shows one. The next report of the code gives the line for an empty cart.
+  if (step !== 'offered') return;
   // The code is still in view, and this line is the one that R15 gives for an empty cart.
   if (s.kioskSeen) s.kioskSeen.said = true;
   speak(turn, say({ key: 'checkout.empty' }));
@@ -185,7 +236,7 @@ export function expireCheckout(turn: Turn): void {
     s.mutedKioskId = null;
   }
   // R19. The server cannot tell if the checkout screen of the phone is open, so the time decides alone.
-  // It also ends a checkout that waits for the fingerprint.
+  // It also ends a checkout that waits for the fingerprint, and one that waits for the product of a spot check.
   if (s.checkout && !isPaying(s) && (!s.kioskSeen || now - s.kioskSeen.at >= TIMING.kioskIdleMs)) {
     endCheckout(turn);
     speak(turn, say({ key: 'checkout.cancelled' }));

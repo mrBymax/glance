@@ -331,3 +331,96 @@ it('a stop intent ends a checkout that waits for the fingerprint', () => {
   h.intent('stop', 'phone');
   expect(h.state).toMatchObject({ phase: 'ended', checkout: null });
 });
+
+const spot = () => { const h = harness({ cart: [RYE, OAT, CRISPS] }); h.kiosk({ spotCheck: true }); return h; };
+
+it('asks to see one product before the pay prompt', () => {
+  const h = harness({ cart: [RYE, OAT, CRISPS] });
+  h.kiosk({ spotCheck: true });
+  expect(h.events()).toEqual(['session.state', 'checkout.spotcheck']);
+  expect(h.event('checkout.spotcheck')!.product.id).toBe(RYE);   // 260 is the highest price
+  expect(h.speak()!.line).toMatchObject({ key: 'spotcheck.ask', product: { id: RYE } });
+  expect(h.speak()).toMatchObject({ priority: 'high', interrupt: true, promptId: null });
+  expect(h.state.prompt).toBeNull();
+  expect(h.state.checkout).toMatchObject({ step: 'spotcheck', spotProductId: RYE });
+  h.see(RYE);
+  expect(h.lines()).toEqual(['spotcheck.thanks']);
+  expect(h.state.checkout).toMatchObject({ step: 'suspended', suspendedBy: null, spotProductId: null });
+  expect(h.state.prompt).toBeNull();
+  h.kiosk({ spotCheck: true });
+  expect(h.event('checkout.offered')).toMatchObject({ totalCents: 639 });
+});
+it('another product does not pass the spot check', () => {
+  const h = harness({ cart: [RYE, OAT, CRISPS] });
+  h.kiosk({ spotCheck: true });
+  h.see(OAT);
+  expect(h.state.checkout!.step).toBe('spotcheck');
+  h.kiosk({ spotCheck: true });
+  expect(h.state.prompt).toMatchObject({ kind: 'product', productId: OAT });
+});
+it('the first cart line wins a tie for the spot check', () => {
+  const h = harness({ products: [product('a', 300), product('b', 300)], cart: [OAT, 'a', 'b'] });
+  h.kiosk({ spotCheck: true });
+  expect(h.event('checkout.spotcheck')!.product.id).toBe('a');
+});
+it('a kiosk with no spot check gives the pay prompt at once', () => {
+  expect(full().state.checkout).toMatchObject({ step: 'offered', spotProductId: null });
+});
+it('the pay prompt after the spot check ends the prompt of another product', () => {
+  const h = spot();
+  h.see(OAT);
+  const promptId = h.state.prompt!.id;
+  h.advance(500); h.see(RYE);
+  expect(h.lines()).toEqual(['spotcheck.thanks']);
+  h.advance(T.viewMs); h.kiosk({ spotCheck: true });
+  expect(h.events()).toEqual(['glance.cleared', 'checkout.offered']);
+  expect(h.event('glance.cleared')).toMatchObject({ promptId });
+});
+it('makes no product prompt for the shown product while it stays in view', () => {
+  const h = spot();
+  h.see(RYE);
+  h.advance(500); h.see(RYE);
+  expect(h.effects).toEqual([]);
+});
+it('a shown product that the shopper just added passes the spot check', () => {
+  const h = harness({ cart: [OAT] });
+  h.see(RYE); h.done(); h.yes('head');
+  h.advance(500); h.kiosk({ spotCheck: true });
+  expect(h.event('checkout.spotcheck')!.product.id).toBe(RYE);
+  h.advance(500); h.see(RYE);
+  expect(h.lines()).toEqual(['spotcheck.thanks']);
+});
+it('R19 also ends a checkout in the spot check', () => {
+  const h = spot();
+  h.advance(T.kioskIdleMs);
+  expect(h.events()).toEqual(['checkout.cancelled', 'session.state']);
+  expect(h.lines()).toEqual(['checkout.cancelled']);
+  expect(h.state).toMatchObject({ checkout: null, phase: 'shopping' });
+});
+it('asks for another product when the product of the spot check leaves the cart', () => {
+  const h = spot();
+  h.send({ type: 'cart.edit', productId: RYE, qty: 0 });
+  expect(h.events()).toEqual(['cart.updated', 'checkout.spotcheck']);
+  expect(h.event('checkout.spotcheck')!.product.id).toBe(CRISPS);   // 190 is now the highest price
+  expect(h.lines()).toEqual(['cart.removed', 'spotcheck.ask']);
+  expect(h.state.checkout).toMatchObject({ step: 'spotcheck', spotProductId: CRISPS });
+});
+it('keeps the product of the spot check when another cart line changes', () => {
+  const h = spot();
+  h.send({ type: 'cart.edit', productId: OAT, qty: 0 });
+  expect(h.events()).toEqual(['cart.updated']);
+  expect(h.state.checkout).toMatchObject({ step: 'spotcheck', spotProductId: RYE });
+});
+it('an empty cart ends a checkout in the spot check', () => {
+  const h = harness({ cart: [RYE] });
+  h.kiosk({ spotCheck: true });
+  h.send({ type: 'cart.edit', productId: RYE, qty: 0 });
+  expect(h.events()).toEqual(['cart.updated', 'checkout.cancelled', 'session.state']);
+  expect(h.state).toMatchObject({ checkout: null, phase: 'shopping' });
+});
+it('a yes or a no during the spot check pays nothing and cancels nothing', () => {
+  const h = spot();
+  h.yes('phone', 'p-0001'); h.no('phone', 'p-0001');
+  expect(payments(h)).toEqual([]);
+  expect(h.state.checkout).toMatchObject({ step: 'spotcheck' });
+});

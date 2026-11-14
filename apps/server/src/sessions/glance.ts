@@ -1,5 +1,5 @@
 import { type Product, TIMING, toProductRef } from '@glance/shared';
-import { isConfirmed, suspendCheckoutFor } from './checkout';
+import { isConfirmed, passSpotCheck, suspendCheckoutFor } from './checkout';
 import { say } from './say';
 import { type Turn, emit, nextPromptId, promptProductInView, qtyInCart, speak } from './turn';
 import type { RuleInput } from './types';
@@ -43,6 +43,8 @@ function onIdentified(turn: Turn, productId: string): void {
 
   const wasInView = inView(s.seen[productId], now);
   s.seen[productId] = now;
+  // Before the mute test: a product that the shopper just added, and still holds, also passes the spot check.
+  if (passSpotCheck(turn, productId)) return;
   if (s.muted.includes(productId)) return;
   // R1: results inside the view time belong to one appearance, and one appearance gets one prompt.
   if (s.prompt?.kind === 'product' && s.prompt.productId === productId && wasInView) return;

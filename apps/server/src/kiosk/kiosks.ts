@@ -19,6 +19,7 @@ const TOKEN_BYTES = 24;
 
 /**
  * What the kiosk page shows. A result wins. Else an open checkout of the session at this kiosk shows its cart.
+ * The view of a spot check does not name the product: the voice names it, and KioskEvent has no field for it.
  * `session` is the state of the session that holds the kiosk, or null.
  */
 export function kioskView(kiosk: KioskRecord, session: SessionState | null, result: KioskResult | null): KioskEvent {
@@ -32,7 +33,8 @@ export function kioskView(kiosk: KioskRecord, session: SessionState | null, resu
   }
   if (result) return { ...base, state: 'failed', cart: null, totalCents: null, receipt: null };
   if (session?.checkout?.kiosk.id === kiosk._id) {
-    return { ...base, state: 'connected', cart: session.cart, totalCents: session.cart.totalCents, receipt: null };
+    const state = session.checkout.step === 'spotcheck' ? 'spotcheck' : 'connected';
+    return { ...base, state, cart: session.cart, totalCents: session.cart.totalCents, receipt: null };
   }
   return { ...base, state: 'idle', cart: null, totalCents: null, receipt: null };
 }

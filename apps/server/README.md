@@ -34,8 +34,6 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/ws/device.ts` | The socket of the phone. See "Device socket". |
 | `src/testing.ts` | Test helpers: an app on a free port, a reader for an events stream, and a phone on the device socket. |
 
-Parts that do not exist yet: the spot check.
-
 ## Run it
 
 Run `npm install` at the repository root first. Then run the commands in `apps/server`, or add `--workspace @glance/server` at the root.
@@ -293,7 +291,7 @@ sequenceDiagram
 - A second yes while the payment runs has no effect, so one checkout makes one order.
 - The store keeps each kiosk. After a restart of the server, no session holds a kiosk. A session that was in a checkout loads with no checkout, and its shopper starts again at the code.
 - If the server stops while a payment waits, that payment fails when the session loads again. No order exists for it.
-- The `spotCheck` value of a kiosk is stored and has no effect yet.
+- A kiosk that registered with `spotCheck: true` asks for one product before the pay prompt. See "Spot check".
 
 ## Catalog
 
@@ -526,7 +524,42 @@ stateDiagram-v2
   offered --> [*]: no, empty cart, or code out of view for 30 seconds
   suspended --> [*]: empty cart, or code out of view for 30 seconds
   paying --> [*]: payment result
+  [*] --> spotcheck: kiosk code in view, cart has items, the kiosk asks for a spot check
+  spotcheck --> suspended: the product of the spot check is in view
+  spotcheck --> [*]: empty cart, or code out of view for 30 seconds
 ```
+
+### Spot check
+
+A kiosk that registered with `spotCheck: true` wants to see one product of the cart before the payment. The rules are in `src/sessions/checkout.ts`.
+
+```mermaid
+sequenceDiagram
+  participant Kiosk as Kiosk page
+  participant Server
+  participant Phone
+  Phone->>Server: kiosk.seen "GL1 K3X7"
+  Server-->>Phone: session.state checkout, checkout.spotcheck with the product
+  Server-->>Phone: speak "Quick check. Show me the rye bread."
+  Server-->>Kiosk: kiosk.state spotcheck, cart, total
+  Phone->>Server: frame with the rye bread
+  Server-->>Phone: speak "Thank you."
+  Server-->>Kiosk: kiosk.state connected
+  Phone->>Server: kiosk.seen "GL1 K3X7"
+  Server-->>Phone: checkout.offered, speak "Checkout 3 at Demo Market. ... Nod to pay."
+```
+
+- The checkout starts in the step `spotcheck`, with no pay prompt. So a yes cannot pay, and a no cancels nothing.
+- The product to show is the cart line with the highest unit price. The first line wins a tie.
+- The start gives `session.state`, then `checkout.spotcheck` with the product reference, then the line `spotcheck.ask`: "Quick check. Show me the rye bread." The line has the priority `high` and interrupts.
+- An `identified` result for that product passes the check. The voice says "Thank you." (`spotcheck.thanks`, priority `high`, no interrupt). The product gets no prompt until it has left the view, also when the shopper added it a moment before and still holds it.
+- The step is then `suspended` with `suspendedBy: null`, and the next `kiosk.seen` gives the pay prompt. No event reports the passed check: `checkout.offered` follows when the shopper looks at the code.
+- Another product in view gets its usual prompt, and a yes adds it. The step stays `spotcheck`.
+- If the product of the check leaves the cart, the check asks for the line that now has the highest price, with a new `checkout.spotcheck` and a new ask line. An empty cart ends the checkout.
+- The checkout ends when its code was out of view for 30 seconds (R19), when the camera stops, at rest, and with a stop intent, as in each other step.
+- The kiosk page gets `kiosk.state` with the state `spotcheck`, the cart, and the total. `KioskEvent` does not name the product.
+- A snapshot has no field for the spot check. A client that connects in the step `spotcheck` sees the phase `checkout`, the kiosk, and no prompt.
+- To try it with the fake server: register a kiosk with `POST /api/kiosks` and the body `{"name":"Checkout 4","store":"Demo Market","spotCheck":true}`. The `kiosk` step of the default script reports the kiosk that registered last. The kiosk `K3X7` of the fake server asks for no spot check.
 
 A paid checkout sets the phase `paid`, empties the cart, and ends the session. A failed payment keeps the cart, and the shopper looks at the code again.
 
@@ -617,6 +650,7 @@ The rules select a line by its key, and `renderLine(line, profile)` in `src/spee
 - The detail level `brief` shortens the glance line, the added line, and the removed line. The level `detailed` adds the brand, the long pack text, and "Contains gluten." for a product that lists allergens.
 - The add that crosses the budget says "Added oat drink. Total twenty-one ten. That is over your budget of twenty euros." The budget has the full price form. The level `brief` also names the total in this line.
 - No level shortens the pay prompt.
+- The spot check says "Quick check. Show me the oat drink." and "Thank you." The Italian texts are "Controllo rapido. Mostrami questo prodotto: bevanda di avena." and "Grazie."
 - A warning follows the price and comes before the yes phrase, at each detail level: "Oat drink, one litre, one eighty-nine. Warning: contains gluten. Nod to add." In the line for a product in the cart it follows the count.
 - The warning texts are "Warning: contains gluten, milk and nuts.", "Warning: not vegan.", "Warning: not vegetarian.", and "Allergen data is missing for this product." They equal the texts of the phone UI.
 - At the level `detailed`, an allergen warning names each allergen of the product, and the "Contains" sentence is left out.

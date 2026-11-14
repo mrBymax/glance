@@ -140,6 +140,7 @@ it('gives an Italian text that differs from the English text for each line with 
     { key: 'checkout.busy' }, { key: 'checkout.cancelled' }, { key: 'checkout.failed' }, { key: 'checkout.biometric' },
     { key: 'info.help' }, { key: 'device.cameraOff' }, { key: 'device.regularCheckout' }, { key: 'device.paused' },
     { key: 'net.backOnline' }, { key: 'recognition.slow' }, { key: 'ask.listening' }, { key: 'ask.noProduct' }, { key: 'ask.failed' },
+    { key: 'spotcheck.thanks' },
   ];
   for (const line of fixed) {
     expect(it_(line)).not.toBe(text(line));
@@ -259,4 +260,11 @@ it('finds the common name of look-alike products with no case, and keeps a brand
     .toBe('I cannot tell which Oatly oat drink this is. Turn the front to me.');
   expect(text({ key: 'glance.ambiguous', products: [named('Soy drink'), named('Oat drink')] }))
     .toBe('I cannot tell which drink this is. Turn the front to me.');
+});
+
+it('asks for the product of a spot check, and says thanks', () => {
+  expect(text({ key: 'spotcheck.ask', product: oat })).toBe('Quick check. Show me the oat drink.');
+  expect(text({ key: 'spotcheck.thanks' })).toBe('Thank you.');
+  expect(it_({ key: 'spotcheck.ask', product: oat })).toBe('Controllo rapido. Mostrami questo prodotto: bevanda di avena.');
+  expect(it_({ key: 'spotcheck.thanks' })).toBe('Grazie.');
 });
