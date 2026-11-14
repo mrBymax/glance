@@ -46,14 +46,17 @@ function main() {
   if (!head) return;
   const status = git('status', '--porcelain', '--untracked-files=all');
   const fingerprint = createHash('sha256').update(`${head}\n${status}`).digest('hex');
-  const remember = () => {
-    state[top] = { commit: head, fingerprint };
+  const save = (entry) => {
+    state[top] = entry;
     writeFileSync(stateFile, JSON.stringify(state, null, 2));
   };
+  const remember = () => save({ commit: head, fingerprint });
 
   // Claude already works on a request of this hook. Let it stop, and start the next check from here.
   if (input.stop_hook_active === true) return remember();
   if (seen.fingerprint === fingerprint) return;
+  // The hook asked for these exact files before, and nothing changed since. Do not ask a second time.
+  if (seen.asked === fingerprint) return remember();
 
   let base = seen.commit && tryGit('merge-base', '--is-ancestor', seen.commit, head) !== null ? seen.commit : null;
   if (!base) base = tryGit('merge-base', head, 'origin/main');
@@ -83,6 +86,7 @@ function main() {
     'Describe only what exists and works now. Follow skills/anti-slop/SKILL.md.',
     'If no document needs a change, say so in one line and stop.',
   ].join('\n');
+  save({ ...seen, asked: fingerprint });
   process.stdout.write(JSON.stringify({ decision: 'block', reason }));
 }
 
