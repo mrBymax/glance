@@ -174,12 +174,12 @@ flowchart LR
     Contract[contract: types, GlanceJson, Codec, Profiles]
     Frame[frame: FrameCodec] --> Contract
     Kiosk[kiosk: KioskCode, KioskDwell] --> Contract
-    Image[image: Sharpness, SharpestFramePicker, UploadGate, FrameGeometry, FramePrep, I420] --> Contract
+    Image[image: Sharpness, SharpestFramePicker, UploadGate, FrameGeometry, Pixelate, FramePrep, I420] --> Contract
     Gesture[gesture: HeadGestureDetector, GyroScript, MotionCsv]
     Audio[audio: SpeechQueue] --> Contract
     Input[input: PromptTracker, HeadInput, MainYesResolver] --> Contract
     Input --> Gesture
-    State[state: StateMapper, StopCauses, NativeErrors, ConnectionAnnouncer] --> Contract
+    State[state: StateMapper, StopCauses, NativeErrors, ConnectionAnnouncer, Revival, HapticPatterns] --> Contract
     Net[net: GlanceApi, DeviceSocket, Backoff] --> Contract
     Net --> Frame
     BridgeText[bridge: Bridge] --> Contract

@@ -132,6 +132,7 @@ Build the phone UI first, because the Gradle build copies `apps/mobile/ui/dist` 
 - The debug build has three screens: "Glance" with the phone UI, "Glance Mock" with the menu of mock mode, and "Glance Probe" with the checks for the glasses and for mock glasses.
 - `./gradlew :core:test :app:assembleDemo` builds the signed APK for the testers. It needs a keystore: see "The demo build" in `apps/mobile/android/README.md`.
 - `tools/fake-server` holds a small server for work on the app alone. Start it with `node server.mjs`, and test it with `npm test` in that folder.
+- `scripts/integration/android/run-spine.mjs` runs the instrumented tests on a phone with mock glasses, against `apps/server` with fake recognition and fake speech. Run `npm install` in `scripts/integration` one time, then `node android/run-spine.mjs --integration`. See "Instrumented tests" in `apps/mobile/android/README.md`.
 
 ## Branches and commits
 
