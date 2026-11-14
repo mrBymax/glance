@@ -33,6 +33,11 @@ export function BridgeProvider(props: { bridge: GlanceBridge; children: ReactNod
   const snapshotCaptions = useRef<SnapshotCaptions>(new Map());
   useSpokenText(state, strings, snapshotCaptions);
 
+  // A screen reader selects its voice from the language of the document.
+  useEffect(() => {
+    document.documentElement.lang = state.profile.lang;
+  }, [state.profile.lang]);
+
   useEffect(() => {
     // The host answers ui.ready at once, so the page must listen first.
     const unsubscribe = bridge.subscribe((message) => {

@@ -172,7 +172,10 @@ flowchart LR
 - An error stays until a sign of recovery: a stream that starts, a new prompt, a snapshot, a payment, or `local.attempt`. `send` runs `local.attempt` before `setup.register`, `setup.requestCamera`, and `session.start`.
 - The list of captions holds the last 20, and the screen shows the last 4. A caption with a known ID replaces the old one.
 - `useSpokenText` announces each new caption, and the line `Cart: 2 items, 4.49 EUR.` after each cart change. It does not announce the captions of a snapshot, also when the snapshot loads again after a lost connection. `BridgeProvider` gives it the captions of the last snapshot.
-- Each string of the page is in `src/text/strings.ts`. `src/text/format.ts` formats an amount as `1.89 EUR`.
+- Each string of the page is in `src/text/strings.ts`: the table `EN`, and the table `IT` with the same keys. `stringsFor(lang)` selects the table of `profile.lang`, so a change of the language shows at once. `src/text/format.ts` formats an amount as `1.89 EUR` in both languages.
+- `BridgeProvider` sets the `lang` attribute of the document to `profile.lang`. A screen reader selects its voice from it.
+- These texts stay English in the Italian page: the words of Astryx itself (for example "completed" in the list of steps and "Clear" in the name of the clear button), the debug panel, and each caption until the server speaks Italian. The page shows a caption as the server sends it.
+- `src/text/strings.test.ts` expects an Italian text for each English text, and the copy rules in both tables. No native speaker has read the Italian table yet.
 
 The field `checkout` follows the checkout events:
 
@@ -304,11 +307,12 @@ The Settings button of the session screen opens `SettingsSheet`. `useUi().setPro
 | Allergens | 14 checkboxes, one for each value of `EU_ALLERGENS` | `{ allergens }`: the full new list, in the order of `EU_ALLERGENS` |
 | Diet | 2 checkboxes: Vegan, Vegetarian | `{ vegan }` or `{ vegetarian }`: only the key that changed |
 | Budget | A number input in whole euros, from 1, with a clear button | `{ budgetCents }`: the value times 100, or `null` after Clear Budget |
+| Language | 2 segments: English, Italiano. Each name is in its own language (`LANGUAGE_NAMES`). | `{ lang }` |
 
 - A speech rate that is not in `SPEECH_RATES` marks the nearest value.
 - Play sample sends `intent` with the kind `help`. The bridge has no message for a speech sample, so the voice speaks the help line at the new speed.
 - Delete my data asks in an `AlertDialog`. Delete sends `data.delete`, runs `local.reset`, and closes the dialog and the sheet.
-- `src/styles/narrow.css` sets the inline padding of a segment to 4 px. With the stock 12 px, "While in view" and "Phone" are cut at a width of 360 px.
+- `src/styles/narrow.css` sets the inline padding of a segment to 4 px. With the stock 12 px, "While in view" and "Phone" are cut at a width of 360 px. The Italian table uses "In vista" and "App" there, because "Telefono" is cut also with 4 px.
 
 ### State banner
 

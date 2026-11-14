@@ -102,3 +102,27 @@ it('shows the budget of the profile in euros', async () => {
   const { sheet } = await open({ messages: [{ t: 'profile', profile: { ...DEFAULT_PROFILE, budgetCents: 3500 } }] });
   expect(sheet.getByRole('spinbutton', { name: 'Budget' })).toHaveValue('35');
 });
+it('sends the language, and shows the page in Italian', async () => {
+  const { bridge, user, sheet } = await open({ messages: [eventMessage('glance.pending', { kind: 'new', warnings: [] })] });
+  await user.click(sheet.getByRole('radio', { name: 'Italiano' }));
+  expect(patches(bridge)).toEqual([{ lang: 'it' }]);
+  expect(document.documentElement).toHaveAttribute('lang', 'it');
+  expect(screen.getByRole('dialog', { name: 'Impostazioni' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Aggiungi' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Salta' })).toBeInTheDocument();
+});
+it('marks the language of the profile, and returns to English', async () => {
+  const { bridge, user } = renderWithUi(<SessionScreen />, { messages: [{ t: 'profile', profile: { ...DEFAULT_PROFILE, lang: 'it' } }] });
+  await user.click(screen.getByRole('button', { name: 'Impostazioni' }));
+  const italian = within(screen.getByRole('dialog', { name: 'Impostazioni' }));
+  expect(italian.getByRole('radio', { name: 'Italiano' })).toHaveAttribute('aria-checked', 'true');
+  await user.click(italian.getByRole('radio', { name: 'English' }));
+  expect(patches(bridge)).toEqual([{ lang: 'en' }]);
+  expect(document.documentElement).toHaveAttribute('lang', 'en');
+  expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+});
+it('has no control below 48 px in the Italian settings sheet', async () => {
+  const { baseElement, user } = renderWithUi(<SessionScreen />, { messages: [{ t: 'profile', profile: { ...DEFAULT_PROFILE, lang: 'it' } }] });
+  await user.click(screen.getByRole('button', { name: 'Impostazioni' }));
+  expect(uncoveredTouchTargets(baseElement)).toEqual([]);
+});

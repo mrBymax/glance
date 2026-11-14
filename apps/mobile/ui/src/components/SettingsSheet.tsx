@@ -7,9 +7,10 @@ import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
-import { EU_ALLERGENS, type Profile } from '@glance/shared';
+import { EU_ALLERGENS, LANGS, type Profile } from '@glance/shared';
 import { useState } from 'react';
 import { useUi } from '../bridge/BridgeContext';
+import { LANGUAGE_NAMES } from '../text/strings';
 
 /** Five steps in place of a slider: the thumb of the Astryx Slider is below 48 px. */
 export const SPEECH_RATES = [0.8, 1, 1.2, 1.5, 2] as const;
@@ -147,6 +148,15 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
             value={profile.budgetCents === null ? null : profile.budgetCents / 100}
             // With hasClear the input reports null for the clear button.
             onChange={(value: number | null) => setProfile({ budgetCents: value === null ? null : Math.round(value * 100) })}
+          />
+          <Choice
+            label={strings.language}
+            value={profile.lang}
+            options={LANGS.map((lang): Option => [lang, LANGUAGE_NAMES[lang]])}
+            onChange={(value) => {
+              const lang = LANGS.find((key) => key === value);
+              if (lang) setProfile({ lang });
+            }}
           />
           <VStack gap={3}>
             <Heading level={2}>{strings.privacyTitle}</Heading>

@@ -1,5 +1,8 @@
 import type { Lang } from '@glance/shared';
 
+/** The name of each language, in that language. */
+export const LANGUAGE_NAMES: Record<Lang, string> = { en: 'English', it: 'Italiano' };
+
 /** Each string of the phone UI, in English. */
 export const EN = {
   appTitle: 'Glance',
@@ -82,6 +85,7 @@ export const EN = {
   deleteText: 'This deletes your session, your cart, and your order from the server.',
   deleteConfirm: 'Delete',
   deleteCancel: 'Keep',
+  language: 'Language',
 
   allergens: 'Allergens',
   diet: 'Diet',
@@ -158,7 +162,172 @@ export const EN = {
 
 export type Strings = typeof EN;
 
-/** Returns the English strings for each language. No other language exists yet. */
-export function stringsFor(_lang: Lang): Strings {
-  return EN;
+/**
+ * Each string of the phone UI, in Italian. The voice of the server uses the same words for the same things.
+ * A native speaker must read this table before a release.
+ */
+export const IT: Strings = {
+  appTitle: 'Glance',
+  idleHint: 'Solleva un prodotto per sentire il prezzo.',
+  add: 'Aggiungi',
+  skip: 'Salta',
+  addAnother: 'Aggiungi un altro',
+  removeOne: 'Rimuovi uno',
+  inCart: (qty) => `Nel carrello: ${qty}`,
+  captions: 'Sottotitoli',
+  noCaptions: 'Ogni frase che la voce pronuncia appare qui.',
+  cart: 'Carrello',
+  cartEmpty: 'Il carrello è vuoto.',
+  cartLine: (packSize, qty, unit) => `${packSize}, ${qty} x ${unit}`,
+  total: 'Totale',
+  items: (count) => (count === 1 ? '1 articolo' : `${count} articoli`),
+  cartStatus: (count, total) => (count === 0 ? 'Carrello: vuoto.' : `Carrello: ${count === 1 ? '1 articolo' : `${count} articoli`}, ${total}.`),
+
+  setupTitle: 'Configura Glance',
+  setupSteps: 'Configurazione',
+  loading: 'Avvio di Glance.',
+  stepLink: 'Collega gli occhiali',
+  stepCamera: 'Consenti la fotocamera',
+  stepReady: 'Pronto',
+  linkOpens: "Si apre l'app Meta AI.",
+  linkConfirm: 'Conferma lì che Glance può collegarsi ai tuoi occhiali.',
+  linkReturn: 'Poi Meta AI ti riporta a Glance.',
+  linking: 'In attesa di Meta AI.',
+  metaAiMissing: "L'app Meta AI non è su questo telefono. Installala, poi torna qui.",
+  getMetaAi: 'Scarica Meta AI',
+  noInternet: 'Nessuna connessione a Internet. Collega il telefono, poi riprova.',
+  tryAgain: 'Riprova',
+  cameraWhy: 'Glance usa la fotocamera dei tuoi occhiali per riconoscere il prodotto che tieni in mano. Il telefono sfoca i volti. Nessun fotogramma viene salvato.',
+  cameraOpens: "Si apre di nuovo l'app Meta AI.",
+  cameraChoose: 'Scegli Consenti sempre o Consenti una volta.',
+  cameraDenied: "L'autorizzazione per la fotocamera è stata negata. Senza di essa Glance non può riconoscere un prodotto.",
+  readyText: 'Solleva un prodotto per sentire il prezzo. Annuisci per aggiungerlo. Guarda un codice della cassa e annuisci per pagare.',
+  start: 'Inizia la spesa',
+
+  checkout: 'Cassa',
+  pay: 'Paga',
+  fingerprint: "Oltre cinquanta euro. Conferma con l'impronta digitale sul telefono.",
+  payFingerprint: "Paga con l'impronta",
+  cancel: 'Annulla',
+  payee: (kiosk, store) => `${kiosk} presso ${store}`,
+  receipt: 'Ricevuta',
+  paid: 'Pagato',
+  order: (id) => `Ordine ${id}`,
+  demoPayment: 'Pagamento dimostrativo. Nessun denaro è stato trasferito.',
+  done: 'Fine',
+
+  settings: 'Impostazioni',
+  voiceDetail: 'Dettaglio della voce',
+  brief: 'Breve',
+  standard: 'Standard',
+  detailed: 'Dettagliato',
+  speechSpeed: 'Velocità della voce',
+  // Italian writes a decimal comma.
+  rate: (value) => `${value.toFixed(1).replace('.', ',')}x`,
+  playSample: 'Prova la voce',
+  inputAndFeedback: 'Comandi e riscontro',
+  headGestures: 'Gesti della testa',
+  haptics: 'Vibrazione',
+  gestureMeaning: 'Significato dei gesti',
+  nodIsYes: 'Annuire è sì',
+  shakeIsYes: 'Scuotere è sì',
+  headWindow: 'Tempo per il gesto',
+  window8: '8 secondi',
+  window15: '15 secondi',
+  windowInView: 'In vista',
+  mainYes: 'Comando principale per il sì',
+  yesHead: 'Testa',
+  yesTouch: 'Tocco',
+  yesVoice: 'Voce',
+  // "Telefono" is cut in a segment of 62 px.
+  yesPhone: 'App',
+  yesKey: 'Tasti',
+  privacyTitle: 'Privacy',
+  privacyText: 'Il telefono sfoca i volti e ritaglia ogni fotogramma prima che lasci il telefono. Il server tiene un fotogramma per una sola richiesta di riconoscimento e non lo salva mai. Glance salva il carrello, le preferenze e la ricevuta. Non salva nessun account e nessun nome.',
+  deleteData: 'Elimina i dati',
+  deleteTitle: 'Eliminare i miei dati?',
+  deleteText: "Questo elimina dal server la sessione, il carrello e l'ordine.",
+  deleteConfirm: 'Elimina',
+  deleteCancel: 'Mantieni',
+  language: 'Lingua',
+
+  allergens: 'Allergeni',
+  diet: 'Dieta',
+  vegan: 'Vegano',
+  vegetarian: 'Vegetariano',
+  // The names of Annex II of Regulation (EU) No 1169/2011, in the short form of a food label.
+  allergenNames: {
+    gluten: 'Glutine', crustaceans: 'Crostacei', eggs: 'Uova', fish: 'Pesce', peanuts: 'Arachidi', soy: 'Soia', milk: 'Latte',
+    nuts: 'Frutta a guscio', celery: 'Sedano', mustard: 'Senape', sesame: 'Sesamo', sulphites: 'Solfiti', lupin: 'Lupini', molluscs: 'Molluschi',
+  },
+  and: 'e',
+  warningAllergen: (list) => `Attenzione: contiene ${list}.`,
+  warningDiet: (diet) => `Attenzione: non ${diet}.`,
+  allergenDataMissing: 'Mancano i dati sugli allergeni per questo prodotto.',
+  lookAlikeTitle: 'Non riesco a capire quale prodotto è.',
+  lookAlikeText: 'Gira il lato frontale verso di me.',
+  lookAlikeList: 'Può essere uno di questi prodotti:',
+  candidate: (name, packSize) => `${name}, ${packSize}`,
+  budget: 'Budget',
+  budgetOver: 'Attenzione: hai superato il budget.',
+  budgetDetail: (total, budget) => `Totale ${total}. Budget ${budget}.`,
+
+  ask: 'Fai una domanda',
+  // Italian software uses the same word for Undo and for Cancel.
+  undo: 'Annulla',
+  end: 'Termina',
+  repeat: 'Ripeti',
+  repeatLabel: "Ripeti l'ultima frase",
+  remove: 'Rimuovi',
+  removeLabel: (name) => `Rimuovi ${name}`,
+  endTitle: 'Terminare questa spesa?',
+  endText: 'La fotocamera si spegne. Dopo non puoi più aggiungere prodotti a questo carrello.',
+  endConfirm: 'Termina',
+  endCancel: 'Continua la spesa',
+
+  pocketMode: 'Modalità tasca',
+  unlock: 'Sblocca',
+  leavePocketTitle: 'Uscire dalla modalità tasca?',
+  leavePocketText: 'Lo schermo mostra di nuovo il carrello.',
+  leave: 'Esci',
+  stay: 'Resta',
+
+  banner: {
+    paymentFailed: { title: 'Pagamento non riuscito.', description: 'Nessun addebito. Guarda il codice per riprovare.' },
+    serverUnreachable: { title: 'Connessione persa.', description: 'Il tuo carrello è al sicuro. Il riconoscimento è in pausa.' },
+    regularCheckout: { title: 'Fotocamera spenta.', description: 'Usa una cassa normale. Il carrello resta su questo telefono come elenco.' },
+    glassesNotFound: { title: 'Occhiali non trovati.', description: 'Apri gli occhiali e tienili vicino al telefono.' },
+    updateRequired: { title: 'Aggiornamento necessario.', description: 'Aggiorna gli occhiali prima di fare la spesa con Glance.' },
+    ended: { title: 'Fotocamera spenta.', description: 'Questa spesa è terminata. Il carrello appare qui sotto come elenco.' },
+    resting: { title: 'Fotocamera spenta.', description: 'Nessun prodotto in vista per 3 minuti. Il tuo carrello è al sicuro.' },
+    paused: { title: 'In pausa.', description: 'Tocca il lato degli occhiali per riprendere.' },
+    offFace: { title: 'Non indossi gli occhiali.', description: 'Il riconoscimento è in pausa. Indossa gli occhiali per continuare.' },
+    cameraOff: 'Fotocamera spenta.',
+    batteryLow: (percent) => `Batteria degli occhiali al ${percent} per cento.`,
+    openUpdate: "Apri l'aggiornamento in Meta AI",
+    newShop: 'Inizia una nuova spesa',
+    startCamera: 'Accendi la fotocamera',
+  },
+  status: {
+    glasses: (value) => `Occhiali: ${value}`,
+    battery: (value) => `Batteria: ${value}`,
+    camera: (value) => `Fotocamera: ${value}`,
+    network: (value) => `Rete: ${value}`,
+    connected: 'Collegati',
+    notConnected: 'Non collegati',
+    unknown: 'Sconosciuta',
+    percent: (value) => `${value}%`,
+    cameraOn: 'Accesa',
+    cameraPaused: 'In pausa',
+    cameraOff: 'Spenta',
+    online: 'Online',
+    offline: 'Offline',
+  },
+};
+
+const TABLES: Record<Lang, Strings> = { en: EN, it: IT };
+
+/** Returns the strings of the language. */
+export function stringsFor(lang: Lang): Strings {
+  return TABLES[lang];
 }
