@@ -18,6 +18,13 @@ export const KEPT_FRAMES = 3;
  * fewer, the verify call named a wrong item in 7 of 51 calls, and with 2 or more it named none wrong.
  */
 export const VERIFY_LEGIBLE_FRAMES = 2;
+/**
+ * An appearance gets at most this number of verify calls. The first one runs with the first 2 readable frames, which
+ * often show the product while it comes into view. The second one runs after VERIFY_AGAIN_LEGIBLE_FRAMES more
+ * readable frames, with the best frames of that time.
+ */
+export const MAX_VERIFY_CALLS = 2;
+export const VERIFY_AGAIN_LEGIBLE_FRAMES = 4;
 /** After this number of frames with a held product and no name, the frames report `unsure`, and the rules ask for a still. */
 export const UNSURE_AFTER_FRAMES = 3;
 /**
@@ -35,6 +42,9 @@ type State = {
   /** What the frames report after a verify call that named no item. */
   unnamed: Decision | null;
   verify: Promise<void> | null;
+  /** The number of verify calls of the appearance, and its number of readable frames at the start of the last one. */
+  verifyCalls: number;
+  legibleAtVerify: number;
 };
 
 const plain = { productId: null, candidates: [] as string[], confidence: 0, aimHint: 'none', gesture: 'none' } as const;
@@ -140,7 +150,10 @@ export function createObservePipeline(deps: {
           line(picked.gtin, 'search', ` matched=${JSON.stringify(picked.reasons)}`);
           return;
         }
-        if (state.unnamed !== null || appearance.legibleFrames < VERIFY_LEGIBLE_FRAMES) return;
+        const needed = state.verifyCalls === 0 ? VERIFY_LEGIBLE_FRAMES : state.legibleAtVerify + VERIFY_AGAIN_LEGIBLE_FRAMES;
+        if (state.verifyCalls >= MAX_VERIFY_CALLS || appearance.legibleFrames < needed) return;
+        state.verifyCalls += 1;
+        state.legibleAtVerify = appearance.legibleFrames;
 
         const kept: readonly KeptFrame[] = appearance.kept;
         const startedAt = deps.clock.now();
@@ -185,7 +198,7 @@ export function createObservePipeline(deps: {
           } else {
             const appearance = tracker.add(observation, at, jpeg);
             if (appearance === null) return NO_RESULT;
-            const state = appearance.outcome ??= { named: null, unnamed: null, verify: null };
+            const state = appearance.outcome ??= { named: null, unnamed: null, verify: null, verifyCalls: 0, legibleAtVerify: 0 };
             if (state.named === null) await decide(appearance, state, observation);
             // A held product with no name yet is no result for the rules: an `unsure` result asks the phone for a still,
             // which stops the motion stream. The frames report `unsure` only when they cannot name the product.

@@ -204,3 +204,18 @@ it('never names an item that the store search does not know', async () => {
   await look();
   expect(await look()).toMatchObject({ status: 'unsure', productId: null });
 });
+it('asks the verify call a second time after 4 more frames with print, and no third time', async () => {
+  const verdicts = [answer({}), answer({ gtin: HELL, confidence: 0.95, seen: 'text' })];
+  const { look, verifyInputs } = pipeline(Array.from({ length: 12 }, () => seen()), async () => verdicts.shift() ?? answer({}));
+  const statuses: string[] = [];
+  for (let i = 0; i < 6; i += 1) statuses.push((await look()).status);
+  expect(statuses).toEqual(['none', 'unsure', 'unsure', 'unsure', 'unsure', 'identified']);
+  expect(verifyInputs).toHaveLength(2);
+  // The second call gets the kept frames of that time.
+  expect(verifyInputs[1]!.frames).toHaveLength(3);
+});
+it('makes at most 2 verify calls for one appearance', async () => {
+  const { look, verifyInputs } = pipeline(Array.from({ length: 16 }, () => seen()), answer({}));
+  for (let i = 0; i < 16; i += 1) await look();
+  expect(verifyInputs).toHaveLength(2);
+});
