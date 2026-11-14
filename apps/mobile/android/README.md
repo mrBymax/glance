@@ -33,6 +33,41 @@ flowchart LR
 - A stopped DAT session is final. `startSession` creates a new session each time.
 - `MockGlassesController` pairs mock glasses of MockDeviceKit. Call `DatLink.initialize` after `enable` and after `disable`.
 
+## The core module
+
+`core` has no Android import and no DAT import. The app does not use these units yet, except `I420`, `RawFrame`, `GyroStats`, `MotionCsv`, `Revival`, and the gesture test of the probe.
+
+```mermaid
+flowchart LR
+    Fixtures[packages/shared/fixtures] -. checked by tests .-> Contract
+    Contract[contract: types, GlanceJson, Codec, Profiles]
+    Frame[frame: FrameCodec] --> Contract
+    Kiosk[kiosk: KioskCode, KioskDwell] --> Contract
+    Image[image: Sharpness, SharpestFramePicker, UploadGate, FrameGeometry, FramePrep, I420] --> Contract
+    Gesture[gesture: HeadGestureDetector, GyroScript, MotionCsv]
+    Audio[audio: SpeechQueue] --> Contract
+    Input[input: PromptTracker, HeadInput, MainYesResolver] --> Contract
+    Input --> Gesture
+```
+
+| Package | Content |
+|---|---|
+| `contract` | The Kotlin mirror of `packages/shared`: one file for each TypeScript file, with the same type names and field names. `GlanceJson` is the one JSON format. `Codec` encodes and decodes the messages, and returns null for a message that it does not know. `Profiles.applyPatch` sets the keys of a profile patch. |
+| `frame` | `FrameCodec` builds and reads the binary frame message: a 4-byte header length, the JSON header, the JPEG. |
+| `kiosk` | `KioskCode` parses the QR text `GL1 <code>`. `KioskDwell` reports a kiosk code after 1500 ms in view, then one time each second. |
+| `image` | `Sharpness` and `SharpestFramePicker` select the sharpest frame of each 500 ms. `UploadGate` gives the reason to skip an upload. `FrameGeometry` and `FramePrep` crop and scale a frame to a long side of 768 pixels at most. `I420.cropScaleToArgb` converts with BT.709 limited range. |
+| `gesture` | `HeadGestureDetector` finds a nod and a shake in gyroscope samples. `HeadGestureConfig.of` gives the limits of the levels `GENTLE`, `NORMAL`, and `FIRM`. `GyroScript` builds samples of head movements for tests and for mock glasses. |
+| `audio` | `SpeechQueue` plays one line at a time through a `LinePlayer`, with interrupt and priority. It reports each prompt whose line ended. A line with no clip uses the phone voice. |
+| `input` | `PromptTracker` follows the prompts of the server. `HeadInput` turns a gesture into a yes or a no while the head window of a prompt is open. `MainYesResolver` selects the yes input that works. |
+
+The detector cuts the angle of each axis into strokes. A nod is a stroke down and a stroke back up to the start, then quiet. A shake is two strokes to opposite sides.
+
+### Tests of the contract
+
+`FixturesTest` reads each file of `packages/shared/fixtures` and compares it with the Kotlin types. The Gradle build gives the folder to the test as the system property `glance.fixtures`. A new message variant in `packages/shared` needs its Kotlin class, or this test fails on the fixture count.
+
+`MotionReplayTest` replays each motion recording in `core/src/test/resources/motion`. A file name ends with `__nod<n>_shake<n>.csv`, and the test expects these counts. The folder is empty until the probe run on the glasses.
+
 ## The probe
 
 Open "Glance Probe" on the phone. The text field above the buttons gives the label of a saved frame and of a motion recording.
@@ -80,6 +115,7 @@ Run each command in `apps/mobile/android`. PowerShell uses `.\gradlew.bat` in pl
 | `./gradlew ktlintFormat` | Formats the Kotlin files |
 | `./gradlew ktlintCheck` | Checks the Kotlin style. The pre-commit hook of the repository runs it. |
 | `./gradlew :core:test` | Runs the unit tests of `core` |
+| `./gradlew :core:test --tests "*gesture*"` | Runs the tests of one package |
 | `./gradlew :app:assembleDebug` | Builds `app/build/outputs/apk/debug/app-debug.apk` |
 | `./gradlew :app:installDebug` | Installs the debug build on each attached phone |
 
