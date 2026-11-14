@@ -187,7 +187,7 @@ export function createObservePipeline(deps: {
       return {
         async recognize(jpeg, opts) {
           const at = deps.clock.now();
-          const observation = await deps.observer.observe(jpeg, { signal: opts.signal });
+          const observation = await deps.observer.observe(jpeg, { signal: opts.signal, view: opts.view, context: opts.context });
           if (!observation.held) {
             tracker.add(observation, at, jpeg);
             return NO_RESULT;

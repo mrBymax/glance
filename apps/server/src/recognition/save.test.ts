@@ -56,6 +56,31 @@ it('the frame saver writes the JPEG under the session ID and the sequence number
   await createFrameSaver(dir)('s1', frame(7));
   expect(new Uint8Array(readFileSync(join(dir, 's1', '7.jpg')))).toEqual(frame(7).jpeg);
 });
+it('the frame saver names a crop in its file name, so a person can tell it from a full frame', async () => {
+  const crop: Frame = { ...frame(8), header: { ...frame(8).header, view: 'crop', crop: { x: 304, y: 366, w: 358, h: 716 }, source: { w: 720, h: 1280 } } };
+  await createFrameSaver(dir)('s1', crop);
+  await createFrameSaver(dir)('s1', { ...frame(9), header: { ...frame(9).header, view: 'full', source: { w: 720, h: 1280 } } });
+  expect(readdirSync(join(dir, 's1')).sort()).toEqual(['8.crop.jpg', '9.jpg']);
+  expect(new Uint8Array(readFileSync(join(dir, 's1', '8.crop.jpg')))).toEqual(crop.jpeg);
+});
+it('the frame saver writes the context image of a crop beside the crop', async () => {
+  const context = new Uint8Array([0xff, 0xd8, 9, 0xff, 0xd9]);
+  await createFrameSaver(dir)('s1', { ...frame(8), header: { ...frame(8).header, view: 'crop', contextBytes: 5 }, context });
+  expect(readdirSync(join(dir, 's1')).sort()).toEqual(['8.context.jpg', '8.crop.jpg']);
+  expect(new Uint8Array(readFileSync(join(dir, 's1', '8.context.jpg')))).toEqual(context);
+});
+it('the frame handler keeps a copy of the context image for the call and for the saver', async () => {
+  const saved: Frame[] = [];
+  const onFrame = handlerWith(async (_sessionId, saving) => { saved.push(saving); });
+  const context = new Uint8Array([0xff, 0xd8, 9, 0xff, 0xd9]);
+  onFrame(fakeSession(), { ...frame(3), header: { ...frame(3).header, view: 'crop', contextBytes: 5 }, context });
+  await vi.waitFor(() => expect(recognize).toHaveBeenCalledTimes(1));
+  const given = recognize.mock.calls[0]![1].context!;
+  expect([...given]).toEqual([...context]);
+  // The context image is a view on the socket message, as the JPEG is.
+  expect(given).not.toBe(context);
+  expect([...saved[0]!.context!]).toEqual([...context]);
+});
 it('the frame saver takes no session ID that leaves its folder', async () => {
   await expect(createFrameSaver(dir)('../up', frame(1))).rejects.toThrow('no safe folder name');
   await expect(createFrameSaver(dir)('', frame(1))).rejects.toThrow('no safe folder name');

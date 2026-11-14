@@ -265,12 +265,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   if (player) app.closers.add(() => player.stopAll());
   // Fake recognition drops each frame after this line. With SAVE_FRAMES it saves the frame first,
   // so the team can collect frames for the test set with no recognition call.
-  const logFrame: FrameHandler = (session, { header, jpeg }) => {
+  const logFrame: FrameHandler = (session, { header, jpeg, context }) => {
     app.log.info(frameLogLine(header, jpeg.length));
     // As with real recognition, REQUIRE_BLUR keeps a frame with no face detection off the disk.
     if (config.requireBlur && !header.blurred) return;
-    // The JPEG is a view on the socket message, and the write ends later, so the saver gets a copy.
-    if (saveFrame) saveFrameWith(saveFrame, app.log, session.id, { header, jpeg: new Uint8Array(jpeg) });
+    // The JPEG and the context image are views on the socket message, and the write ends later, so the saver gets copies.
+    if (saveFrame) saveFrameWith(saveFrame, app.log, session.id, { header, jpeg: new Uint8Array(jpeg), ...(context ? { context: new Uint8Array(context) } : {}) });
   };
 
   const { recognizer, recognizerFor } = deps;

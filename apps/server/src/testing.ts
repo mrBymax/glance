@@ -98,7 +98,8 @@ export type TestPhone = {
   send(message: DeviceToServer): void;
   /** For a test of bad input. */
   sendRaw(data: string | Uint8Array): void;
-  sendFrame(header: FrameHeader, jpeg: Uint8Array): void;
+  /** `context` is the context image of a crop. */
+  sendFrame(header: FrameHeader, jpeg: Uint8Array, context?: Uint8Array): void;
   /** The first message that matches. It also matches a message that came before the call. */
   next(match: (message: ServerToDevice) => boolean): Promise<ServerToDevice>;
   /** Resolves when the socket has closed. */
@@ -127,7 +128,7 @@ export function connectPhone(t: TestApp, sessionId: string, token: string): Prom
     messages,
     send: (message) => ws.send(JSON.stringify(message)),
     sendRaw: (data) => ws.send(data),
-    sendFrame: (header, jpeg) => ws.send(encodeFrame(header, jpeg)),
+    sendFrame: (header, jpeg, context) => ws.send(encodeFrame(header, jpeg, context)),
     next: (match) => {
       const found = messages.find(match);
       if (found) return Promise.resolve(found);

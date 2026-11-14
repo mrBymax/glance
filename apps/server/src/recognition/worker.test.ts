@@ -56,6 +56,22 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it('gives the view of the frame to the recognizer', async () => {
+  const wide = makeWorker(3);
+  wide.submit({ ...frame(1), header: { ...frame(1).header, view: 'crop', crop: { x: 304, y: 366, w: 358, h: 716 }, source: { w: 720, h: 1280 } } });
+  wide.submit({ ...frame(2), header: { ...frame(2).header, view: 'full', source: { w: 720, h: 1280 } } });
+  wide.submit(frame(3));
+  expect(calls.map((call) => call.opts.view)).toEqual(['crop', 'full', undefined]);
+});
+it('gives the context image of a crop to the recognizer, and counts its bytes', async () => {
+  const context = new Uint8Array(300);
+  worker.submit({ ...frame(1), header: { ...frame(1).header, view: 'crop', contextBytes: 300 }, context });
+  expect(calls[0]!.opts.context).toBe(context);
+  expect(worker.heldBytes()).toBe(1300);
+  worker.submit(frame(2));
+  expect(calls).toHaveLength(1);
+  expect(worker.heldBytes()).toBe(2300);
+});
 it('runs one call at a time, and the newest frame wins', async () => {
   for (const seq of [1, 2, 3, 4]) worker.submit(frame(seq));
   expect(calls).toHaveLength(1);

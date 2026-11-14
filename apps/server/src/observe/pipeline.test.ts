@@ -25,10 +25,16 @@ const frame = new Uint8Array([0xff, 0xd8]);
 /** A pipeline whose observe call gives the observations in turn, and whose verify call gives `verdict`. */
 function pipeline(observations: Observation[], verdict: VerifyAnswer | Error | (() => Promise<VerifyAnswer>) = answer({}), store = entries) {
   const verifyInputs: Parameters<Verifier['verify']>[0][] = [];
+  const views: (string | undefined)[] = [];
   const lines: string[] = [];
   let now = 0;
   const made = createObservePipeline({
-    observer: { observe: async () => observations.shift() ?? NOT_HELD },
+    observer: {
+      observe: async (_jpeg, opts) => {
+        views.push(opts.context ? `${opts.view} with context` : opts.view);
+        return observations.shift() ?? NOT_HELD;
+      },
+    },
     verifier: {
       verify: async (input) => {
         verifyInputs.push(input);
@@ -40,12 +46,23 @@ function pipeline(observations: Observation[], verdict: VerifyAnswer | Error | (
     clock: { now: () => now }, minVerifyConfidence: 0.9, log: (line) => lines.push(line),
   });
   const recognizer: Recognizer = made.forSession('s1');
-  const look = (opts: { exclude?: string[]; still?: boolean; ms?: number } = {}) => {
+  const look = (opts: { exclude?: string[]; still?: boolean; ms?: number; view?: 'crop' | 'full'; context?: Uint8Array } = {}) => {
     now += opts.ms ?? 400;
-    return recognizer.recognize(frame, { exclude: opts.exclude ?? [], still: opts.still ?? false, signal: new AbortController().signal });
+    return recognizer.recognize(frame, {
+      exclude: opts.exclude ?? [], still: opts.still ?? false, view: opts.view, context: opts.context, signal: new AbortController().signal,
+    });
   };
-  return { look, verifyInputs, lines };
+  return { look, verifyInputs, lines, views };
 }
+
+it('gives the view and the context image of each frame to the observe call', async () => {
+  const { look, views } = pipeline([NOT_HELD, NOT_HELD, NOT_HELD, NOT_HELD]);
+  await look({ view: 'crop' });
+  await look({ view: 'crop', context: frame });
+  await look({ view: 'full' });
+  await look();
+  expect(views).toEqual(['crop', 'crop with context', 'full', undefined]);
+});
 
 it('a frame with no product in a hand is none', async () => {
   const { look, verifyInputs } = pipeline([NOT_HELD]);

@@ -88,6 +88,27 @@ it('writes the exclude list', () => {
   expect(userText([])).toBe('Exclude: none.');
   expect(userText(['a', 'b'])).toBe('Exclude: a, b.');
 });
+it('writes the view of a crop before the exclude list, and no view for a full frame', () => {
+  expect(userText([], 'crop')).toBe('View: crop.\nExclude: none.');
+  expect(userText(['a'], 'crop')).toBe('View: crop.\nExclude: a.');
+  // A full frame keeps the text of a phone that does not crop.
+  expect(userText(['a'], 'full')).toBe('Exclude: a.');
+  expect(userText([], undefined)).toBe('Exclude: none.');
+});
+it('the instruction file says what a crop is, and how to judge held in a crop', () => {
+  const text = readFileSync('../../agents/recognition.md', 'utf8');
+  expect(text).toContain('## The image');
+  expect(text).toContain('"View: crop."');
+  expect(text).toMatch(/crop can cut the hand off/);
+  expect(text).toMatch(/a finger, a thumb, or a part of a hand on the product/);
+  expect(text).toMatch(/no finger on it gives `held` false/);
+  // The texts of the two images of a crop with its context image, as `cropWithContextParts` writes them.
+  expect(text).toContain('after the text "The whole frame"');
+  expect(text).toContain('follows the text "The crop"');
+  expect(text).toMatch(/never name a product from it/);
+  // The exclude line is no longer the one line of the text.
+  expect(text).not.toContain('one line of text');
+});
 it('the instruction file has the placeholders for the catalog and for the store items', () => {
   const text = readFileSync('../../agents/recognition.md', 'utf8');
   expect(text).toContain('{{catalog}}');

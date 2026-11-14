@@ -10,12 +10,25 @@ import { tokenMatches } from '../http/auth';
 import type { DeviceSink, SessionRuntime } from '../sessions/runtime';
 import { parseVoiceCommand } from '../sessions/voice';
 
-/** Gets each frame that decodes. The JPEG is a view on the socket message: the handler copies it if it keeps it. */
-export type FrameHandler = (session: SessionRuntime, frame: { header: FrameHeader; jpeg: Uint8Array }) => void;
+/**
+ * Gets each frame that decodes. The JPEG is a view on the socket message: the handler copies it if it keeps it.
+ * `context` is the context image of a crop, also a view: the whole frame in a small size.
+ */
+export type FrameHandler = (session: SessionRuntime, frame: { header: FrameHeader; jpeg: Uint8Array; context?: Uint8Array }) => void;
 
-/** The log line of a frame: its header fields and its size. No log line holds bytes of the image. */
+/**
+ * The log line of a frame: its header fields and its size. No log line holds bytes of the image.
+ * A frame of a phone that crops also has its view, the size and the place of the crop in the source image, the
+ * size of that image, and the byte count of the context image. These come last, so the line of a phone that does
+ * not crop is the line of before. `bytes` is the JPEG alone, with no context image.
+ */
 export function frameLogLine(header: FrameHeader, bytes: number): string {
-  return `frame seq=${header.seq} w=${header.w} h=${header.h} blurred=${header.blurred} kind=${header.kind ?? 'frame'} bytes=${bytes}`;
+  const { view, crop, source, contextBytes } = header;
+  return `frame seq=${header.seq} w=${header.w} h=${header.h} blurred=${header.blurred} kind=${header.kind ?? 'frame'} bytes=${bytes}`
+    + (view === undefined ? '' : ` view=${view}`)
+    + (crop === undefined ? '' : ` crop=${crop.w}x${crop.h}@${crop.x},${crop.y}`)
+    + (source === undefined ? '' : ` source=${source.w}x${source.h}`)
+    + (contextBytes === undefined ? '' : ` context=${contextBytes}`);
 }
 
 const DEVICE_PATH = '/ws/device';

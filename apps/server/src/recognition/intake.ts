@@ -121,8 +121,10 @@ export function createFrameHandler(deps: {
     }
 
     intake.worker ??= makeWorker(session);
-    // The JPEG is a view on the socket message. The worker keeps the frame for the time of a call, so it gets a copy.
-    const copy: Frame = { header: frame.header, jpeg: new Uint8Array(frame.jpeg) };
+    // The JPEG and the context image are views on the socket message. The worker keeps the frame for the time of a call, so it gets copies.
+    const copy: Frame = {
+      header: frame.header, jpeg: new Uint8Array(frame.jpeg), ...(frame.context ? { context: new Uint8Array(frame.context) } : {}),
+    };
     deps.log.debug(`${frameLogLine(copy.header, copy.jpeg.length)} session=${session.id}`);
     saveFrameWith(deps.saveFrame, deps.log, session.id, copy);
     intake.worker.submit(copy);

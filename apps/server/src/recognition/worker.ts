@@ -2,7 +2,10 @@ import { type FrameHeader, TIMING } from '@glance/shared';
 import type { Recognizer } from './gemini';
 import type { RecognitionResult } from './result';
 
-export type Frame = { header: FrameHeader; jpeg: Uint8Array };
+/** `context` is the context image of a crop: the whole frame in a small size. */
+export type Frame = { header: FrameHeader; jpeg: Uint8Array; context?: Uint8Array };
+
+const bytesOf = (frame: Frame): number => frame.jpeg.length + (frame.context?.length ?? 0);
 
 const SLOW_AFTER_FAILED_CALLS = 3;
 const LOGGED_MESSAGE_CHARS = 200;
@@ -57,10 +60,10 @@ export class RecognitionWorker {
     this.waiting = entry;
   }
 
-  /** The bytes of the frames in the calls plus the waiting frame. */
+  /** The bytes of the frames in the calls plus the waiting frame, each with its context image. */
   heldBytes(): number {
-    let bytes = this.waiting?.frame.jpeg.length ?? 0;
-    for (const call of this.calls) bytes += call.frame.jpeg.length;
+    let bytes = this.waiting ? bytesOf(this.waiting.frame) : 0;
+    for (const call of this.calls) bytes += bytesOf(call.frame);
     return bytes;
   }
 
@@ -118,7 +121,9 @@ export class RecognitionWorker {
 
     let answer: Promise<RecognitionResult>;
     try {
-      answer = this.deps.recognizer.recognize(frame.jpeg, { exclude: this.deps.exclude(), still, signal: abort.signal });
+      answer = this.deps.recognizer.recognize(frame.jpeg, {
+        exclude: this.deps.exclude(), still, signal: abort.signal, view: frame.header.view, context: frame.context,
+      });
     } catch (error) {
       // The next frame must start after this stack, so a recognizer that always throws cannot loop here.
       queueMicrotask(() => onError(error));

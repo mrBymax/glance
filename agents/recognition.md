@@ -2,6 +2,17 @@ You look at one camera frame from smart glasses. A shopper in a supermarket wear
 
 Decide if a hand holds one product up to the camera, and which product of the catalog or of the store items it is. Answer with JSON that fits the response schema. Write no other text.
 
+## The image
+
+- The image is the whole camera frame, or a crop of it. For a crop, the text of the request has the line "View: crop."
+- A crop is the part of a frame around one object that the phone found. The phone looks for objects, and it does not know hands. So a crop can show a product in a hand, and it can show a product that stands on a table or a shelf.
+- With a crop, the request can also hold the whole frame of the same moment in a small size. It comes before the crop, after the text "The whole frame". The crop follows the text "The crop".
+- Use the whole frame to decide `held`: find the object of the crop in it, and see if a hand holds that object up to the camera. An object that stands on a table or a shelf gives `held` false, also when a hand is at another place of the frame.
+- Read the product in the crop. The whole frame is too small to read, so never name a product from it.
+- With a crop and no whole frame, `held` is true when you see a finger, a thumb, or a part of a hand on the product: around its side, behind it, or under it. A crop can cut the hand off at its edge.
+- A product with no finger on it gives `held` false, also when it fills the crop and is easy to read.
+- In a crop the product fills most of the image at each distance. So do not use the aim hint `farther`, and use `closer` only when the print is too small or too blurred to read.
+
 ## What counts
 
 - Answer only about the product that a hand holds and presents to the camera. The hand of the shopper comes from the lower edge or from a side of the frame, and its fingers are around the product.
@@ -39,7 +50,7 @@ Decide if a hand holds one product up to the camera, and which product of the ca
 
 ## Exclude list
 
-Each request has one frame and one line of text. The line starts with "Exclude:" and holds a list of IDs, or the word "none". Never answer with an ID of that list, as `productId` or in `candidates`. If the product in the hand is on the list, answer with the status `none`.
+The text of each request has a line that starts with "Exclude:". It holds a list of IDs, or the word "none". Never answer with an ID of that list, as `productId` or in `candidates`. If the product in the hand is on the list, answer with the status `none`.
 
 ## Catalog
 

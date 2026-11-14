@@ -5,7 +5,7 @@ import { STREAMING } from '../sessions/harness';
 import type { RuntimeDeps, SessionRuntime } from '../sessions/runtime';
 import type { RuleInputBody } from '../sessions/types';
 import { type TestApp, type TestPhone, connectPhone, testApp, upgradeStatus } from '../testing';
-import type { FrameHandler } from './device';
+import { type FrameHandler, frameLogLine } from './device';
 
 const seeOat: RuleInputBody = {
   type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'oat-drink-1l' }, still: false,
@@ -223,6 +223,34 @@ it('gives a good frame to the frame handler', async () => {
   expect(onFrame.mock.calls[0]![0]).toBe(session);
   expect(onFrame.mock.calls[0]![1].header.seq).toBe(1);
   expect([...onFrame.mock.calls[0]![1].jpeg]).toEqual([...JPEG]);
+});
+it('gives the view, the crop, and the source size of a frame to the frame handler', async () => {
+  const header = { seq: 2, ts: 1, w: 358, h: 716, blurred: true, view: 'crop', crop: { x: 304, y: 366, w: 358, h: 716 }, source: { w: 720, h: 1280 } } as const;
+  phone.sendFrame(header, JPEG);
+  await vi.waitFor(() => expect(onFrame).toHaveBeenCalledTimes(1));
+  expect(onFrame.mock.calls[0]![1].header).toEqual(header);
+  expect(onFrame.mock.calls[0]![1].context).toBeUndefined();
+});
+it('gives the context image of a crop to the frame handler, apart from the crop', async () => {
+  const context = new Uint8Array([0xff, 0xd8, 9, 9, 0xff, 0xd9]);
+  phone.sendFrame({ seq: 3, ts: 1, w: 358, h: 716, blurred: true, view: 'crop' }, JPEG, context);
+  await vi.waitFor(() => expect(onFrame).toHaveBeenCalledTimes(1));
+  const frame = onFrame.mock.calls[0]![1];
+  expect(frame.header.contextBytes).toBe(6);
+  expect([...frame.jpeg]).toEqual([...JPEG]);
+  expect([...frame.context!]).toEqual([...context]);
+});
+it('the log line of a frame shows the view and the size of the crop', () => {
+  const header = { seq: 7, ts: 1, w: 576, h: 768, blurred: true };
+  expect(frameLogLine(header, 4)).toBe('frame seq=7 w=576 h=768 blurred=true kind=frame bytes=4');
+  expect(frameLogLine({ ...header, w: 358, h: 716, view: 'crop', crop: { x: 304, y: 366, w: 358, h: 716 }, source: { w: 720, h: 1280 } }, 37000))
+    .toBe('frame seq=7 w=358 h=716 blurred=true kind=frame bytes=37000 view=crop crop=358x716@304,366 source=720x1280');
+  expect(frameLogLine({ ...header, w: 432, h: 768, view: 'full', source: { w: 720, h: 1280 } }, 20000))
+    .toBe('frame seq=7 w=432 h=768 blurred=true kind=frame bytes=20000 view=full source=720x1280');
+  expect(frameLogLine({ ...header, kind: 'label', view: 'crop' }, 9)).toBe('frame seq=7 w=576 h=768 blurred=true kind=label bytes=9 view=crop');
+  // `bytes` is the JPEG of the crop alone. The context image has its own count.
+  expect(frameLogLine({ ...header, view: 'crop', source: { w: 720, h: 1280 }, contextBytes: 13094 }, 37000))
+    .toBe('frame seq=7 w=576 h=768 blurred=true kind=frame bytes=37000 view=crop source=720x1280 context=13094');
 });
 it('closes the socket for a message of more than 2 MB', async () => {
   phone.sendRaw(new Uint8Array(2 * 1024 * 1024 + 1));

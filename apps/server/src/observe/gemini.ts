@@ -1,10 +1,23 @@
-import { GoogleGenAI, MediaResolution } from '@google/genai';
+import { GoogleGenAI, MediaResolution, type Part } from '@google/genai';
+import type { FrameHeader } from '@glance/shared';
 import { jpegPart } from '../label/gemini';
+import { cropWithContextParts } from '../recognition/gemini';
+import { CROP_VIEW_LINE } from '../recognition/prompt';
 import { NOT_HELD, type Observation, observationResponseSchema, parseObservation } from './observation';
 
-/** Says what one frame shows of the product in the hand. A call that fails rejects, and the caller counts it. */
+/**
+ * Says what one frame shows of the product in the hand. A call that fails rejects, and the caller counts it.
+ * `view` is the view of the frame header: `crop` for a crop of the phone around an object that it found.
+ * `context` is the context image of a crop: the whole frame in a small size.
+ */
 export interface Observer {
-  observe(jpeg: Uint8Array, opts: { signal: AbortSignal }): Promise<Observation>;
+  observe(jpeg: Uint8Array, opts: { signal: AbortSignal; view?: FrameHeader['view']; context?: Uint8Array }): Promise<Observation>;
+}
+
+/** The parts of one request: the frame alone, or a crop after its context image, with the line that names the crop. */
+function observeParts(jpeg: Uint8Array, view: FrameHeader['view'], context: Uint8Array | undefined): Part[] {
+  if (view !== 'crop') return [jpegPart(jpeg)];
+  return [...(context ? cropWithContextParts(jpeg, context) : [jpegPart(jpeg)]), { text: CROP_VIEW_LINE }];
 }
 
 /** The path of the instruction file, from the working directory apps/server. */
@@ -38,7 +51,7 @@ export function createGeminiObserver(deps: {
     async observe(jpeg, opts) {
       const response = await ai.models.generateContent({
         model: deps.model,
-        contents: [jpegPart(jpeg)],
+        contents: observeParts(jpeg, opts.view, opts.context),
         config: {
           systemInstruction,
           responseMimeType: 'application/json',

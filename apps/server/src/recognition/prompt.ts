@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AimHintSchema, type Product } from '@glance/shared';
+import { AimHintSchema, type FrameHeader, type Product } from '@glance/shared';
 import { scannedProductId } from '../products/scanned';
 import type { StoreEntry } from '../products/storeEntries';
 
@@ -14,7 +14,7 @@ const REFERENCE_RULES = `
 
 ## Reference pictures
 
-The request starts with reference pictures: photos of the real package of some products, each after a line with the ID of its product. The last image is the frame.
+The request starts with reference pictures: photos of the real package of some products, each after a line with the ID of its product. The last image is the frame, or the crop of it.
 
 - A reference picture can show the package from another side, at another size, or in other light. Its background means nothing.
 - If a hand in the frame holds a product, and the shape, the colors, and the print of its package match the reference pictures of one product, use \`identified\` with that ID. This holds also when the text in the frame is too small to read.
@@ -70,7 +70,15 @@ export function recognitionResponseSchema(productIds: readonly string[]): unknow
   }));
 }
 
-/** The text part of a request. It carries the products that the model must not name (R9). */
-export function userText(exclude: readonly string[]): string {
-  return `Exclude: ${exclude.length === 0 ? 'none' : exclude.join(', ')}.`;
+/** The line of a request that says that the image is a crop. The instruction has the rules for it, in "The image". */
+export const CROP_VIEW_LINE = 'View: crop.';
+
+/**
+ * The text part of a request. It carries the products that the model must not name (R9).
+ * For a crop of the phone, the line `View: crop.` comes first. A full frame has no such line, so its request is
+ * that of a phone that does not crop.
+ */
+export function userText(exclude: readonly string[], view?: FrameHeader['view']): string {
+  const line = `Exclude: ${exclude.length === 0 ? 'none' : exclude.join(', ')}.`;
+  return view === 'crop' ? `${CROP_VIEW_LINE}\n${line}` : line;
 }

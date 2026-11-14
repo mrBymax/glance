@@ -42,8 +42,8 @@ function recognizer(over: { mediaResolution?: 'default' | 'low'; storeEntries?: 
     minConfidence: 0.6, catalog, storeEntries: over.storeEntries ?? [], template, fetch: fetchStub,
   });
 }
-const opts = (part: { exclude?: string[]; still?: boolean } = {}) =>
-  ({ exclude: part.exclude ?? [], still: part.still ?? false, signal: new AbortController().signal });
+const opts = (part: { exclude?: string[]; still?: boolean; view?: 'crop' | 'full'; context?: Uint8Array } = {}) =>
+  ({ exclude: part.exclude ?? [], still: part.still ?? false, view: part.view, context: part.context, signal: new AbortController().signal });
 
 beforeEach(() => {
   calls = [];
@@ -51,6 +51,45 @@ beforeEach(() => {
   reply = modelSays(JSON.stringify(answer));
 });
 
+it('says in the text of the request that the image is a crop, and nothing more for a full frame', async () => {
+  const image = { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } };
+  const parts = (index: number) => (calls[index]!.body.contents as { parts: unknown[] }[])[0]!.parts;
+
+  await recognizer().recognize(JPEG, opts({ view: 'crop' }));
+  expect(parts(0)).toEqual([image, { text: 'View: crop.\nExclude: none.' }]);
+  await recognizer().recognize(JPEG, opts({ view: 'full', exclude: ['rye-bread'] }));
+  expect(parts(1)).toEqual([image, { text: 'Exclude: rye-bread.' }]);
+  await recognizer().recognize(JPEG, opts());
+  expect(parts(2)).toEqual([image, { text: 'Exclude: none.' }]);
+  // Each request has the rules for a crop: the instruction does not depend on the view.
+  for (const call of calls) expect(JSON.stringify(call.body.systemInstruction)).toContain('## The image');
+});
+it('sends the whole frame in a small size before a crop that came with its context image', async () => {
+  const context = new Uint8Array([0xff, 0xd8, 9, 0xff, 0xd9]);
+  const crop = { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } };
+  const whole = {
+    inlineData: { mimeType: 'image/jpeg', data: Buffer.from(context).toString('base64') },
+    mediaResolution: { level: PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW },
+  };
+  const picture: Part = { fileData: { fileUri: 'https://files.example/p1', mimeType: 'image/jpeg' } };
+  const withPictures = createGeminiRecognizer({
+    apiKey: 'test-key', model: 'gemini-3.5-flash-lite', mediaResolution: 'default', minConfidence: 0.6,
+    catalog, storeEntries: [cups], template, fetch: fetchStub, references: () => [{ text: 'Reference picture of gtin-6438574558384: Paper cups' }, picture],
+  });
+  const parts = (index: number) => (calls[index]!.body.contents as { parts: unknown[] }[])[0]!.parts;
+
+  await recognizer().recognize(JPEG, opts({ view: 'crop', context }));
+  expect(parts(0)).toEqual([{ text: 'The whole frame' }, whole, { text: 'The crop' }, crop, { text: 'View: crop.\nExclude: none.' }]);
+  // With reference pictures, the two images come after them, in place of the text "The frame" and the frame.
+  await withPictures.recognize(JPEG, opts({ view: 'crop', context }));
+  expect(parts(1)).toEqual([
+    { text: 'Reference picture of gtin-6438574558384: Paper cups' }, picture,
+    { text: 'The whole frame' }, whole, { text: 'The crop' }, crop, { text: 'View: crop.\nExclude: none.' },
+  ]);
+  // A context image with a full frame is no request of the phone. The frame goes out alone.
+  await recognizer().recognize(JPEG, opts({ view: 'full', context }));
+  expect(parts(2)).toEqual([crop, { text: 'Exclude: none.' }]);
+});
 it('sends one frame, the exclude list, the catalog, and the answer schema', async () => {
   expect(await recognizer().recognize(JPEG, opts({ exclude: ['rye-bread'] }))).toEqual(result);
   expect(calls).toHaveLength(1);

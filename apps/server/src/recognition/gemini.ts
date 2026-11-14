@@ -1,25 +1,46 @@
 import { GoogleGenAI, MediaResolution, type Part } from '@google/genai';
+import type { FrameHeader } from '@glance/shared';
 import { type CatalogIndex, indexCatalog } from '../catalog/catalog';
-import { jpegPart } from '../label/gemini';
+import { jpegPart, referencePicturePart } from '../label/gemini';
 import { scannedProduct } from '../products/scanned';
 import type { StoreEntry } from '../products/storeEntries';
 import { buildSystemInstruction, recognitionResponseSchema, userText } from './prompt';
 import { NO_RESULT, type RecognitionResult, normalizeResult } from './result';
 
-/** Names the product of one frame. A call that fails rejects, and the caller counts it. */
+/**
+ * Names the product of one frame. A call that fails rejects, and the caller counts it.
+ * `view` is the view of the frame header: `crop` for a crop of the phone around an object that it found.
+ * `context` is the context image of a crop: the whole frame in a small size.
+ */
 export interface Recognizer {
-  recognize(jpeg: Uint8Array, opts: { exclude: readonly string[]; still: boolean; signal: AbortSignal }): Promise<RecognitionResult>;
+  recognize(jpeg: Uint8Array, opts: {
+    exclude: readonly string[]; still: boolean; signal: AbortSignal; view?: FrameHeader['view']; context?: Uint8Array;
+  }): Promise<RecognitionResult>;
 }
 
 /** The path of the instruction template, from the working directory apps/server. */
 export const RECOGNITION_TEMPLATE_PATH = '../../agents/recognition.md';
 
 /**
+ * The parts of the image of a crop that came with its context: the whole frame in a small size, then the crop.
+ * The whole frame has the low media resolution of its part (280 tokens): the model finds the hand in it and
+ * reads nothing. The two texts are those of "The image" in the instruction.
+ */
+export function cropWithContextParts(crop: Uint8Array, context: Uint8Array): Part[] {
+  return [{ text: 'The whole frame' }, referencePicturePart(context), { text: 'The crop' }, jpegPart(crop)];
+}
+
+/**
  * The parts of one request: the frame and the exclude line. With reference pictures, their parts come first,
  * and the frame follows the text "The frame", so the model can tell the frame from a picture.
+ * A crop with a context image goes out as two images: see `cropWithContextParts`.
  */
-export function recognitionParts(jpeg: Uint8Array, exclude: readonly string[], references: readonly Part[]): Part[] {
-  const frame = [jpegPart(jpeg), { text: userText(exclude) }];
+export function recognitionParts(
+  jpeg: Uint8Array, exclude: readonly string[], references: readonly Part[], view?: FrameHeader['view'], context?: Uint8Array,
+): Part[] {
+  const text = { text: userText(exclude, view) };
+  if (view === 'crop' && context !== undefined) return [...references, ...cropWithContextParts(jpeg, context), text];
+  const frame = [jpegPart(jpeg), text];
   return references.length === 0 ? frame : [...references, { text: 'The frame' }, ...frame];
 }
 
@@ -61,7 +82,7 @@ export function createGeminiRecognizer(deps: {
       const references = deps.references?.() ?? [];
       const response = await ai.models.generateContent({
         model: deps.model,
-        contents: recognitionParts(jpeg, opts.exclude, references),
+        contents: recognitionParts(jpeg, opts.exclude, references, opts.view, opts.context),
         config: {
           systemInstruction: references.length > 0 ? instructionWithReferences : systemInstruction,
           responseMimeType: 'application/json',

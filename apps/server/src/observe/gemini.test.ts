@@ -27,7 +27,7 @@ const observer = (over: { withBox?: boolean; mediaResolution?: 'default' | 'low'
   apiKey: 'test-key', model: 'gemini-3.5-flash-lite', mediaResolution: over.mediaResolution ?? 'default', template,
   withBox: over.withBox ?? true, fetch: fetchStub,
 });
-const opts = () => ({ signal: new AbortController().signal });
+const opts = (view?: 'crop' | 'full', context?: Uint8Array) => ({ signal: new AbortController().signal, view, context });
 
 beforeEach(() => {
   calls = [];
@@ -58,6 +58,25 @@ it('sends the frame alone, with an instruction that holds no store item, and the
   ]);
   expect(config.mediaResolution).toBeUndefined();
   expect(body.tools).toBeUndefined();
+});
+it('says that the image is a crop, after the image, and sends a full frame alone', async () => {
+  const image = { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } };
+  await observer().observe(JPEG, opts('crop'));
+  await observer().observe(JPEG, opts('full'));
+  const parts = calls.map((call) => (call.body.contents as { parts: unknown[] }[])[0]!.parts);
+  expect(parts).toEqual([[image, { text: 'View: crop.' }], [image]]);
+  expect(JSON.stringify(calls[0]!.body.systemInstruction)).toContain('## The image');
+});
+it('sends the whole frame in a small size before a crop that came with its context image', async () => {
+  const context = new Uint8Array([0xff, 0xd8, 9, 0xff, 0xd9]);
+  await observer().observe(JPEG, opts('crop', context));
+  expect((calls[0]!.body.contents as { parts: unknown[] }[])[0]!.parts).toEqual([
+    { text: 'The whole frame' },
+    { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(context).toString('base64') }, mediaResolution: { level: 'MEDIA_RESOLUTION_LOW' } },
+    { text: 'The crop' },
+    { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } },
+    { text: 'View: crop.' },
+  ]);
 });
 it('asks for no box when the caller needs none', async () => {
   await observer({ withBox: false }).observe(JPEG, opts());
