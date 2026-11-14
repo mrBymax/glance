@@ -64,6 +64,8 @@ export type CodeState = {
   /** The last code that was read: a product, or a code that the store does not sell. */
   acceptedAt: number | null;
   stillRequestAt: number | null;
+  /** The still requests since the last code that was read. */
+  stillsOpen: number;
   /** The last line for a label frame that gave no product. */
   unreadableAt: number | null;
   /** The last code that the store does not sell, with the time of its last report. */

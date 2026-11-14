@@ -20,6 +20,7 @@ export function onBarcode(turn: Turn, input: Extract<RuleInput, { type: 'barcode
   const code = codeOf(s);
   code.at = now;
   code.acceptedAt = now;
+  code.stillsOpen = 0;
   s.lastTargetAt = now;
   // A prompt would suspend the checkout that waits for its payment.
   if (isConfirmed(s)) return;

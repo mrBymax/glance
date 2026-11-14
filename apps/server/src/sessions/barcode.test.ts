@@ -1,7 +1,9 @@
 import { expect, it } from 'vitest';
 import { TIMING as T } from '@glance/shared';
 import { NO_RESULT } from '../recognition/result';
-import { CODE_FRAMES_WITHIN_MS, CODE_QUIET_MS, STILL_REQUEST_EVERY_MS, UNREADABLE_EVERY_MS } from './code';
+import {
+  CODE_FRAMES_WITHIN_MS, CODE_QUIET_MS, STILLS_BEFORE_WAIT, STILL_REQUEST_EVERY_MS, STILL_REQUEST_WAIT_MS, UNREADABLE_EVERY_MS,
+} from './code';
 import { type Harness, KIOSK, OAT, RYE, harness, product } from './harness';
 import { step } from './step';
 import type { BarcodeOutcome, SessionState } from './types';
@@ -258,4 +260,25 @@ it('a label frame that gave no product gets no line while the payment runs', () 
 });
 it('the times of the design', () => {
   expect([CODE_QUIET_MS, CODE_FRAMES_WITHIN_MS, STILL_REQUEST_EVERY_MS, UNREADABLE_EVERY_MS]).toEqual([3000, 2000, 6000, 10000]);
+});
+it('after 2 stills with no code read, the next still waits 30 seconds, so a code that no reader can read does not stop Motion each 6 seconds', () => {
+  expect([STILLS_BEFORE_WAIT, STILL_REQUEST_WAIT_MS]).toEqual([2, 30000]);
+  const h = scanned();
+  const times: number[] = [];
+  const start = h.now;
+  for (let elapsed = 0; elapsed <= 70000; elapsed += 500) {
+    code(h);
+    if (h.effects.some((effect) => effect.type === 'still.request')) times.push(h.now - start);
+    h.advance(500);
+  }
+  expect(times).toEqual([500, 6500, 36500, 66500]);
+});
+it('a code that was read ends the long wait for the next still', () => {
+  const h = scanned();
+  const requests = () => h.all.filter((effect) => effect.type === 'still.request').length;
+  for (let elapsed = 0; elapsed < 8000; elapsed += 500) { code(h); h.advance(500); }
+  expect(requests()).toBe(2);
+  h.barcode(missing());
+  h.advance(STILL_REQUEST_EVERY_MS); code(h); h.advance(500); code(h);
+  expect(requests()).toBe(3);
 });
