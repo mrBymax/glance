@@ -70,6 +70,15 @@ it('fills the brand and the pack size that the store does not give', () => {
   expect(alone).toMatchObject({ brand: 'Nutella', packSize: '1 pc', spokenPack: { en: 'one pack', it: 'una confezione' } });
   expect(ProductSchema.safeParse(alone).success).toBe(true);
 });
+it('says a plus sign of a name as a word, and shows the name as the store wrote it', () => {
+  const yuzu = scannedProduct({ gtin: '6430062761795', priceCents: 249, name: 'Kili Cascara Yuzu + Sitruuna', brand: 'Kili', packSize: '330 ml' }, null);
+  expect(yuzu.name).toEqual({ en: 'Kili Cascara Yuzu + Sitruuna', it: 'Kili Cascara Yuzu + Sitruuna' });
+  expect(yuzu.spokenName).toEqual({ en: 'Kili Cascara Yuzu plus Sitruuna', it: 'Kili Cascara Yuzu più Sitruuna' });
+  const tight = scannedProduct({ gtin: '6430062761825', priceCents: 249, name: 'Mango+Ananas  +  C' }, null);
+  expect(tight.spokenName.en).toBe('Mango plus Ananas plus C');
+  const plain = scannedProduct({ gtin: '6430062761764', priceCents: 249, name: 'Kili Cascara Vadelma' }, null);
+  expect(plain.spokenName).toEqual(plain.name);
+});
 it('writes a pack size as words', () => {
   expect(spokenPack('500 g', 'en')).toBe('five hundred grams');
   expect(spokenPack('1 L', 'en')).toBe('one litre');

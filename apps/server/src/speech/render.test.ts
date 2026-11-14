@@ -90,6 +90,15 @@ it('leaves the pack size out at the standard level when the name has more than 3
   // A name of 3 words keeps its pack size.
   expect(it_(glance(false))).toBe('Bevanda di avena, un litro, uno e ottantanove.');
 });
+it('speaks the plus sign of a name as a word, and such a name counts each of its words', () => {
+  const kili = (name: string) => scannedProduct({ gtin: '6430062761795', priceCents: 249, name, brand: 'Kili', packSize: '330 ml' }, null);
+  const line = (name: string): Line => ({ key: 'glance.new', product: kili(name), hint: false, warnings: [] });
+  // 5 words, so the line has no pack size.
+  expect(text(line('Kili Cascara Yuzu + Sitruuna'))).toBe('Kili Cascara Yuzu plus Sitruuna, two forty-nine.');
+  expect(it_(line('Kili Cascara Mango + Ananas'))).toBe('Kili Cascara Mango più Ananas, due e quarantanove.');
+  expect(text(line('Kili Cascara Vadelma'))).toBe('Kili Cascara Vadelma, three hundred thirty millilitres, two forty-nine.');
+  expect(text({ key: 'cart.added', product: kili('Kili Cascara Yuzu + Sitruuna'), totalCents: 249, budgetCents: null })).toBe('Added Kili Cascara Yuzu plus Sitruuna. Total two forty-nine.');
+});
 it('names no allergen at the detailed level when the product has no allergen data', () => {
   expect(text({ key: 'glance.new', product: crisps, hint: false, warnings: [] }, { detail: 'detailed' }))
     .toBe('Demo Snacks potato crisps, one hundred fifty gram bag, one euro ninety.');

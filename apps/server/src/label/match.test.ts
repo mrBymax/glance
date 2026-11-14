@@ -164,3 +164,18 @@ it('the pack size never selects an item that has no pack size', () => {
   expect(matchLabel(read({ brand: 'Ferrero', name: 'Nutella', packSize: '15 g' }), two, 0.6, 0.7)).toBeNull();
   expect(matchLabel(read({ brand: 'Ferrero', name: 'Nutella', packSize: '400 g' }), two, 0.6, 0.7)).toBe('3017624010701');
 });
+it('tells three drinks of one brand apart by the flavor word, and a plus sign in a name is no word', () => {
+  const kili: StoreItem[] = [
+    { gtin: '6430062761764', priceCents: 249, name: 'Kili Cascara Vadelma', brand: 'Kili', packSize: '330 ml' },
+    { gtin: '6430062761795', priceCents: 249, name: 'Kili Cascara Yuzu + Sitruuna', brand: 'Kili', packSize: '330 ml' },
+    { gtin: '6430062761825', priceCents: 249, name: 'Kili Cascara Mango + Ananas', brand: 'Kili', packSize: '330 ml' },
+  ];
+  const kiliMatch = (name: string) => matchLabel(read({ brand: 'Kili', name, packSize: '330 ml' }), kili, 0.6, 0.7);
+  expect(kiliMatch('Cascara Yuzu + Sitruuna')).toBe('6430062761795');
+  expect(kiliMatch('CASCARA yuzu sitruuna')).toBe('6430062761795');
+  expect(kiliMatch('Cascara Mango & Ananas')).toBe('6430062761825');
+  expect(kiliMatch('Cascara vadelma')).toBe('6430062761764');
+  // The flavor is not read, so the three items stay three.
+  expect(kiliMatch('Cascara')).toBeNull();
+  expect(kiliMatch('Cascara Yuzu')).toBeNull();
+});

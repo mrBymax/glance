@@ -66,6 +66,16 @@ export function spokenPack(packSize: string, lang: Lang): string {
   return `${numberToWords(whole, lang)} ${plural}`;
 }
 
+const PLUS: Record<Lang, string> = { en: 'plus', it: 'più' };
+
+/**
+ * A store name as the voice says it: a plus sign becomes a word. A speech service can skip the sign or read it
+ * in another language. The shown name keeps the sign.
+ */
+export function spokenStoreName(name: string, lang: Lang): string {
+  return name.replace(/\s*\+\s*/g, ` ${PLUS[lang]} `).trim();
+}
+
 /** The pack of a product when no source gives its size. */
 const UNKNOWN_PACK = { packSize: '1 pc', spoken: { en: 'one pack', it: 'una confezione' } };
 
@@ -85,7 +95,7 @@ export function scannedProduct(item: StoreItem, details: ProductDetails | null):
     id: scannedProductId(item.gtin),
     gtin: item.gtin,
     name,
-    spokenName: name,
+    spokenName: { en: spokenStoreName(item.name, 'en'), it: spokenStoreName(item.name, 'it') },
     brand: item.brand ?? details?.brand ?? item.name,
     packSize: packSize ?? UNKNOWN_PACK.packSize,
     spokenPack: pack,

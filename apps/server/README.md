@@ -1436,6 +1436,7 @@ The rules select a line by its key, and `renderLine(line, profile)` in `src/spee
 - With no allergen in the profile, the voice says nothing about allergens for a product with no allergen data. It never says that a product is safe.
 - The barcode lines are "This product is not in this store." and "I cannot read this code. Hold it closer." The Italian texts are "Questo prodotto non è in questo negozio." and "Non riesco a leggere questo codice. Avvicinalo."
 - A scanned product has no spoken texts of its own. Its spoken name is its name, and its name stays as the database writes it inside a sentence: "Added Nutella."
+- A plus sign in the name of a store item is the word "plus" in a spoken line, and "più" in Italian: "Kili Cascara Yuzu plus Sitruuna, two forty-nine." (`spokenStoreName` in `src/products/scanned.ts`). A speech service can skip the sign or read it in another language. The shown name keeps the sign, and the caption text is the spoken line. Each word counts for the rule of the long name, also the word "plus".
 - `spokenPack` in `src/products/scanned.ts` writes the pack size of a scanned product as words: "500 g" is "five hundred grams" and "cinquecento grammi". It knows one number and the units g, kg, ml, cl, and l. Each other text stays as it is.
 
 Italian, for the profile language `it`:
