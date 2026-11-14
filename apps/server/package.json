@@ -13,6 +13,7 @@
     "catalog:check": "tsx scripts/catalog-check.ts",
     "catalog:seed": "tsx --env-file-if-exists=.env scripts/catalog-seed.ts",
     "replay": "tsx --env-file-if-exists=.env scripts/replay.ts",
+    "live:probe": "tsx --env-file-if-exists=.env scripts/live-probe.ts",
     "smoke": "tsx scripts/smoke.ts",
     "reference": "tsx --env-file-if-exists=.env scripts/reference.ts",
     "typecheck": "tsc --noEmit"
