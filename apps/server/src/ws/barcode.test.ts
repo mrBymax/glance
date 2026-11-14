@@ -273,6 +273,30 @@ it('a code that the model sees in 2 frames and cannot read asks the phone for a 
   expect(phone.messages.filter(isSpeak)).toEqual([]);
 });
 
+it('a product that sight does not know asks for a still, and the label names it with no unknown line', async () => {
+  const reader = labelReaderOf({ ...NO_LABEL, name: 'Hasselpahkinalevite', item: NUTELLA, itemConfidence: 0.9 });
+  const { phone } = await shop({ recognizer: recognizerOf([{ status: 'unknown' }]), labelReader: reader });
+  phone.sendFrame(frame, JPEG);
+  await serverReadAll(phone);
+  expect(phone.messages.some((m) => m.t === 'still.request')).toBe(false);
+  phone.sendFrame({ ...frame, seq: 2 }, JPEG);
+  expect(await phone.next((m) => m.t === 'still.request')).toEqual({ t: 'still.request', purpose: 'label' });
+  phone.sendFrame(label, JPEG);
+  expect(eventOf<'glance.pending'>(await phone.next(isEvent('glance.pending'))).product.id).toBe('gtin-3017624010701');
+  await serverReadAll(phone);
+  expect(phone.messages.filter(isSpeak).map((m) => m.text)).toEqual(['Nutella, four hundred grams, three ninety-nine. Nod to add.']);
+});
+it('a label that read a package and selects no item gives the unknown line when sight asked for the still', async () => {
+  const reader = labelReaderOf({ ...NO_LABEL, brand: 'Rigoni', name: 'Nocciolata', confidence: 0.9 });
+  const { phone } = await shop({ recognizer: recognizerOf([{ status: 'unknown' }]), labelReader: reader });
+  phone.sendFrame(frame, JPEG);
+  await serverReadAll(phone);
+  phone.sendFrame({ ...frame, seq: 2 }, JPEG);
+  await phone.next((m) => m.t === 'still.request');
+  phone.sendFrame(label, JPEG);
+  expect(await phone.next(isSpeak)).toMatchObject({ text: 'I do not know this product.' });
+});
+
 const nutellaLabel: LabelAnswer = { ...NO_LABEL, brand: 'Ferrero', name: 'Nutella', packSize: '400 g', confidence: 0.9 };
 
 it('in fake mode a scripted code asks for a still, and the label frame gives the product through the fake reader', async () => {

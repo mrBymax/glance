@@ -57,13 +57,18 @@ it('R11: a product in the cart that comes into view gets the add-another prompt'
 });
 it('R13: the unknown line plays one time for each appearance', () => {
   const h = harness();
+  // The line waits 2 seconds for a second frame, which would ask the phone for a still (see barcode.test.ts).
   h.result({ status: 'unknown' });
+  expect(h.effects).toEqual([]);
+  h.advance(2000);
   expect(h.lines()).toEqual(['glance.unknown']);
   expect(h.events()).toEqual(['glance.unknown']);
   h.advance(500); h.result({ status: 'unknown' });
   expect(h.effects).toEqual([]);
   h.advance(T.viewMs); h.result({ status: 'unknown' });
+  h.advance(2000);
   expect(h.lines()).toEqual(['glance.unknown']);
+  expect(h.all.filter((effect) => effect.type === 'speak')).toHaveLength(2);
 });
 it('gives an aim hint at most one time each 5 seconds', () => {
   const h = harness();

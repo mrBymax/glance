@@ -3,7 +3,7 @@ import { onAnswer, onCartEdit, onPromptDone, onUndo } from './answers';
 import { expireAskWindow, onAnswerText, onQuestion } from './ask';
 import { onBarcode, onLabel } from './barcode';
 import { expireCheckout, onBiometricResult, onKioskSeen, onPaymentResult } from './checkout';
-import { newCodeState } from './code';
+import { expireUnknownLine, newCodeState } from './code';
 import { onDeviceState, onGeneralIntent, onProfileSet, onRecognitionSlow, onSocketOpen, restWhenIdle } from './general';
 import { expireSecondLook, onRecognition } from './glance';
 import { type Turn, emit } from './turn';
@@ -154,5 +154,6 @@ function expire(turn: Turn): void {
   expireCheckout(turn);
   expireAskWindow(turn);
   expireSecondLook(turn);
+  expireUnknownLine(turn);
   restWhenIdle(turn);
 }

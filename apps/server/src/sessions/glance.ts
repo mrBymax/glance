@@ -1,6 +1,6 @@
 import { type Product, TIMING, toProductRef } from '@glance/shared';
 import { isConfirmed, passSpotCheck, suspendCheckoutFor } from './checkout';
-import { codeQuiet, onFrameCode } from './code';
+import { codeOf, codeQuiet, endStillWait, holdUnknownLine, onFrameCode, onUnnamedProduct, speakUnknown } from './code';
 import { say } from './say';
 import { type Turn, emit, nextPromptId, promptProductInView, qtyInCart, speak } from './turn';
 import type { RuleInput } from './types';
@@ -37,16 +37,18 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
     case 'identified':
       if (result.productId !== null) onIdentified(turn, result.productId);
       return;
-    case 'unknown':
-      onUnknown(turn);
-      return;
-    case 'unsure':
-      onAimHint(turn, result.aimHint);
-      return;
     case 'ambiguous':
       onAmbiguous(turn, result.candidates);
       return;
+    case 'unknown':
+      onUnknown(turn);
+      break;
+    case 'unsure':
+      onAimHint(turn, result.aimHint);
+      break;
   }
+  // The still of the second look is a still already, so only a stream frame counts.
+  if (!input.still) onUnnamedProduct(turn);
 }
 
 /** For a product that recognition named, and for the product of a barcode. */
@@ -56,6 +58,8 @@ export function onIdentified(turn: Turn, productId: string): void {
   if (!product) return;
   // The model named one product, in a still or in a stream frame, so the look-alike line is out of date.
   s.heldAmbiguous = null;
+  // The same for the unknown line that waits for a still.
+  endStillWait(s);
 
   const wasInView = inView(s.seen[productId], now);
   s.seen[productId] = now;
@@ -99,14 +103,16 @@ function openProductPrompt(turn: Turn, product: Product): void {
 
 // R13. The time moves with each unknown result, so one appearance gives one line.
 // No line while the shopper shows a barcode: the barcode path speaks then.
+// The line of a new appearance waits while a still can name the product. `expireUnknownLine` and `onLabel` speak it later.
 function onUnknown(turn: Turn): void {
   const { s, now } = turn;
   if (promptProductInView(s, now) || codeQuiet(s, now)) return;
-  if (s.unknownAt === null || now - s.unknownAt >= TIMING.viewMs) {
-    emit(turn, { type: 'glance.unknown' });
-    speak(turn, say({ key: 'glance.unknown' }));
+  if (codeOf(s).unknownHeldAt !== null) return;
+  if (s.unknownAt !== null && now - s.unknownAt < TIMING.viewMs) {
+    s.unknownAt = now;
+    return;
   }
-  s.unknownAt = now;
+  if (!holdUnknownLine(turn)) speakUnknown(turn);
 }
 
 // The time moves with each ambiguous result, so one appearance gives one line.
@@ -114,6 +120,8 @@ function onAmbiguous(turn: Turn, candidates: readonly string[]): void {
   const { s, now, ctx } = turn;
   const products = candidates.flatMap((id) => ctx.catalog.get(id) ?? []);
   if (products.length < 2) return;
+  // Sight names candidates now, so the unknown line that waits for a still is out of date.
+  endStillWait(s);
 
   if (s.prompt?.kind === 'product') {
     if (candidates.includes(s.prompt.productId)) {

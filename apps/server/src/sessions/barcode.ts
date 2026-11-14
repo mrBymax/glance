@@ -1,5 +1,5 @@
 import { isConfirmed } from './checkout';
-import { UNREADABLE_EVERY_MS, codeOf } from './code';
+import { LABEL_ANSWER_MS, UNREADABLE_EVERY_MS, codeOf, endStillWait, speakUnknown } from './code';
 import { onIdentified } from './glance';
 import { say } from './say';
 import { type Turn, promptProductInView, speak } from './turn';
@@ -22,6 +22,8 @@ export function onBarcode(turn: Turn, input: Extract<RuleInput, { type: 'barcode
   code.acceptedAt = now;
   code.stillsOpen = 0;
   s.lastTargetAt = now;
+  // The code has the voice now, as a product or as the line for a code that the store does not sell.
+  endStillWait(s);
   // A prompt would suspend the checkout that waits for its payment.
   if (isConfirmed(s)) return;
 
@@ -42,15 +44,34 @@ export function onBarcode(turn: Turn, input: Extract<RuleInput, { type: 'barcode
 
 /**
  * A label frame: the still of a package that the phone could not read. The model reads it outside the rules.
- * A read that failed gets the unreadable line. A still with no product in it gets no line.
+ * While the call runs, the voice of recognition is quiet. A still with no product in it gets no line.
+ * A read that failed gets one line: the unknown line when it waits for this still, else the unreadable line.
  */
 export function onLabel(turn: Turn, input: Extract<RuleInput, { type: 'label' }>): void {
   const { s, now } = turn;
   if (s.phase !== 'shopping' && s.phase !== 'checkout') return;
   const code = codeOf(s);
-  code.at = now;
   s.lastTargetAt = now;
-  if (input.read !== 'failed' || isConfirmed(s)) return;
+  if (input.read === 'started') {
+    code.at = now;
+    code.waitUntil = now + LABEL_ANSWER_MS;
+    return;
+  }
+
+  const unknownWaits = code.unknownHeldAt !== null;
+  endStillWait(s);
+  if (input.read === 'empty') {
+    // The still showed no product, so recognition by sight has the voice again at once.
+    code.at = null;
+    return;
+  }
+  code.at = now;
+  if (isConfirmed(s)) return;
+  if (unknownWaits) {
+    // Sight asked for this still, and no barcode was in view: "I cannot read this code." would name a code that nobody showed.
+    if (!promptProductInView(s, now)) speakUnknown(turn);
+    return;
+  }
   if (code.unreadableAt !== null && now - code.unreadableAt < UNREADABLE_EVERY_MS) return;
   code.unreadableAt = now;
   speak(turn, say({ key: 'barcode.unreadable' }));

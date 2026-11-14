@@ -2,7 +2,8 @@ import { expect, it } from 'vitest';
 import { TIMING as T } from '@glance/shared';
 import { NO_RESULT } from '../recognition/result';
 import {
-  CODE_FRAMES_WITHIN_MS, CODE_QUIET_MS, STILLS_BEFORE_WAIT, STILL_REQUEST_EVERY_MS, STILL_REQUEST_WAIT_MS, UNREADABLE_EVERY_MS,
+  CODE_ACCEPTED_MS, CODE_FRAMES_WITHIN_MS, CODE_QUIET_MS, LABEL_ANSWER_MS, STILLS_BEFORE_WAIT, STILL_ANSWER_MS, STILL_REQUEST_EVERY_MS,
+  STILL_REQUEST_WAIT_MS, UNREADABLE_EVERY_MS,
 } from './code';
 import { type Harness, KIOSK, OAT, RYE, harness, product } from './harness';
 import { step } from './step';
@@ -122,8 +123,9 @@ it('an invalid code gives nothing', () => {
   const h = scanned();
   h.barcode({ kind: 'invalid' });
   expect(h.effects).toEqual([]);
-  h.result({ status: 'unknown' });
-  expect(h.lines()).toEqual(['glance.unknown']);
+  // An invalid code is no sign of a barcode, so the voice of recognition is not quiet.
+  h.result({ status: 'unsure', aimHint: 'turn' });
+  expect(h.lines()).toEqual(['glance.partial']);
 });
 it('R22: barcode reports keep the camera on', () => {
   const h = scanned();
@@ -150,8 +152,8 @@ it('one voice: a frame with a visible code is quiet too, also with the status un
   const h = scanned();
   h.result({ status: 'unknown', code: { visible: true, digits: null } });
   expect(h.effects).toEqual([]);
-  h.advance(CODE_QUIET_MS); h.result({ status: 'unknown' });
-  expect(h.lines()).toEqual(['glance.unknown']);
+  h.advance(CODE_QUIET_MS); h.result({ status: 'unsure', aimHint: 'turn' });
+  expect(h.lines()).toEqual(['glance.partial']);
 });
 it('one voice: a label frame is quiet from its arrival', () => {
   const h = scanned();
@@ -238,7 +240,8 @@ it('a session that an older server stored has no code state, and takes each inpu
   expect(run(old as SessionState, { type: 'label', read: 'failed', now: h.now }).effects).toHaveLength(1);
   expect(run(old as SessionState, { type: 'tick', now: h.now }).state.code).toBeUndefined();
   const seen = run(old as SessionState, { type: 'recognition', result: { ...NO_RESULT, status: 'unknown' }, still: false, now: h.now });
-  expect(seen.effects).toHaveLength(2);
+  expect(seen.effects).toEqual([]);
+  expect(run(seen.state, { type: 'tick', now: h.now + CODE_FRAMES_WITHIN_MS }).effects).toHaveLength(2);
 });
 it('keeps the kiosk rules: a pay prompt does not open while a scanned product has its prompt', () => {
   const h = harness({ products: [product(NUTELLA, 399)], cart: [OAT] });
@@ -291,4 +294,181 @@ it('a code that was read ends the long wait for the next still', () => {
   h.barcode(missing());
   h.advance(STILL_REQUEST_EVERY_MS); code(h); h.advance(500); code(h);
   expect(requests()).toBe(3);
+});
+
+const unknown = (h: Harness) => h.result({ status: 'unknown' });
+const stillRequests = (h: Harness) => h.all.filter((effect) => effect.type === 'still.request').length;
+const spokenKeys = (h: Harness) => h.all.flatMap((effect) => (effect.type === 'speak' ? [effect.line.key] : []));
+
+it('a product that sight does not know in 2 frames inside 2 seconds asks the phone for a still', () => {
+  const h = scanned();
+  unknown(h);
+  expect(h.effects).toEqual([]);
+  h.advance(CODE_FRAMES_WITHIN_MS - 1); unknown(h);
+  expect(h.effects).toEqual([{ type: 'still.request' }]);
+});
+it('an unsure frame counts as an unknown one for the still', () => {
+  const h = scanned();
+  h.result({ status: 'unsure' }); h.advance(500); unknown(h);
+  expect(h.effects).toEqual([{ type: 'still.request' }]);
+  const unsure = scanned();
+  unsure.result({ status: 'unsure' }); unsure.advance(500); unsure.result({ status: 'unsure' });
+  expect(unsure.effects).toEqual([{ type: 'still.request' }]);
+});
+it('2 unknown frames that are 2 seconds apart ask for no still, and a still of the second look does not count', () => {
+  const h = scanned();
+  unknown(h); h.advance(CODE_FRAMES_WITHIN_MS); unknown(h);
+  expect(stillRequests(h)).toBe(0);
+  const second = scanned();
+  unknown(second); second.advance(500);
+  second.send({ type: 'recognition', result: { ...NO_RESULT, status: 'unknown' }, still: true });
+  expect(stillRequests(second)).toBe(0);
+});
+it('a product that sight does not know has the still limits of a code: one each 6 seconds, then 30 seconds after 2 with no result', () => {
+  const h = scanned();
+  const times: number[] = [];
+  const start = h.now;
+  for (let elapsed = 0; elapsed <= 70000; elapsed += 500) {
+    unknown(h);
+    if (h.effects.some((effect) => effect.type === 'still.request')) times.push(h.now - start);
+    h.advance(500);
+  }
+  expect(times).toEqual([500, 6500, 36500, 66500]);
+});
+it('a code and an unknown product share one still limit', () => {
+  const h = scanned();
+  code(h); h.advance(500); code(h);
+  expect(stillRequests(h)).toBe(1);
+  h.advance(CODE_QUIET_MS); unknown(h); h.advance(500); unknown(h);
+  expect(stillRequests(h)).toBe(1);
+});
+it('asks for no still for an unknown product while a code or a product was accepted in the last 3 seconds', () => {
+  const h = scanned();
+  h.barcode(missing());
+  h.advance(CODE_ACCEPTED_MS - 600); unknown(h); h.advance(500); unknown(h);
+  expect(stillRequests(h)).toBe(0);
+  h.advance(100); unknown(h);
+  expect(stillRequests(h)).toBe(1);
+
+  const seen = scanned();
+  seen.see(OAT);
+  seen.advance(CODE_ACCEPTED_MS - 600); unknown(seen); seen.advance(500); unknown(seen);
+  expect(stillRequests(seen)).toBe(0);
+  seen.advance(100); unknown(seen);
+  expect(stillRequests(seen)).toBe(1);
+});
+it('asks for no still for an unknown product while the payment runs', () => {
+  const h = harness({ cart: [OAT] });
+  h.kiosk(); h.done(); h.yes();
+  unknown(h); h.advance(500); unknown(h);
+  expect(h.effects).toEqual([]);
+});
+
+it('one voice: the unknown line waits for the still and its label call, and plays when the label gave no product', () => {
+  const h = scanned();
+  unknown(h); h.advance(500); unknown(h);
+  h.advance(2500); unknown(h); h.label('started');
+  h.advance(2000); unknown(h);
+  expect(spokenKeys(h)).toEqual([]);
+  h.label('failed');
+  expect(h.lines()).toEqual(['glance.unknown']);
+  expect(h.events()).toEqual(['glance.unknown']);
+  // One appearance, one line: the frames that follow say nothing.
+  h.advance(500); unknown(h);
+  expect(h.effects).toEqual([]);
+});
+it('one voice: the unknown line never plays when the label gave the product', () => {
+  const h = scanned();
+  unknown(h); h.advance(500); unknown(h);
+  h.advance(2500); h.label('started');
+  h.advance(2000); h.barcode(found(NUTELLA));
+  expect(h.lines()).toEqual(['glance.new']);
+  for (let elapsed = 0; elapsed < 12000; elapsed += 500) h.advance(500);
+  expect(spokenKeys(h)).toEqual(['glance.new']);
+});
+it('a still with no product in it drops the unknown line, and the next unknown frame gets it at once', () => {
+  const h = scanned();
+  unknown(h); h.advance(500); unknown(h);
+  h.advance(2500); h.label('started'); h.advance(1500); h.label('empty');
+  expect(h.effects).toEqual([]);
+  h.advance(500);
+  expect(h.effects).toEqual([]);
+  unknown(h);
+  expect(h.lines()).toEqual(['glance.unknown']);
+});
+it('the unknown line plays when no label frame comes in 5 seconds after the request', () => {
+  expect(STILL_ANSWER_MS).toBe(5000);
+  const h = scanned();
+  unknown(h); h.advance(500); unknown(h);
+  h.advance(STILL_ANSWER_MS - 1);
+  expect(spokenKeys(h)).toEqual([]);
+  h.advance(1);
+  expect(h.lines()).toEqual(['glance.unknown']);
+  expect(h.events()).toEqual(['glance.unknown']);
+});
+it('the unknown line of one frame plays after 2 seconds, when no second frame asked for a still', () => {
+  const h = scanned();
+  unknown(h);
+  h.advance(CODE_FRAMES_WITHIN_MS - 1);
+  expect(spokenKeys(h)).toEqual([]);
+  h.advance(1);
+  expect(h.lines()).toEqual(['glance.unknown']);
+});
+it('the unknown line plays at once while the limits allow no still', () => {
+  const h = scanned();
+  for (let elapsed = 0; elapsed < 14000; elapsed += 500) { code(h); h.advance(500); }
+  expect(stillRequests(h)).toBe(2);
+  h.advance(CODE_QUIET_MS + STILL_ANSWER_MS); unknown(h);
+  expect(h.lines()).toEqual(['glance.unknown']);
+});
+it('the unknown line that waits is dropped when a barcode report or a product by sight comes', () => {
+  const h = scanned();
+  unknown(h); h.advance(500); h.barcode(missing());
+  expect(h.lines()).toEqual(['barcode.notInStore']);
+  h.advance(CODE_FRAMES_WITHIN_MS + CODE_QUIET_MS);
+  expect(spokenKeys(h)).toEqual(['barcode.notInStore']);
+
+  const seen = scanned();
+  unknown(seen); seen.advance(500); seen.see(OAT);
+  seen.advance(CODE_FRAMES_WITHIN_MS);
+  expect(spokenKeys(seen)).toEqual(['glance.new']);
+});
+it('the unknown line that waits is dropped when sight names look-alike products', () => {
+  const h = scanned();
+  unknown(h); h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, 'oat-drink-barista-1l'] });
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+  h.advance(CODE_FRAMES_WITHIN_MS);
+  expect(spokenKeys(h)).toEqual(['glance.ambiguous']);
+});
+it('a session that the server of 2026-11-14 stored has a code state with fewer fields, and takes an unknown result', () => {
+  const h = scanned();
+  const { heldAt: _heldAt, waitUntil: _waitUntil, unknownHeldAt: _unknownHeldAt, ...old } = h.state.code;
+  h.state = { ...h.state, code: old as SessionState['code'] };
+  h.advance(1000);
+  expect(h.effects).toEqual([]);
+  unknown(h); h.advance(500); unknown(h);
+  expect(h.effects).toEqual([{ type: 'still.request' }]);
+  expect(h.state.code).toMatchObject({ heldAt: h.now, waitUntil: h.now + STILL_ANSWER_MS, unknownHeldAt: h.now - 500 });
+});
+it('one voice: no aim hint while the server waits for a still and its label call', () => {
+  const h = scanned();
+  h.result({ status: 'unsure' }); h.advance(500); h.result({ status: 'unsure' });
+  expect(stillRequests(h)).toBe(1);
+  h.advance(STILL_ANSWER_MS - 1); h.result({ status: 'unsure', aimHint: 'closer' });
+  expect(h.effects).toEqual([]);
+  h.label('started');
+  h.advance(LABEL_ANSWER_MS - 1); h.result({ status: 'unsure', aimHint: 'closer' });
+  expect(h.effects).toEqual([]);
+  h.label('empty'); h.result({ status: 'unsure', aimHint: 'closer' });
+  expect(h.lines()).toEqual(['glance.partial']);
+});
+it('a label call that gives no end holds the unknown line for the time of the call and the lookup', () => {
+  expect(LABEL_ANSWER_MS).toBe(6500);
+  const h = scanned();
+  unknown(h); h.advance(500); unknown(h);
+  h.advance(2500); h.label('started');
+  h.advance(LABEL_ANSWER_MS - 1);
+  expect(spokenKeys(h)).toEqual([]);
+  h.advance(1);
+  expect(h.lines()).toEqual(['glance.unknown']);
 });

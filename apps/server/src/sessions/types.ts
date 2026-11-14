@@ -57,7 +57,10 @@ export type BarcodeOutcome =
 
 /** The barcode side of a session. Each time is a clock value, or null for "never". */
 export type CodeState = {
-  /** The last barcode report, label frame, or frame in which the model saw a code. The voice of recognition is quiet after it. */
+  /**
+   * The last barcode report, label frame, or frame in which the model saw a code. The voice of recognition is quiet after it.
+   * A still that showed no product sets it to null.
+   */
   at: number | null;
   /** The last frame in which the model saw a code. */
   visibleAt: number | null;
@@ -70,6 +73,12 @@ export type CodeState = {
   unreadableAt: number | null;
   /** The last code that the store does not sell, with the time of its last report. */
   miss: { gtin: string; at: number } | null;
+  /** The last stream frame with a product that sight cannot name: the status `unknown` or `unsure`. */
+  heldAt: number | null;
+  /** The voice of recognition is quiet until this time: the server waits for the still that it asked for, or for its label call. */
+  waitUntil: number | null;
+  /** The time of the unknown result whose line waits for a still, or null when no line waits. */
+  unknownHeldAt: number | null;
 };
 
 /** The rule numbers in the comments are those of spec section 6.2. Each time is a clock value in milliseconds. */
@@ -122,7 +131,7 @@ export type SessionState = {
   /** The battery level of the last spoken warning. A level above 20 percent sets it to null. */
   batteryWarned: 20 | 10 | null;
   lastReceipt: Receipt | null;
-  /** A session that an older server stored has no value here. Read it through `codeOf` of code.ts. */
+  /** A session that an older server stored has no value here, or one with fewer fields. Read it through `codeOf` of code.ts. */
   code: CodeState;
 };
 
@@ -169,7 +178,7 @@ export type Effect =
   | { type: 'biometric.request' }
   /** The runtime asks the model and answers with an `answer` input. */
   | { type: 'ask'; question: string; product: Product }
-  /** The runtime asks the phone for one still of a barcode. The phone answers with `barcode.seen` or with a label frame. */
+  /** The runtime asks the phone for one still of the product in the hand. The phone answers with `barcode.seen` or with a label frame. */
   | { type: 'still.request' };
 
 /** secondLookWaitMs: how long the look-alike line waits for the result of a still. 0 means that it does not wait. */
