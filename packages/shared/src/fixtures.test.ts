@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ZodType } from 'zod';
 import * as shared from './index';
 import {
-  DeviceToServerSchema, NativeToPageSchema, PageToNativeSchema, ProductSchema, ServerEventSchema, ServerToDeviceSchema,
+  DeviceToServerSchema, FrameHeaderSchema, NativeToPageSchema, PageToNativeSchema, ProductSchema, ServerEventSchema, ServerToDeviceSchema,
 } from './index';
 
 const root = new URL('../fixtures/', import.meta.url);
@@ -15,6 +15,7 @@ const SCHEMA_BY_FOLDER = {
   'server-to-device': ServerToDeviceSchema,
   'bridge-page-to-native': PageToNativeSchema,
   'bridge-native-to-page': NativeToPageSchema,
+  'frame-headers': FrameHeaderSchema,
 } as const;
 
 function readFolder(folder: string): { file: string; json: unknown }[] {

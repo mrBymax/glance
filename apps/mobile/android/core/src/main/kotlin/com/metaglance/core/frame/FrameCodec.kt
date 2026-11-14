@@ -20,8 +20,30 @@ enum class FrameKind {
 }
 
 /**
+ * `CROP`: the JPEG is a part of the source image, around an object that the phone found. `FULL`: the whole source
+ * image. No view means a phone that does not crop.
+ */
+@Serializable
+enum class FrameView {
+    @SerialName("crop")
+    CROP,
+
+    @SerialName("full")
+    FULL
+}
+
+/** The place of a crop in the source image, in source pixels. */
+@Serializable
+data class FrameCrop(val x: Int, val y: Int, val w: Int, val h: Int)
+
+/** The size of the source image: the stream frame or the still photo, before the phone cropped or scaled it. */
+@Serializable
+data class FrameSize(val w: Int, val h: Int)
+
+/**
  * `ts` is the capture time in milliseconds since the Unix epoch. `w` and `h` are the size of the JPEG.
- * `blurred` is false when the frame did not go through face detection.
+ * `blurred` is false when the frame did not go through face detection. `view`, `crop`, and `source` say what the
+ * JPEG shows of the source image. An older server ignores the three.
  */
 @Serializable
 data class FrameHeader(
@@ -30,7 +52,10 @@ data class FrameHeader(
     val w: Int,
     val h: Int,
     val blurred: Boolean,
-    val kind: FrameKind? = null
+    val kind: FrameKind? = null,
+    val view: FrameView? = null,
+    val crop: FrameCrop? = null,
+    val source: FrameSize? = null
 )
 
 class FrameFormatError(message: String) : Exception(message)

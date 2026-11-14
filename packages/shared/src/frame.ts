@@ -15,6 +15,15 @@ export const FrameHeaderSchema = z.object({
   blurred: z.boolean(),
   // No kind means 'frame'. A 'label' is a still of a barcode that the phone did not read.
   kind: z.enum(['frame', 'still', 'label']).optional(),
+  // 'crop': the JPEG is a part of the source image, around an object that the phone found. 'full': the whole source image.
+  // No view means a phone that does not crop: the whole image.
+  view: z.enum(['crop', 'full']).optional(),
+  // The place of the JPEG in the source image, in source pixels. Only with the view 'crop'.
+  crop: z.object({
+    x: z.number().int().min(0), y: z.number().int().min(0), w: z.number().int().positive(), h: z.number().int().positive(),
+  }).optional(),
+  // The size of the source image: the stream frame or the still photo, before the phone cropped or scaled it.
+  source: z.object({ w: z.number().int().positive(), h: z.number().int().positive() }).optional(),
 });
 export type FrameHeader = z.infer<typeof FrameHeaderSchema>;
 

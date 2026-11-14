@@ -1,5 +1,9 @@
 package com.metaglance.core.contract
 
+import com.metaglance.core.frame.FrameCrop
+import com.metaglance.core.frame.FrameHeader
+import com.metaglance.core.frame.FrameSize
+import com.metaglance.core.frame.FrameView
 import java.io.File
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonArray
@@ -64,6 +68,7 @@ class FixturesTest {
                 "server-to-device",
                 "bridge-page-to-native",
                 "bridge-native-to-page",
+                "frame-headers",
                 "rest"
             ),
             root.list()!!.toSet()
@@ -79,6 +84,7 @@ class FixturesTest {
                 "server-to-device" to 7,
                 "bridge-page-to-native" to 11,
                 "bridge-native-to-page" to 4,
+                "frame-headers" to 4,
                 "rest" to 8
             ),
             counts()
@@ -131,6 +137,14 @@ class FixturesTest {
             "WebIntentRequest" to WebIntentRequest.serializer()
         )
         for (fixture in folder("rest")) assertRoundTrip(fixture, restTypes.getValue(fixture.name))
+    }
+
+    @Test fun `reads each frame header fixture with each of its fields`() {
+        for (fixture in folder("frame-headers")) assertRoundTrip(fixture, FrameHeader.serializer())
+        val crop = GlanceJson.decodeFromString(FrameHeader.serializer(), folder("frame-headers").first { it.name == "crop" }.text)
+        assertEquals(FrameView.CROP, crop.view)
+        assertEquals(FrameCrop(316, 420, 360, 716), crop.crop)
+        assertEquals(FrameSize(720, 1280), crop.source)
     }
 
     @Test fun `encodes each message that the app sends back to the same JSON`() {

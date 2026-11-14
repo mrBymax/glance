@@ -3,6 +3,7 @@ package com.metaglance.core.frame
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,6 +39,32 @@ class FrameCodecTest {
         assertEquals(FrameKind.LABEL, FrameCodec.decode(label).first.kind)
         val other = String(label, Charsets.ISO_8859_1).replace("label", "video").toByteArray(Charsets.ISO_8859_1)
         assertThrows(FrameFormatError::class.java) { FrameCodec.decode(other) }
+    }
+
+    @Test fun `writes the view, the crop, and the source size after the other fields`() {
+        val crop = header.copy(w = 360, h = 716, view = FrameView.CROP, crop = FrameCrop(316, 420, 360, 716), source = FrameSize(720, 1280))
+        val message = FrameCodec.encode(crop, jpeg)
+        val text = String(message, Charsets.ISO_8859_1)
+        assertTrue(text, text.contains("\"blurred\":true,\"view\":\"crop\",\"crop\":{\"x\":316,\"y\":420,\"w\":360,\"h\":716},\"source\":{\"w\":720,\"h\":1280}}"))
+        assertEquals(crop, FrameCodec.decode(message).first)
+    }
+
+    @Test fun `a full frame of a phone that crops has the view and the source size, and no crop`() {
+        val full = header.copy(view = FrameView.FULL, source = FrameSize(504, 896))
+        val message = FrameCodec.encode(full, jpeg)
+        val text = String(message, Charsets.ISO_8859_1)
+        assertTrue(text, text.contains("\"view\":\"full\",\"source\":{\"w\":504,\"h\":896}}"))
+        assertFalse(text.contains("\"crop\":"))
+        assertEquals(full, FrameCodec.decode(message).first)
+    }
+
+    @Test fun `a header with no view has none of the three fields`() {
+        val text = String(FrameCodec.encode(header, jpeg), Charsets.ISO_8859_1)
+        for (field in listOf("view", "crop", "source")) assertFalse(field, text.contains(field))
+        val decoded = FrameCodec.decode(FrameCodec.encode(header, jpeg)).first
+        assertNull(decoded.view)
+        assertNull(decoded.crop)
+        assertNull(decoded.source)
     }
 
     @Test fun `rejects a message shorter than 4 bytes`() {
