@@ -54,6 +54,7 @@ import com.metaglance.core.gesture.GyroSample
 import com.metaglance.core.gesture.MotionRow
 import com.metaglance.core.image.I420
 import com.metaglance.core.image.RawFrame
+import com.metaglance.core.image.StreamSize
 import com.metaglance.core.input.TouchEvent
 import com.metaglance.core.input.Transcript
 import com.metaglance.core.state.DatCompatibility
@@ -895,14 +896,16 @@ class DatLink(
         meter.count(frame.width, frame.height)
     }
 
-    /** Logs the frame rate one time each second, and a frame size that is not in order. */
+    /** Logs the frame rate one time each second, each change of the frame size, and a frame size that is not in order. */
     private inner class FrameMeter {
         private var windowStartNs = System.nanoTime()
         private var windowFrames = 0
         private var total = 0L
         private var reportedSize = ""
+        private val streamSize = StreamSize()
 
         fun count(width: Int, height: Int) {
+            streamSize.onFrame(width, height)?.let(log)
             total += 1
             windowFrames += 1
             val elapsedNs = System.nanoTime() - windowStartNs
