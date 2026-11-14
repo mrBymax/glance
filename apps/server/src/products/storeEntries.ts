@@ -7,8 +7,8 @@ export type StoreEntry = { item: StoreItem; details: ProductDetails | null };
 
 /**
  * Reads the whole store list one time, with the details that the reader of the product database holds.
- * It makes no network call: the database allows 15 reads each minute for one address, and a list can hold more items.
- * The details of an item that the reader does not hold come with its first prompt.
+ * It makes no network call, so the start of the server does not wait for the database.
+ * The warm-up of warmup.ts reads the details of each item that the reader does not hold, after the start.
  * `log` gets one line for each item whose details the reader cannot give.
  */
 export async function readStoreEntries(storeList: StoreList, info: ProductInfo, log: (line: string) => void): Promise<StoreEntry[]> {

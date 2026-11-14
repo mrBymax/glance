@@ -16,6 +16,7 @@ it('reads each item with the details that the reader holds, and makes no read of
   const info = {
     byGtin: vi.fn<ProductInfo['byGtin']>(async () => details),
     cached: vi.fn<ProductInfo['cached']>(async (gtin) => (gtin === nutella.gtin ? details : null)),
+    holds: async () => true,
   };
   expect(await readStoreEntries(listOf([nutella, cups]), info, () => undefined)).toEqual([
     { item: nutella, details }, { item: cups, details: null },
@@ -24,7 +25,7 @@ it('reads each item with the details that the reader holds, and makes no read of
 });
 it('an item whose details the reader cannot give has none, and the log says why', async () => {
   const lines: string[] = [];
-  const info: ProductInfo = { byGtin: async () => details, cached: async () => { throw new Error('The cache folder is gone.'); } };
+  const info: ProductInfo = { byGtin: async () => details, cached: async () => { throw new Error('The cache folder is gone.'); }, holds: async () => true };
   expect(await readStoreEntries(listOf([cups]), info, (line) => { lines.push(line); })).toEqual([{ item: cups, details: null }]);
   expect(lines).toEqual(['product info: no details at the start. gtin=6438574558384 The cache folder is gone.']);
 });

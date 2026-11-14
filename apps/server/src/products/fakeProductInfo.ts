@@ -23,5 +23,5 @@ export function createFakeProductInfo(dir: string = FAKE_PRODUCT_INFO_DIR): Prod
     return parseOffAnswer(JSON.parse(body));
   };
   // Each fixture is a file, so each read is a read with no network call.
-  return { byGtin, cached: byGtin };
+  return { byGtin, cached: byGtin, holds: async () => true };
 }

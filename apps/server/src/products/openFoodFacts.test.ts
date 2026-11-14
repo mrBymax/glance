@@ -147,6 +147,23 @@ it('gives the details that it holds with no request, from memory and from a file
   expect(await reader().cached(SPAGHETTI)).toBeNull();
   expect(fetchStub).not.toHaveBeenCalled();
 });
+it('tells if it holds an answer for a code, a hit or a miss, with no request', async () => {
+  const info = reader();
+  expect(await info.holds(SPAGHETTI)).toBe(false);
+  await info.byGtin(SPAGHETTI);
+  fetchStub.mockResolvedValueOnce(json(NOT_FOUND));
+  await info.byGtin('4006381333931');
+  fetchStub.mockClear();
+  expect(await info.holds(SPAGHETTI)).toBe(true);
+  expect(await info.holds('4006381333931')).toBe(true);
+  // A new process reads the files.
+  expect(await reader().holds(SPAGHETTI)).toBe(true);
+  // The reader never asks for a code of one store, so nothing is left to read for it.
+  expect(await reader().holds('2000000000015')).toBe(true);
+  now += OFF_HIT_TTL_MS;
+  expect(await reader().holds(SPAGHETTI)).toBe(false);
+  expect(fetchStub).not.toHaveBeenCalled();
+});
 it('reads again when a cache file is broken', async () => {
   writeFileSync(join(cacheDir, `${SPAGHETTI}.json`), '{"fetchedAt":');
   expect(await reader().byGtin(SPAGHETTI)).toMatchObject({ brand: 'Barilla' });

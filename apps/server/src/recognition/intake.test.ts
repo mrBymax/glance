@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CreateSessionResponseSchema } from '@glance/shared';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { FAKE_PRODUCT_INFO_DIR } from '../products/fakeProductInfo';
+import { createOpenFoodFactsInfo } from '../products/openFoodFacts';
 import { DEFAULT_STORE_LIST_PATH, readStoreListFile } from '../products/storeList';
+import type { FetchFn } from '../speech/elevenlabs';
 import { type TestApp, type TestPhone, connectPhone, testApp } from '../testing';
 import type { Recognizer } from './gemini';
 import { NO_RESULT, type RecognitionResult } from './result';
@@ -168,7 +174,7 @@ it('with SECOND_LOOK_WAIT_MS a still that is not sure speaks the look-alike line
 
 it('a store item that sight names gets the normal prompt, with the details that the resolver reads for its first prompt', async () => {
   const details = { brand: 'Ferrero', quantity: '400 g', allergens: ['milk' as const, 'nuts' as const], vegan: false, vegetarian: true };
-  const info = { byGtin: vi.fn(async () => details), cached: vi.fn(async () => null) };
+  const info = { byGtin: vi.fn(async () => details), cached: vi.fn(async () => null), holds: async () => true };
   recognize.mockResolvedValue({ ...NO_RESULT, status: 'identified', productId: 'gtin-3017624010701', confidence: 0.9 });
   const app = await testApp({}, { recognizer: { recognize }, productInfo: info });
   apps.push(app);
@@ -186,6 +192,44 @@ it('a store item that sight names gets the normal prompt, with the details that 
     text: expect.stringContaining('Nutella, four hundred grams, three ninety-nine. Warning: contains nuts.'), promptId: 'p-0001',
   });
   expect(info.byGtin).toHaveBeenCalledWith('3017624010701');
+});
+it('with a real product reader the start reads the details in the background, and the prompt of that item makes no read', async () => {
+  const NUTELLA = '3017624010701';
+  const cacheDir = mkdtempSync(join(tmpdir(), 'glance-products-'));
+  const offFetch = vi.fn<FetchFn>(async (url) => {
+    const gtin = /product\/(\d+)/.exec(String(url))![1]!;
+    return new Response(readFileSync(`${FAKE_PRODUCT_INFO_DIR}/${gtin}.json`, 'utf8'), { status: 200 });
+  });
+  const productInfo = createOpenFoodFactsInfo({ baseUrl: 'https://off.test', userAgent: 'test', cacheDir, fetch: offFetch });
+  recognize.mockResolvedValue({ ...NO_RESULT, status: 'identified', productId: `gtin-${NUTELLA}`, confidence: 0.9 });
+  const app = await testApp({ FAKE_PRODUCT_INFO: '0' }, {
+    recognizer: { recognize }, productInfo, log: { level: 'info', stream: { write: (line) => { logLines.push(line); } } },
+  });
+  apps.push(app);
+  try {
+    // The Nutella is the first item of the dev store list, so the warm-up reads it at once. The next read is 5 seconds later.
+    await vi.waitFor(() => expect(offFetch).toHaveBeenCalledTimes(1));
+    expect(String(offFetch.mock.calls[0]![0])).toContain(NUTELLA);
+    expect(logged('product info: warm-up started. 9 of 9 store items are not in the cache, one read each 5 s')).toBe(1);
+    await vi.waitFor(async () => expect(await productInfo.holds(NUTELLA)).toBe(true));
+    const res = await fetch(`${app.base}/api/sessions`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profile: { allergens: ['nuts'] } }),
+    });
+    const created = CreateSessionResponseSchema.parse(await res.json());
+    const storePhone = await connectPhone(app, created.sessionId, created.token);
+    storePhone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+    expect(await storePhone.next((m) => m.t === 'speak')).toMatchObject({
+      text: expect.stringContaining('Nutella, four hundred grams, three ninety-nine. Warning: contains nuts.'),
+    });
+    expect(offFetch).toHaveBeenCalledTimes(1);
+  } finally {
+    await app.close();
+    apps.splice(apps.indexOf(app), 1);
+    rmSync(cacheDir, { recursive: true, force: true });
+  }
+});
+it('with fake product details the start makes no warm-up', async () => {
+  expect(logged('warm-up')).toBe(0);
 });
 it('a store item that the store list no longer holds gets no prompt', async () => {
   const items = await readStoreListFile(DEFAULT_STORE_LIST_PATH).all();

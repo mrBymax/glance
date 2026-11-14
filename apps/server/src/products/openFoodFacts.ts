@@ -163,13 +163,19 @@ export function createOpenFoodFactsInfo(deps: {
   // The database gives its own 200... codes to products with no barcode, so a hit for a store code is no match.
   const known = (gtin13: string): boolean => /^\d{13}$/.test(gtin13) && !isStoreInternalGtin(gtin13);
 
+  /** The answer that the memory or a file holds for a code, or null. */
+  const keptEntry = async (gtin13: string): Promise<Cached | null> => {
+    const kept = memory.get(gtin13) ?? await readFileEntry(gtin13);
+    if (!kept || !fresh(kept)) return null;
+    memory.set(gtin13, kept);
+    return kept;
+  };
   return {
     async cached(gtin13) {
-      if (!known(gtin13)) return null;
-      const kept = memory.get(gtin13) ?? await readFileEntry(gtin13);
-      if (!kept || !fresh(kept)) return null;
-      memory.set(gtin13, kept);
-      return kept.details;
+      return known(gtin13) ? (await keptEntry(gtin13))?.details ?? null : null;
+    },
+    async holds(gtin13) {
+      return !known(gtin13) || await keptEntry(gtin13) !== null;
     },
     async byGtin(gtin13) {
       if (!known(gtin13)) return null;

@@ -113,7 +113,7 @@ it('an invalid code gives nothing', async () => {
 it('with Open Food Facts down the prompt has the name of the store, and the allergen data is missing', async () => {
   const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   try {
-    const down = { byGtin: vi.fn(async () => { throw new Error('Open Food Facts answered 503.'); }), cached: async () => null };
+    const down = { byGtin: vi.fn(async () => { throw new Error('Open Food Facts answered 503.'); }), cached: async () => null, holds: async () => true };
     const { phone } = await shop({ productInfo: down }, {}, { allergens: ['nuts'] });
     phone.send({ t: 'barcode.seen', code: '8076809513753', source: 'barcode' });
     const pending = eventOf<'glance.pending'>(await phone.next(isEvent('glance.pending')));

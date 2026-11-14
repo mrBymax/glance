@@ -20,6 +20,7 @@ import { ProductResolver } from './products/resolver';
 import { ScannedProducts, gtinOfScannedId, scannedProduct, withScanned } from './products/scanned';
 import { type StoreEntry, notInCatalog, readStoreEntries } from './products/storeEntries';
 import type { StoreList } from './products/storeList';
+import { startWarmUp } from './products/warmup';
 import { type ReferenceImages, createFolderReferences } from './reference/images';
 import { ScriptPlayer, readFakeScript } from './recognition/fake';
 import type { Recognizer } from './recognition/gemini';
@@ -162,6 +163,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     catalog: deps.catalog, storeList: deps.storeList, info: deps.productInfo, scanned, log: (line) => app.log.warn(line),
   });
   const reportBarcode = createBarcodeReports({ resolver, log: app.log });
+  // Not awaited: the start of the server does not wait for Open Food Facts. The fixtures of FAKE_PRODUCT_INFO need no read.
+  if (!config.fakeProductInfo) {
+    const warmUp = startWarmUp({
+      entries: notInCatalog(storeEntries, deps.catalog.products), info: deps.productInfo, resolver, log: (line) => app.log.info(line),
+    });
+    app.closers.add(() => warmUp.stop());
+  }
   let ask: RuntimeDeps['ask'];
   if (fakeScript !== null) ask = async (_question, _product, lang) => FAKE_ANSWER[lang];
   else ask = deps.ask ?? (async () => { throw new Error('The server has no answer service.'); });

@@ -73,6 +73,8 @@ it('the fake reader reads a fixture by the 13 digits and makes no call', async (
 it('the fake reader holds each fixture with no network call', async () => {
   expect(await createFakeProductInfo().cached('0000080177173')).toMatchObject({ brand: 'Ferrero', quantity: '15 g' });
   expect(await createFakeProductInfo().cached('4006381333931')).toBeNull();
+  // The fixtures are all that the fake reader can read, so no code waits for a read.
+  expect(await createFakeProductInfo().holds('4006381333931')).toBe(true);
 });
 it('the fake reader knows no other code', async () => {
   expect(await createFakeProductInfo().byGtin('4006381333931')).toBeNull();

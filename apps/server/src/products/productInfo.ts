@@ -22,6 +22,11 @@ export interface ProductInfo {
    * The start of the server reads the whole store list this way, because the database limits the reads of one address.
    */
   cached(gtin13: string): Promise<ProductDetails | null>;
+  /**
+   * True when a read of this code needs no network call now: the reader holds its details or its "not found",
+   * or the reader never asks for this code. The warm-up of the start reads each other code.
+   */
+  holds(gtin13: string): Promise<boolean>;
 }
 
 /** The tags of the allergens taxonomy of Open Food Facts for the 14 EU allergens. Each other tag has no allergen of the contract. */

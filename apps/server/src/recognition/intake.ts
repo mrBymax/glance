@@ -78,8 +78,8 @@ export function createFrameHandler(deps: {
         give();
         return;
       }
-      // The first prompt of a store item needs its allergens, so the result waits for the read. The read has the time of
-      // a barcode lookup, and the next read comes from the cache. A result of a later frame can reach the rules first.
+      // The prompt of a store item needs its allergens, so the result waits for the read. With the details in the cache,
+      // the read takes no time. Else it has the time of a barcode lookup, and a result of a later frame can reach the rules first.
       const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
       read.catch((error: unknown) => {
         // The rules still hold the product from the start of the server, with the details of that time.

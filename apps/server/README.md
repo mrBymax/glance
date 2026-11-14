@@ -63,7 +63,7 @@ curl -X POST http://localhost:8080/api/sessions
 # {"sessionId":"...","token":"...","wsUrl":"ws://localhost:8080/ws/device?session=...&token=..."}
 ```
 
-At the start the server logs `store: memory` or `store: mongo`, the number of products, `store list: <path>, <n> items`, `reference pictures: <dir>, <n> items, <m> pictures`, `product info: fake` or the address of Open Food Facts, `recognition: fake` or the model, and `speech: fake` or the speech model.
+At the start the server logs `store: memory` or `store: mongo`, the number of products, `store list: <path>, <n> items`, `reference pictures: <dir>, <n> items, <m> pictures`, `product info: fake` or the address of Open Food Facts, `recognition: fake` or the model, and `speech: fake` or the speech model. With real product details it also logs the start and the end of the warm-up of the product cache. See "Product details from Open Food Facts".
 
 With real recognition and real speech (`npm run dev` with both keys in `.env` and both fake switches empty), each frame is one paid Gemini call, and each new line is one paid ElevenLabs call. A phone sends one frame each 300 ms, and at most one label still each 6 seconds with the default still gap of the app.
 
@@ -263,7 +263,7 @@ The worker:
 - The worker stops when its session stops and when the app closes. It then aborts each call.
 - Each result gets the log line `recognition session=<id> seq=<n> status=<status> code=<digits|visible|no> ms=<n>`. `code` is what the model said about a barcode in the frame. Each request for a still gets the line `still.request session=<id>`. It gives the server share of the time from glance to voice.
 - The digits of the code of a result go to the lookup of a barcode. A frame with the kind `label` never reaches the worker.
-- A result that names a store item waits for `ProductResolver.resolve` before it reaches the rules. See "Recognition knows the store list".
+- A result that names a store item goes through `ProductResolver.resolve` before it reaches the rules. With the details in the cache, this takes no time. See "Recognition knows the store list".
 
 ### Stored frames
 
@@ -349,6 +349,7 @@ sequenceDiagram
 | `src/products/fakeProductInfo.ts` | `createFakeProductInfo`: the reader of `FAKE_PRODUCT_INFO` |
 | `src/products/scanned.ts` | `scannedProduct` builds the product of a store item. `ScannedProducts` keeps these products, and `withScanned` adds them to the index of the rules |
 | `src/products/resolver.ts` | `ProductResolver.resolve`: the catalog, then the store list, then the details |
+| `src/products/warmup.ts` | `startWarmUp`: the reads of the start, for each store item that the product cache does not hold |
 | `src/products/storeEntries.ts` | `readStoreEntries`: the store list as the server reads it one time at its start, with the details that the product cache holds |
 | `src/products/barcodes.ts` | `createBarcodeReports`: the check of a code, its lookup, and the rule input `barcode` |
 | `src/sessions/barcode.ts`, `src/sessions/code.ts` | The rules |
@@ -418,14 +419,24 @@ The cache:
 - A new process reads the files, so a restart makes no new call for a known code. To read a product again, delete its file and restart the server.
 - A cache file that the server cannot write gets the log line `product info: cache file not written`, and the lookup goes on.
 
+The warm-up of the start:
+
+- With `FAKE_PRODUCT_INFO` off, the start reads the details of each store item that the cache does not hold, and that the catalog does not hold. The reads run in the background, one read each 5 seconds, which is 12 reads each minute.
+- The server listens before the first read ends. The warm-up has no effect on the start time.
+- The log has `product info: warm-up started. <n> of <m> store items are not in the cache, one read each 5 s` and `product info: warm-up ended. read=<n> failed=<n> ms=<n>`, at `info` level.
+- Each read puts the product with its details into the index of the rules. So an `identified` store item whose details are in the cache opens its prompt with no wait.
+- An item whose read failed, and an item that a prompt names before its turn, get their read with the first prompt, as before. That prompt waits up to 2500 ms.
+- The warm-up reads each item one time. After the status 429 its reads of the next 60 seconds fail with no call.
+- A list of 60 new items needs 5 minutes. A restart reads only the items that the cache files do not hold.
+
 Limits of Open Food Facts:
 
-- It allows 15 product reads each minute for one address, and it can block an address that reads more. Each shopper shares the address of the server. The guards are the cache, the wait of 30 seconds after a failed read, and the pause of 60 seconds after the status 429. The server does not count its calls, so many new codes in one minute can pass the limit one time.
+- It allows 15 product reads each minute for one address, and it can block an address that reads more. Each shopper shares the address of the server. The guards are the cache, the wait of 30 seconds after a failed read, and the pause of 60 seconds after the status 429. The warm-up of the start makes 12 reads each minute at most. The server does not count its other calls, so new codes of shoppers in the minutes of the warm-up can pass the limit one time.
 - Its users write the data. The terms say that it is "for indicative information" and not for medical use. No line says that a product is safe.
 - An allergen list can be empty for a product with allergens. A person must check each product of the store list before a real shop.
 - It has no price, and the server makes no search by brand and name.
 - The documentation calls the v2 path deprecated and still supported.
-- The server code made no call to Open Food Facts yet. Each test uses a fetch function of its own, or the fixtures.
+- Each test uses a fetch function of its own, or the fixtures. The one run against the real database was the warm-up of a list of 3 items on 2026-11-14: 3 reads in 10.8 seconds, each with an answer.
 
 ### Rules
 
@@ -524,9 +535,9 @@ sequenceDiagram
 
 A store item has a name and a price, and no description of its package. With a clear frame, the model can still tell that a package is "Paper cups", also when its text is Finnish.
 
-- At its start the server reads the store list one time, through `readStoreEntries`. Each item gets the details that `ProductInfo.cached` holds: the fixtures with `FAKE_PRODUCT_INFO`, else the cache files of Open Food Facts. The start makes no call to Open Food Facts, because the database allows 15 reads each minute and a list can hold more items.
+- At its start the server reads the store list one time, through `readStoreEntries`. Each item gets the details that `ProductInfo.cached` holds: the fixtures with `FAKE_PRODUCT_INFO`, else the cache files of Open Food Facts. This read makes no call to Open Food Facts, so the start does not wait. The warm-up then reads each item that the cache does not hold, in the background.
 - Each item that the catalog does not hold by its `gtin` is a line of the recognition instruction and an ID of the answer schema. `ScannedProducts` holds its product from the start, so the rules and a fake script find it by its ID.
-- `identified` with the ID of a store item opens the normal prompt. Before the result reaches the rules, `ProductResolver.resolve` reads the product again, as for a scanned barcode. So the first prompt of an item makes the one call to Open Food Facts for its allergens, inside the 2500 ms of a lookup, and each later prompt reads the cache.
+- `identified` with the ID of a store item opens the normal prompt. Before the result reaches the rules, `ProductResolver.resolve` reads the product again, as for a scanned barcode. After the warm-up read an item, this read comes from the cache and the prompt opens with no wait. Before that, the first prompt of the item makes the call to Open Food Facts for its allergens, inside the 2500 ms of a lookup.
 - A result of a later frame can reach the rules before a result that waits for its read. An item that the store list no longer holds gets no prompt, with the log line `recognition result dropped: the store does not sell <id>`.
 - The store list is read at the start. An ERP that changes its list needs a restart of the server before recognition and the label call know a new item. A barcode of the phone finds a new item at once.
 
