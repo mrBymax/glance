@@ -2,6 +2,24 @@
 
 This directory contains the canonical context documents for the Meta Glance 3-minute pitch deck and synchronized Raylight video demo for HackJunction 2026.
 
+## The deck of the final
+
+`Meta-Glance-pitch.pdf` is the deck of the final: 18 slides of 1920 x 1080, in the design of the site. It replaces the 5-slide outline of `00-master-deck.md`, which holds figures that nobody verified.
+
+| File | Content |
+|---|---|
+| `Meta-Glance-pitch.pdf` | The deck |
+| `slides/` | One PNG of each slide, for the video editor |
+| `notes.md` | The speaker notes, and the places where the video cuts to footage |
+| `design.md` | The design decisions, the references, and the build steps |
+| `deck.src.html` | The source of the slides; `deck.html` is the built page |
+| `diagrams/` | The seven diagrams, each as a standalone page |
+| `assets/screens/` | Screens of the app, the kiosk page, and the HUD mockup from their replay modes, and frames of the animation |
+| `assets/media/` | Team photos, the logo, and the crops that the slides use |
+| `scripts/` | The capture and build scripts |
+
+To build again: `node docs/pitch/scripts/diagrams.mjs && node docs/pitch/scripts/build.mjs`. `design.md` has the full steps.
+
 ## Structure and Pacing
 
 The presentation runs for strictly 180 seconds (~420 spoken words at 140 words per minute). Each beat corresponds to one presentation slide and one synchronized video scene block.
