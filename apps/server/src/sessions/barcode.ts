@@ -1,5 +1,5 @@
 import { isConfirmed } from './checkout';
-import { LABEL_ANSWER_MS, UNREADABLE_EVERY_MS, codeOf, endStillWait, speakUnknown } from './code';
+import { LABEL_ANSWER_MS, codeOf, endStillWait, speakUnknown } from './code';
 import { onIdentified } from './glance';
 import { say } from './say';
 import { type Turn, promptProductInView, speak } from './turn';
@@ -38,14 +38,16 @@ export function onBarcode(turn: Turn, input: Extract<RuleInput, { type: 'barcode
   if (promptProductInView(s, now)) return;
   const before = code.miss;
   const newAppearance = !before || before.gtin !== outcome.gtin || !inView(before.at, now);
-  code.miss = { gtin: outcome.gtin, at: now };
-  if (newAppearance) speak(turn, say({ key: 'barcode.notInStore' }));
+  const said = !newAppearance && before.said !== false;
+  // A line that came too close to another line gets a new chance with the next report of the code, one second later.
+  code.miss = { gtin: outcome.gtin, at: now, said: said || speak(turn, say({ key: 'barcode.notInStore' })) !== 'gap' };
 }
 
 /**
  * A label frame: the still of a package that the phone could not read. The model reads it outside the rules.
  * While the call runs, the voice of recognition is quiet. A still with no product in it gets no line.
  * A read that failed gets one line: the unknown line when it waits for this still, else the unreadable line.
+ * The guard of guard.ts lets one such line through for each appearance, so a product that stays in view gets no line for each still.
  */
 export function onLabel(turn: Turn, input: Extract<RuleInput, { type: 'label' }>): void {
   const { s, now } = turn;
@@ -72,7 +74,5 @@ export function onLabel(turn: Turn, input: Extract<RuleInput, { type: 'label' }>
     if (!promptProductInView(s, now)) speakUnknown(turn);
     return;
   }
-  if (code.unreadableAt !== null && now - code.unreadableAt < UNREADABLE_EVERY_MS) return;
-  code.unreadableAt = now;
   speak(turn, say({ key: 'barcode.unreadable' }));
 }

@@ -69,16 +69,29 @@ export type CodeState = {
   stillRequestAt: number | null;
   /** The still requests since the last code that was read. */
   stillsOpen: number;
-  /** The last line for a label frame that gave no product. */
-  unreadableAt: number | null;
-  /** The last code that the store does not sell, with the time of its last report. */
-  miss: { gtin: string; at: number } | null;
+  /**
+   * The last code that the store does not sell, with the time of its last report.
+   * said: the voice gave the line for this appearance of the code. A stored value of an older server has no `said`.
+   */
+  miss: { gtin: string; at: number; said?: boolean } | null;
   /** The last stream frame with a product that sight cannot name: the status `unknown` or `unsure`. */
   heldAt: number | null;
   /** The voice of recognition is quiet until this time: the server waits for the still that it asked for, or for its label call. */
   waitUntil: number | null;
   /** The time of the unknown result whose line waits for a still, or null when no line waits. */
   unknownHeldAt: number | null;
+};
+
+/** What the guard of guard.ts knows about the voice of a session. Each time is a clock value, or null for "never". */
+export type VoiceState = {
+  /** The text and the time of each line of the last 20 seconds. */
+  recent: { text: string; at: number }[];
+  /** The last unsolicited line. */
+  unsolicitedAt: number | null;
+  /** The last input that showed a product or a code in view. */
+  sightAt: number | null;
+  /** The voice said for this appearance that a read failed. */
+  attemptSaid: boolean;
 };
 
 /** The rule numbers in the comments are those of spec section 6.2. Each time is a clock value in milliseconds. */
@@ -133,6 +146,10 @@ export type SessionState = {
   lastReceipt: Receipt | null;
   /** A session that an older server stored has no value here, or one with fewer fields. Read it through `codeOf` of code.ts. */
   code: CodeState;
+  /** The last report of slow recognition, or null. A session that an older server stored has no value here. */
+  slowAt: number | null;
+  /** A session that an older server stored has no value here. guard.ts fills it. */
+  voice: VoiceState;
 };
 
 export type RuleInputBody =
@@ -179,7 +196,12 @@ export type Effect =
   /** The runtime asks the model and answers with an `answer` input. */
   | { type: 'ask'; question: string; product: Product }
   /** The runtime asks the phone for one still of the product in the hand. The phone answers with `barcode.seen` or with a label frame. */
-  | { type: 'still.request' };
+  | { type: 'still.request' }
+  /** The guard of guard.ts dropped this line. The runtime writes it to the log, and the phone gets nothing. */
+  | { type: 'speak.dropped'; line: Line; reason: DropReason };
+
+/** Why the guard dropped a line: its text is that of a line of the last 20 seconds, it came less than 3 seconds after another unsolicited line, or its appearance already had a line about a failed read. */
+export type DropReason = 'same text' | 'gap' | 'appearance';
 
 /** secondLookWaitMs: how long the look-alike line waits for the result of a still. 0 means that it does not wait. */
 export type RuleContext = { catalog: CatalogIndex; secondLookWaitMs: number };

@@ -21,8 +21,6 @@ export const STILL_REQUEST_EVERY_MS = 6000;
 export const STILLS_BEFORE_WAIT = 2;
 /** The time between two requests after that count. A code that was read brings the 6 seconds back. */
 export const STILL_REQUEST_WAIT_MS = 30000;
-/** The voice says at most one time in this time that it cannot read a code. */
-export const UNREADABLE_EVERY_MS = 10000;
 /**
  * The voice of recognition waits this time for the label frame of a still request. The glasses need 2.3 to 2.9 seconds
  * for a still (measured on 2026-11-14), and the upload follows. A phone that takes no still sends nothing.
@@ -33,7 +31,7 @@ export const LABEL_ANSWER_MS = TIMING.recognitionTimeoutMs + BARCODE_LOOKUP_MS;
 
 export function newCodeState(): CodeState {
   return {
-    at: null, visibleAt: null, acceptedAt: null, stillRequestAt: null, stillsOpen: 0, unreadableAt: null, miss: null,
+    at: null, visibleAt: null, acceptedAt: null, stillRequestAt: null, stillsOpen: 0, miss: null,
     heldAt: null, waitUntil: null, unknownHeldAt: null,
   };
 }

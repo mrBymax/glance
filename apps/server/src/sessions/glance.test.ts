@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { EMPTY_CART, TIMING as T } from '@glance/shared';
 import { NO_RESULT, type RecognitionResult, RecognitionResultSchema } from '../recognition/result';
+import { SAME_TEXT_MS, UNSOLICITED_GAP_MS } from './guard';
 import { BARISTA, CRISPS, type Harness, KIOSK, OAT, RYE, harness } from './harness';
 import { LINE_DEFAULTS, say } from './say';
 import { step } from './step';
@@ -65,7 +66,11 @@ it('R13: the unknown line plays one time for each appearance', () => {
   expect(h.events()).toEqual(['glance.unknown']);
   h.advance(500); h.result({ status: 'unknown' });
   expect(h.effects).toEqual([]);
+  // A new appearance inside 20 seconds: the guard drops the line with the same text (see guard.test.ts).
   h.advance(T.viewMs); h.result({ status: 'unknown' });
+  h.advance(2000);
+  expect(h.effects).toEqual([{ type: 'event', event: { type: 'glance.unknown' } }, { type: 'speak.dropped', line: { key: 'glance.unknown' }, reason: 'same text' }]);
+  h.advance(SAME_TEXT_MS); h.result({ status: 'unknown' });
   h.advance(2000);
   expect(h.lines()).toEqual(['glance.unknown']);
   expect(h.all.filter((effect) => effect.type === 'speak')).toHaveLength(2);
@@ -155,25 +160,41 @@ it('gives one look-alike answer while the products stay in view, and a new one f
   ambiguous();
   for (let elapsed = 0; elapsed < 2 * T.viewMs; elapsed += 500) { h.advance(500); ambiguous(); }
   expect(h.all.filter((e) => e.type === 'speak')).toHaveLength(1);
+  // A new appearance gives its event. Inside 20 seconds the guard drops the line with the same text (see guard.test.ts).
   h.advance(T.viewMs); ambiguous();
+  expect(h.events()).toEqual(['glance.ambiguous']);
+  expect(h.lines()).toEqual([]);
+  h.advance(SAME_TEXT_MS); ambiguous();
   expect(h.lines()).toEqual(['glance.ambiguous']);
 });
 it('gives a new look-alike answer for other candidates', () => {
   const h = harness();
   h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
-  h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
+  h.advance(UNSOLICITED_GAP_MS); h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
   expect(h.lines()).toEqual(['glance.ambiguous']);
   expect(h.event('glance.ambiguous')!.candidates.map((c) => c.id)).toEqual([OAT, RYE]);
+});
+it('other candidates less than 3 seconds later give their event, and the guard drops their line', () => {
+  const h = harness();
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
+  expect(h.event('glance.ambiguous')!.candidates.map((c) => c.id)).toEqual([OAT, RYE]);
+  expect(h.lines()).toEqual([]);
 });
 it('gives the look-alike answer again when the model named one candidate in between', () => {
   const h = harness();
   h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   h.advance(500); h.see(OAT);
   expect(h.state.prompt).toMatchObject({ productId: OAT });
+  h.advance(SAME_TEXT_MS); h.see(OAT);
   h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   expect(h.events()).toEqual(['glance.cleared', 'glance.ambiguous']);
-  expect(h.lines()).toEqual(['glance.ambiguous']);
+  // 500 ms after the prompt line, the guard drops the look-alike line. The prompt still ends.
+  expect(h.lines()).toEqual([]);
   expect(h.state.prompt).toBeNull();
+  h.advance(500); h.see(OAT);
+  h.advance(UNSOLICITED_GAP_MS); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.lines()).toEqual(['glance.ambiguous']);
 });
 it('starts with no look-alike appearance', () => {
   expect(harness().state).toMatchObject({ ambiguousKey: null, ambiguousAt: null });

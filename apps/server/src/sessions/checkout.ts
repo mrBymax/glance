@@ -40,9 +40,10 @@ export function onKioskSeen(turn: Turn, input: Extract<RuleInput, { type: 'kiosk
   if (s.mutedKioskId === kiosk.id || s.prompt?.kind === 'product') return;
   if (input.busy || s.cart.items.length === 0) {
     if (!s.kioskSeen.said) {
+      // A line that came too close to another line gets a new chance with the next report of the code, one second later.
+      if (speak(turn, say({ key: input.busy ? 'checkout.busy' : 'checkout.empty' })) === 'gap') return;
       s.kioskSeen.said = true;
       if (input.busy) emit(turn, { type: 'error', code: 'kiosk.busy', message: 'This checkout is busy.' });
-      speak(turn, say({ key: input.busy ? 'checkout.busy' : 'checkout.empty' }));
     }
     return;
   }

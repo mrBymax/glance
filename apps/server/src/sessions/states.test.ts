@@ -73,6 +73,7 @@ it('slow recognition keeps the current prompt', () => {
   h.see(OAT);
   const prompt = h.state.prompt;
   expect(prompt).not.toBeNull();
+  h.advance(3000);
   h.send({ type: 'recognition.slow' });
   expect(h.state.prompt).toEqual(prompt);
   expect(h.speak()!.promptId).toBeNull();

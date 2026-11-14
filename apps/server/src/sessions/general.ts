@@ -15,6 +15,9 @@ export const CANNOT_STREAM_THERMAL = 6;
 /** R23. */
 const CART_LINES_BY_VOICE = 5;
 
+/** The voice and the clients get at most one report of slow recognition in this time. The worker reports again after each 3 failed calls. */
+export const SLOW_REPORT_EVERY_MS = 60_000;
+
 /** Percent. The voice reports the battery one time at each level. */
 const BATTERY_LOW = 20;
 const BATTERY_VERY_LOW = 10;
@@ -71,6 +74,10 @@ export function onDeviceState(turn: Turn, input: Extract<RuleInput, { type: 'dev
 }
 
 export function onRecognitionSlow(turn: Turn): void {
+  const { s, now } = turn;
+  // `!= null`: a session that an older server stored has no value here.
+  if (s.slowAt != null && now - s.slowAt < SLOW_REPORT_EVERY_MS) return;
+  s.slowAt = now;
   emit(turn, { type: 'error', code: 'recognition.slow', message: 'Recognition is slow right now.' });
   speak(turn, say({ key: 'recognition.slow' }));
 }

@@ -151,9 +151,17 @@ it('a second shopper hears that the checkout is busy', async () => {
   first.phone.send({ t: 'kiosk.seen', text: formatKioskCode(first.kiosk.code) });
   await first.phone.next(isEvent('checkout.offered'));
   const second = await shopperWithOatDrink();
-  second.phone.send({ t: 'kiosk.seen', text: formatKioskCode(first.kiosk.code) });
-  expect(await second.phone.next((m) => m.t === 'speak' && m.text.startsWith('This'))).toMatchObject({ text: 'This checkout is busy.' });
+  // The phone reports a code that stays in view again and again. The first reports come less than 3 seconds after
+  // the prompt line of the oat drink, so the guard drops their line, and a later report gets it.
+  const reports = setInterval(() => second.phone.send({ t: 'kiosk.seen', text: formatKioskCode(first.kiosk.code) }), 250);
+  try {
+    expect(await second.phone.next((m) => m.t === 'speak' && m.text.startsWith('This'))).toMatchObject({ text: 'This checkout is busy.' });
+  } finally {
+    clearInterval(reports);
+  }
   expect(second.session.state.phase).toBe('shopping');
+  expect(second.phone.messages.filter((m) => m.t === 'speak' && m.text.startsWith('This'))).toHaveLength(1);
+  expect(second.phone.messages.filter(isEvent('error'))).toHaveLength(1);
 });
 it('a text that is no code of a kiosk changes nothing', async () => {
   const { phone, session } = await checkoutReady();

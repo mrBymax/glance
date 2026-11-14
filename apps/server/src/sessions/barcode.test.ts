@@ -3,8 +3,9 @@ import { TIMING as T } from '@glance/shared';
 import { NO_RESULT } from '../recognition/result';
 import {
   CODE_ACCEPTED_MS, CODE_FRAMES_WITHIN_MS, CODE_QUIET_MS, LABEL_ANSWER_MS, STILLS_BEFORE_WAIT, STILL_ANSWER_MS, STILL_REQUEST_EVERY_MS,
-  STILL_REQUEST_WAIT_MS, UNREADABLE_EVERY_MS,
+  STILL_REQUEST_WAIT_MS,
 } from './code';
+import { SAME_TEXT_MS } from './guard';
 import { type Harness, KIOSK, OAT, RYE, harness, product } from './harness';
 import { step } from './step';
 import type { BarcodeOutcome, SessionState } from './types';
@@ -103,13 +104,31 @@ it('a code that the store does not sell gets its line one time for each appearan
   expect(h.state.prompt).toBeNull();
   holdCode(h, missing(), 5000);
   expect(h.all.filter((e) => e.type === 'speak')).toHaveLength(1);
+  // A new appearance inside 20 seconds: the guard drops the line with the same text (see guard.test.ts).
   h.advance(T.viewMs); h.barcode(missing());
+  expect(h.effects).toEqual([{ type: 'speak.dropped', line: { key: 'barcode.notInStore' }, reason: 'same text' }]);
+  h.advance(SAME_TEXT_MS); h.barcode(missing());
   expect(h.lines()).toEqual(['barcode.notInStore']);
 });
-it('another code that the store does not sell gets the line at once', () => {
+it('another code that the store does not sell is a new appearance, and its line has the same text, so the guard drops it for 20 seconds', () => {
   const h = scanned();
   h.barcode(missing()); h.advance(1000); h.barcode(missing('4006381333948'));
+  expect(h.effects).toEqual([{ type: 'speak.dropped', line: { key: 'barcode.notInStore' }, reason: 'same text' }]);
+  // One drop for the appearance, and no drop for each report of the phone.
+  h.advance(1000); h.barcode(missing('4006381333948'));
+  expect(h.effects).toEqual([]);
+});
+it('a line for a code that the store does not sell, dropped for the gap of 3 seconds, plays with a later report of the code', () => {
+  const h = scanned();
+  h.send({ type: 'recognition.slow' });
+  h.advance(1000); h.barcode(missing());
+  expect(h.effects).toEqual([{ type: 'speak.dropped', line: { key: 'barcode.notInStore' }, reason: 'gap' }]);
+  h.advance(1000); h.barcode(missing());
+  expect(h.lines()).toEqual([]);
+  h.advance(1000); h.barcode(missing());
   expect(h.lines()).toEqual(['barcode.notInStore']);
+  h.advance(1000); h.barcode(missing());
+  expect(h.effects).toEqual([]);
 });
 it('the line for a code that the store does not sell waits while the product of a prompt is in view', () => {
   const h = scanned();
@@ -163,22 +182,26 @@ it('one voice: a label frame is quiet from its arrival', () => {
   expect(h.effects).toEqual([]);
 });
 
-it('a label frame that gave no product gets the unreadable line, at most one time each 10 seconds', () => {
+it('a label frame that gave no product gets the unreadable line, one time for each appearance and at most one time each 20 seconds', () => {
   const h = scanned();
   h.label('started'); h.label('failed');
   expect(h.lines()).toEqual(['barcode.unreadable']);
   expect(h.speak()).toMatchObject({ priority: 'normal', interrupt: false, promptId: null });
-  h.advance(UNREADABLE_EVERY_MS - 1); h.label('failed');
-  expect(h.effects).toEqual([]);
-  h.advance(1); h.label('failed');
+  // The next still of the same appearance. The guard of guard.ts drops its line.
+  h.advance(T.viewMs - 1); h.label('failed');
+  expect(h.effects).toEqual([{ type: 'speak.dropped', line: { key: 'barcode.unreadable' }, reason: 'appearance' }]);
+  // A new appearance, and the text is still that of a line of the last 20 seconds.
+  h.advance(T.viewMs); h.label('failed');
+  expect(h.effects).toEqual([{ type: 'speak.dropped', line: { key: 'barcode.unreadable' }, reason: 'same text' }]);
+  h.advance(SAME_TEXT_MS); h.label('failed');
   expect(h.lines()).toEqual(['barcode.unreadable']);
 });
 
-it('a still that showed no product gets no line, also after the 10 seconds of the unreadable line', () => {
+it('a still that showed no product gets no line, and does not use the turn of the unreadable line', () => {
   const h = scanned();
   h.label('started'); h.label('empty');
   expect(h.effects).toEqual([]);
-  h.advance(UNREADABLE_EVERY_MS); h.label('started'); h.label('empty');
+  h.advance(10_000); h.label('started'); h.label('empty');
   expect(h.effects).toEqual([]);
   // The empty still does not use the turn of the unreadable line.
   h.label('failed');
@@ -272,7 +295,7 @@ it('a label frame that gave no product gets no line while the payment runs', () 
   expect(h.effects).toEqual([]);
 });
 it('the times of the design', () => {
-  expect([CODE_QUIET_MS, CODE_FRAMES_WITHIN_MS, STILL_REQUEST_EVERY_MS, UNREADABLE_EVERY_MS]).toEqual([3000, 2000, 6000, 10000]);
+  expect([CODE_QUIET_MS, CODE_FRAMES_WITHIN_MS, STILL_REQUEST_EVERY_MS]).toEqual([3000, 2000, 6000]);
 });
 it('after 2 stills with no code read, the next still waits 30 seconds, so a code that no reader can read does not stop Motion each 6 seconds', () => {
   expect([STILLS_BEFORE_WAIT, STILL_REQUEST_WAIT_MS]).toEqual([2, 30000]);

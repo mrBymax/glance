@@ -1,19 +1,31 @@
 import type { ServerEvent } from '@glance/shared';
-import type { Effect, RuleContext, SessionState, SpeakEffect } from './types';
+import { admitLine } from './guard';
+import type { DropReason, Effect, RuleContext, SessionState, SpeakEffect } from './types';
 import { inView } from './view';
 
 /**
  * The work of one input. `s` is a private copy of the session state, so a handler can change it in place.
  * `out` collects the effects in the order in which the runtime must run them.
+ * `solicited` is true while the handler of an action of the shopper runs. The guard of guard.ts reads it.
  */
-export type Turn = { s: SessionState; now: number; ctx: RuleContext; out: Effect[] };
+export type Turn = { s: SessionState; now: number; ctx: RuleContext; out: Effect[]; solicited: boolean };
 
 export function emit(turn: Turn, event: ServerEvent): void {
   turn.out.push({ type: 'event', event });
 }
 
-export function speak(turn: Turn, effect: SpeakEffect): void {
+/**
+ * Speaks a line, if the guard of guard.ts lets it play. Returns 'spoken', or the reason for the drop.
+ * A rule that speaks one time for each appearance can try again after 'gap': the next report of its target is a new chance.
+ */
+export function speak(turn: Turn, effect: SpeakEffect): 'spoken' | DropReason {
+  const reason = admitLine(turn, effect);
+  if (reason !== null) {
+    turn.out.push({ type: 'speak.dropped', line: effect.line, reason });
+    return reason;
+  }
   turn.out.push(effect);
+  return 'spoken';
 }
 
 /** Counts the prompt and returns its ID, for example "p-0001". */

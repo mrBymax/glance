@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { EMPTY_CART, TIMING as T } from '@glance/shared';
+import { SAME_TEXT_MS } from './guard';
 import { BARISTA, CRISPS, type Harness, KIOSK, OAT, RYE, STREAMING, harness, product } from './harness';
 import { toSnapshot } from './view';
 
@@ -28,8 +29,24 @@ it('R15: with an empty cart the voice says so one time for each appearance of th
   expect(h.state.phase).toBe('shopping');
   h.advance(1000); h.kiosk();
   expect(h.effects).toEqual([]);
+  // A new appearance inside 20 seconds: the guard drops the line with the same text (see guard.test.ts).
   h.advance(T.viewMs); h.kiosk();
+  expect(h.effects).toEqual([{ type: 'speak.dropped', line: { key: 'checkout.empty' }, reason: 'same text' }]);
+  h.advance(1000); h.kiosk();
+  expect(h.effects).toEqual([]);
+  h.advance(SAME_TEXT_MS); h.kiosk();
   expect(h.lines()).toEqual(['checkout.empty']);
+});
+it('a busy line that the guard drops for the gap of 3 seconds plays with a later report of the code, with one error event', () => {
+  const h = harness({ cart: [RYE] });
+  h.send({ type: 'recognition.slow' });
+  h.advance(1000); h.kiosk({ busy: true });
+  expect(h.effects).toEqual([{ type: 'speak.dropped', line: { key: 'checkout.busy' }, reason: 'gap' }]);
+  h.advance(2000); h.kiosk({ busy: true });
+  expect(h.lines()).toEqual(['checkout.busy']);
+  expect(h.events()).toEqual(['error']);
+  h.advance(1000); h.kiosk({ busy: true });
+  expect(h.effects).toEqual([]);
 });
 it('R15: a current product prompt holds the checkout back', () => {
   const h = harness({ cart: [RYE] });

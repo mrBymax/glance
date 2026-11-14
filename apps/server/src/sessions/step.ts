@@ -6,6 +6,7 @@ import { expireCheckout, onBiometricResult, onKioskSeen, onPaymentResult } from 
 import { expireUnknownLine, newCodeState } from './code';
 import { onDeviceState, onGeneralIntent, onProfileSet, onRecognitionSlow, onSocketOpen, restWhenIdle } from './general';
 import { expireSecondLook, onRecognition } from './glance';
+import { isSolicited, newVoiceState, noteSight } from './guard';
 import { type Turn, emit } from './turn';
 import type { Effect, RuleContext, RuleInput, SessionState, SpeakEffect } from './types';
 import { inView } from './view';
@@ -40,23 +41,33 @@ export function createSessionState(profile: Profile, now: number): SessionState 
     batteryWarned: null,
     lastReceipt: null,
     code: newCodeState(),
+    slowAt: null,
+    voice: newVoiceState(),
   };
 }
 
 /**
  * The rules R1 to R24 of spec section 6.2 as one pure function.
  * It reads no clock and does no I/O: each input carries `now`, and the runtime runs the effects.
- * The state that it gets stays as it is.
+ * The state that it gets stays as it is. Each line goes through the guard of guard.ts.
  */
 export function step(state: SessionState, input: RuleInput, ctx: RuleContext): { state: SessionState; effects: Effect[] } {
-  const turn: Turn = { s: structuredClone(state), now: input.now, ctx, out: [] };
+  // A line of a time rule is never an answer to the shopper, also in the step of an action.
+  const turn: Turn = { s: structuredClone(state), now: input.now, ctx, out: [], solicited: false };
+  noteSight(turn, input);
   expire(turn);
+  turn.solicited = isSolicited(input.type);
+  handle(turn, input);
 
+  const lastSpeak = lastSpeakOf(turn.out);
+  if (lastSpeak) turn.s.lastSpeak = lastSpeak;
+  return { state: turn.s, effects: turn.out };
+}
+
+function handle(turn: Turn, input: RuleInput): void {
   // A session that is paid or ended takes no input that can change its cart or start a prompt.
   const closed = turn.s.phase === 'paid' || turn.s.phase === 'ended';
-  if (closed && input.type !== 'device.state' && input.type !== 'profile.set') {
-    return { state: turn.s, effects: turn.out };
-  }
+  if (closed && input.type !== 'device.state' && input.type !== 'profile.set') return;
 
   switch (input.type) {
     case 'recognition':
@@ -107,10 +118,6 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
     case 'tick':
       break;
   }
-
-  const lastSpeak = lastSpeakOf(turn.out);
-  if (lastSpeak) turn.s.lastSpeak = lastSpeak;
-  return { state: turn.s, effects: turn.out };
 }
 
 function onIntent(turn: Turn, input: Extract<RuleInput, { type: 'intent' }>): void {
