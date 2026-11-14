@@ -10,13 +10,17 @@ import { CartList } from '../components/CartList';
 import { CheckoutSheet } from '../components/CheckoutSheet';
 import { PromptCard } from '../components/PromptCard';
 import { SettingsSheet } from '../components/SettingsSheet';
+import { StateBanner } from '../components/StateBanner';
+import { StatusRow } from '../components/StatusRow';
 
 export function SessionScreen() {
   const { state, strings } = useUi();
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   return (
     <VStack as="main" padding={4} gap={4}>
+      <StateBanner />
       <Heading level={1}>{strings.appTitle}</Heading>
+      <StatusRow />
       {state.prompt?.kind === 'product' ? <PromptCard prompt={state.prompt} /> : <Text>{strings.idleHint}</Text>}
       <CaptionList />
       <CartList />

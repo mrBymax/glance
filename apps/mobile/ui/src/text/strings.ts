@@ -80,6 +80,39 @@ export const EN = {
   deleteText: 'This deletes your session, your cart, and your order from the server.',
   deleteConfirm: 'Delete',
   deleteCancel: 'Keep',
+
+  // The title and the description of a banner together hold the spoken line of the design, section 6.6.
+  banner: {
+    paymentFailed: { title: 'Payment failed.', description: 'Nothing was charged. Look at the code to try again.' },
+    serverUnreachable: { title: 'Connection lost.', description: 'Your cart is safe. Glances are paused.' },
+    regularCheckout: { title: 'Camera off.', description: 'Please use a regular checkout. Your cart stays on this phone as a list.' },
+    glassesNotFound: { title: 'Glasses not found.', description: 'Unfold your glasses and keep them near the phone.' },
+    updateRequired: { title: 'Update required.', description: 'Update your glasses before you shop with Glance.' },
+    ended: { title: 'Camera off.', description: 'This shop has ended. Your cart shows below as a list.' },
+    resting: { title: 'Camera off.', description: 'No product was in view for 3 minutes. Your cart is safe.' },
+    paused: { title: 'Paused.', description: 'Tap the side of your glasses to resume.' },
+    offFace: { title: 'Glasses are off your face.', description: 'Glances are paused. Put the glasses on to continue.' },
+    cameraOff: 'Camera off.',
+    batteryLow: (percent: number) => `Glasses battery at ${percent} percent.`,
+    openUpdate: 'Open the update in Meta AI',
+    newShop: 'Start a new shop',
+    startCamera: 'Start camera',
+  },
+  status: {
+    glasses: (value: string) => `Glasses: ${value}`,
+    battery: (value: string) => `Battery: ${value}`,
+    camera: (value: string) => `Camera: ${value}`,
+    network: (value: string) => `Network: ${value}`,
+    connected: 'Connected',
+    notConnected: 'Not connected',
+    unknown: 'Unknown',
+    percent: (value: number) => `${value}%`,
+    cameraOn: 'On',
+    cameraPaused: 'Paused',
+    cameraOff: 'Off',
+    online: 'Online',
+    offline: 'Offline',
+  },
 };
 
 export type Strings = typeof EN;

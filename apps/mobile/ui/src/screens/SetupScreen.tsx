@@ -6,6 +6,7 @@ import { VStack } from '@astryxdesign/core/VStack';
 import type { NativeState, PageToNative } from '@glance/shared';
 import type { ReactNode } from 'react';
 import { useUi } from '../bridge/BridgeContext';
+import { StateBanner } from '../components/StateBanner';
 import { setupStepOf } from '../state/selectors';
 import type { Strings } from '../text/strings';
 
@@ -60,6 +61,7 @@ export function SetupScreen() {
   const labels = [strings.stepLink, strings.stepCamera, strings.stepReady];
   return (
     <VStack as="main" padding={4} gap={4}>
+      <StateBanner />
       <Heading level={1}>{strings.setupTitle}</Heading>
       <Stepper orientation="vertical" label={strings.setupSteps} activeStep={step}>
         {labels.map((label, index) => (
