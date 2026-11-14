@@ -54,8 +54,10 @@ export type Harness = {
   advance(ms: number): void;
   /** Moves the clock to start + ms, then sends one tick. */
   at(ms: number): void;
-  /** An identified result. */
+  /** One identified result of a stream frame. With no prompt for the product, it opens none. */
   see(productId: string): void;
+  /** 2 identified results in a row at one time: sight opens the prompt of the product with the second one. */
+  show(productId: string): void;
   /** See now, then advance 500 and see, until ms have passed. */
   hold(productId: string, ms: number): void;
   /** NO_RESULT with the given fields. */
@@ -128,6 +130,10 @@ export function harness(
     },
     see(productId) {
       h.result({ status: 'identified', productId, confidence: 1 });
+    },
+    show(productId) {
+      h.see(productId);
+      h.see(productId);
     },
     hold(productId, ms) {
       h.see(productId);

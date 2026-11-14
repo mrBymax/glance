@@ -9,7 +9,7 @@ const HEAD_BOUND_MS = T.headWindowMs + HEAD_MAX_EXTRA_MS + HEAD_LATE_MS;
 
 it('R3: a yes with the ID of a replaced prompt adds nothing', () => {
   const h = harness();
-  h.see(OAT); h.done(); const old = h.state.prompt!.id;
+  h.show(OAT); h.done(); const old = h.state.prompt!.id;
   h.see(RYE); h.see(RYE); h.done();
   h.yes('voice', old);
   expect(h.state.cart).toEqual(EMPTY_CART);
@@ -18,31 +18,31 @@ it('R3: a yes with the ID of a replaced prompt adds nothing', () => {
 });
 it('R3: a yes with no prompt ID adds nothing', () => {
   const h = harness();
-  h.see(OAT); h.done();
+  h.show(OAT); h.done();
   h.send({ type: 'intent', kind: 'yes', source: 'phone' });
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
 it('R4: a nod counts inside the head window', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.hold(OAT, T.headWindowMs - 500);
+  h.show(OAT); h.done(); h.hold(OAT, T.headWindowMs - 500);
   h.yes('head');
   expect(h.state.cart.totalCents).toBe(189);
 });
 it('R4: a nod that the phone sends late counts, up to 21 seconds after the head window', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.hold(OAT, HEAD_BOUND_MS - 500);
+  h.show(OAT); h.done(); h.hold(OAT, HEAD_BOUND_MS - 500);
   h.yes('head');
   expect(h.state.cart.totalCents).toBe(189);
 });
 it('R4: a nod does not count 21 seconds after the head window', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.hold(OAT, HEAD_BOUND_MS);
+  h.show(OAT); h.done(); h.hold(OAT, HEAD_BOUND_MS);
   h.yes('head');
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
 it('R4: a late nod does not count for a prompt that was replaced', () => {
   const h = harness();
-  h.see(OAT); h.done(); const old = h.state.prompt!.id;
+  h.show(OAT); h.done(); const old = h.state.prompt!.id;
   h.hold(OAT, T.headWindowMs);
   h.see(RYE); h.see(RYE); h.done();
   h.yes('head', old);
@@ -50,7 +50,7 @@ it('R4: a late nod does not count for a prompt that was replaced', () => {
 });
 it('R4: a late nod does not count for a prompt that ended', () => {
   const h = harness();
-  h.see(OAT); h.done(); const old = h.state.prompt!.id;
+  h.show(OAT); h.done(); const old = h.state.prompt!.id;
   h.advance(T.viewMs + T.promptTtlAfterLeftMs);
   expect(h.state.prompt).toBeNull();
   h.yes('head', old);
@@ -59,43 +59,43 @@ it('R4: a late nod does not count for a prompt that ended', () => {
 // The test of 2026-11-14: recognition named the product in one frame, 8 seconds before the nod.
 it('R4: a nod counts with the product out of view for 10 seconds', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.away(10_000);
+  h.show(OAT); h.done(); h.away(10_000);
   h.yes('head');
   expect(h.state.cart.totalCents).toBe(189);
   expect(h.lines()).toEqual(['cart.added']);
 });
 it('R4: a shake counts with the product out of view', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.away(T.viewMs);
+  h.show(OAT); h.done(); h.away(T.viewMs);
   h.no('head');
   expect(h.lines()).toEqual(['glance.skipped']);
 });
 it('R4: a nod counts with no frame for 12 seconds', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.advance(12_000);
+  h.show(OAT); h.done(); h.advance(12_000);
   h.yes('head');
   expect(h.state.cart.totalCents).toBe(189);
 });
 it('R4: a nod counts while the line of a product prompt plays', () => {
   const h = harness();
-  h.see(OAT); h.advance(1500);
+  h.show(OAT); h.advance(1500);
   h.yes('head', h.state.prompt!.id);
   expect(h.state.cart.totalCents).toBe(189);
   expect(h.state.prompt).toBeNull();
 });
 it('R4: a nod before prompt.done counts up to 29 seconds after the start of the prompt', () => {
   const late = harness();
-  late.see(OAT); const id = late.state.prompt!.id; late.hold(OAT, HEAD_BOUND_MS);
+  late.show(OAT); const id = late.state.prompt!.id; late.hold(OAT, HEAD_BOUND_MS);
   late.yes('head', id);
   expect(late.state.cart).toEqual(EMPTY_CART);
   const inTime = harness();
-  inTime.see(OAT); inTime.hold(OAT, HEAD_BOUND_MS - 500);
+  inTime.show(OAT); inTime.hold(OAT, HEAD_BOUND_MS - 500);
   inTime.yes('head', id);
   expect(inTime.state.cart.totalCents).toBe(189);
 });
 it('R4: a session that an older server stored, whose prompt has no start time, takes a nod before prompt.done', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   const { startedAt: _startedAt, ...stored } = h.state.prompt!;
   h.state = { ...h.state, prompt: stored as typeof h.state.prompt };
   h.yes('head', stored.id);
@@ -103,7 +103,7 @@ it('R4: a session that an older server stored, whose prompt has no start time, t
 });
 it('R10: a voice no takes back the unit that a nod added while the line played', () => {
   const h = harness();
-  h.see(OAT); h.advance(1500);
+  h.show(OAT); h.advance(1500);
   h.yes('head', h.state.prompt!.id);
   expect(h.state.lastDone).toMatchObject({ promptId: 'p-0001', kind: 'product' });
   h.no('voice', h.state.lastDone!.promptId);
@@ -112,35 +112,35 @@ it('R10: a voice no takes back the unit that a nod added while the line played',
 it('R5, R6: a time with no frame changes nothing for the other sources', () => {
   for (const source of ['voice', 'touch', 'key', 'camera', 'phone', 'hud'] as const) {
     const h = harness();
-    h.see(OAT); h.done(); h.advance(12000);
+    h.show(OAT); h.done(); h.advance(12000);
     h.yes(source);
     expect(h.state.cart.totalCents).toBe(189);
   }
 });
 it('R4: the profile can remove the time limit and can turn head gestures off', () => {
   const open = harness({ profile: { headWindowMs: null } });
-  open.see(OAT); open.done(); open.hold(OAT, 20000); open.yes('head');
+  open.show(OAT); open.done(); open.hold(OAT, 20000); open.yes('head');
   expect(open.state.cart.totalCents).toBe(189);
   const off = harness({ profile: { headGestures: false } });
-  off.see(OAT); off.done(); off.yes('head');
+  off.show(OAT); off.done(); off.yes('head');
   expect(off.state.cart).toEqual(EMPTY_CART);
 });
 it('R5: a voice yes counts after the head window while the prompt is current', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.advance(T.headWindowMs + 1000);
+  h.show(OAT); h.done(); h.advance(T.headWindowMs + 1000);
   h.yes('voice');
   expect(h.state.cart.totalCents).toBe(189);
 });
 it('R5: a voice yes does not count for a prompt that ended', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.advance(T.viewMs + T.promptTtlAfterLeftMs);
+  h.show(OAT); h.done(); h.advance(T.viewMs + T.promptTtlAfterLeftMs);
   h.yes('voice');
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
 it('R5: a yes from voice, touchpad, key, or camera needs a finished prompt', () => {
   for (const source of ['voice', 'touch', 'key', 'camera'] as const) {
     const h = harness();
-    h.see(OAT);
+    h.show(OAT);
     h.yes(source, h.state.prompt!.id);
     expect(h.state.cart).toEqual(EMPTY_CART);
     h.done(); h.advance(T.headWindowMs + 1000); h.yes(source);
@@ -149,14 +149,14 @@ it('R5: a yes from voice, touchpad, key, or camera needs a finished prompt', () 
 });
 it('R6: a phone yes names its card and needs no view and no finished prompt', () => {
   const h = harness();
-  h.see(OAT); const card = h.state.prompt!.id;
+  h.show(OAT); const card = h.state.prompt!.id;
   h.advance(T.viewMs + 5000);
   h.yes('phone', card);
   expect(h.state.cart.totalCents).toBe(189);
 });
 it('R6: a phone yes for a card that is gone adds nothing', () => {
   const h = harness();
-  h.see(OAT); const card = h.state.prompt!.id;
+  h.show(OAT); const card = h.state.prompt!.id;
   h.advance(T.viewMs + T.promptTtlAfterLeftMs);
   h.yes('phone', card);
   expect(h.state.cart).toEqual(EMPTY_CART);
@@ -164,7 +164,7 @@ it('R6: a phone yes for a card that is gone adds nothing', () => {
 });
 it('R7: an accepted yes adds one unit and names the product and the total', () => {
   const h = harness({ cart: [RYE] });
-  h.see(OAT); h.done(); h.yes('head');
+  h.show(OAT); h.done(); h.yes('head');
   expect(h.state.cart).toEqual({
     items: [
       { productId: RYE, name: 'Rye bread', packSize: '500 g', qty: 1, unitPriceCents: 260 },
@@ -179,32 +179,32 @@ it('R7: an accepted yes adds one unit and names the product and the total', () =
 });
 it('R7: the cart line has the name in the language of the profile', () => {
   const h = harness({ profile: { lang: 'it' } });
-  h.see(OAT); h.done(); h.yes('head');
+  h.show(OAT); h.done(); h.yes('head');
   expect(h.state.cart.items[0]).toMatchObject({ name: 'Bevanda di avena', unitPriceCents: 189 });
   expect(h.event('cart.updated')!.change).toMatchObject({ name: 'Bevanda di avena' });
 });
 it('R8: an accepted no skips the product and mutes it until it has left the view', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.no('head');
+  h.show(OAT); h.done(); h.no('head');
   expect(h.lines()).toEqual(['glance.skipped']);
   expect(h.events()).toEqual(['glance.cleared']);
   h.hold(OAT, 2000);
   expect(h.state.prompt).toBeNull();
-  h.advance(T.viewMs); h.see(OAT);
+  h.advance(T.viewMs); h.show(OAT);
   expect(h.state.prompt).toMatchObject({ productId: OAT, mode: 'new' });
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
 it('R9: recognition excludes a skipped product for 10 seconds, and another product can become pending', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.no('head');
+  h.show(OAT); h.done(); h.no('head');
   expect(excludeList(h.state, h.now + T.excludeAfterNoMs - 1)).toEqual([OAT]);
   expect(excludeList(h.state, h.now + T.excludeAfterNoMs)).toEqual([]);
-  h.see(BARISTA);
+  h.show(BARISTA);
   expect(h.state.prompt).toMatchObject({ productId: BARISTA, mode: 'new' });
 });
 it('R10: after an add the product is muted, a second yes does nothing, and a no removes the unit', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.yes('head');
+  h.show(OAT); h.done(); h.yes('head');
   h.hold(OAT, 2000);
   expect(h.state.prompt).toBeNull();
   h.yes('head');
@@ -218,25 +218,25 @@ it('R10: after an add the product is muted, a second yes does nothing, and a no 
 });
 it('R10: a no later than 8 seconds after the add removes nothing', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.yes('head'); h.advance(T.undoWindowMs);
+  h.show(OAT); h.done(); h.yes('head'); h.advance(T.undoWindowMs);
   h.no('head');
   expect(h.state.cart.totalCents).toBe(189);
   expect(h.effects).toEqual([]);
 });
 it('R11: a yes on the add-another prompt adds a unit, and a no removes one', () => {
   const more = harness({ cart: [OAT] });
-  more.see(OAT); more.done(); more.yes('head');
+  more.show(OAT); more.done(); more.yes('head');
   expect(more.state.cart.items[0]!.qty).toBe(2);
   expect(more.speak()!.line).toMatchObject({ key: 'cart.added', totalCents: 378 });
   const less = harness({ cart: [OAT] });
-  less.see(OAT); less.done(); less.no('head');
+  less.show(OAT); less.done(); less.no('head');
   expect(less.state.cart).toEqual(EMPTY_CART);
   expect(less.lines()).toEqual(['cart.removed']);
 });
 it('R12: an undo removes the last added unit and names it', () => {
   const h = harness();
-  h.see(RYE); h.done(); h.yes('head'); h.advance(T.viewMs);
-  h.see(OAT); h.done(); h.yes('head'); h.advance(T.undoWindowMs);
+  h.show(RYE); h.done(); h.yes('head'); h.advance(T.viewMs);
+  h.show(OAT); h.done(); h.yes('head'); h.advance(T.undoWindowMs);
   h.intent('undo', 'voice');
   expect(h.speak()!.line).toMatchObject({ key: 'cart.removed', product: { id: OAT }, totalCents: 260 });
   h.intent('undo', 'phone');
@@ -246,8 +246,8 @@ it('R12: an undo removes the last added unit and names it', () => {
 });
 it('R12: an undo after the unit left the cart by another way removes the unit before it', () => {
   const h = harness();
-  h.see(RYE); h.done(); h.yes('head'); h.advance(T.viewMs);
-  h.see(OAT); h.done(); h.yes('head');
+  h.show(RYE); h.done(); h.yes('head'); h.advance(T.viewMs);
+  h.show(OAT); h.done(); h.yes('head');
   h.send({ type: 'cart.edit', productId: OAT, qty: 0 });
   h.intent('undo', 'voice');
   expect(h.speak()!.line).toMatchObject({ key: 'cart.removed', product: { id: RYE }, totalCents: 0 });
@@ -255,7 +255,7 @@ it('R12: an undo after the unit left the cart by another way removes the unit be
 });
 it('a yes with no product prompt to answer says nothing', () => {
   const ended = harness();
-  ended.see(OAT); ended.done(); const old = ended.state.prompt!.id;
+  ended.show(OAT); ended.done(); const old = ended.state.prompt!.id;
   ended.see(RYE); ended.see(RYE); ended.done();
   ended.yes('head', old);
   expect(ended.effects).toEqual([]);
@@ -271,7 +271,7 @@ it('gives a verdict for each intent, with the reason for an answer that does not
   expect(h.verdict).toBeNull();
   h.intent('help', 'phone');
   expect(h.verdict).toEqual({ kind: 'help', source: 'phone', promptId: null, accepted: true, reason: null });
-  h.see(OAT); const id = h.state.prompt!.id;
+  h.show(OAT); const id = h.state.prompt!.id;
   h.send({ type: 'intent', kind: 'yes', source: 'phone' });
   expect(h.verdict).toMatchObject({ promptId: null, accepted: false, reason: 'no-prompt-id' });
   h.yes('voice', id);
@@ -282,12 +282,12 @@ it('gives a verdict for each intent, with the reason for an answer that does not
   h.yes('voice');
   expect(h.verdict).toEqual({ kind: 'yes', source: 'voice', promptId: id, accepted: true, reason: null });
   const off = harness({ profile: { headGestures: false } });
-  off.see(OAT); off.done(); off.yes('head');
+  off.show(OAT); off.done(); off.yes('head');
   expect(off.verdict).toMatchObject({ accepted: false, reason: 'head-off' });
 });
 it('R21: silence never adds', () => {
   const h = harness();
-  h.see(OAT); h.done();
+  h.show(OAT); h.done();
   for (let i = 0; i < 60; i += 1) h.advance(1000);
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
@@ -322,7 +322,7 @@ it('a cart edit with a bad quantity or the same quantity changes nothing', () =>
 });
 it('a prompt.done for the current prompt starts its head window', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   h.send({ type: 'prompt.done', promptId: 'p-9999' });
   expect(h.state.prompt!.doneAt).toBeNull();
   expect(h.state.lastDone).toBeNull();
@@ -332,7 +332,7 @@ it('a prompt.done for the current prompt starts its head window', () => {
 });
 it('accepts tells if an answer counts for the current prompt', () => {
   const h = harness();
-  h.see(OAT); h.done();
+  h.show(OAT); h.done();
   const id = h.state.prompt!.id;
   expect(accepts(h.state, { source: 'head', promptId: id }, h.now)).toBe(true);
   expect(accepts(h.state, { source: 'head', promptId: id }, h.now + HEAD_BOUND_MS - 1)).toBe(true);
@@ -343,21 +343,21 @@ it('accepts tells if an answer counts for the current prompt', () => {
 });
 it('warns one time when an add crosses the budget', () => {
   const h = harness({ profile: { budgetCents: 2000 }, products: [product('big-box', 1921)], cart: ['big-box'] });
-  h.see(OAT); h.done(); h.yes('head');
+  h.show(OAT); h.done(); h.yes('head');
   expect(h.events()).toEqual(['glance.cleared', 'cart.updated', 'budget.exceeded']);
   expect(h.event('budget.exceeded')).toEqual({ type: 'budget.exceeded', budgetCents: 2000, totalCents: 2110 });
   expect(h.speak()).toMatchObject({ line: { key: 'cart.added', totalCents: 2110, budgetCents: 2000 }, sound: 'warning' });
-  h.advance(T.viewMs); h.see(RYE); h.done(); h.yes('head');
+  h.advance(T.viewMs); h.show(RYE); h.done(); h.yes('head');
   expect(h.events()).toEqual(['glance.cleared', 'cart.updated']);
   expect(h.speak()).toMatchObject({ line: { budgetCents: null }, sound: 'added' });
 });
 it('gives no budget warning for a total that equals the budget, and none with no budget', () => {
   const exact = harness({ profile: { budgetCents: 2110 }, products: [product('big-box', 1921)], cart: ['big-box'] });
-  exact.see(OAT); exact.done(); exact.yes('head');
+  exact.show(OAT); exact.done(); exact.yes('head');
   expect(exact.events()).toEqual(['glance.cleared', 'cart.updated']);
   expect(exact.speak()).toMatchObject({ line: { budgetCents: null }, sound: 'added' });
   const free = harness({ products: [product('big-box', 1921)], cart: ['big-box'] });
-  free.see(OAT); free.done(); free.yes('head');
+  free.show(OAT); free.done(); free.yes('head');
   expect(free.events()).toEqual(['glance.cleared', 'cart.updated']);
 });
 it('warns when a higher quantity in a cart edit crosses the budget', () => {

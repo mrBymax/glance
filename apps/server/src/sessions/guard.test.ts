@@ -66,6 +66,7 @@ it('drops an unsolicited line less than 3 seconds after another one, and does no
   lookAlike();
   // The event still goes out. Only the voice is quiet.
   expect(h.events()).toEqual(['glance.ambiguous']);
+  lookAlike();
   expect(h.lines()).toEqual([]);
   expect(dropped(h)).toEqual([['glance.ambiguous', 'gap']]);
   // The products stay in view, and no later step speaks the dropped line.
@@ -89,7 +90,7 @@ it('a product prompt, a checkout line, and a state line play inside the gap and 
   h.barcode(NOT_SOLD);
   expect(h.lines()).toEqual(['barcode.notInStore']);
   h.advance(100);
-  h.see(OAT);
+  h.show(OAT);
   expect(h.lines()).toEqual(['glance.new']);
   h.advance(100);
   h.see(BARISTA); h.see(BARISTA);
@@ -118,7 +119,7 @@ it('the pay prompt plays right after another line', () => {
 });
 it('a line less than 3 seconds after a prompt line is dropped, and a dropped line has no speak effect and so no sound', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   h.advance(1000);
   h.send({ type: 'recognition.slow' });
   expect(h.events()).toEqual(['error']);
@@ -198,7 +199,7 @@ it('a product prompt starts a new appearance for the line about a failed read', 
   h.label('failed');
   expect(h.lines()).toEqual(['barcode.unreadable']);
   h.advance(1000);
-  h.see(OAT);
+  h.show(OAT);
   expect(h.lines()).toEqual(['glance.new']);
   h.done();
   h.no('phone');
@@ -234,12 +235,12 @@ it('never drops a line that answers an action of the shopper', () => {
 });
 it('the line that confirms a nod during the prompt line always plays, with an interrupt', () => {
   const h = harness();
-  h.see(OAT); h.advance(1300);
+  h.show(OAT); h.advance(1300);
   h.yes('head', 'p-0001');
   expect(h.speak()).toMatchObject({ line: { key: 'cart.added' }, interrupt: true });
   h.no('head', 'p-0001');
   // The same text less than 20 seconds later, and less than 3 seconds after the prompt line.
-  h.advance(TIMING.viewMs); h.see(OAT); h.advance(1300);
+  h.advance(TIMING.viewMs); h.show(OAT); h.advance(1300);
   h.yes('head', 'p-0002');
   expect(h.speak()).toMatchObject({ line: { key: 'cart.added', totalCents: 189 }, interrupt: true });
   expect(h.all.some((effect) => effect.type === 'speak.dropped')).toBe(false);

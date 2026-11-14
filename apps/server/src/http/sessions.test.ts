@@ -8,6 +8,11 @@ import { deviceSocketUrl } from './sessions';
 const seeOat: RuleInputBody = {
   type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'oat-drink-1l' }, still: false,
 };
+/** 2 results in a row: sight opens the prompt of the oat drink with the second one. */
+const showOat = (session: { dispatch(input: RuleInputBody): void }): void => {
+  session.dispatch(seeOat);
+  session.dispatch(seeOat);
+};
 
 let t: TestApp;
 let id: string;
@@ -68,14 +73,14 @@ it('patches the profile, drops an unknown key, and rejects a bad value', async (
 });
 it('takes a yes from a web client', async () => {
   const session = (await t.app.sessions.get(id))!;
-  session.dispatch(seeOat);
+  showOat(session);
   const res = await post(`/api/sessions/${id}/intents?token=${token}`, { kind: 'yes', source: 'phone', promptId: 'p-0001' });
   expect(res.status).toBe(204);
   expect(session.state.cart.totalCents).toBe(189);
 });
 it('edits the cart', async () => {
   const session = (await t.app.sessions.get(id))!;
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   expect((await post(`/api/sessions/${id}/cart?token=${token}`, { productId: 'oat-drink-1l', qty: 0 })).status).toBe(204);
   expect(session.state.cart).toEqual(EMPTY_CART);
@@ -85,7 +90,7 @@ it('streams the events of a session with the CORS header', async () => {
   expect(res.headers.get('content-type')).toBe('text/event-stream');
   expect(res.headers.get('cache-control')).toBe('no-cache');
   expect(res.headers.get('access-control-allow-origin')).toBe('*');
-  (await t.app.sessions.get(id))!.dispatch(seeOat);
+  showOat((await t.app.sessions.get(id))!);
   expect(parseServerEvent(await eventReader(res).next())?.type).toBe('glance.pending');
 });
 it('deletes a session with its data', async () => {

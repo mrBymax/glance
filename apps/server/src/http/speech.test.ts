@@ -13,6 +13,11 @@ import { type TestApp, type TestPhone, connectPhone, testApp } from '../testing'
 const seeOat: RuleInputBody = {
   type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'oat-drink-1l' }, still: false,
 };
+/** 2 results in a row: sight opens the prompt of the oat drink with the second one. */
+const showOat = (session: { dispatch(input: RuleInputBody): void }): void => {
+  session.dispatch(seeOat);
+  session.dispatch(seeOat);
+};
 const REAL_SPEECH = { FAKE_SPEECH: '0', ELEVENLABS_API_KEY: 'test-key', ELEVENLABS_VOICE_EN: 'voice-en' };
 const glanceText = 'Oat drink, one litre, one eighty-nine. Nod to add.';
 
@@ -64,7 +69,7 @@ it('reads no file for a name that is not a hash', async () => {
 });
 it('a line goes out with the address of its clip, and the address gives the clip', async () => {
   const { session, phone } = await shopper(t);
-  session.dispatch(seeOat);
+  showOat(session);
   const speak = await phone.next((m) => m.t === 'speak') as { url: string };
   expect(speak.url).toBe(`${t.base}/api/speech/${clipKey(glanceText, 'en', 'voice-en', ELEVENLABS_MODEL)}.mp3`);
   expect(synthesize).toHaveBeenCalledWith(glanceText, 'voice-en');
@@ -76,7 +81,7 @@ it('with FAKE_SPEECH each line has no clip, the speech path answers 404, and no 
   const fake = await speechApp({});
   await fake.app.clips.put('a'.repeat(64), new Uint8Array([1, 2, 3]));
   const { session, phone } = await shopper(fake);
-  session.dispatch(seeOat);
+  showOat(session);
   expect(await phone.next((m) => m.t === 'speak')).toMatchObject({ text: glanceText, url: null });
   expect((await fetch(`${fake.base}/api/speech/${'a'.repeat(64)}.mp3`)).status).toBe(404);
   expect(synthesize).not.toHaveBeenCalled();
@@ -93,7 +98,7 @@ it('removes the cache directory of a test app when the app closes', async () => 
 it('with ElevenLabs down, the line goes out with no clip, and the prompt still takes a yes', async () => {
   synthesize.mockImplementation(async () => { throw new Error('503'); });
   const { session, phone } = await shopper(t);
-  session.dispatch(seeOat);
+  showOat(session);
   expect(await phone.next((m) => m.t === 'speak')).toMatchObject({
     text: 'Oat drink, one litre, one eighty-nine. Nod to add.', url: null, promptId: 'p-0001',
   });

@@ -10,6 +10,11 @@ import type { FrameHandler } from './device';
 const seeOat: RuleInputBody = {
   type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'oat-drink-1l' }, still: false,
 };
+/** 2 results in a row: sight opens the prompt of the oat drink with the second one. */
+const showOat = (session: { dispatch(input: RuleInputBody): void }): void => {
+  session.dispatch(seeOat);
+  session.dispatch(seeOat);
+};
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
 const isSpeak = (m: ServerToDevice) => m.t === 'speak';
 
@@ -61,7 +66,7 @@ it('device.state with a running stream says Camera on', async () => {
   expect(await phone.next(isSpeak)).toMatchObject({ text: 'Camera on. Hold a product up to hear its price.', url: null });
 });
 it('a glance prompt reaches the phone as an event and as a line', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   await phone.next((m) => m.t === 'event' && m.event.type === 'glance.pending');
   expect(await phone.next(isSpeak)).toMatchObject({
     text: 'Oat drink, one litre, one eighty-nine. Nod to add.', promptId: 'p-0001', url: null,
@@ -69,7 +74,7 @@ it('a glance prompt reaches the phone as an event and as a line', async () => {
   await phone.next((m) => m.t === 'event' && m.event.type === 'caption');
 });
 it('prompt.done and a nod add the product', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   phone.send({ t: 'prompt.done', promptId: 'p-0001' });
   phone.send({ t: 'intent', kind: 'yes', source: 'head', promptId: 'p-0001' });
   expect(await phone.next((m) => m.t === 'speak' && m.text.startsWith('Added'))).toMatchObject({
@@ -77,7 +82,7 @@ it('prompt.done and a nod add the product', async () => {
   });
 });
 it('a cart edit from the phone changes the cart', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   phone.send({ t: 'cart.edit', productId: 'oat-drink-1l', qty: 3 });
   await serverReadAll();
@@ -88,7 +93,7 @@ it('profile.set changes the profile, and the phone gets a new snapshot', async (
   expect(await phone.next((m) => m.t === 'snapshot' && m.session.profile.detail === 'brief')).toBeDefined();
 });
 it('the word add adds the product, after the prompt finished', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   phone.send({ t: 'speech.final', text: 'Add.', confidence: 0.5, locale: 'en-US' });
   await serverReadAll();
   expect(session.state.cart.items).toEqual([]);
@@ -97,7 +102,7 @@ it('the word add adds the product, after the prompt finished', async () => {
   await vi.waitFor(() => expect(session.state.cart.totalCents).toBe(189));
 });
 it('drops speech with a low confidence and speech that is no command', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   phone.send({ t: 'prompt.done', promptId: 'p-0001' });
   phone.send({ t: 'speech.final', text: 'add', confidence: 0.49, locale: 'en-US' });
   phone.send({ t: 'speech.final', text: 'add milk to my list', confidence: 0.9, locale: 'en-US' });
@@ -105,7 +110,7 @@ it('drops speech with a low confidence and speech that is no command', async () 
   expect(session.state.cart.items).toEqual([]);
 });
 it('speech that is no command is a question, after the microphone button or a double tap', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   phone.send({ t: 'speech.final', text: 'Does it contain nuts?', confidence: 0.9, locale: 'en-US' });
   await serverReadAll();
   expect(ask).not.toHaveBeenCalled();
@@ -117,7 +122,7 @@ it('speech that is no command is a question, after the microphone button or a do
   expect(ask.mock.calls[0]).toMatchObject(['Does it contain nuts?', { id: 'oat-drink-1l' }, 'en']);
 });
 it('a command word in the question window stays a command, and the window stays open', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   phone.send({ t: 'intent', kind: 'ask', source: 'phone' });
   phone.send({ t: 'speech.final', text: 'help', confidence: 0.9, locale: 'en-US' });
   await phone.next((m) => m.t === 'speak' && m.text.startsWith('Hold a product up to hear'));
@@ -125,7 +130,7 @@ it('a command word in the question window stays a command, and the window stays 
   expect(session.state.askUntil).not.toBeNull();
 });
 it('the word remove takes back the last add when no prompt is current', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   phone.send({ t: 'prompt.done', promptId: 'p-0001' });
   phone.send({ t: 'speech.final', text: 'add', confidence: 0.9, locale: 'en-US' });
   await vi.waitFor(() => expect(session.state.cart.totalCents).toBe(189));
@@ -134,7 +139,7 @@ it('the word remove takes back the last add when no prompt is current', async ()
   await vi.waitFor(() => expect(session.state.cart.items).toEqual([]));
 });
 it('the word add never pays, and the word pay does', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   const kiosk = await t.app.kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
   phone.send({ t: 'kiosk.seen', text: formatKioskCode(kiosk.code) });
@@ -147,14 +152,14 @@ it('the word add never pays, and the word pay does', async () => {
   await vi.waitFor(() => expect(session.state.phase).toBe('paid'));
 });
 it('the word pay never adds a product', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   phone.send({ t: 'prompt.done', promptId: 'p-0001' });
   phone.send({ t: 'speech.final', text: 'pay', confidence: 0.9, locale: 'en-US' });
   await serverReadAll();
   expect(session.state.cart.items).toEqual([]);
 });
 it('a total above 50 EUR is paid after a yes with no biometric.request', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   phone.send({ t: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
   const kiosk = await t.app.kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
@@ -168,7 +173,7 @@ it('a total above 50 EUR is paid after a yes with no biometric.request', async (
 });
 it('with a limit of 50 EUR, a payment above it waits for the fingerprint result of the phone', async () => {
   await restartWithLimit();
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   phone.send({ t: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
   const kiosk = await t.app.kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
@@ -188,7 +193,7 @@ it('with a limit of 50 EUR, a payment above it waits for the fingerprint result 
 });
 it('with a limit of 50 EUR, a failed fingerprint check cancels the checkout, and the cart stays', async () => {
   await restartWithLimit();
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   session.dispatch({ type: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
   const kiosk = await t.app.kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
@@ -230,7 +235,7 @@ it('answers 404 to an upgrade for an unknown session or another path', async () 
   expect(await upgradeStatus(`${t.wsBase}/ws/other?session=${id}&token=${token}`)).toBe(404);
 });
 it('keeps the session when the phone leaves, and takes the phone back', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   phone.close();
   await phone.closed;
@@ -265,7 +270,7 @@ it('closes while a phone is connected', async () => {
 it('a second socket for the session takes over, and no message goes out two times', async () => {
   const second = await connectPhone(t, id, token);
   await phone.closed;
-  session.dispatch(seeOat);
+  showOat(session);
   const isPrompt = (m: ServerToDevice) => m.t === 'speak' && m.promptId === 'p-0001';
   await second.next(isPrompt);
   expect(phone.messages.filter(isPrompt)).toEqual([]);

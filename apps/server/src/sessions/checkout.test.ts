@@ -54,7 +54,7 @@ it('a busy line that the guard drops for the gap of 3 seconds plays with a later
 });
 it('R15: a current product prompt holds the checkout back', () => {
   const h = harness({ cart: [RYE] });
-  h.see(OAT); h.kiosk();
+  h.show(OAT); h.kiosk();
   expect(h.state.phase).toBe('shopping');
   h.done(); h.no('head'); h.kiosk();
   expect(h.state.phase).toBe('checkout');
@@ -114,14 +114,14 @@ it('R16: a late nod does not pay for a pay prompt that a cart change replaced', 
 });
 it('R16: a yes for a product prompt never pays', () => {
   const h = harness({ cart: [RYE] });
-  h.see(OAT); h.done(); const card = h.state.prompt!.id;
+  h.show(OAT); h.done(); const card = h.state.prompt!.id;
   h.no('phone', card); h.kiosk();
   h.yes('voice', card);
   expect(payments(h)).toEqual([]);
 });
 it('R17: a product held up during checkout suspends it, and the pay prompt returns with the new total', () => {
   const h = full(); const first = h.state.prompt!.id;
-  h.see(BARISTA);
+  h.show(BARISTA);
   expect(h.events()).toEqual(['checkout.suspended', 'glance.pending']);
   expect(h.state.checkout!.step).toBe('suspended');
   h.done(); h.yes('head');
@@ -135,13 +135,13 @@ it('R17: a product held up during checkout suspends it, and the pay prompt retur
 });
 it('R17: a second product during a suspended checkout gives no second suspended event', () => {
   const h = full();
-  h.see(BARISTA); h.see(OAT); h.see(OAT);
+  h.show(BARISTA); h.see(OAT); h.see(OAT);
   expect(h.events()).toEqual(['glance.cleared', 'glance.pending']);
   expect(h.state.checkout).toMatchObject({ step: 'suspended', suspendedBy: OAT });
 });
 it('R17: the pay prompt replaces a product prompt whose product has left the view', () => {
   const h = full();
-  h.see(BARISTA); const card = h.state.prompt!.id;
+  h.show(BARISTA); const card = h.state.prompt!.id;
   h.advance(T.viewMs); h.kiosk();
   expect(h.events()).toEqual(['glance.cleared', 'checkout.offered']);
   expect(h.event('glance.cleared')).toEqual({ type: 'glance.cleared', promptId: card });
@@ -248,7 +248,7 @@ it('a payment that runs does not end after 30 seconds, and a product in view get
   const h = full(); h.done(); h.yes('head');
   h.advance(T.kioskIdleMs);
   expect(h.state.checkout!.step).toBe('paying');
-  h.see(BARISTA);
+  h.show(BARISTA);
   expect(h.effects).toEqual([]);
   expect(h.state.prompt).toBeNull();
 });
@@ -266,7 +266,7 @@ it('a cart change during a pay prompt gives a new pay prompt, and the old one ca
 });
 it('an undo during a pay prompt gives a new pay prompt with the new total', () => {
   const h = harness({ cart: [RYE] });
-  h.see(OAT); h.done(); h.yes('head');
+  h.show(OAT); h.done(); h.yes('head');
   h.advance(T.viewMs); h.kiosk(); const old = h.state.prompt!.id;
   h.intent('undo', 'phone');
   expect(h.events()).toEqual(['cart.updated', 'checkout.offered']);
@@ -294,7 +294,7 @@ it('a second yes while the payment runs starts no second payment and says nothin
 });
 it('R15: a suspended checkout ends when the cart gets empty, so an empty cart never gets a pay prompt', () => {
   const h = harness({ cart: [OAT] }); h.kiosk();
-  h.see(OAT); h.done(); h.no('head');               // the add-another prompt suspends the checkout, and the no removes the unit
+  h.show(OAT); h.done(); h.no('head');               // the add-another prompt suspends the checkout, and the no removes the unit
   expect(h.events()).toEqual(['glance.cleared', 'cart.updated', 'checkout.cancelled', 'session.state']);
   expect(h.lines()).toEqual(['cart.removed']);
   expect(h.state).toMatchObject({ phase: 'shopping', checkout: null, prompt: null, cart: EMPTY_CART });
@@ -369,7 +369,7 @@ it('while the fingerprint check runs, no answer, no undo, no cart edit, and no p
   h.no('phone', pay); expect(h.effects).toEqual([]);
   h.intent('undo', 'phone'); expect(h.effects).toEqual([]);
   h.send({ type: 'cart.edit', productId: 'tv', qty: 0 }); expect(h.effects).toEqual([]);
-  h.see(OAT); expect(h.effects).toEqual([]);
+  h.show(OAT); expect(h.effects).toEqual([]);
   h.send({ type: 'device.state', state: { ...STREAMING, stream: 'streaming' } });
   h.send({ type: 'device.state', state: { ...STREAMING, stream: 'stopped' } });
   expect(h.state.checkout).toMatchObject({ step: 'biometric' });
@@ -419,7 +419,7 @@ it('asks to see one product before the pay prompt', () => {
   expect(h.speak()).toMatchObject({ priority: 'high', interrupt: true, promptId: null });
   expect(h.state.prompt).toBeNull();
   expect(h.state.checkout).toMatchObject({ step: 'spotcheck', spotProductId: RYE });
-  h.see(RYE);
+  h.show(RYE);
   expect(h.lines()).toEqual(['spotcheck.thanks']);
   expect(h.state.checkout).toMatchObject({ step: 'suspended', suspendedBy: null, spotProductId: null });
   expect(h.state.prompt).toBeNull();
@@ -429,7 +429,7 @@ it('asks to see one product before the pay prompt', () => {
 it('another product does not pass the spot check', () => {
   const h = harness({ cart: [RYE, OAT, CRISPS] });
   h.kiosk({ spotCheck: true });
-  h.see(OAT);
+  h.show(OAT);
   expect(h.state.checkout!.step).toBe('spotcheck');
   h.kiosk({ spotCheck: true });
   expect(h.state.prompt).toMatchObject({ kind: 'product', productId: OAT });
@@ -444,7 +444,7 @@ it('a kiosk with no spot check gives the pay prompt at once', () => {
 });
 it('the pay prompt after the spot check ends the prompt of another product', () => {
   const h = spot();
-  h.see(OAT);
+  h.show(OAT);
   const promptId = h.state.prompt!.id;
   h.advance(500); h.see(RYE); h.see(RYE);
   expect(h.lines()).toEqual(['spotcheck.thanks']);
@@ -454,16 +454,16 @@ it('the pay prompt after the spot check ends the prompt of another product', () 
 });
 it('makes no product prompt for the shown product while it stays in view', () => {
   const h = spot();
-  h.see(RYE);
-  h.advance(500); h.see(RYE);
+  h.show(RYE);
+  h.advance(500); h.show(RYE);
   expect(h.effects).toEqual([]);
 });
 it('a shown product that the shopper just added passes the spot check', () => {
   const h = harness({ cart: [OAT] });
-  h.see(RYE); h.done(); h.yes('head');
-  h.advance(500); h.kiosk({ spotCheck: true });
+  h.show(RYE); h.done(); h.yes('head');
+  h.advance(2000); h.kiosk({ spotCheck: true });
   expect(h.event('checkout.spotcheck')!.product.id).toBe(RYE);
-  h.advance(500); h.see(RYE);
+  h.advance(500); h.show(RYE);
   expect(h.lines()).toEqual(['spotcheck.thanks']);
 });
 it('R19 also ends a checkout in the spot check', () => {

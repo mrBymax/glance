@@ -155,7 +155,7 @@ sequenceDiagram
   Gemini-->>Worker: JSON answer
   Note over Worker: normalizeResult checks the answer
   Worker->>Runtime: dispatch(recognition, status identified)
-  Note over Runtime: step makes the prompt p-0001 (R1)
+  Note over Runtime: the second result in a row for the product: step makes the prompt p-0001 (R1)
   Runtime->>Socket: event glance.pending, through the EventBus
   Socket->>App: event glance.pending
   App->>Page: event glance.pending
@@ -241,7 +241,7 @@ sequenceDiagram
 - The product prompt ends on the server 18 seconds after the last result with its product. A stall does not stop that time, so a nod after it adds nothing.
 - Each number of this path comes from tests with synthetic samples and from one log. See "Parts that do not exist yet".
 
-A result with the status `ambiguous` gives no prompt. The server sends the event `glance.ambiguous` with the candidates and speaks "I cannot tell which oat drink this is. Turn the front to me." If the pending product is one of the candidates, `glance.cleared` comes first, so a yes cannot add it.
+A result with the status `ambiguous` gives no prompt. The server sends the event `glance.ambiguous` with the candidates. With the second such result in a row for the same candidates, it speaks "I cannot tell which oat drink this is. Turn the front to me." If the pending product is one of the candidates, `glance.cleared` comes first, so a yes cannot add it.
 
 The Android app takes a still photo after each `glance.ambiguous`. The message `still.request` of the contract asks only for the still of a barcode, so for look-alike products the event is the signal for the phone. With `SECOND_LOOK_WAIT_MS` above 0 on the server, the look-alike line waits for the result of that still. The default is 0: the line plays at once, and the result of a still counts as the result of a stream frame. The diagram shows a server with a wait.
 
@@ -255,7 +255,7 @@ sequenceDiagram
 
   Worker->>Runtime: dispatch(recognition, status ambiguous)
   Runtime->>Socket: event glance.ambiguous, through the EventBus
-  Note over Runtime: the look-alike line waits in heldAmbiguous
+  Note over Runtime: after the second such result in a row, the look-alike line waits in heldAmbiguous
   Socket->>App: event glance.ambiguous
   Note over App: takes a still
   App->>Socket: binary frame with kind still
@@ -640,7 +640,7 @@ stateDiagram-v2
 - While the step is `paying`, no answer, no undo, no cart edit, and no stop intent has an effect.
 - After a no on the pay prompt, and after a failed payment, the kiosk is muted until its code has left the view. So the shopper looks away and back to start again.
 - A failed payment keeps the cart. A kiosk that registered with `failPayment: true` declines each payment.
-- A kiosk that registered with `spotCheck: true` starts its checkout in the step `spotcheck`. The product to show is the cart line with the highest unit price. Until an `identified` result names that product, no pay prompt exists. Another product in view gets its usual prompt, and the step stays. If the product leaves the cart, the server asks for another one with a new `checkout.spotcheck`.
+- A kiosk that registered with `spotCheck: true` starts its checkout in the step `spotcheck`. The product to show is the cart line with the highest unit price. Until 2 `identified` results in a row name that product, no pay prompt exists. Another product in view gets its usual prompt, and the step stays. If the product leaves the cart, the server asks for another one with a new `checkout.spotcheck`.
 
 ## Parts that do not exist yet
 

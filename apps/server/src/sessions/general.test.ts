@@ -22,12 +22,12 @@ it('a stop intent ends the session with Camera off', () => {
   expect(h.event('session.state')).toEqual({ type: 'session.state', phase: 'ended', cameraOn: false });
   expect(h.lines()).toEqual(['device.cameraOff']);
   expect(h.effects.at(-1)).toEqual({ type: 'session.end' });
-  h.see(OAT);
+  h.show(OAT);
   expect(h.effects).toEqual([]);
 });
 it('a stop intent ends a current prompt and an open checkout', () => {
   const glance = harness();
-  glance.see(OAT);
+  glance.show(OAT);
   glance.intent('stop', 'voice');
   expect(glance.events()).toEqual(['glance.cleared', 'session.state']);
   expect(glance.state.prompt).toBeNull();
@@ -48,7 +48,7 @@ it('a stop intent has no effect while the payment runs', () => {
 it('R22: after 3 minutes with no product and no kiosk in view the camera rests, and the cart stays', () => {
   const h = harness({ cart: [RYE] });
   h.send({ type: 'device.state', state: STREAMING });
-  h.see(OAT);
+  h.show(OAT);
   h.advance(T.restAfterIdleMs - 1);
   expect(h.state.phase).toBe('shopping');
   h.advance(1);
@@ -129,7 +129,7 @@ it('tells from the battery and the thermal level that the glasses cannot stream'
 });
 it('repeats the last line and opens the head window again for a current prompt', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.hold(OAT, T.headWindowMs);
+  h.show(OAT); h.done(); h.hold(OAT, T.headWindowMs);
   h.intent('repeat', 'voice');
   expect(h.speak()).toMatchObject({ line: { key: 'glance.new' }, promptId: 'p-0001' });
   h.done(); h.yes('head');
@@ -139,7 +139,7 @@ it('repeats the line of a prompt that ended with no prompt ID, and says nothing 
   const h = harness();
   h.intent('repeat', 'voice');
   expect(h.effects).toEqual([]);
-  h.see(OAT); h.advance(T.viewMs + T.promptTtlAfterLeftMs);
+  h.show(OAT); h.advance(T.viewMs + T.promptTtlAfterLeftMs);
   h.intent('repeat', 'voice');
   expect(h.speak()).toMatchObject({ line: { key: 'glance.new' }, promptId: null });
 });
@@ -167,7 +167,7 @@ it('after the payment, the session takes only the device state and a profile pat
   h.send({ type: 'device.state', state: STREAMING });
   h.kiosk(); h.done(); h.yes('head');
   h.send({ type: 'payment.result', ok: true, orderId: 'ord-1', paidAt: '2026-11-14T12:00:00.000Z' });
-  h.see(OAT); expect(h.effects).toEqual([]);
+  h.show(OAT); expect(h.effects).toEqual([]);
   h.kiosk(); expect(h.effects).toEqual([]);
   h.intent('total', 'voice'); expect(h.effects).toEqual([]);
   h.intent('stop', 'phone'); expect(h.effects).toEqual([]);
@@ -179,7 +179,7 @@ it('after the payment, the session takes only the device state and a profile pat
 });
 it('makes a snapshot that passes the shared schema', () => {
   const h = harness({ cart: [RYE] });
-  h.see(OAT);
+  h.show(OAT);
   const snapshot = toSnapshot('s1', h.state, [], h.ctx);
   expect(SessionSnapshotSchema.parse(snapshot)).toEqual(snapshot);
   expect(snapshot.prompt).toEqual({
@@ -228,7 +228,7 @@ it('a profile patch with the same language, or with no language, gives no cart e
 });
 it('after a language change the next product gets its Italian name in the cart and in the prompt', () => {
   const h = harness({ profile: { lang: 'it' } });
-  h.see(OAT);
+  h.show(OAT);
   expect(h.event('glance.pending')!.product.name).toBe('Bevanda di avena');
   h.done(); h.yes('head');
   expect(h.state.cart.items[0]!.name).toBe('Bevanda di avena');

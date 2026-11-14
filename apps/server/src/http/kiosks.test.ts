@@ -19,6 +19,11 @@ import { type TestApp, type TestPhone, connectPhone, eventReader, testApp } from
 const seeOat: RuleInputBody = {
   type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'oat-drink-1l' }, still: false,
 };
+/** 2 results in a row: sight opens the prompt of the oat drink with the second one. */
+const showOat = (session: { dispatch(input: RuleInputBody): void }): void => {
+  session.dispatch(seeOat);
+  session.dispatch(seeOat);
+};
 const products = readCatalogFile(fileURLToPath(new URL('../../catalog/catalog.dev.json', import.meta.url)));
 const isEvent = (type: string) => (m: ServerToDevice) => m.t === 'event' && m.event.type === type;
 
@@ -40,7 +45,7 @@ async function shopperWithOatDrink(): Promise<Shopper> {
   const phone = await connectPhone(t, created.sessionId, created.token);
   phones.push(phone);
   await phone.next((m) => m.t === 'snapshot');
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   expect(session.state.cart.totalCents).toBe(189);
   return { session, phone };
@@ -214,7 +219,7 @@ it('shows idle again after the result time', async () => {
   bus.subscribe(kioskTopic(kioskId), (view) => views.push(view as KioskEvent));
 
   const session = await registry.create();
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   kiosks.sight(session, formatKioskCode(code));
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
@@ -281,7 +286,7 @@ it('a kiosk with spotCheck asks for one product, and gives the pay prompt after 
   expect(await phone.next((m) => m.t === 'speak' && m.text === 'Quick check. Show me the oat drink.')).toMatchObject({ promptId: null });
   expect(await kioskEvents.next()).toMatchObject({ state: 'spotcheck', totalCents: 189, cart: { totalCents: 189 } });
   expect(session.state.prompt).toBeNull();
-  session.dispatch(seeOat);
+  showOat(session);
   await phone.next((m) => m.t === 'speak' && m.text === 'Thank you.');
   expect(await kioskEvents.next()).toMatchObject({ state: 'connected', totalCents: 189 });
   const promptId = await seeCode(phone, kiosk.code);

@@ -65,7 +65,10 @@ async function askAbout(target: Awaited<ReturnType<typeof buildApp>>, lang: 'en'
     const event = message as ServerEvent;
     if (event.type === 'caption') captions.push(event.text);
   });
-  session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'oat-drink-1l' }, still: false });
+  // 2 results in a row open the prompt of the product.
+  for (let frame = 0; frame < 2; frame += 1) {
+    session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'oat-drink-1l' }, still: false });
+  }
   session.dispatch({ type: 'intent', kind: 'ask', source: 'phone' });
   session.dispatch({ type: 'question', text: 'Does it contain nuts?' });
   await vi.waitFor(() => expect(captions).toHaveLength(3));
@@ -107,7 +110,9 @@ it('starts with the demo catalog and the demo store list, and with an empty cata
       const productId = scannedProductId(entry!.item.gtin);
       const created = (await real.inject({ method: 'POST', url: '/api/sessions' })).json<{ sessionId: string }>();
       const session = (await real.sessions.get(created.sessionId))!;
-      session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId, confidence: 0.9 }, still: false });
+      for (let frame = 0; frame < 2; frame += 1) {
+        session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId, confidence: 0.9 }, still: false });
+      }
       expect(session.state.prompt).toMatchObject({ kind: 'product', productId });
     } finally {
       await real.close();

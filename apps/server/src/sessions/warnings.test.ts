@@ -38,26 +38,26 @@ it('gives no warning to a profile with no allergen and no diet', () => {
 });
 it('puts the warning in the event, the line, and the sound', () => {
   const h = harness({ profile: { allergens: ['gluten'] } });
-  h.see(OAT);
+  h.show(OAT);
   const warnings = [{ kind: 'allergen', allergens: ['gluten'] }];
   expect(h.event('glance.pending')!.warnings).toEqual(warnings);
   expect(h.speak()).toMatchObject({ line: { warnings }, sound: 'warning' });
 });
 it('puts the warning in the prompt for a product in the cart', () => {
   const h = harness({ profile: { allergens: ['gluten'] }, cart: [OAT] });
-  h.see(OAT);
+  h.show(OAT);
   const warnings = [{ kind: 'allergen', allergens: ['gluten'] }];
   expect(h.event('glance.pending')).toMatchObject({ kind: 'inCart', warnings });
   expect(h.speak()).toMatchObject({ line: { key: 'glance.inCart', warnings }, sound: 'warning' });
 });
 it('gives a glance with no warning no sound', () => {
   const h = harness({ profile: { allergens: ['milk'] } });
-  h.see(OAT);
+  h.show(OAT);
   expect(h.event('glance.pending')!.warnings).toEqual([]);
   expect(h.speak()).toMatchObject({ line: { warnings: [] }, sound: null });
 });
 it('puts the warnings of the current prompt in the snapshot', () => {
   const h = harness({ profile: { allergens: ['gluten'] } });
-  h.see(CRISPS);
+  h.show(CRISPS);
   expect(toSnapshot('s-1', h.state, [], h.ctx).prompt).toMatchObject({ kind: 'product', warnings: [{ kind: 'allergenDataMissing' }] });
 });

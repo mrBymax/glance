@@ -9,24 +9,24 @@ const spoken = (h: Harness) => h.all.filter((e): e is SpeakEffect => e.type === 
 
 it('gaps shorter than the view time keep one prompt', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   h.at(500); h.result({ status: 'none' });
-  h.at(1000); h.see(OAT);
+  h.at(1000); h.show(OAT);
   h.at(2000); h.result({ status: 'none' });
-  h.at(3900); h.see(OAT);
+  h.at(3900); h.show(OAT);
   expect(pendings(h)).toHaveLength(1);
 });
 it('a gap of the view time gives a new prompt, and the old prompt ID adds nothing', () => {
   const h = harness();
-  h.see(OAT); h.done(); const first = h.state.prompt!.id;
-  h.at(T.viewMs); h.see(OAT);
+  h.show(OAT); h.done(); const first = h.state.prompt!.id;
+  h.at(T.viewMs); h.show(OAT);
   expect(pendings(h)).toHaveLength(2);
   h.yes('head', first);
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
 it('a one-frame change keeps the prompt, a change of 2 frames replaces it, and each yes adds only the product of its own prompt', () => {
   const h = harness();
-  h.see(OAT); h.done(); const p1 = h.state.prompt!.id;
+  h.show(OAT); h.done(); const p1 = h.state.prompt!.id;
   h.at(350); h.see(BARISTA);
   expect(h.state.prompt!.id).toBe(p1);
   h.at(500); h.see(BARISTA); const p2 = h.state.prompt!.id;
@@ -43,9 +43,9 @@ it('a one-frame change keeps the prompt, a change of 2 frames replaces it, and e
 });
 it('a late prompt.done for a replaced prompt finishes no prompt', () => {
   const h = harness();
-  h.see(OAT); const p1 = h.state.prompt!.id;
-  h.at(350); h.see(RYE);
-  h.at(500); h.see(RYE);
+  h.show(OAT); const p1 = h.state.prompt!.id;
+  h.at(350); h.show(RYE);
+  h.at(500); h.show(RYE);
   h.send({ type: 'prompt.done', promptId: p1 });
   expect(h.state.prompt!.doneAt).toBeNull();
   h.yes('head', p1); h.yes('voice', h.state.prompt!.id);
@@ -53,26 +53,26 @@ it('a late prompt.done for a replaced prompt finishes no prompt', () => {
 });
 it('an added product that flickers for 10 seconds gets no second prompt and no second unit', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.yes('head');
+  h.show(OAT); h.done(); h.yes('head');
   for (let t = 500; t <= 10000; t += 500) {
     h.at(t);
-    if (t % 1500 === 0) h.result({ status: 'none' }); else h.see(OAT);
+    if (t % 1500 === 0) h.result({ status: 'none' }); else h.show(OAT);
   }
   expect(pendings(h)).toHaveLength(1);
   expect(h.state.cart.items[0]!.qty).toBe(1);
 });
 it('unsure and unknown results between results of the pending product say nothing', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   h.at(500); h.result({ status: 'unsure', aimHint: 'left' });
   h.at(1000); h.result({ status: 'unknown' });
-  h.at(1500); h.see(OAT);
+  h.at(1500); h.show(OAT);
   expect(spoken(h)).toEqual(['glance.new']);
 });
 it('a muted product in view does not suspend the checkout', () => {
   const h = harness({ cart: [RYE] });
-  h.see(OAT); h.done(); h.yes('head');
+  h.show(OAT); h.done(); h.yes('head');
   h.kiosk();
-  h.at(500); h.see(OAT);
+  h.at(500); h.show(OAT);
   expect(h.state.checkout!.step).toBe('offered');
 });

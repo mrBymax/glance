@@ -60,7 +60,7 @@ it('R8, R9: after a no, the code gets no prompt while it stays in view and for 1
 });
 it('R2: a scanned product replaces the pending product at once, and a product in sight replaces a scanned one after 2 results in a row', () => {
   const h = scanned();
-  h.see(OAT); h.barcode(found(NUTELLA));
+  h.show(OAT); h.barcode(found(NUTELLA));
   expect(h.events()).toEqual(['glance.cleared', 'glance.pending']);
   h.see(RYE);
   expect(h.state.prompt).toMatchObject({ productId: NUTELLA });
@@ -393,7 +393,7 @@ const twoFrames: [string, (h: Harness) => void][] = [['a code in view', code], [
 
 it.each(twoFrames)('a still is the exception: none for %s while a product prompt is open', (_name, frame) => {
   const h = scanned();
-  h.see(OAT);
+  h.show(OAT);
   // The oat drink left the view, and its prompt still waits for the answer.
   h.advance(PRODUCT_KNOWN_MS + 500); frame(h); h.advance(500); frame(h);
   expect(h.state.prompt).toMatchObject({ productId: OAT });
@@ -413,7 +413,7 @@ it.each(twoFrames)('a still is the exception: none for %s while sight named a pr
 });
 it.each(twoFrames)('a still is the exception: none for %s in the 8 seconds after a yes', (_name, frame) => {
   const h = scanned();
-  h.see(OAT); h.done(); h.yes('phone');
+  h.show(OAT); h.done(); h.yes('phone');
   expect(h.state.prompt).toBeNull();
   h.advance(STILL_AFTER_ANSWER_MS - 600); frame(h); h.advance(500); frame(h);
   expect(stillRequests(h)).toBe(0);
@@ -422,7 +422,7 @@ it.each(twoFrames)('a still is the exception: none for %s in the 8 seconds after
 });
 it('a still is the exception: none in the 8 seconds after a no', () => {
   const h = scanned();
-  h.see(OAT); h.done(); h.no('phone');
+  h.show(OAT); h.done(); h.no('phone');
   h.advance(STILL_AFTER_ANSWER_MS - 600); code(h); h.advance(500); code(h);
   expect(stillRequests(h)).toBe(0);
   h.advance(100); code(h);
@@ -430,7 +430,7 @@ it('a still is the exception: none in the 8 seconds after a no', () => {
 });
 it('the unknown line plays at once while a product prompt is open, because no still can follow', () => {
   const h = scanned();
-  h.see(OAT);
+  h.show(OAT);
   h.advance(PRODUCT_KNOWN_MS + 500); unknown(h);
   expect(h.lines()).toEqual(['glance.unknown']);
 });
@@ -506,13 +506,14 @@ it('the unknown line that waits is dropped when a barcode report or a product by
   expect(spokenKeys(h)).toEqual(['barcode.notInStore']);
 
   const seen = scanned();
-  unknown(seen); seen.advance(500); seen.see(OAT);
+  unknown(seen); seen.advance(500); seen.show(OAT);
   seen.advance(CODE_FRAMES_WITHIN_MS);
   expect(spokenKeys(seen)).toEqual(['glance.new']);
 });
 it('the unknown line that waits is dropped when sight names look-alike products', () => {
   const h = scanned();
-  unknown(h); h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, 'oat-drink-barista-1l'] });
+  const lookAlike = () => h.result({ status: 'ambiguous', candidates: [OAT, 'oat-drink-barista-1l'] });
+  unknown(h); h.advance(500); lookAlike(); lookAlike();
   expect(h.lines()).toEqual(['glance.ambiguous']);
   h.advance(CODE_FRAMES_WITHIN_MS);
   expect(spokenKeys(h)).toEqual(['glance.ambiguous']);

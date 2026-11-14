@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
 import { EMPTY_CART, TIMING as T } from '@glance/shared';
 import { NO_RESULT, type RecognitionResult, RecognitionResultSchema } from '../recognition/result';
-import { GO_BACK_AFTER_MS, SWITCH_WITHIN_MS } from './glance';
+import { STILL_ANSWER_MS } from './code';
+import { ALIKE_WITHIN_MS, GO_BACK_AFTER_MS, OPEN_WITHIN_MS, SWITCH_WITHIN_MS } from './glance';
 import { SAME_TEXT_MS, UNSOLICITED_GAP_MS } from './guard';
 import { BARISTA, CRISPS, type Harness, KIOSK, OAT, RYE, harness } from './harness';
 import { LINE_DEFAULTS, say } from './say';
@@ -11,7 +12,7 @@ import { excludeList, inView } from './view';
 
 it('R1: a recognized product becomes the pending product and gets a glance prompt', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   expect(h.state.prompt).toEqual({ id: 'p-0001', kind: 'product', mode: 'new', productId: OAT, startedAt: h.now, doneAt: null });
   expect(h.events()).toEqual(['glance.pending']);
   expect(h.event('glance.pending')).toEqual({
@@ -30,13 +31,79 @@ it('R1: results inside the view time give one prompt', () => {
 });
 it('R1: a product that comes back after it left the view gets a new prompt', () => {
   const h = harness();
-  h.see(OAT); h.advance(T.viewMs); h.see(OAT);
+  h.show(OAT); h.advance(T.viewMs); h.see(OAT);
   expect(h.events()).toEqual(['glance.cleared', 'glance.pending']);
   expect(h.state.prompt!.id).toBe('p-0002');
 });
+it('R1: one result by sight opens no prompt, and the second result in a row for the product opens it', () => {
+  const h = harness();
+  h.see(OAT);
+  expect(h.effects).toEqual([]);
+  expect(h.state.prompt).toBeNull();
+  expect(h.state.seen[OAT]).toBeUndefined();
+  h.advance(150); h.see(OAT);
+  expect(h.lines()).toEqual(['glance.new']);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+});
+it('R1: a result between the 2 results starts the count again, but not a look-alike result with the product', () => {
+  const others = [
+    { status: 'none' }, { status: 'unsure' }, { status: 'unknown' }, { status: 'identified', productId: RYE },
+    { status: 'ambiguous', candidates: [RYE, CRISPS] },
+  ] satisfies Partial<RecognitionResult>[];
+  for (const between of others) {
+    const h = harness();
+    h.see(OAT);
+    h.advance(150); h.result(between);
+    h.advance(150); h.see(OAT);
+    expect(h.state.prompt).toBeNull();
+    h.advance(150); h.see(OAT);
+    expect(h.state.prompt).toMatchObject({ productId: OAT });
+  }
+  const h = harness();
+  h.see(OAT);
+  h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  h.advance(150); h.see(OAT);
+  expect(h.state.prompt).toMatchObject({ productId: OAT });
+});
+it('R1: the 2 results must come inside 1.5 seconds', () => {
+  const h = harness();
+  h.see(OAT);
+  h.at(OPEN_WITHIN_MS + 1); h.see(OAT);
+  expect(h.state.prompt).toBeNull();
+  h.advance(OPEN_WITHIN_MS); h.see(OAT);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+});
+it('R1: single results for one product among results with no name open no prompt', () => {
+  const h = harness();
+  // The test of 2026-11-14: 4 blurred frames got the name of one can, 3 to 4 seconds apart. Each got a prompt.
+  for (const before of ['ambiguous', 'unsure', 'none', 'unsure'] as const) {
+    h.advance(300); h.result(before === 'ambiguous' ? { status: before, candidates: [RYE, CRISPS] } : { status: before });
+    h.advance(300); h.see(OAT);
+    h.advance(300); h.result({ status: 'none' });
+    h.away(2500);
+  }
+  expect(h.state.prompt).toBeNull();
+  expect(h.all.filter((e) => e.type === 'speak' && e.line.key === 'glance.new')).toEqual([]);
+});
+it('R1: a barcode, and the still of the second look, open a prompt with one result', () => {
+  const code = harness();
+  code.barcode({ kind: 'product', productId: OAT });
+  expect(code.state.prompt).toMatchObject({ productId: OAT });
+
+  const second = harness();
+  second.send({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: OAT, confidence: 1 }, still: true });
+  expect(second.state.prompt).toMatchObject({ productId: OAT });
+});
+it('R1: one result by sight does not hold back the still for a product that sight cannot name', () => {
+  const h = harness();
+  h.see(OAT);
+  h.advance(300); h.result({ status: 'unsure' });
+  h.advance(300); h.result({ status: 'unsure' });
+  expect(h.effects).toEqual([{ type: 'still.request' }]);
+});
 it('R2: a new product in view replaces the pending product after 2 results in a row', () => {
   const h = harness();
-  h.see(OAT); h.advance(150); h.see(RYE);
+  h.show(OAT); h.advance(150); h.see(RYE);
   expect(h.effects).toEqual([]);
   expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
   h.advance(150); h.see(RYE);
@@ -46,7 +113,7 @@ it('R2: a new product in view replaces the pending product after 2 results in a 
 });
 it('R2: one stray result never replaces a prompt, while its line plays and after it', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   h.advance(500); h.see(RYE);
   h.advance(150); h.see(OAT);
   h.done();
@@ -59,7 +126,7 @@ it('R2: one stray result never replaces a prompt, while its line plays and after
 it('R2: a result with no name, or with the name of the prompt, between two results starts the count again', () => {
   for (const between of [{ status: 'none' }, { status: 'unsure' }, { status: 'unknown' }, { status: 'identified', productId: OAT }] as const) {
     const h = harness();
-    h.see(OAT); h.advance(150); h.see(RYE);
+    h.show(OAT); h.advance(150); h.see(RYE);
     h.advance(150); h.result(between);
     h.advance(150); h.see(RYE);
     expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
@@ -69,7 +136,7 @@ it('R2: a result with no name, or with the name of the prompt, between two resul
 });
 it('R2: the 2 results must come inside 1.5 seconds', () => {
   const h = harness();
-  h.see(OAT); h.advance(150); h.see(RYE);
+  h.show(OAT); h.advance(150); h.see(RYE);
   h.at(150 + SWITCH_WITHIN_MS + 1); h.see(RYE);
   expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
   h.advance(SWITCH_WITHIN_MS); h.see(RYE);
@@ -77,14 +144,14 @@ it('R2: the 2 results must come inside 1.5 seconds', () => {
 });
 it('R2: 2 results in a row for 2 other products do not replace the prompt', () => {
   const h = harness();
-  h.see(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(CRISPS);
+  h.show(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(CRISPS);
   expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
   h.advance(150); h.see(CRISPS);
   expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: CRISPS });
 });
 it('R2: results that change between two products keep the first prompt', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   // 9 seconds of frames, 150 ms apart.
   for (let frame = 0; frame < 30; frame += 1) {
     h.advance(150); h.see(RYE);
@@ -96,7 +163,7 @@ it('R2: results that change between two products keep the first prompt', () => {
 });
 it('R2: results that change between two products in pairs give two prompts, and do not go back and forth', () => {
   const h = harness();
-  h.see(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(RYE);
+  h.show(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(RYE);
   for (let frame = 0; frame < 15; frame += 1) {
     for (const productId of [OAT, OAT, RYE, RYE]) {
       h.advance(150); h.see(productId);
@@ -107,7 +174,7 @@ it('R2: results that change between two products in pairs give two prompts, and 
 });
 it('R2: the product that a prompt replaced gets its prompt again when sight did not name the other one for 1 second', () => {
   const h = harness();
-  h.see(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(RYE);
+  h.show(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(RYE);
   h.advance(GO_BACK_AFTER_MS - 151); h.see(OAT);
   h.advance(150); h.see(OAT);
   expect(h.effects).toEqual([]);
@@ -119,7 +186,7 @@ it('R2: the product that a prompt replaced gets its prompt again when sight did 
 });
 it('R2: a barcode of another product replaces the prompt at once', () => {
   const h = harness();
-  h.see(OAT); h.advance(150);
+  h.show(OAT); h.advance(150);
   h.barcode({ kind: 'product', productId: RYE });
   expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: RYE });
 });
@@ -135,16 +202,16 @@ it('R2: a prompt that a barcode or a label match opened keeps its product agains
   h.advance(150); h.see(OAT);
   expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: OAT });
 });
-it('R2: the product that a prompt replaced gets its prompt again at once when the shopper answered the other one', () => {
+it('R2: the product that a prompt replaced gets its prompt again with no wait when the shopper answered the other one', () => {
   const h = harness();
-  h.see(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(RYE);
+  h.show(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(RYE);
   h.done(); h.no();
-  h.advance(150); h.see(OAT);
+  h.advance(150); h.show(OAT);
   expect(h.state.prompt).toMatchObject({ productId: OAT });
 });
 it('R5: a product prompt ends when its product left the view for 15 seconds', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   h.advance(T.viewMs + T.promptTtlAfterLeftMs - 1);
   expect(h.state.prompt).not.toBeNull();
   h.advance(1);
@@ -153,7 +220,7 @@ it('R5: a product prompt ends when its product left the view for 15 seconds', ()
 });
 it('R11: a product in the cart that comes into view gets the add-another prompt', () => {
   const h = harness({ cart: [OAT] });
-  h.see(OAT);
+  h.show(OAT);
   expect(h.state.prompt).toMatchObject({ kind: 'product', mode: 'inCart', productId: OAT });
   expect(h.event('glance.pending')).toMatchObject({ kind: 'inCart', qtyInCart: 1 });
   expect(h.speak()!.line).toMatchObject({ key: 'glance.inCart', qty: 1 });
@@ -187,7 +254,7 @@ it('gives an aim hint at most one time each 5 seconds', () => {
   h.advance(1); h.result({ status: 'unsure', aimHint: 'up' });
   expect(h.lines()).toEqual(['glance.partial']);
 });
-// The first product gets its prompt with one result. Each other one replaces a prompt, which needs 2 results in a row.
+// Each prompt by sight needs 2 results in a row for its product.
 const hintsOf = (h: ReturnType<typeof harness>) => [OAT, RYE, BARISTA, CRISPS].map((id) => {
   h.see(id);
   if (h.speak() === undefined) h.see(id);
@@ -202,7 +269,7 @@ it('adds the yes hint to each glance prompt at the detailed level', () => {
 it('ignores a result while the camera rests', () => {
   const h = harness();
   h.state = { ...h.state, phase: 'resting' };
-  h.see(OAT);
+  h.show(OAT);
   expect(h.effects).toEqual([]);
   expect(h.state.prompt).toBeNull();
 });
@@ -224,10 +291,13 @@ it('says that it cannot tell look-alike products apart, one time for each appear
   h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   expect(h.events()).toEqual(['glance.ambiguous']);
   expect(h.event('glance.ambiguous')!.candidates.map((c) => c.id)).toEqual([OAT, BARISTA]);
+  expect(h.lines()).toEqual([]);
+  h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.events()).toEqual([]);
   expect(h.lines()).toEqual(['glance.ambiguous']);
   h.advance(500); h.result({ status: 'ambiguous', candidates: [BARISTA, OAT] });
   expect(h.effects).toEqual([]);
-  h.advance(500); h.see(BARISTA);
+  h.advance(500); h.show(BARISTA);
   expect(h.state.prompt).toMatchObject({ productId: BARISTA });
 });
 it('keeps a prompt that a barcode or a label match opened when sight is not sure of its product', () => {
@@ -241,7 +311,7 @@ it('keeps a prompt that a barcode or a label match opened when sight is not sure
 });
 it('a barcode makes the prompt of sight for its product a sure prompt', () => {
   const h = harness();
-  h.see(OAT); h.advance(150);
+  h.show(OAT); h.advance(150);
   h.barcode({ kind: 'product', productId: OAT });
   expect(h.effects).toEqual([]);
   h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
@@ -267,7 +337,7 @@ it('a prompt of sight that follows a sure prompt is not sure', () => {
 });
 it('ends a prompt for a product that the model is no longer sure of', () => {
   const h = harness();
-  h.see(OAT); h.done();
+  h.show(OAT); h.done();
   h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   expect(h.events()).toEqual(['glance.cleared', 'glance.ambiguous']);
   h.yes('voice');
@@ -283,13 +353,14 @@ it('gives the look-alike answer with the product references of the contract, and
       { id: BARISTA, name: 'Barista oat drink', packSize: '1 L', priceCents: 229 },
     ],
   });
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   expect(h.speak()).toMatchObject({ priority: 'normal', sound: null, interrupt: false, promptId: null });
   expect((h.speak()!.line as { products: { id: string }[] }).products.map((p) => p.id)).toEqual([OAT, BARISTA]);
   expect(h.state.prompt).toBeNull();
 });
 it('says nothing for look-alike products while the product of another prompt is in view', () => {
   const h = harness();
-  h.see(RYE); h.advance(500);
+  h.show(RYE); h.advance(500);
   h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   expect(h.effects).toEqual([]);
   expect(h.state.prompt).toMatchObject({ productId: RYE });
@@ -307,37 +378,42 @@ it('gives one look-alike answer while the products stay in view, and a new one f
   // A new appearance gives its event. Inside 20 seconds the guard drops the line with the same text (see guard.test.ts).
   h.advance(T.viewMs); ambiguous();
   expect(h.events()).toEqual(['glance.ambiguous']);
-  expect(h.lines()).toEqual([]);
-  h.advance(SAME_TEXT_MS); ambiguous();
+  ambiguous();
+  expect(h.effects).toMatchObject([{ type: 'speak.dropped', reason: 'same text' }]);
+  h.advance(SAME_TEXT_MS); ambiguous(); ambiguous();
   expect(h.lines()).toEqual(['glance.ambiguous']);
 });
 it('gives a new look-alike answer for other candidates', () => {
   const h = harness();
-  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  lookAlike(h, [OAT, BARISTA]);
   h.advance(UNSOLICITED_GAP_MS); h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
-  expect(h.lines()).toEqual(['glance.ambiguous']);
   expect(h.event('glance.ambiguous')!.candidates.map((c) => c.id)).toEqual([OAT, RYE]);
+  expect(h.lines()).toEqual([]);
+  h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
+  expect(h.lines()).toEqual(['glance.ambiguous']);
 });
 it('other candidates less than 3 seconds later give their event, and the guard drops their line', () => {
   const h = harness();
-  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  lookAlike(h, [OAT, BARISTA]);
   h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
   expect(h.event('glance.ambiguous')!.candidates.map((c) => c.id)).toEqual([OAT, RYE]);
-  expect(h.lines()).toEqual([]);
+  h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
+  expect(h.effects).toMatchObject([{ type: 'speak.dropped', reason: 'gap' }]);
 });
 it('gives the look-alike answer again when the model named one candidate in between', () => {
   const h = harness();
-  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
-  h.advance(500); h.see(OAT);
+  lookAlike(h, [OAT, BARISTA]);
+  h.advance(500); h.show(OAT);
   expect(h.state.prompt).toMatchObject({ productId: OAT });
-  h.advance(SAME_TEXT_MS); h.see(OAT);
+  h.advance(SAME_TEXT_MS); h.show(OAT);
   h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   expect(h.events()).toEqual(['glance.cleared', 'glance.ambiguous']);
-  // 500 ms after the prompt line, the guard drops the look-alike line. The prompt still ends.
-  expect(h.lines()).toEqual([]);
   expect(h.state.prompt).toBeNull();
-  h.advance(500); h.see(OAT);
-  h.advance(UNSOLICITED_GAP_MS); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  // 500 ms after the prompt line, the guard drops the look-alike line. The prompt still ends.
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.effects).toMatchObject([{ type: 'speak.dropped', reason: 'gap' }]);
+  h.advance(500); h.show(OAT);
+  h.advance(UNSOLICITED_GAP_MS); lookAlike(h, [OAT, BARISTA]);
   expect(h.lines()).toEqual(['glance.ambiguous']);
 });
 it('starts with no look-alike appearance', () => {
@@ -356,19 +432,19 @@ it('says nothing for candidates that the catalog does not hold', () => {
 });
 it('says nothing for an unknown result while the product of the current prompt is in view', () => {
   const h = harness();
-  h.see(OAT); h.advance(500); h.result({ status: 'unknown' });
+  h.show(OAT); h.advance(500); h.result({ status: 'unknown' });
   expect(h.effects).toEqual([]);
   expect(h.state.unknownAt).toBeNull();
 });
 it('makes no prompt for a product ID that the catalog does not hold', () => {
   const h = harness();
-  h.see('no-such-product');
+  h.show('no-such-product');
   expect(h.effects).toEqual([]);
   expect(h.state.prompt).toBeNull();
 });
 it('keeps the last spoken line for the repeat intent', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   expect(h.state.lastSpeak).toEqual(h.speak());
   h.advance(500);
   expect(h.state.lastSpeak).toMatchObject({ line: { key: 'glance.new' } });
@@ -394,27 +470,78 @@ it('checks a recognition result with its schema', () => {
 
 const still = (part: Partial<RecognitionResult>) => ({ type: 'recognition' as const, result: { ...NO_RESULT, ...part }, still: true });
 const spokenKeys = (h: Harness) => h.all.filter((e): e is SpeakEffect => e.type === 'speak').map((e) => e.line.key);
+/** 2 look-alike results in a row at one time: the line of their appearance is due with the second one. */
+const lookAlike = (h: Harness, candidates: string[]) => {
+  h.result({ status: 'ambiguous', candidates });
+  h.result({ status: 'ambiguous', candidates });
+};
 const waiting = () => {
   const h = harness({ secondLookWaitMs: 2500 });
-  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  lookAlike(h, [OAT, BARISTA]);
   return h;
 };
 
+it('says the look-alike line with the second look-alike result in a row, and gives the event with the first one', () => {
+  const h = harness();
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.events()).toEqual(['glance.ambiguous']);
+  expect(h.lines()).toEqual([]);
+  h.advance(150); h.result({ status: 'ambiguous', candidates: [BARISTA, OAT] });
+  expect(h.events()).toEqual([]);
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+});
+it('a result between 2 look-alike results starts their count again', () => {
+  const others = [
+    { status: 'none' }, { status: 'unsure' }, { status: 'unknown' }, { status: 'identified', productId: RYE },
+    { status: 'ambiguous', candidates: [RYE, CRISPS] },
+  ] satisfies Partial<RecognitionResult>[];
+  for (const between of others) {
+    const h = harness();
+    h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+    h.advance(150); h.result(between);
+    h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+    expect(spokenKeys(h)).toEqual([]);
+    h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+    expect(spokenKeys(h)).toEqual(['glance.ambiguous']);
+  }
+});
+it('the 2 look-alike results must come inside 1.5 seconds', () => {
+  const h = harness();
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  h.at(ALIKE_WITHIN_MS + 1); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(spokenKeys(h)).toEqual([]);
+  h.advance(ALIKE_WITHIN_MS); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(spokenKeys(h)).toEqual(['glance.ambiguous']);
+});
+it('gives no aim hint while a still is on its way, also after a look-alike result', () => {
+  const h = harness();
+  h.result({ status: 'unsure' });
+  h.advance(300); h.result({ status: 'unsure' });
+  expect(h.effects).toEqual([{ type: 'still.request' }]);
+  h.advance(300); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  h.advance(300); h.result({ status: 'unsure', aimHint: 'left' });
+  expect(h.effects).toEqual([]);
+  h.label('started');
+  h.advance(STILL_ANSWER_MS); h.result({ status: 'unsure', aimHint: 'left' });
+  expect(h.effects).toEqual([]);
+});
 it('holds the look-alike line for the still, and a sure still gives the normal prompt', () => {
   const h = harness({ secondLookWaitMs: 2500 });
   h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   expect(h.events()).toEqual(['glance.ambiguous']);
-  expect(h.lines()).toEqual([]);
-  expect(h.state.heldAmbiguous).toEqual({ products: [OAT, BARISTA], since: h.now });
-  h.advance(1500); h.send(still({ status: 'identified', productId: BARISTA }));
+  expect(h.state.heldAmbiguous).toBeNull();
+  h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.effects).toEqual([]);
+  // The wait counts from the event, which asked the phone for the still.
+  expect(h.state.heldAmbiguous).toEqual({ products: [OAT, BARISTA], since: h.now - 150 });
+  h.advance(1350); h.send(still({ status: 'identified', productId: BARISTA }));
   expect(h.state.prompt).toMatchObject({ productId: BARISTA });
   expect(h.state.heldAmbiguous).toBeNull();
   h.advance(2500);
   expect(spokenKeys(h)).toEqual(['glance.new']);
 });
 it('speaks the line when no still comes in time', () => {
-  const h = harness({ secondLookWaitMs: 2500 });
-  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  const h = waiting();
   h.advance(2499);
   expect(spokenKeys(h)).toEqual([]);
   h.advance(1);
@@ -425,8 +552,7 @@ it('speaks the line when no still comes in time', () => {
   expect(spokenKeys(h)).toEqual(['glance.ambiguous']);
 });
 it('speaks the line at once when the still is not sure', () => {
-  const h = harness({ secondLookWaitMs: 2500 });
-  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  const h = waiting();
   h.advance(1200); h.send(still({ status: 'ambiguous', candidates: [OAT, BARISTA] }));
   expect(h.lines()).toEqual(['glance.ambiguous']);
   expect(h.events()).toEqual([]);
@@ -452,9 +578,11 @@ it('holds one line while the stream repeats the look-alike result, and speaks it
   h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   expect(h.effects).toEqual([]);
 });
-it('drops the held line when a stream frame names one product', () => {
+it('drops the held line when the stream names one product', () => {
   const h = waiting();
   h.advance(500); h.see(OAT);
+  expect(h.state.heldAmbiguous).not.toBeNull();
+  h.advance(150); h.see(OAT);
   expect(h.lines()).toEqual(['glance.new']);
   expect(h.state.heldAmbiguous).toBeNull();
   h.advance(2500);
@@ -479,6 +607,7 @@ it('holds the line of other candidates from the time of their result', () => {
   const h = waiting();
   h.advance(1000); h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
   expect(h.events()).toEqual(['glance.ambiguous']);
+  h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
   expect(h.state.heldAmbiguous).toEqual({ products: [OAT, RYE], since: h.now });
   h.advance(2499);
   expect(spokenKeys(h)).toEqual([]);
@@ -494,7 +623,7 @@ it('drops the held line when the session stops, and when a payment is confirmed'
 
   const paying = harness({ secondLookWaitMs: 2500, cart: [RYE] });
   paying.kiosk(); paying.done();
-  paying.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  lookAlike(paying, [OAT, BARISTA]);
   paying.advance(500); paying.kiosk(); paying.yes('phone');
   expect(paying.state.checkout).toMatchObject({ step: 'paying' });
   paying.advance(2500);
@@ -505,7 +634,7 @@ it('drops the held line when the session stops, and when a payment is confirmed'
 it('with no wait, a still counts as a stream frame', () => {
   const h = harness();
   expect(h.ctx.secondLookWaitMs).toBe(0);
-  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  lookAlike(h, [OAT, BARISTA]);
   expect(h.lines()).toEqual(['glance.ambiguous']);
   expect(h.state.heldAmbiguous).toBeNull();
   h.advance(1000); h.send(still({ status: 'ambiguous', candidates: [OAT, BARISTA] }));

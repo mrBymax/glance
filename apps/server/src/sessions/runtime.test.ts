@@ -20,6 +20,11 @@ const products = readCatalogFile(fileURLToPath(new URL('../../catalog/catalog.de
 const seeOat: RuleInputBody = {
   type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'oat-drink-1l' }, still: false,
 };
+/** 2 results in a row: sight opens the prompt of the oat drink with the second one. */
+const showOat = (session: { dispatch(input: RuleInputBody): void }): void => {
+  session.dispatch(seeOat);
+  session.dispatch(seeOat);
+};
 const help: RuleInputBody = { type: 'intent', kind: 'help', source: 'phone' };
 const glanceText = 'Oat drink, one litre, one eighty-nine. Nod to add.';
 
@@ -85,12 +90,12 @@ afterEach(() => {
 });
 
 it('runs the rules with the clock time and publishes the events', () => {
-  session.dispatch(seeOat);
+  showOat(session);
   expect(busEvents.map((e) => e.type)).toEqual(['glance.pending']);
   expect(session.state.seen['oat-drink-1l']).toBe(time);
 });
 it('logs each intent with the verdict of the rules', () => {
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'voice', promptId: 'p-0001' });
   session.dispatch({ type: 'intent', kind: 'yes', source: 'head', promptId: 'p-0001' });
   session.dispatch(help);
@@ -101,7 +106,7 @@ it('logs each intent with the verdict of the rules', () => {
   ]);
 });
 it('sends a line to the phone and a caption to the bus', async () => {
-  session.attach(sink); session.dispatch(seeOat); await session.settled();
+  session.attach(sink); showOat(session); await session.settled();
   expect(sink.sent).toEqual([{
     t: 'speak', id: 's-1', priority: 'normal', text: glanceText, lang: 'en', url: null,
     sound: null, interrupt: true, promptId: 'p-0001',
@@ -110,14 +115,14 @@ it('sends a line to the phone and a caption to the bus', async () => {
 });
 it('keeps the order of the lines when an early clip is slow', async () => {
   clipDelays = [50, 0];
-  session.attach(sink); session.dispatch(seeOat); session.dispatch(help);
+  session.attach(sink); showOat(session); session.dispatch(help);
   await session.settled();
   expect(sink.sent.map((m) => (m.t === 'speak' ? m.id : m.t))).toEqual(['s-1', 's-2']);
 });
 it('sends the line with no clip when the clip fails', async () => {
   deps.clipUrl = async () => { throw new Error('no credits'); };
   const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-  session.attach(sink); session.dispatch(seeOat); await session.settled();
+  session.attach(sink); showOat(session); await session.settled();
   expect(sink.sent).toMatchObject([{ t: 'speak', text: glanceText, url: null, promptId: 'p-0001' }]);
   expect(error).toHaveBeenCalledTimes(1);
   error.mockRestore();
@@ -164,7 +169,7 @@ it('publishes events and captions with no phone, and drops the device messages',
 });
 it('stores the session after an event and not after a sighting', async () => {
   const put = vi.spyOn(store, 'putSession');
-  session.dispatch(seeOat); await session.settled();
+  showOat(session); await session.settled();
   expect(put).toHaveBeenCalledTimes(1);
   session.dispatch(seeOat); await session.settled();
   expect(put).toHaveBeenCalledTimes(1);
@@ -176,7 +181,7 @@ it('stores the session after a profile patch', async () => {
 it('logs a store write that fails and takes the next input', async () => {
   vi.spyOn(store, 'putSession').mockRejectedValueOnce(new Error('disk full'));
   const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-  session.dispatch(seeOat); await session.settled();
+  showOat(session); await session.settled();
   expect(error).toHaveBeenCalledTimes(1);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' }); await session.settled();
   expect((await store.getSession(session.id))!.cart.totalCents).toBe(189);
@@ -194,7 +199,7 @@ it('keeps the new sink when the old sink detaches', () => {
   expect(session.connected).toBe(false);
 });
 it('starts the payment and calls afterStep', () => {
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   session.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
   session.dispatch({ type: 'prompt.done', promptId: 'p-0002' });
@@ -205,7 +210,7 @@ it('starts the payment and calls afterStep', () => {
 });
 it('a total above 50 EUR is paid after a yes with no biometric.request', async () => {
   session.attach(sink);
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   session.dispatch({ type: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
   session.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
@@ -217,7 +222,7 @@ it('a total above 50 EUR is paid after a yes with no biometric.request', async (
 it('with a limit of 50 EUR, asks the phone for the fingerprint after the line, and starts the payment after the result', async () => {
   session = await new SessionRegistry({ ...deps, biometricAboveCents: 5000 }).create();
   session.attach(sink);
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   session.dispatch({ type: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
   session.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
@@ -232,7 +237,7 @@ it('with a limit of 50 EUR, asks the phone for the fingerprint after the line, a
   expect(startPayment).toHaveBeenCalledWith(session, KIOSK, 5670);
 });
 const askOat = (): void => {
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'ask', source: 'phone' });
   session.dispatch({ type: 'question', text: 'Does it contain nuts?' });
 };
@@ -285,7 +290,7 @@ it('sends a tick to each live session each second', async () => {
   vi.useFakeTimers();
   const ticking = new SessionRegistry({ ...deps, clock: systemClock });   // fake timers also move Date.now()
   const live = await ticking.create(); ticking.startTicks();
-  live.dispatch(seeOat);
+  showOat(live);
   await vi.advanceTimersByTimeAsync(TIMING.viewMs + TIMING.promptTtlAfterLeftMs + 1000);
   expect(live.state.prompt).toBeNull();
   ticking.stop();
@@ -302,7 +307,7 @@ it('creates a session with the profile patch, a random ID, and a random token', 
 it('removes a session from the memory and from the store', async () => {
   const stopped = vi.fn();
   session.onStop(stopped);
-  session.dispatch(seeOat);
+  showOat(session);
   await registry.remove(session.id);
   expect(stopped).toHaveBeenCalledTimes(1);
   expect(await registry.get(session.id)).toBeNull();
@@ -311,7 +316,7 @@ it('removes a session from the memory and from the store', async () => {
 it('gives the session and its cart back after a restart', async () => {
   const first = new SessionRegistry(deps);
   const shopper = await first.create();
-  shopper.dispatch(seeOat);
+  showOat(shopper);
   shopper.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   await shopper.settled();
   const second = new SessionRegistry(deps);       // the same store, as after a restart
@@ -328,7 +333,7 @@ it('loads a session one time when two callers ask for it together', async () => 
   expect(a).toBe(b);
 });
 it('fails a payment that a restart cut off, and keeps the cart', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   session.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
@@ -342,7 +347,7 @@ it('fails a payment that a restart cut off, and keeps the cart', async () => {
   expect(again.snapshot().cart.totalCents).toBe(189);
 });
 it('ends a checkout that a restart cut off, so the kiosk is free and the shopper starts again at the code', async () => {
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   session.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
   await session.settled();
@@ -361,7 +366,7 @@ it('ends a checkout that a restart cut off, so the kiosk is free and the shopper
 
 it('logs each line that the shopper heard, with its key, its first 80 characters, and its prompt', async () => {
   session.attach(sink);
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch(help);
   await session.settled();
   const spoken = logLines.filter((line) => line.startsWith('speak '));
@@ -374,6 +379,8 @@ it('logs each line that the shopper heard, with its key, its first 80 characters
 it('logs for each product prompt the time from the frame to the result, of the product read, and of the clip', async () => {
   session.attach(sink);
   clipDelays = [40];
+  session.dispatch(seeOat, { frameToResultMs: 1500, resolveMs: 0 });
+  // The times are those of the result that opened the prompt.
   session.dispatch(seeOat, { frameToResultMs: 1400, resolveMs: 12 });
   session.dispatch(help);
   await session.settled();
@@ -398,7 +405,7 @@ it('asks for the clips of the answer lines when a product prompt opens, and the 
   const synthesize = vi.fn(async (_text: string, _voiceId: string) => new Uint8Array([1]));
   const { dir } = clipsWith(synthesize);
   try {
-    session.attach(sink); session.dispatch(seeOat); await session.settled();
+    session.attach(sink); showOat(session); await session.settled();
     await vi.waitFor(() => expect(synthesize).toHaveBeenCalledTimes(3));
     expect(synthesize.mock.calls.map((call) => call[0]).sort()).toEqual([addedText, glanceText, 'Skipped.'].sort());
 
@@ -413,7 +420,7 @@ it('asks for the clips of the answer lines when a product prompt opens, and the 
 it('sends the prompt line while the clip of an answer line is not made yet', async () => {
   const { dir } = clipsWith(async (text) => (text === addedText ? new Promise<Uint8Array>(() => undefined) : new Uint8Array([1])));
   try {
-    session.attach(sink); session.dispatch(seeOat); await session.settled();
+    session.attach(sink); showOat(session); await session.settled();
     expect(sink.sent).toMatchObject([{ t: 'speak', text: glanceText, promptId: 'p-0001' }]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -422,10 +429,10 @@ it('sends the prompt line while the clip of an answer line is not made yet', asy
 it('asks for the clip of the remove line when the prompt is for a product in the cart', async () => {
   const texts: string[] = [];
   deps.clipUrl = async (text) => { texts.push(text); return null; };
-  session.dispatch(seeOat);
+  showOat(session);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   time += TIMING.viewMs;
-  session.dispatch(seeOat);
+  showOat(session);
   await session.settled();
   expect(texts).toContain('Added oat drink. Total three seventy-eight.');
   expect(texts).toContain('Removed oat drink. Total zero euros.');
@@ -435,13 +442,13 @@ it('asks for the clip of the remove line when the prompt is for a product in the
 });
 it('a product prompt of an input with no measured times logs none for them', async () => {
   session.attach(sink);
-  session.dispatch(seeOat);
+  showOat(session);
   await session.settled();
   expect(logLines[1]).toMatch(new RegExp(`^glance timing session=${session.id} product=oat-drink-1l frameToResultMs=none resolveMs=none clipMs=\\d+$`));
 });
 it('logs each line that the guard dropped, with the reason, and sends the phone nothing for it', async () => {
   session.attach(sink);
-  session.dispatch(seeOat);
+  showOat(session);
   time += 1000;
   session.dispatch({ type: 'recognition.slow' });
   await session.settled();

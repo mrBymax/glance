@@ -34,6 +34,10 @@ async function appWithPhone(env: Record<string, string> = {}): Promise<{ t: Test
   await appPhone.next((m) => m.t === 'snapshot');
   return { t: app, sessionId: created.sessionId, token: created.token, phone: appPhone };
 }
+/** 2 stream frames: sight opens a prompt with the second result in a row for one product. */
+const sendFrames = (to: TestPhone, seq: number, blurred = true): void => {
+  for (const n of [seq, seq + 1]) to.sendFrame({ seq: n, ts: n, w: 576, h: 768, blurred }, JPEG);
+};
 const logged = (text: string) => logLines.filter((line) => line.includes(text)).length;
 
 beforeEach(async () => {
@@ -47,41 +51,41 @@ afterEach(async () => {
 });
 
 it('a frame from the phone becomes a spoken glance', async () => {
-  phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  sendFrames(phone, 1);
   expect(await phone.next((m) => m.t === 'speak')).toMatchObject({
     text: 'Oat drink, one litre, one eighty-nine. Nod to add.', promptId: 'p-0001',
   });
 });
 it('gives the recognizer the JPEG of the frame, and tells a still from a frame', async () => {
-  phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  sendFrames(phone, 1);
   await phone.next((m) => m.t === 'speak');
-  phone.sendFrame({ seq: 2, ts: 2, w: 1440, h: 1080, blurred: true, kind: 'still' }, JPEG);
-  await vi.waitFor(() => expect(recognize).toHaveBeenCalledTimes(2));
+  phone.sendFrame({ seq: 3, ts: 3, w: 1440, h: 1080, blurred: true, kind: 'still' }, JPEG);
+  await vi.waitFor(() => expect(recognize).toHaveBeenCalledTimes(3));
   expect([...recognize.mock.calls[0]![0]]).toEqual([...JPEG]);
-  expect(recognize.mock.calls.map((call) => call[1].still)).toEqual([false, true]);
+  expect(recognize.mock.calls.map((call) => call[1].still)).toEqual([false, false, true]);
 });
 it('logs the status and the time of each call', async () => {
-  phone.sendFrame({ seq: 5, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  sendFrames(phone, 5);
   await phone.next((m) => m.t === 'speak');
   expect(logLines.join('')).toMatch(new RegExp(`recognition session=${sessionId} seq=5 status=identified code=no ms=\\d+`));
 });
 it('logs where the time from the frame to the spoken line went', async () => {
-  phone.sendFrame({ seq: 5, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  sendFrames(phone, 5);
   await phone.next((m) => m.t === 'speak');
   await vi.waitFor(() => expect(logLines.join('')).toMatch(
     new RegExp(`glance timing session=${sessionId} product=oat-drink-1l frameToResultMs=\\d+ resolveMs=0 clipMs=\\d+`),
   ));
 });
 it('a frame with blurred false still becomes a glance', async () => {
-  phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: false }, JPEG);
+  sendFrames(phone, 1, false);
   await phone.next((m) => m.t === 'speak');
-  expect(recognize).toHaveBeenCalledTimes(1);
+  expect(recognize).toHaveBeenCalledTimes(2);
 });
 it('warns one time for each session about frames that are not blurred', async () => {
-  phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: false }, JPEG);
+  sendFrames(phone, 1, false);
   await phone.next((m) => m.t === 'speak');
-  phone.sendFrame({ seq: 2, ts: 2, w: 576, h: 768, blurred: false }, JPEG);
-  await vi.waitFor(() => expect(recognize).toHaveBeenCalledTimes(2));
+  phone.sendFrame({ seq: 3, ts: 3, w: 576, h: 768, blurred: false }, JPEG);
+  await vi.waitFor(() => expect(recognize).toHaveBeenCalledTimes(3));
   expect(logged('frame not blurred: the phone did not run face detection')).toBe(1);
 });
 it('with REQUIRE_BLUR a frame with blurred false never reaches the recognizer', async () => {
@@ -95,17 +99,17 @@ it('with REQUIRE_BLUR a frame with blurred false never reaches the recognizer', 
 });
 it('with REQUIRE_BLUR a blurred frame still becomes a glance', async () => {
   const strict = await appWithPhone({ REQUIRE_BLUR: '1' });
-  strict.phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  sendFrames(strict.phone, 1);
   expect(await strict.phone.next((m) => m.t === 'speak')).toMatchObject({ promptId: 'p-0001' });
 });
 it('the call excludes a product that the shopper just skipped', async () => {
-  phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  sendFrames(phone, 1);
   await phone.next((m) => m.t === 'speak');
   phone.send({ t: 'intent', kind: 'no', source: 'phone', promptId: 'p-0001' });
   await phone.next((m) => m.t === 'speak' && m.text === 'Skipped.');
-  phone.sendFrame({ seq: 2, ts: 2, w: 576, h: 768, blurred: true }, JPEG);
-  await vi.waitFor(() => expect(recognize).toHaveBeenCalledTimes(2));
-  expect(recognize.mock.calls[1]![1].exclude).toEqual(['oat-drink-1l']);
+  phone.sendFrame({ seq: 3, ts: 3, w: 576, h: 768, blurred: true }, JPEG);
+  await vi.waitFor(() => expect(recognize).toHaveBeenCalledTimes(3));
+  expect(recognize.mock.calls[2]![1].exclude).toEqual(['oat-drink-1l']);
 });
 it('reports a recognizer that fails 3 times in a row, and keeps the socket open', async () => {
   recognize.mockRejectedValue(new Error('503 overloaded'));
@@ -171,10 +175,12 @@ it('with SECOND_LOOK_WAIT_MS a still that is not sure speaks the look-alike line
   const ambiguous: RecognitionResult = { ...NO_RESULT, status: 'ambiguous', candidates: ['oat-drink-1l', 'oat-drink-barista-1l'] };
   recognize.mockResolvedValue(ambiguous);
   const waiting = await appWithPhone({ SECOND_LOOK_WAIT_MS: '10000' });
-  waiting.phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  // The line of a look-alike appearance is due with the second result in a row.
+  sendFrames(waiting.phone, 1);
   await waiting.phone.next((m) => m.t === 'event' && m.event.type === 'glance.ambiguous');
+  await vi.waitFor(() => expect(recognize).toHaveBeenCalledTimes(2));
   // The same result for a stream frame would say nothing for 10 seconds.
-  waiting.phone.sendFrame({ seq: 2, ts: 2, w: 1440, h: 1080, blurred: true, kind: 'still' }, JPEG);
+  waiting.phone.sendFrame({ seq: 3, ts: 3, w: 1440, h: 1080, blurred: true, kind: 'still' }, JPEG);
   await waiting.phone.next((m) => m.t === 'speak');
   expect(waiting.phone.messages.flatMap((m) => (m.t === 'speak' ? [m.text] : []))).toEqual(['I cannot tell which oat drink this is. Turn the front to me.']);
 });
@@ -194,7 +200,7 @@ it('a store item that sight names gets the normal prompt, with the details that 
   });
   const created = CreateSessionResponseSchema.parse(await res.json());
   const storePhone = await connectPhone(app, created.sessionId, created.token);
-  storePhone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  sendFrames(storePhone, 1);
   expect(await storePhone.next((m) => m.t === 'speak')).toMatchObject({
     text: expect.stringContaining('Nutella, four hundred grams, three ninety-nine. Warning: contains nuts.'), promptId: 'p-0001',
   });
@@ -224,7 +230,7 @@ it('with a real product reader the start reads the details in the background, an
     });
     const created = CreateSessionResponseSchema.parse(await res.json());
     const storePhone = await connectPhone(app, created.sessionId, created.token);
-    storePhone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+    sendFrames(storePhone, 1);
     expect(await storePhone.next((m) => m.t === 'speak')).toMatchObject({
       text: expect.stringContaining('Nutella, four hundred grams, three ninety-nine. Warning: contains nuts.'),
     });
@@ -272,7 +278,8 @@ it('a store item whose read fails still gets its prompt, with the details of the
   down = true;
   const created = CreateSessionResponseSchema.parse(await (await fetch(`${app.base}/api/sessions`, { method: 'POST' })).json());
   const storePhone = await connectPhone(app, created.sessionId, created.token);
-  storePhone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  sendFrames(storePhone, 1);
   expect(await storePhone.next((m) => m.t === 'speak')).toMatchObject({ text: 'Nutella, four hundred grams, three ninety-nine. Nod to add.' });
-  expect(logged('product not read again. id=gtin-3017624010701 The ERP is down.')).toBe(1);
+  // One line for each of the 2 results.
+  expect(logged('product not read again. id=gtin-3017624010701 The ERP is down.')).toBe(2);
 });

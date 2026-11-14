@@ -70,7 +70,7 @@ it('reports slow recognition with a line and an error event', () => {
 });
 it('slow recognition keeps the current prompt', () => {
   const h = harness();
-  h.see(OAT);
+  h.show(OAT);
   const prompt = h.state.prompt;
   expect(prompt).not.toBeNull();
   h.advance(3000);

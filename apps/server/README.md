@@ -328,7 +328,7 @@ The voice names only the product that the shopper holds. A table behind the hand
 - In the test of 2026-11-14 a label still named the can in the hand, and its prompt played. 0.5 seconds later one stream frame came back `identified` as another can, which stood on a table behind the hand, and that prompt took the place of the first one. The same happened a second time in that session.
 - `agents/recognition.md` says: find the hand first, look only at the product in it, and never give the name of a product that stands behind or beside it. A product on a table, on a shelf, in a basket, on a checkout belt, or in the hand of another person does not count. The product in the hand counts also when it is tilted, low in the frame, at an edge, or partly behind the fingers.
 - The field `held` makes the model say where the product is, before it names it. `normalizeResult` turns an answer with `held` false into `none`.
-- The rules do the rest: one result by sight never replaces a prompt. See R2 in "Rules".
+- The rules do the rest: one result by sight never opens a prompt and never replaces one. See R1 and R2 in "Rules".
 - A second form of the answer was measured and is not used: the field `heldDescription` before `held`, one short phrase about the thing in the hand. It named no more products, it gave one wrong name in 25 frames, and the median call took 150 ms more. The phrases showed what the model sees in a frame of 288 x 448 pixels: "a blurred can held in a hand", and "showing its barcode side" for a front.
 
 ### Measured: the product in the hand, and items that look alike
@@ -645,7 +645,7 @@ Limits of Open Food Facts:
 - `invalid`: a code with a wrong check digit, or with 14 digits, has no effect.
 - A scanned product has the ID `gtin-<13 digits>`. The cart, the warnings, the snapshot, a question, the cart by voice, the spot check, and a new profile language find it by that ID as they find a catalog product.
 - The clip seed makes no clip for a scanned product. With real speech, each new line of a scanned product is one ElevenLabs call.
-- One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight gives no unknown line and no aim hint. So a shopper who shows a barcode does not hear "Turn the front to me." The same holds while the server waits for a still that it asked for (5 seconds), and for the label call of that still (6.5 seconds at most).
+- One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight gives no unknown line and no aim hint. So a shopper who shows a barcode does not hear "Turn the front to me." The same holds while the server waits for a still that it asked for (5 seconds), and for the label call of that still (6.5 seconds at most). An `ambiguous` result in that time does not end the wait.
 - A result that arrives after the session stopped is dropped. A result that arrives after the result of a later report of another code is dropped too: the shopper shows the other code now.
 - The scanned products live in the memory of the process. The start puts each item of the store list there, with the details that the product cache holds, and each lookup puts the product there again with the details of that time. When a stored session loads after a restart, the server resolves the scanned products of its cart again. A product that the store list no longer holds stays a cart line with its old price: the shopper can remove it, and the voice does not name it.
 
@@ -725,10 +725,11 @@ sequenceDiagram
 ```
 
 - 2 stream frames with the status `unknown` or `unsure`, less than 2 seconds apart, ask the phone for a still. The rule is `onUnnamedProduct` in `src/sessions/code.ts`. The still of the sharp second look does not count.
-- The request has the limits of a still for a code, and shares them. See "The model also reads the code": no open product prompt, no product by sight in the last 3 seconds, no answer in the last 8 seconds, one request each 6 seconds, and 30 seconds after 2 requests with no code read.
+- The request has the limits of a still for a code, and shares them. See "The model also reads the code": no open product prompt, no product by sight in the last 3 seconds, no answer in the last 8 seconds, one request each 6 seconds, and 30 seconds after 2 requests with no code read. One result by sight that named a product and got no second result does not count as a product by sight.
 - The unknown line of a new appearance waits while a still can follow. It plays after 2 seconds when no second frame asked for a still, after 5 seconds when no label frame came, and at the end of a label call that gave no product. A barcode report, a product by sight, and a look-alike answer drop it.
 - When the limits allow no still, the unknown line plays at once, as before. This holds for an unknown product that the shopper shows while a prompt is open.
-- An aim hint does not wait. It is quiet from the request to the end of the label call.
+- An aim hint does not wait. It is quiet from the request to the end of the label call. A look-alike result in that time drops the unknown line that waits, and the aim hint stays quiet. Before, that result ended the quiet, and "Turn the front to me." could play while the still was on its way.
+- The server knows of a still only by its own request and by the label frame. The phone also takes a label still by itself, when it finds a code region in a frame, and it sends no message at the start of that still. In the test of 2026-11-14 one aim hint played 2.3 seconds after the phone started such a still, and 1.2 seconds before its label frame arrived. No rule of the server can stop that line.
 - A session with no phone gets no still. Its unknown line plays 5 seconds after the request.
 
 ### Recognition knows the store list
@@ -916,7 +917,7 @@ The settings of the demo server, after the measurement of 2026-11-14 (see "Measu
 - Set `CATALOG_PATH=catalog/catalog.demo.json` and `STORE_LIST_PATH=catalog/store-list.demo.json`.
 - Do not set `GEMINI_MODEL`, `GEMINI_MEDIA_RESOLUTION`, `RECOGNITION_REFERENCES`, `RECOGNITION_CONCURRENCY`, and `RECOGNITION_MIN_CONFIDENCE`. The defaults are the measured request: `gemini-3.5-flash-lite`, the default media resolution, and 3 reference pictures for each item before the frame.
 - Take 3 reference pictures of each item: its front, its back, and the side with its name.
-- Do not set `SECOND_LOOK_WAIT_MS`. A can of one design then gets the look-alike line at once, and the still names it some seconds later. A wait of 5000 ms would hold the line for that still. Nobody tested it: in the session of 2026-11-14 the phone sent the still 2.9 to 3.3 seconds after the event, and the call of a still follows.
+- Do not set `SECOND_LOOK_WAIT_MS`. A can of one design then gets the look-alike line with its second `ambiguous` result in a row, and the still names it some seconds later. A wait of 5000 ms would hold the line for that still. Nobody tested it: in the session of 2026-11-14 the phone sent the still 2.9 to 3.3 seconds after the event, and the call of a still follows.
 - Do not set `SAVE_FRAMES` for the demo. Set it to collect frames for the next measurement.
 
 Measured in the test of 2026-11-14, with Ray-Ban Meta glasses and the real model:
@@ -1076,16 +1077,20 @@ The rules that exist:
 
 - A recognized product gets a glance prompt with a new ID (R1). A new product replaces the pending product (R2).
 - A result by sight replaces the prompt of another product only as the second result in a row for that product, at most 1.5 seconds after the first one (`SWITCH_WITHIN_MS` in `src/sessions/glance.ts`). Each result between them ends the row: a result for the product of the prompt, for a third product, and a result with no name. So one stray frame never changes the product, while the line of the prompt plays, while its head window is open, and after it. In the test of 2026-11-14 one frame named a can on a table behind the can in the hand, 0.5 seconds after the prompt of the can in the hand.
-- This holds for each product prompt: one that a barcode, a label match, digits of the model, or a still opened, and one that a stream frame opened. With no product prompt, one result by sight opens a prompt, as before.
-- A barcode, a label match, and digits of the model are sure. They replace a prompt at once.
+- This holds for each product prompt: one that a barcode, a label match, digits of the model, or a still opened, and one that a stream frame opened.
+- With no product prompt, a result by sight opens a prompt only as the second result in a row for that product, at most 1.5 seconds after the first one (`OPEN_WITHIN_MS` in `src/sessions/glance.ts`). The two rules share one count. The first result has no effect: it starts no appearance, it drops no line that waits, and it holds back no still.
+- "In a row" means the order of the frames. The worker drops the result of a frame when a newer frame already has its result, so the rules get the results in frame order, 60 to 650 ms apart in the tests. Each result between the two ends the row: `none`, `unsure`, `unknown`, a result for another product, and an `ambiguous` result without the product. An `ambiguous` result with the product among its candidates names no other product: it does not end the row, and it does not count as the second result.
+- `none` and `unsure` end the row because a wrong name comes from a blurred frame, and the frames around a blurred frame get `none` and `unsure`. The model gave the same wrong name each time, so 2 wrong names with such results between them are likely. A product that sight can name got 8 `identified` results in a row.
+- Measured in the test of 2026-11-14: the shopper held cans of one design, which sight cannot name. 4 blurred stream frames came back `identified` as another can of the store list. The results around each one said `none`, `unsure`, or `ambiguous` with other candidates, and the next `identified` result came 3.2 seconds later or more. Each of the 4 opened a prompt at once, and the shopper shook the head 3 times. With the rule, none of the 4 opens a prompt. A can that sight named right got its second result 0.5 seconds after the first one, so its prompt comes 0.5 seconds later.
+- A barcode, a label match, and digits of the model are sure. They open a prompt with one result, and they replace a prompt at once. The still of the second look opens a prompt with one result. It does not replace one alone.
 - The product that a prompt replaced gets no prompt by sight while sight named the product of that prompt in the last second (`GO_BACK_AFTER_MS` in `src/sessions/glance.ts`). Two store items that look alike can get their names in turn, in pairs of frames. They then get two prompts, and the second one stays. Names that change with each frame keep the first prompt. A barcode and a label match bring the first product back at once.
 - Results inside the view time belong to one appearance. A product that comes back after it left the view gets a new prompt.
 - A product prompt ends when its product left the view for 15 seconds (R5).
 - A product in the cart gets the prompt for "add another" (R11).
 - A glance prompt carries the warnings of its product for the profile of the shopper. See "Allergen guard".
-- An unknown product gets one line for each appearance (R13). The line waits while a still can name the product. See "A product that sight cannot name". An aim hint plays at most one time each 5 seconds.
+- An unknown product gets one line for each appearance (R13). The line waits while a still can name the product. See "A product that sight cannot name". An aim hint plays at most one time each 5 seconds, and never while the server waits for a still or for its label call.
 - Each line goes through the guard for the voice. It drops a line that the shopper did not ask for when the line repeats a text, follows another line too closely, or names a failed read a second time. See "A guard for the voice".
-- An `ambiguous` result gets the look-alike answer, and never a prompt. See "Look-alike products".
+- An `ambiguous` result gets the look-alike answer, and never a prompt. The event goes out with the first result. The line plays with the second `ambiguous` result in a row with the same candidates, at most 1.5 seconds after the one before (`ALIKE_WITHIN_MS` in `src/sessions/glance.ts`). See "Look-alike products".
 - A yes or a no counts only with the ID of the current prompt (R3). From voice, touchpad, key, or camera it also needs a finished prompt (R5). From the phone or the HUD it needs the ID alone (R6).
 - A yes or a no from the head (R4) for a product prompt needs the ID of the current prompt, and no more. The ID is the guard: the shopper heard the name and the price of that prompt. The product can be out of view, because recognition names a held product in few frames, and the shopper lowers it while the line plays. In the test of 2026-11-14 one frame named the product 8 seconds before the nod, and the old rule "product in view" dropped that nod.
 - A head answer for a product prompt also counts before `prompt.done`. The phone opens its head window 1200 ms after the line starts to play, and stops the line at a head answer. It then sends no `prompt.done`. Each other source keeps its rule: voice, touchpad, key, and camera need a finished prompt (R5).
@@ -1187,10 +1192,10 @@ The audit of 2026-11-14: each line that the server speaks with no action of the 
 
 | Line | Trigger | Limit of its rule | Guard |
 |---|---|---|---|
-| `glance.new`, `glance.inCart`: the product prompt. Sound `warning` with a warning | An `identified` result, a barcode of the store, or a label match | One for each appearance of the product (R1). A new product takes the place of the prompt (R2): by sight with its second result in a row, and at once with a barcode or a label match | always |
+| `glance.new`, `glance.inCart`: the product prompt. Sound `warning` with a warning | The second `identified` result in a row for one product, a barcode of the store, a label match, or a sure still | One for each appearance of the product (R1). A new product takes the place of the prompt (R2): by sight with its second result in a row, and at once with a barcode or a label match | always |
 | `glance.unknown`: "I do not know this product." | An `unknown` result, or a failed label read of a still that sight asked for | One for each appearance (R13). It waits for a still | one for each appearance, then 20 s and 3 s |
-| `glance.partial`: "I can see part of it. ..." | An `unsure` result with an aim hint | One each 5 seconds. None while a barcode has the voice | 20 s for one hint text, 3 s |
-| `glance.ambiguous`: the look-alike line | An `ambiguous` result | One for each appearance of the same candidates | 20 s, 3 s |
+| `glance.partial`: "I can see part of it. ..." | An `unsure` result with an aim hint | One each 5 seconds. None while a barcode has the voice, and none while the server waits for a still or its label call | 20 s for one hint text, 3 s |
+| `glance.ambiguous`: the look-alike line | The second `ambiguous` result in a row with the same candidates | One for each appearance of the same candidates | 20 s, 3 s |
 | `barcode.notInStore` | A barcode of the phone that the store list does not hold | One for each appearance of that code | 20 s, 3 s, new chance after 3 s |
 | `barcode.unreadable`: "I cannot read this code. Hold it closer." | A label read that matched nothing or failed | None of its own. Before the guard: one each 10 seconds | one for each appearance, then 20 s and 3 s |
 | `checkout.empty`, `checkout.busy` | A kiosk code with an empty cart, or of a busy kiosk | One for each appearance of the code | 20 s, 3 s, new chance after 3 s |
@@ -1256,7 +1261,9 @@ An `ambiguous` result names two or more candidates. The model cannot tell which 
 - A prompt that a sure source opened or confirmed stays, and the result has no effect. The sure sources are a barcode, a label match, digits of the model, and a still. A stream frame is smaller than a still, and for store items of one design it answers `ambiguous` in most frames. Without this rule each such prompt would end 150 ms after its start.
 - If the current prompt is for another product, and that product is in view, the result has no effect.
 - In each other case the event `glance.ambiguous` carries the candidates as product references, and the voice speaks the line `glance.ambiguous`. The line has the priority `normal`, no sound, and no interrupt. It is no prompt, so a yes adds nothing.
-- One appearance gets one line. Results with the same candidates, each less than 3 seconds after the one before, are one appearance. The order of the candidates does not count. The guard for the voice can drop the line of a new appearance, and the event still goes out.
+- The event goes out with the first result of an appearance. It is the signal for the phone to take a still, and the still is what names the product, so it does not wait.
+- The line needs 2 `ambiguous` results in a row with the same candidates, at most 1.5 seconds apart (`ALIKE_WITHIN_MS`). Each other result between them starts the count again, also an `ambiguous` result with other candidates. One blurred frame gets candidates as it gets a wrong name. See R1 in "Rules". An appearance whose first results stood alone gets its line with the first 2 results in a row.
+- One appearance gets one event and one line. Results with the same candidates, each less than 3 seconds after the one before, are one appearance. The order of the candidates does not count. The guard for the voice can drop the line of a new appearance, and the event still goes out.
 - A new product prompt ends the appearance. If the model then gives the same `ambiguous` result again, the prompt ends. The line plays again when 20 seconds passed since its last time, and 3 seconds since the prompt line.
 - The line names the words that end each spoken name: "I cannot tell which oat drink this is. Turn the front to me." Names with no common last word give "I cannot tell if this is oat drink or rye bread. Turn the front to me.", with the first two candidates.
 - The line and the event say no price.
@@ -1275,7 +1282,7 @@ sequenceDiagram
   Server->>Gemini: frame
   Gemini-->>Server: ambiguous, two candidates
   Server-->>Phone: event glance.ambiguous
-  Note over Server: the look-alike line waits, SECOND_LOOK_WAIT_MS
+  Note over Server: after the second such result in a row, the look-alike line waits, SECOND_LOOK_WAIT_MS
   Note over Phone: takes a still
   Phone->>Server: frame with kind still
   Server->>Gemini: still, default media resolution
@@ -1287,13 +1294,13 @@ sequenceDiagram
   end
 ```
 
-- With `SECOND_LOOK_WAIT_MS=0`, which is the default, the look-alike line plays at once, and the result of a still goes through the rules of a stream frame. One difference stays: a prompt that a still opened is sure. See "Look-alike products".
-- With a wait, an `ambiguous` result of a stream frame gives the event `glance.ambiguous` at once. The line waits in `SessionState.heldAmbiguous`.
-- An `identified` result drops the line that waits, for a still and for a stream frame. The product gets its usual prompt (R1).
-- Each other result of a still speaks the line at once: `ambiguous`, `unknown`, `unsure`, `none`, and a product ID that the catalog does not hold. That result has no other effect, so no second line and no second event follows.
+- With `SECOND_LOOK_WAIT_MS=0`, which is the default, the look-alike line plays with the second `ambiguous` result in a row, and the result of a still goes through the rules of a stream frame. Two differences stay: a still opens a prompt with one result, and that prompt is sure. See "Look-alike products".
+- With a wait, an `ambiguous` result of a stream frame gives the event `glance.ambiguous` at once. With the second such result in a row, the line waits in `SessionState.heldAmbiguous`. The wait counts from the event, because the event asked for the still.
+- A product that sight names drops the line that waits: one `identified` result of a still, or the second one in a row of the stream. The product gets its usual prompt (R1).
+- Each other result of a still speaks the line that waits at once: `ambiguous`, `unknown`, `unsure`, `none`, and a product ID that the catalog does not hold. That result has no other effect, so no second line and no second event follows. When the stream gave one `ambiguous` result only, no line waits, and the still says nothing.
 - With no result of a still, the line plays when the wait is over. The server checks the time with each input and with each tick, so the line can be up to one tick late.
 - A sure still that comes after the line still gives the usual prompt. A still that is not sure, with no line that waits, has no effect.
-- Results with the same candidates inside the view time are one appearance: one event, and one line that waits. Other candidates give a new event, and their line waits from the time of their result.
+- Results with the same candidates inside the view time are one appearance: one event, and one line that waits. Other candidates give a new event, and their line waits from the time of that event, after their second result in a row.
 - A session that stops, rests, or waits for a payment drops the line.
 - The worker keeps a still in its own slot, so a stream frame does not replace a still that waits for its call.
 - Set `SECOND_LOOK_WAIT_MS=2500` only when the phone sends stills. With no still, each look-alike line is late by the wait. One test took about 1 second for the capture (spec section 11.1). The recognition call of the still follows, and a call can take 4 seconds at most.
@@ -1412,7 +1419,7 @@ sequenceDiagram
 - The checkout starts in the step `spotcheck`, with no pay prompt. So a yes cannot pay, and a no cancels nothing.
 - The product to show is the cart line with the highest unit price. The first line wins a tie.
 - The start gives `session.state`, then `checkout.spotcheck` with the product reference, then the line `spotcheck.ask`: "Quick check. Show me the rye bread." The line has the priority `high` and interrupts.
-- An `identified` result for that product passes the check. The voice says "Thank you." (`spotcheck.thanks`, priority `high`, no interrupt). The product gets no prompt until it has left the view, also when the shopper added it a moment before and still holds it.
+- The second `identified` result in a row for that product passes the check, as for a prompt (R1). A barcode of the product passes it with one report. The voice says "Thank you." (`spotcheck.thanks`, priority `high`, no interrupt). The product gets no prompt until it has left the view, also when the shopper added it a moment before and still holds it.
 - The step is then `suspended` with `suspendedBy: null`, and the next `kiosk.seen` gives the pay prompt. No event reports the passed check: `checkout.offered` follows when the shopper looks at the code.
 - Another product in view gets its usual prompt, and a yes adds it. The step stays `spotcheck`.
 - If the product of the check leaves the cart, the check asks for the line that now has the highest price, with a new `checkout.spotcheck` and a new ask line. An empty cart ends the checkout.

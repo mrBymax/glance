@@ -46,6 +46,6 @@ it('shows the spot check with the cart and the total, and the cart alone after i
   const view = kioskView(record, h.state, null);
   expect(view).toMatchObject({ state: 'spotcheck', totalCents: 639, cart: h.state.cart, receipt: null });
   expect(KioskEventSchema.safeParse(view).success).toBe(true);
-  h.see(RYE);
+  h.show(RYE);
   expect(kioskView(record, h.state, null).state).toBe('connected');
 });
