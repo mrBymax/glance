@@ -188,3 +188,25 @@ it('a store item that the store list no longer holds gets no prompt', async () =
   await vi.waitFor(() => expect(logged('recognition result dropped: the store does not sell gtin-3017624010701')).toBe(1));
   expect(storePhone.messages.some((m) => m.t === 'speak')).toBe(false);
 });
+it('a store item whose read fails still gets its prompt, with the details of the start', async () => {
+  const items = await readStoreListFile(DEFAULT_STORE_LIST_PATH).all();
+  let down = false;
+  const storeList = {
+    all: async () => items,
+    byGtin: async (gtin: string) => {
+      if (down) throw new Error('The ERP is down.');
+      return items.find((item) => item.gtin === gtin);
+    },
+  };
+  recognize.mockResolvedValue({ ...NO_RESULT, status: 'identified', productId: 'gtin-3017624010701', confidence: 0.9 });
+  const app = await testApp({}, {
+    recognizer: { recognize }, storeList, log: { level: 'info', stream: { write: (line) => { logLines.push(line); } } },
+  });
+  apps.push(app);
+  down = true;
+  const created = CreateSessionResponseSchema.parse(await (await fetch(`${app.base}/api/sessions`, { method: 'POST' })).json());
+  const storePhone = await connectPhone(app, created.sessionId, created.token);
+  storePhone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  expect(await storePhone.next((m) => m.t === 'speak')).toMatchObject({ text: 'Nutella, four hundred grams, three ninety-nine. Nod to add.' });
+  expect(logged('product not read again. id=gtin-3017624010701 The ERP is down.')).toBe(1);
+});

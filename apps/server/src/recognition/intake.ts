@@ -77,13 +77,17 @@ export function createFrameHandler(deps: {
       }
       // The first prompt of a store item needs its allergens, so the result waits for the read. The read has the time of
       // a barcode lookup, and the next read comes from the cache. A result of a later frame can reach the rules first.
-      read.then((sold) => {
+      const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+      read.catch((error: unknown) => {
+        // The rules still hold the product from the start of the server, with the details of that time.
+        deps.log.warn(`product not read again. id=${result.productId} ${message(error)} session=${session.id}`);
+        return true;
+      }).then((sold) => {
         if (sold) give();
         else deps.log.warn(`recognition result dropped: the store does not sell ${result.productId}. seq=${info.seq} session=${session.id}`);
-      }, (error: unknown) => {
-        // The rules still hold the product from the start of the server, with the details of that time.
-        deps.log.warn(`product not read again. id=${result.productId} ${error instanceof Error ? error.message : String(error)} session=${session.id}`);
-        give();
+      }).catch((error: unknown) => {
+        // As in the worker: a failure of the rules is no failure of the recognition service.
+        deps.log.warn(`recognition result of seq=${info.seq} failed in the session. ${message(error)} session=${session.id}`);
       });
     },
     onSlow: () => deps.onSlow(session),
