@@ -79,6 +79,7 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.mlkit.barcode)
     implementation(libs.mlkit.face)
+    implementation(libs.mlkit.text)
     implementation(libs.media3.exoplayer)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.biometric)

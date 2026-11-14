@@ -21,6 +21,21 @@ object TestClips {
     const val KIOSK = "kiosk.mp4"
     const val SCENE_IMAGE = "scene.png"
     const val KIOSK_TEXT = "GL1 K3X7"
+
+    /** A sharp EAN-13 code with its digits, as a clip and as a still image. */
+    const val BARCODE = "barcode.mp4"
+    const val BARCODE_IMAGE = "barcode.png"
+    const val BARCODE_TEXT = "4006381333931"
+
+    /** The digits of a code with no bars. */
+    const val DIGITS = "barcode-digits.mp4"
+    const val DIGITS_TEXT = "8076809513753"
+
+    /** Bars that the scanner finds and does not decode, with no digits and with sharp digits. */
+    const val BLURRED = "barcode-blurred.mp4"
+    const val BLURRED_IMAGE = "barcode-blurred.png"
+    const val BLURRED_DIGITS = "barcode-blurred-digits.mp4"
+    const val BLURRED_TEXT = "3017624010701"
     const val FRAME_SIZE = "720x1280"
 }
 

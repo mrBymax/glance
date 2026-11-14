@@ -117,6 +117,34 @@ class ProbeScreenTest {
     }
 
     @Test
+    fun theBarcodeLogAndThePipelineReadAProductCode() {
+        pairWithFeed(TestClips.BARCODE)
+        tap("Start session")
+        awaitLine("stream STREAMING")
+
+        tap("Barcode log")
+        val decoded = awaitLine(Regex("""barcode EAN_13 "${TestClips.BARCODE_TEXT}" valid=true width=(\d+) frame=${TestClips.FRAME_SIZE}"""))
+        // The clip has 5 pixels for each of the 95 narrow bars of the code.
+        assertTrue("width ${decoded.groupValues[1]}", decoded.groupValues[1].toInt() in 400..560)
+        // OCR can read a digit wrong: on the test phone it read 4008381333931 here. The check digit then gives no code.
+        val digits = awaitLine(Regex("""barcode digits ".*\d.*" codes=\[(.*)] crop=\d+x\d+"""))
+        assertTrue("codes ${digits.groupValues[1]}", digits.groupValues[1] in setOf("", TestClips.BARCODE_TEXT))
+        tap("Barcode log")
+
+        val read = "barcode read ${TestClips.BARCODE_TEXT} barcode"
+        val report = "barcode ${TestClips.BARCODE_TEXT} barcode"
+        tap("Pipeline test")
+        waitUntil("the pipeline logs 3 reports of the code", PIPELINE_MS, ::logTail) { lines().count { it.endsWith(" $report") } >= 3 }
+        tap("Pipeline test")
+
+        // The agreement rule: the first report comes with the second equal read, and not before it.
+        val texts = lines().map { it.substringAfter(' ') }
+        assertEquals(2, texts.take(texts.indexOf(report)).count { it == read })
+        // A code in view is reported one time each second, and the mock stream has 30 frames each second.
+        assertGap("barcode reports", lines().filter { it.endsWith(" $report") }, 700, 1500)
+    }
+
+    @Test
     fun motionInputsSpeechAndTheStillWork() {
         pairWithFeed(TestClips.SCENE)
         tap("Start session")

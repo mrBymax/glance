@@ -53,6 +53,15 @@ object Gtin {
     }
 
     /**
+     * Returns the text of a barcode decoder as the phone sends it in `barcode.seen`, or null when it is no
+     * product code. A UPC-E code goes out in its UPC-A form, because 8 digits alone read as EAN-8.
+     */
+    fun fromDecoder(text: String, upcE: Boolean): String? {
+        val code = if (upcE) expandUpcE(text) else text
+        return code?.takeIf { normalize(it) != null }
+    }
+
+    /**
      * True for a 13-digit code that only one store or one company can know: it starts with 2, 02, or 04.
      * 02 and 04 are the UPC-A number systems 2 and 4. An open product database cannot resolve such a code.
      */

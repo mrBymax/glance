@@ -4,7 +4,7 @@
 //   node server.mjs        port 8080, or PORT. HOST selects the address, default 0.0.0.0.
 //   SAVE_FRAMES=1          writes the newest frame to <temp folder>/glance-last.jpg
 //   FIRST_PROMPT_MS=3000   the time from the first frame to the first product prompt
-//   keyboard               rest, bio, cancel, amb, slow, badclip, drop
+//   keyboard               rest, bio, cancel, amb, label, slow, badclip, drop
 //
 // A test on a phone has no keyboard. It runs a command with POST /debug/command/<name>,
 // and it reads the newest log lines with GET /debug/log.
@@ -21,6 +21,7 @@ const FIXTURES = join(here, '..', '..', '..', '..', '..', 'packages', 'shared', 
 const fixture = (name) => JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
 
 const SNAPSHOT = fixture('server-to-device/snapshot.json');
+const STILL_REQUEST = fixture('server-to-device/still.request.json');
 const PENDING = fixture('events/glance.pending.json');
 const AMBIGUOUS = fixture('events/glance.ambiguous.json');
 const CART_UPDATED = fixture('events/cart.updated.json');
@@ -32,7 +33,7 @@ const SESSION_ID = 's-1';
 const TOKEN = 't-1';
 const SESSION_PATH = `/api/sessions/${SESSION_ID}`;
 const COMMAND_PATH = '/debug/command/';
-const COMMANDS = ['rest', 'bio', 'cancel', 'amb', 'slow', 'badclip', 'drop'];
+const COMMANDS = ['rest', 'bio', 'cancel', 'amb', 'label', 'slow', 'badclip', 'drop'];
 const MAX_KEPT_LOG_LINES = 500;
 // The event and the line of the server of Plan 1 after 3 failed recognition calls in a row.
 const SLOW = { type: 'error', code: 'recognition.slow', message: 'Recognition is slow right now.' };
@@ -228,6 +229,9 @@ export function startFakeServer({
         // A pay prompt that nobody answered gives way to a new one after the prompt gap.
         if (prompt?.kind !== 'pay' || Date.now() - prompt.at >= promptGapMs) payPrompt();
         break;
+      case 'barcode.seen':
+        log(`barcode.seen ${message.code} source=${message.source}`);
+        break;
       case 'prompt.done':
         log(`prompt.done ${message.promptId}`);
         break;
@@ -301,6 +305,9 @@ export function startFakeServer({
         break;
       case 'amb':
         event(AMBIGUOUS);
+        break;
+      case 'label':
+        send(STILL_REQUEST);
         break;
       case 'slow':
         event(SLOW);

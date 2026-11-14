@@ -63,10 +63,10 @@ abstract class FakeServerTestCase : MockDeviceKitTestCase<MainActivity>(MainActi
 
     protected fun page(message: PageToNative) = onMain { glance.session.onPageMessage(message) }
 
-    /** Pairs the glasses, starts a session from the page message, and waits for the first frame at the server. */
-    protected fun startSession() {
+    /** Pairs the glasses, starts a session with `clip` as the camera, and waits for the first frame at the server. */
+    protected fun startSession(clip: String = TestClips.SCENE) {
         pairGlasses()
-        setCameraFeed(TestClips.SCENE)
+        setCameraFeed(clip)
         page(PageToNative.SessionStart)
         waitUntil("the stream reaches streaming", START_MS, ::state) {
             native.session == SessionStatus.STARTED && native.stream == StreamStatus.STREAMING
