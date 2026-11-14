@@ -110,3 +110,7 @@ it('pays one time with the fingerprint button, and has no control below 48 px', 
   await user.click(pay);
   expect(intents(bridge)).toEqual([{ t: 'intent', kind: 'yes', promptId: 'p-0001' }]);
 });
+it('shows the short word Pay on the fingerprint button, so that a large font does not cut it', () => {
+  renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.offered', { needsBiometric: true })] });
+  expect(sheet('Checkout').getByRole('button', { name: 'Pay with fingerprint' })).toHaveTextContent(/^Pay$/);
+});

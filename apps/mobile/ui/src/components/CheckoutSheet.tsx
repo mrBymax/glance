@@ -38,7 +38,10 @@ function PayView(props: { prompt: PayPrompt; answer: Answer | null; onAnswer(kin
         width="100%"
         isLoading={given === 'yes'}
         onClick={() => onAnswer('yes')}
-      />
+      >
+        {/* The full name is cut at a font scale of 200 percent. The banner above states the fingerprint. */}
+        {strings.pay}
+      </Button>
       <Button label={strings.cancel} size="lg" width="100%" isDisabled={given !== null} onClick={() => onAnswer('no')} />
     </VStack>
   );
