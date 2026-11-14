@@ -1,4 +1,4 @@
-import type { GlanceBridge, PageToNative } from '@glance/shared';
+import type { GlanceBridge, PageToNative, ProfilePatch } from '@glance/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
 import { snapshotCaptionsOf, useSpokenText, type SnapshotCaptions } from '../components/useSpokenText';
 import { initialUiState, reduce, type UiAction, type UiState } from '../state/uiState';
@@ -10,6 +10,8 @@ export type Ui = {
   bridge: GlanceBridge;
   send(message: PageToNative): void;
   dispatch(action: UiAction): void;
+  /** Shows the new value at once, then sends the patch to the host. */
+  setProfile(patch: ProfilePatch): void;
 };
 
 const UiContext = createContext<Ui | null>(null);
@@ -39,7 +41,12 @@ export function BridgeProvider(props: { bridge: GlanceBridge; children: ReactNod
     bridge.send(message);
   }, [bridge]);
 
-  const ui = useMemo(() => ({ state, strings, bridge, send, dispatch }), [state, strings, bridge, send]);
+  const setProfile = useCallback((patch: ProfilePatch) => {
+    dispatch({ t: 'local.profile', patch });
+    bridge.send({ t: 'profile.set', patch });
+  }, [bridge]);
+
+  const ui = useMemo(() => ({ state, strings, bridge, send, dispatch, setProfile }), [state, strings, bridge, send, setProfile]);
   return <UiContext.Provider value={ui}>{children}</UiContext.Provider>;
 }
 
