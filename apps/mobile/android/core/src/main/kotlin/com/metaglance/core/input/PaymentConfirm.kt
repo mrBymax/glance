@@ -5,7 +5,7 @@ enum class PromptOutcome { SUCCEEDED, ERROR, ATTEMPT_FAILED }
 
 /**
  * The answer of the phone to `biometric.request`: one `biometric.result` for each prompt that the shopper saw.
- * The server asks for it before a payment above 50 EUR.
+ * Only a server with the setting BIOMETRIC_ABOVE_CENTS asks for it, before a payment above that limit.
  */
 class PaymentConfirm {
     enum class Start {

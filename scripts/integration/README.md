@@ -12,7 +12,7 @@ npm install --prefix scripts/integration  # puppeteer-core, for the test of the 
 | Command, at the repository root | Test |
 |---|---|
 | `node scripts/integration/server-kotlin.mjs` | The server and the Kotlin client of the Android app |
-| `node scripts/integration/android/run-spine.mjs --integration` | The Android app with mock glasses on the test phone: the spine, the device states, the phone UI in the WebView, the answers from the volume keys, the touchpad, and the voice, two extras (the fingerprint above 50 EUR, and the still photo), and the barcode of a product |
+| `node scripts/integration/android/run-spine.mjs --integration` | The Android app with mock glasses on the test phone: the spine, the device states, the phone UI in the WebView, the answers from the volume keys, the touchpad, and the voice, two extras (the fingerprint before a payment, and the still photo), and the barcode of a product |
 | `node scripts/integration/server-web.mjs` | The server, the phone UI with `BrowserBridge`, the kiosk page, and the mirror page |
 
 The exit code of each script is 0 for a pass and 1 for a fail, and the last line is `result: pass` or `result: fail`.

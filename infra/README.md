@@ -51,6 +51,7 @@ flowchart LR
 | `RECOGNITION_REFERENCES` | The number of reference pictures of one store item in each recognition call for a frame, from 0 to 3. Empty means 3. `0` means none. |
 | `REQUIRE_BLUR` | `1` when the phone runs face detection. |
 | `SECOND_LOOK_WAIT_MS` | `2500` when the phone sends a still for look-alike products. Empty means off. |
+| `BIOMETRIC_ABOVE_CENTS` | A total above this number of cents needs a fingerprint on the phone. Empty means that no payment needs one. |
 
 The image sets `PORT=8080`, `NODE_ENV=production`, and `SPEECH_CACHE_DIR=/data/speech`. Do not set them in `infra/.env`.
 

@@ -11,7 +11,7 @@ import androidx.fragment.app.FragmentActivity
 import com.metaglance.core.input.PromptOutcome
 
 /**
- * The prompt that confirms a payment above 50 EUR. `GlanceApp` holds one. The instrumented tests replace it,
+ * The prompt that confirms a payment for a server that asks for a fingerprint. `GlanceApp` holds one. The instrumented tests replace it,
  * because nobody can put a finger on the test phone.
  */
 interface PaymentPrompt {

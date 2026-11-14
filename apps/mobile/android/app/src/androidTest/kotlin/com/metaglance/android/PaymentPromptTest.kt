@@ -23,8 +23,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The fingerprint above 50 EUR: the checks of Plan 2 Task 24 Step 2 that need no finger. The command `bio` of the
- * fake server sends `biometric.request`, as the server of Plan 1 does before a payment above 50 EUR.
+ * The fingerprint before a payment: the checks of Plan 2 Task 24 Step 2 that need no finger. The command `bio` of
+ * the fake server sends `biometric.request`, as a server with the setting BIOMETRIC_ABOVE_CENTS does before a
+ * payment above that limit. A server with no such setting never sends it.
  *
  * Two tests show the real prompt of Android and close it with no finger: one with the back key, as a shopper
  * who cancels, and one with the end of the checkout. The other tests replace the prompt, so that a test can

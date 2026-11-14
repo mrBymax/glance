@@ -47,7 +47,7 @@ export const EN = {
 
   checkout: 'Checkout',
   pay: 'Pay',
-  fingerprint: 'Over fifty euros. Confirm with your fingerprint on the phone.',
+  fingerprint: 'Confirm with your fingerprint on the phone.',
   payFingerprint: 'Pay with fingerprint',
   cancel: 'Cancel',
   payee: (kiosk: string, store: string) => `${kiosk} at ${store}`,
@@ -211,7 +211,7 @@ export const IT: Strings = {
 
   checkout: 'Cassa',
   pay: 'Paga',
-  fingerprint: "Oltre cinquanta euro. Conferma con l'impronta digitale sul telefono.",
+  fingerprint: "Conferma con l'impronta sul telefono.",
   payFingerprint: "Paga con l'impronta",
   cancel: 'Annulla',
   payee: (kiosk, store) => `${kiosk} presso ${store}`,

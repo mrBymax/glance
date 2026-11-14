@@ -94,7 +94,7 @@ it('has no control below 48 px in the pay view and in the receipt', () => {
 });
 it('asks for the fingerprint when the server requires it', () => {
   renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.offered', { needsBiometric: true })] });
-  expect(sheet('Checkout').getByText('Over fifty euros. Confirm with your fingerprint on the phone.')).toBeInTheDocument();
+  expect(sheet('Checkout').getByText('Confirm with your fingerprint on the phone.')).toBeInTheDocument();
   expect(sheet('Checkout').getByRole('button', { name: 'Pay with fingerprint' })).toBeInTheDocument();
   expect(sheet('Checkout').queryByRole('button', { name: 'Pay' })).toBeNull();
 });

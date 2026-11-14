@@ -12,7 +12,7 @@
 //   state  DeviceStatesTest, SetupFlowTest, and RecognitionSlowTest: each device and error state
 //   page   PhoneUiPageTest: the phone UI in the WebView
 //   input  VolumeKeysTest, TouchpadInputTest, and VoiceCommandsTest: the volume keys, the touchpad, and the voice
-//   extra  PaymentPromptTest, StillPhotoTest, and StillPhotoPrepareTest: the fingerprint above 50 EUR, and the
+//   extra  PaymentPromptTest, StillPhotoTest, and StillPhotoPrepareTest: the fingerprint before a payment, and the
 //          sharp second look
 //   barcode  BarcodeScanTest and LabelStillTest: the barcode of a product, its digits, and the label still
 //

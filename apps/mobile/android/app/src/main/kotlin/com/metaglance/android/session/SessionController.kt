@@ -633,7 +633,11 @@ class SessionController(
         }
     }
 
-    /** The server asks for it before a payment above 50 EUR. Each request gets one `biometric.result`. */
+    /**
+     * Only a server with the setting BIOMETRIC_ABOVE_CENTS asks for it, before a payment above that limit.
+     * Each request gets one `biometric.result`. The prompt needs a screen that the shopper sees. So with the
+     * phone locked, or with the screen off, the answer is `ok: false` at once.
+     */
     private fun onBiometricRequest() {
         val activity = activity
         if (activity == null) {
