@@ -125,6 +125,8 @@ it('makes the clips of the prompts of each store item at the start, so the first
 
   // The first prompt of a session has the yes phrase, and its text is the text of a clip that exists.
   const { session, phone } = await shopper(warm);
+  // A prompt by sight opens with the second result in a row.
+  session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: `gtin-${item.gtin}` }, still: false });
   session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: `gtin-${item.gtin}` }, still: false });
   const speak = await phone.next((m) => m.t === 'speak') as { text: string; url: string };
   expect(speak.text).toBe(made[0]);
