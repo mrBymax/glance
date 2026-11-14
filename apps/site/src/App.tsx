@@ -1,13 +1,14 @@
 import { LazyMotion, MotionConfig, domAnimation } from 'motion/react';
 import { SiteHeader } from './components/SiteHeader';
 import { Closing, SiteFooter } from './sections/Closing';
+import { Builders } from './sections/Builders';
+import { Demo } from './sections/Demo';
 import { Faq } from './sections/Faq';
-import { Features } from './sections/Features';
 import { Hero } from './sections/Hero';
 import { HowItWorks } from './sections/HowItWorks';
-import { Status } from './sections/Status';
 import { Team } from './sections/Team';
-import { Technology } from './sections/Technology';
+import { UseCases } from './sections/UseCases';
+import { Why } from './sections/Why';
 
 export function App() {
   // domAnimation holds the animations, the gestures, and the in-view checks, without layout animation.
@@ -23,9 +24,10 @@ export function App() {
           <main id="main" tabIndex={-1}>
             <Hero />
             <HowItWorks />
-            <Features />
-            <Technology />
-            <Status />
+            <UseCases />
+            <Demo />
+            <Builders />
+            <Why />
             <Team />
             <Faq />
             <Closing />

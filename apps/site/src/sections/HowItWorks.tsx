@@ -1,5 +1,5 @@
 import * as m from 'motion/react-m';
-import { INTRO, STEPS } from '../content/site';
+import { INTRO, LOOP } from '../content/site';
 import { EASE_OUT, Reveal } from '../motion/Reveal';
 
 // The numeral rises out of its own line box after its step appears.
@@ -8,7 +8,7 @@ const numeral = {
   shown: (index: number) => ({ y: 0, opacity: 1, transition: { duration: 0.7, ease: EASE_OUT, delay: 0.12 + index * 0.08 } }),
 };
 
-/** The statement after the hero, then the four steps, each under one large numeral as in the phone app. */
+/** The statement after the hero, then the loop of the protocol, each step under one large numeral as in the phone app. */
 export function HowItWorks() {
   return (
     <>
@@ -24,12 +24,12 @@ export function HowItWorks() {
         <div className="container">
           <Reveal className="section-head">
             <h2 id="how-title" className="section-title">
-              {STEPS.heading}
+              {LOOP.heading}
             </h2>
-            <p className="lead">{STEPS.lead}</p>
+            <p className="lead">{LOOP.lead}</p>
           </Reveal>
           <ol className="steps">
-            {STEPS.items.map((step, index) => (
+            {LOOP.steps.map((step, index) => (
               <Reveal as="li" key={step.title} className="step" index={index}>
                 <span className="step__numeral-box" aria-hidden="true">
                   <m.span className="step__numeral" variants={numeral} custom={index}>

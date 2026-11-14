@@ -1,23 +1,22 @@
 /*
- * The copy of the page. Each claim comes from the documentation of the repository:
- * README.md, docs/architecture.md, and the design spec in docs/superpowers/specs.
- * Keep the copy true to the build. The status section says what is a demo.
+ * The copy of the page. Meta Glance is a protocol: a place shows a Glance code, the glasses read it, the voice says
+ * what a nod will do, and a nod confirms. The store is the first demo of that loop.
+ * The mechanics come from docs/architecture.md and apps/website/README.md of the app branch. Use cases other than the
+ * checkout are what the protocol enables; the page states no availability, price, partner, or certification.
  */
 
 export const PRODUCT = {
   name: 'Meta Glance',
-  shortName: 'Glance',
-  tagline: 'Glance tells. Nod buys.',
-  sentence: 'Look at a product to hear its name and price. Nod to add it to the cart. Nod at the kiosk to pay.',
-  origin: 'A prototype for Ray-Ban Meta glasses, built at Junction 2026.',
+  claim: 'Look. Nod. Done.',
+  sentence: 'Meta Glance is a protocol for AI glasses. Look at a Glance code, hear what it is and what it costs, and nod to confirm.',
 };
 
 /** The sections in page order. The sticky navigation lists the ones with a `nav` label. */
 export const SECTIONS = [
   { id: 'how-it-works', nav: 'How it works' },
-  { id: 'features', nav: 'Features' },
-  { id: 'technology', nav: 'Technology' },
-  { id: 'status', nav: 'Status' },
+  { id: 'use-cases', nav: 'Use cases' },
+  { id: 'demo', nav: 'The demo' },
+  { id: 'builders', nav: 'For builders' },
   { id: 'team', nav: 'Team' },
   { id: 'faq', nav: 'FAQ' },
 ] as const;
@@ -25,38 +24,74 @@ export const SECTIONS = [
 export type SectionId = (typeof SECTIONS)[number]['id'];
 
 export const HERO = {
-  eyebrow: 'Scan as you shop, with your eyes and your voice',
   primaryAction: { label: 'See how it works', href: '#how-it-works' },
-  secondaryAction: { label: 'What works today', href: '#status' },
-  animationCaption: 'The kiosk shows a code like this one. You look at it, and a nod pays.',
+  secondaryAction: { label: 'See what you can build', href: '#use-cases' },
 };
 
 export const INTRO = {
-  heading: 'The glasses are the scanner.',
+  heading: 'A code you look at.',
   body:
-    'In scan-as-you-shop, a shopper scans each product with a handheld scanner or a phone. ' +
-    'With Meta Glance, the shopper looks at the product instead. The voice in the glasses does the rest, and the phone can stay in a pocket.',
+    'A Glance code is a QR code with a short code inside. Any place can show one, on a screen or on a sticker. ' +
+    'Your glasses read it while you look, so your hands and your phone stay free.',
 };
 
-export const STEPS = {
-  heading: 'Four moves, from the shelf to the exit.',
-  lead: 'A glance never changes the cart. Only a nod does.',
-  items: [
-    { title: 'Look', body: 'Hold a product up and look at it. The glasses see it, and the cart stays as it is.' },
-    { title: 'Hear', body: 'The voice says the name and the price, and a warning when a product does not suit your profile.' },
-    { title: 'Nod', body: 'A nod adds the product. A shake skips it. You can answer while the voice still speaks.' },
-    { title: 'Pay', body: 'Look at the code on the kiosk screen. The voice says the store and the total, and a nod pays.' },
+export const LOOP = {
+  heading: 'One loop for every place.',
+  lead: 'The same four steps buy a ticket, open a gate, or pay for groceries.',
+  steps: [
+    { title: 'Look', body: 'Look at a Glance code, or at a product that the glasses know.' },
+    { title: 'Hear', body: 'The voice says what it is, and what it costs or what it does.' },
+    { title: 'Nod', body: 'A nod confirms. A shake says no. A look alone changes nothing.' },
+    { title: 'Done', body: 'The place gets the answer: the payment goes through, the ticket is valid, the gate opens.' },
   ],
+};
+
+export type UseCase = {
+  id: string;
+  icon: 'checkout' | 'bus' | 'gate' | 'machine' | 'table' | 'exhibit';
+  title: string;
+  body: string;
+  isDemo?: boolean;
+};
+
+export const USE_CASES = {
+  heading: 'What you can build with it.',
+  lead: 'Any place that can show a code can take a nod.',
+  demoTag: 'Demo',
+  /** The line that the voice says on the bus, shown in the captions window of the bus card. */
+  busLine: 'Line 4 to the harbor. Single ticket. Nod to buy.',
+  items: [
+    {
+      id: 'bus',
+      icon: 'bus',
+      title: 'Buy a bus ticket',
+      body: 'A code by the door sells the ticket. Look at it as you board, hear the line and the fare, and nod. No app to open, no card to tap.',
+    },
+    {
+      id: 'checkout',
+      icon: 'checkout',
+      title: 'Pay at a checkout',
+      body: 'Look at the code on the kiosk. The voice says the store and the total. A nod pays.',
+      isDemo: true,
+    },
+    { id: 'gate', icon: 'gate', title: 'Open a gate', body: 'At a ticket gate or a door, the voice says what the code opens. A nod lets you through.' },
+    { id: 'machine', icon: 'machine', title: 'Pay a machine', body: 'A vending machine or a parking meter shows a code. Hear the item or the time and the price, and nod.' },
+    { id: 'table', icon: 'table', title: 'Order at a table', body: 'The code on the table reads the menu out loud. A nod orders, a shake moves on.' },
+    { id: 'exhibit', icon: 'exhibit', title: 'Hear about an exhibit', body: 'Look at the code next to a painting and hear its story. No nod needed.' },
+  ] satisfies UseCase[],
 };
 
 export type Chapter = {
   id: string;
-  eyebrow: string;
   heading: string;
   body: string;
   points: readonly { title: string; body: string }[];
   media: 'voice' | 'prompt' | 'phones' | 'privacy' | 'kiosk';
-  mediaCaption: string;
+};
+
+export const DEMO = {
+  heading: 'The first demo: a store you shop with your eyes.',
+  lead: 'The demo runs the whole loop in a supermarket, from the product in your hand to the payment at the exit.',
 };
 
 /** Two lines of the recorded demo shop of the phone app (DEMO_RUN), in the order the voice says them. */
@@ -66,78 +101,59 @@ export const VOICE_LINES = {
   newest: 'Oat drink, one litre, one eighty-nine. Nod to add.',
 };
 
-export const FEATURES_INTRO = {
-  heading: 'Built for the shopper who cannot see the label.',
-  body:
-    'Small print, a price on the shelf edge, an allergen list on the back of the pack. ' +
-    'Meta Glance reads these out loud, so a blind or low-vision shopper can shop without help, and any shopper can shop with full hands.',
-};
-
 export const CHAPTERS: readonly Chapter[] = [
   {
-    id: 'hands-free',
-    eyebrow: 'Hands free, eyes free',
-    heading: 'The voice does the work.',
-    body: 'Each answer comes as a short spoken line in the glasses. The phone shows the same facts in large text, for a shopper who wants to read them.',
+    id: 'hear',
+    heading: 'Hear what is in your hand.',
+    body: 'Hold a product up. Meta Glance knows it by sight or by its barcode, and the voice says the name and the price.',
     points: [
-      { title: 'By sight', body: 'The server names the product in your hand. It compares the frame with reference pictures of each item that the store sells.' },
-      { title: 'By barcode', body: 'The phone reads the barcode, or the digits under it. The store list gives the name and the price.' },
-      { title: 'Repeat and undo', body: 'Swipe the touchpad of the glasses to hear the last line again. A shake soon after an add undoes it.' },
+      { title: 'By sight', body: 'The server compares the frame with reference pictures of each item that the store sells.' },
+      { title: 'By barcode', body: 'The phone reads the barcode, and the store list gives the name and the price.' },
+      { title: 'Undo', body: 'A shake soon after an add takes the product back out of the cart.' },
     ],
     media: 'voice',
-    mediaCaption: 'Two spoken lines of a recorded demo shop, as the phone app shows them in its captions.',
   },
   {
     id: 'allergens',
-    eyebrow: 'Allergens and budget',
-    heading: 'A warning before the nod, not after.',
-    body: 'Set your allergens, your diet, and a budget once. The voice warns you before you add a product, and the phone shows the same warning.',
+    heading: 'A warning before the nod.',
+    body: 'Set your allergens, your diet, and a budget once. You hear a warning before you add a product, and the phone shows it too.',
     points: [
       { title: 'Allergens and diets', body: 'The 14 allergens of EU law, and vegan and vegetarian diets, with the data of Open Food Facts.' },
       { title: 'Missing data', body: 'When a product has no allergen data, the voice says so. No message ever says that a product is safe.' },
       { title: 'Budget', body: 'When an add takes the total over your budget, you hear it before the nod.' },
     ],
     media: 'prompt',
-    mediaCaption: 'The phone app during a demo shop: the product, its price, and a warning before the nod.',
   },
   {
     id: 'pocket',
-    eyebrow: 'Phone in the pocket',
     heading: 'Lock the phone. Keep shopping.',
-    body: 'The phone app runs the shop as a foreground service. The camera frames, the head answers, and the voice do not need the screen, so the phone can stay locked in a pocket.',
+    body: 'The phone runs the shop in the background. The camera, the voice, and the nods do not need the screen.',
     points: [
       { title: 'One notification', body: 'It shows your total, and a button that stops the camera.' },
-      { title: 'A button for each move', body: 'Every nod, shake, and question also has a button in the app, for a shopper who prefers to tap.' },
-      { title: 'Large text', body: 'The app keeps each label whole at twice the normal font size, on a 360 pixel screen.' },
+      { title: 'A button for each move', body: 'Every nod and shake also has a button in the app.' },
+      { title: 'Large text', body: 'Every label stays whole at twice the normal font size.' },
     ],
     media: 'phones',
-    mediaCaption: 'The checkout and the receipt in the phone app, after a demo payment.',
   },
   {
     id: 'privacy',
-    eyebrow: 'Privacy',
-    heading: 'Faces stay on the phone.',
+    heading: 'Faces are pixelated on the phone.',
     body: 'The phone pixelates each face in a frame before the frame leaves the phone. When face detection fails, the phone drops the frame.',
     points: [
       { title: 'In memory only', body: 'The server keeps a frame in memory for one recognition call. It writes no frame to a disk, a database, or a log.' },
-      { title: 'Best effort', body: 'Face detection can miss a face. The camera runs only during a shop, and you can stop it at any time.' },
       { title: 'No saved frames', body: 'The server option that saves frames for a test is off by default.' },
     ],
     media: 'privacy',
-    mediaCaption: 'Each face is pixelated on the phone before a frame goes to the server.',
   },
   {
     id: 'kiosk',
-    eyebrow: 'For stores and for an audience',
     heading: 'Pay with a look and a nod.',
-    body: 'The kiosk page shows a code on a screen at the exit. When you look at it, the voice names the kiosk, the store, and the total. A nod pays only while you look at the code.',
+    body: 'The kiosk shows a Glance code. Look at it, and the voice says the store and the total. A nod pays, and only while you look at the code.',
     points: [
-      { title: 'The kiosk page', body: 'A code, then the cart and the total, then the result, in large type.' },
-      { title: 'The mirror page', body: 'For a demo on stage: it shows the spoken lines in large text and plays the voice for the room.' },
-      { title: 'A staffed checkout', body: 'The kiosk tells a shopper without glasses to use a staffed checkout.' },
+      { title: 'The kiosk page', body: 'The code, then the cart and the total, then the result, in large type.' },
+      { title: 'The mirror page', body: 'For a room: the spoken lines in large text, with the voice.' },
     ],
     media: 'kiosk',
-    mediaCaption: 'The kiosk page waits for a nod. The voice has just said the total.',
   },
 ];
 
@@ -152,148 +168,119 @@ export const KIOSK_SCREEN = {
   ],
 };
 
-export const CONTROL = {
-  heading: 'You stay in control.',
+export const WHY = {
+  heading: 'Why a look and a nod.',
+  lead: 'A screen asks for your hands and your eyes. Meta Glance asks for neither.',
   items: [
-    { title: 'Nothing changes without a nod', body: 'A glance only tells. The cart changes when you nod, and a shake within eight seconds undoes an add.' },
-    { title: 'Stop the camera', body: 'The notification of the phone has a button that stops the camera, also with the screen locked.' },
-    { title: 'English and Italian', body: 'The phone app and the voice speak English and Italian.' },
+    { title: 'Hands free', body: 'Bags, a child, a cane, a stroller: you answer with your head.' },
+    { title: 'Eyes free', body: 'Blind and low-vision people hear every name, price, and warning. There is no screen to read.' },
+    { title: 'Phone in the pocket', body: 'The phone can stay locked. The glasses see, speak, and feel the nod.' },
+    { title: 'Nothing by accident', body: 'A look only tells. You hear what a nod will do before you nod.' },
   ],
 };
 
-/** The diagram of the technology section, after docs/architecture.md of the app branch. */
+export const BUILDERS = {
+  heading: 'Built to be built on.',
+  lead:
+    'A place shows a code, the glasses read it, and a server ties the two together. ' +
+    'Meta could build the loop into the glasses, and any place could plug in.',
+  integration: [
+    { term: 'Glance code', detail: 'A plain QR code with a short code inside, such as GL1 K3X7' },
+    { term: 'A place', detail: 'A screen or a sticker with the code. The place registers with the Glance server and gets each result as an event' },
+    { term: 'Glance server', detail: 'Links a session to the place that the person looks at, writes what the voice says, and confirms the nod' },
+    { term: 'Glasses', detail: "Ray-Ban Meta: the camera, the speakers, and the head-motion sensor that Meta's Wearables Device Access Toolkit gives an app" },
+    { term: 'Phone', detail: 'An Android app that streams the camera, reads codes, and pixelates faces' },
+    { term: 'Recognition', detail: 'Gemini, for products that carry no code' },
+    { term: 'Voice', detail: 'ElevenLabs, in English and Italian' },
+  ],
+};
+
+/** The diagram of the builders section: the protocol, after docs/architecture.md of the app branch. */
 export const DIAGRAM = {
-  title: 'The parts of Meta Glance and what flows between them',
-  description:
-    'Data flows from the glasses through the phone to the server, which asks a model and the product data, speaks back through the phone, and updates the kiosk and the mirror.',
+  title: 'How the Glance protocol works',
+  description: 'A place shows a Glance code, the glasses see it, the phone sends the code and the nod to the Glance server, and the server confirms to the place.',
   parts: {
     glasses: { title: 'Glasses', lines: ['Ray-Ban Meta', 'Camera', 'Speakers', 'Motion sensor'] },
-    phone: { title: 'Phone', lines: ['Android app', 'Camera stream', 'Barcode reading', 'Face pixelation', 'Works screen off'] },
-    server: { title: 'Server', lines: ['Node.js', 'Recognition', 'Cart rules', 'Spoken lines', 'Kiosk checkout'] },
-    model: { title: 'Model', lines: ['Gemini'] },
-    storeList: { title: 'Store list', lines: ['Names and prices'] },
-    openFoodFacts: { title: 'Open Food Facts', lines: ['Allergens, diets'] },
-    sources: { title: 'Model and data', lines: ['The server asks', 'Gemini, the model', 'The store list', 'Open Food Facts'] },
-    kiosk: { title: 'Kiosk page', lines: ['Shows the QR code'] },
-    mirror: { title: 'Mirror page', lines: ['Lines for the room'] },
+    phone: { title: 'Phone', lines: ['Glance app', 'Reads the code', 'Face pixelation', 'Works screen off'] },
+    server: { title: 'Glance server', lines: ['Sessions', 'Places', 'Spoken lines', 'Confirmation'] },
+    model: { title: 'Model and data', lines: ['Gemini', 'Store list', 'Open Food Facts'] },
+    place: { title: 'Place', lines: ['Shows a Glance code', 'Checkout, bus, gate'] },
   },
   flows: {
     glassesToPhone: 'Frames, motion',
-    phoneToGlasses: 'Spoken lines',
-    frames: 'Pixelated frames',
-    answers: 'Nods, codes',
-    serverToPhone: 'Lines, cart',
-    toModel: 'Frames',
-    toStoreList: 'Barcode',
-    toOpenFoodFacts: 'Barcode',
-    toSources: 'Frames, barcodes',
-    toKiosk: 'Cart, result',
-    toMirror: 'Lines, cart',
-    qr: 'QR code',
+    phoneToGlasses: 'Voice',
+    phoneToServer: 'Code, nod',
+    serverToPhone: 'Spoken lines',
+    toModel: 'Products',
+    serverAndPlace: 'Register, result',
+    code: 'Glance code',
   },
   legend: [
     { label: 'Data over the network', isFocal: false },
     { label: 'Seen by the camera', isFocal: true },
   ],
   textAlternative: [
-    'The glasses send camera frames and the motion of the head to the phone. The phone plays the spoken lines in the glasses.',
-    'The phone reads barcodes, pixelates each face, and keeps the shop running with the screen off.',
-    'The phone sends the pixelated frames to the server, with the nods and shakes and each barcode and QR code that it reads.',
-    'The server sends the spoken lines and the cart back to the phone.',
-    'The server asks the Gemini model to name the product in a frame, and looks up a barcode in the store list and in Open Food Facts.',
-    'The server sends the cart and the result of the payment to the kiosk page, and the lines and the cart to the mirror page.',
-    'The kiosk page shows a QR code. The camera of the glasses sees it, and that starts the payment.',
+    'A place, such as a checkout, a bus, or a gate, shows a Glance code. The camera of the glasses sees it.',
+    'The glasses send camera frames and the motion of the head to the phone, and play the voice.',
+    'The phone reads the code, pixelates each face, and sends the code and the nod to the Glance server.',
+    'The Glance server sends the spoken lines back to the phone.',
+    'The place registers with the Glance server and gets the result when the person nods.',
+    'For a product without a code, the server asks the Gemini model, the store list, and Open Food Facts.',
   ],
-};
-
-export const TECHNOLOGY = {
-  heading: 'How the parts talk.',
-  lead: 'The glasses see and speak, the phone connects, the server decides, and a model names the product. The kiosk and the mirror show the result.',
-  specs: [
-    { term: 'Glasses', detail: "Ray-Ban Meta glasses, through Meta's Wearables Device Access Toolkit" },
-    { term: 'Phone', detail: 'Android 10 or later' },
-    { term: 'Server', detail: 'Node.js 22, TypeScript, Fastify' },
-    { term: 'Recognition', detail: 'Gemini, with up to three reference pictures for each store item' },
-    { term: 'Voice', detail: 'ElevenLabs' },
-    { term: 'Product data', detail: 'A store list file, and Open Food Facts for allergens and diets' },
-    { term: 'Languages', detail: 'English and Italian' },
-  ],
-};
-
-export const STATUS = {
-  eyebrow: 'Status',
-  heading: 'A prototype, said plainly.',
-  lead: 'Meta Glance is a hackathon prototype. Some parts run end to end, and some parts are a demo.',
-  real: {
-    title: 'Works today',
-    items: [
-      'One shop runs from the first glance to the payment, against the server in test mode.',
-      'Barcode lookup in the store list, with allergens and diets from Open Food Facts.',
-      'The phone app, the kiosk page, and the mirror page.',
-    ],
-  },
-  demo: {
-    title: 'A demo today',
-    items: [
-      'The payment is a mock. No money moves.',
-      'The store list is a file in place of the stock system of a supermarket. Its prices are invented.',
-      'One test with real glasses ran on 14 November 2026. In it, the phone read no barcode at arm length.',
-      'The head gestures were rebuilt after that test. Since then, only synthetic test motion has checked them.',
-      'Spoken questions and voice commands work only in the mock mode of the app, without real glasses.',
-      'Blind and low-vision shoppers have not tested Meta Glance yet.',
-    ],
-  },
 };
 
 export const TEAM_COPY = {
   heading: 'The team',
-  lead: 'Four people built Meta Glance at Junction 2026 in Espoo, for the Meta challenge "AI Glasses for Everyone, Everyday".',
 };
 
 export const FAQ = {
   heading: 'Questions',
   items: [
     {
-      question: 'Is Meta Glance a product of Meta?',
-      answer: "No. Meta Glance is an independent prototype, built at a hackathon. It works with Ray-Ban Meta glasses through Meta's Wearables Device Access Toolkit.",
+      question: 'What is a Glance code?',
+      answer: 'A QR code with a short code inside, such as GL1 K3X7. A place shows it on a screen or a sticker, and the glasses read it when you look at it.',
     },
     {
-      question: 'Can I use it in a store today?',
-      answer: 'No. The payment is a demo, and the store list is a file that stands in for the stock system of a supermarket. The store list sits behind one interface, so the system of a real store can take its place.',
+      question: 'Do I need to take out my phone?',
+      answer: 'No. The phone runs Meta Glance in the background and can stay locked in a pocket. The camera of the glasses sees, the speakers tell, and a nod answers.',
     },
     {
-      question: 'What do I need?',
-      answer: 'Ray-Ban Meta glasses, an Android phone with Android 10 or later, and the Meta AI app and the Meta Glance app on the phone.',
+      question: 'What if I nod by mistake?',
+      answer: 'A look alone changes nothing, and the voice says what a nod will do before you nod. At a checkout, a nod pays only while you look at its code. A shake soon after an add undoes it.',
     },
     {
-      question: 'Does the camera record the people around me?',
-      answer: 'The phone pixelates each face before a frame leaves the phone, and drops the frame when face detection fails. The server keeps a frame in memory for one recognition call only. Face detection is best effort, so it can miss a face.',
+      question: 'What about the people around me?',
+      answer: 'The phone pixelates each face before a frame leaves the phone, and drops a frame when face detection fails. The server keeps a frame in memory for one recognition call only.',
     },
     {
-      question: 'What if Glance names the wrong product?',
-      answer: 'You hear the name and the price before the cart changes. Shake your head to skip the product, or undo the last add. A barcode that the store list does not hold gets the line "This product is not in this store."',
+      question: 'What can I build on it?',
+      answer: 'Anything at a place that can show a code: a checkout, a bus, a gate, a vending machine, a table, an exhibit. The place registers with the Glance server and gets the result when the person nods.',
     },
     {
       question: 'What if I cannot nod or shake my head?',
-      answer: 'Each move also has a button in the phone app: add, skip, undo, and repeat.',
+      answer: 'Each move also has a button in the phone app.',
     },
     {
       question: 'Which languages does it speak?',
-      answer: 'English and Italian, in the phone app and in the voice. Voice commands are in English only.',
+      answer: 'English and Italian, in the phone app and in the voice.',
+    },
+    {
+      question: 'Is Meta Glance a product of Meta?',
+      answer: "No. Meta Glance is a concept by an independent team, built at Junction 2026. It works with Ray-Ban Meta glasses through Meta's Wearables Device Access Toolkit.",
     },
   ],
 };
 
 export const CLOSING = {
-  heading: PRODUCT.tagline,
-  body: 'A look tells you the name and the price. Your nod is the only thing that changes the cart.',
-  primaryAction: { label: 'See how it works', href: '#how-it-works' },
+  heading: PRODUCT.claim,
+  body: 'Any code in the world, answered with a nod.',
+  primaryAction: { label: 'See what you can build', href: '#use-cases' },
   secondaryAction: { label: 'Read the questions', href: '#faq' },
 };
 
 export const FOOTER = {
   independence:
-    "Meta Glance is an independent prototype, built at Junction 2026. It is not a product of Meta, and Meta does not endorse it. It works with Ray-Ban Meta glasses through Meta's Wearables Device Access Toolkit. Meta and Ray-Ban are trademarks of their owners.",
+    "Meta Glance is a concept by an independent team, built at Junction 2026. It is not a product of Meta, and Meta does not endorse it. It works with Ray-Ban Meta glasses through Meta's Wearables Device Access Toolkit. Meta and Ray-Ban are trademarks of their owners.",
   openFoodFacts: {
     before: 'Product data from ',
     name: 'Open Food Facts',

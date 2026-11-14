@@ -5,15 +5,27 @@ import { DIAGRAM } from '../content/site';
 import { EASE_OUT } from '../motion/Reveal';
 
 /*
- * The parts of Meta Glance and what flows between them, after docs/architecture.md of the app branch.
+ * The Glance protocol: a place, the glasses, the phone, the Glance server, and the model and data for products
+ * without a code. After docs/architecture.md of the app branch.
  * Two drawings of one content: a wide one for a container of 70 rem or more, a tall one below it. The text of both is
  * 18.5 units or more, and each one is shown only at widths where a unit is 0.76 px or more, so no text is under 14 px.
  * The grammar follows the diagram-design skill: orthogonal connectors with r=8 corners, labels on a mask with a gap,
- * one focal path (the QR code that the camera sees), a legend strip at the bottom.
+ * one focal path (the Glance code that the camera sees), a legend strip at the bottom.
  */
 
 type Direction = 'right' | 'left' | 'up' | 'down';
-type Arrow = { d: string; end: [number, number]; direction: Direction; label: string; labelAt: [number, number]; anchor: 'start' | 'middle' | 'end'; isFocal?: boolean };
+type Arrow = {
+  d: string;
+  end: [number, number];
+  direction: Direction;
+  /** A second head at the start, for a flow both ways. */
+  start?: [number, number];
+  startDirection?: Direction;
+  label: string;
+  labelAt: [number, number];
+  anchor: 'start' | 'middle' | 'end';
+  isFocal?: boolean;
+};
 type Box = { x: number; y: number; w: number; h: number; title: string; lines: readonly string[]; isGroup?: boolean };
 
 const NAME = 24;
@@ -25,58 +37,66 @@ const { parts, flows, legend } = DIAGRAM;
 
 const WIDE = {
   width: 1480,
-  height: 700,
+  height: 680,
   boxes: [
-    { x: 40, y: 40, w: 220, h: 360, ...parts.glasses },
-    { x: 430, y: 40, w: 240, h: 360, ...parts.phone },
-    { x: 840, y: 40, w: 240, h: 360, ...parts.server },
-    { x: 1210, y: 40, w: 230, h: 100, ...parts.model },
-    { x: 1210, y: 170, w: 230, h: 100, ...parts.storeList },
-    { x: 1210, y: 300, w: 230, h: 100, ...parts.openFoodFacts },
-    { x: 40, y: 500, w: 220, h: 100, ...parts.kiosk },
-    { x: 1210, y: 500, w: 230, h: 100, ...parts.mirror },
+    { x: 40, y: 40, w: 220, h: 300, ...parts.glasses },
+    { x: 430, y: 40, w: 240, h: 300, ...parts.phone },
+    { x: 840, y: 40, w: 240, h: 300, ...parts.server },
+    { x: 1210, y: 40, w: 230, h: 180, ...parts.model },
+    { x: 40, y: 440, w: 260, h: 140, ...parts.place },
   ] satisfies Box[],
   // Each label sits 16 units above its line: its mask ends 8 units above the stroke.
   arrows: [
-    { d: 'M260,150 H430', end: [430, 150], direction: 'right', label: flows.glassesToPhone, labelAt: [345, 134], anchor: 'middle' },
-    { d: 'M430,300 H260', end: [260, 300], direction: 'left', label: flows.phoneToGlasses, labelAt: [345, 284], anchor: 'middle' },
-    { d: 'M670,130 H840', end: [840, 130], direction: 'right', label: flows.frames, labelAt: [755, 114], anchor: 'middle' },
-    { d: 'M670,230 H840', end: [840, 230], direction: 'right', label: flows.answers, labelAt: [755, 214], anchor: 'middle' },
-    { d: 'M840,330 H670', end: [670, 330], direction: 'left', label: flows.serverToPhone, labelAt: [755, 314], anchor: 'middle' },
-    { d: 'M1080,90 H1210', end: [1210, 90], direction: 'right', label: flows.toModel, labelAt: [1145, 74], anchor: 'middle' },
-    { d: 'M1080,220 H1210', end: [1210, 220], direction: 'right', label: flows.toStoreList, labelAt: [1145, 204], anchor: 'middle' },
-    { d: 'M1080,350 H1210', end: [1210, 350], direction: 'right', label: flows.toOpenFoodFacts, labelAt: [1145, 334], anchor: 'middle' },
-    { d: 'M900,400 V542 Q900,550 892,550 H260', end: [260, 550], direction: 'left', label: flows.toKiosk, labelAt: [580, 534], anchor: 'middle' },
-    { d: 'M1020,400 V542 Q1020,550 1028,550 H1210', end: [1210, 550], direction: 'right', label: flows.toMirror, labelAt: [1119, 534], anchor: 'middle' },
-    { d: 'M150,500 V400', end: [150, 400], direction: 'up', label: flows.qr, labelAt: [164, 456], anchor: 'start', isFocal: true },
+    { d: 'M260,130 H430', end: [430, 130], direction: 'right', label: flows.glassesToPhone, labelAt: [345, 114], anchor: 'middle' },
+    { d: 'M430,250 H260', end: [260, 250], direction: 'left', label: flows.phoneToGlasses, labelAt: [345, 234], anchor: 'middle' },
+    { d: 'M670,130 H840', end: [840, 130], direction: 'right', label: flows.phoneToServer, labelAt: [755, 114], anchor: 'middle' },
+    { d: 'M840,250 H670', end: [670, 250], direction: 'left', label: flows.serverToPhone, labelAt: [755, 234], anchor: 'middle' },
+    { d: 'M1080,130 H1210', end: [1210, 130], direction: 'right', label: flows.toModel, labelAt: [1145, 114], anchor: 'middle' },
+    {
+      d: 'M960,340 V502 Q960,510 952,510 H300',
+      end: [300, 510],
+      direction: 'left',
+      start: [960, 340],
+      startDirection: 'up',
+      label: flows.serverAndPlace,
+      labelAt: [630, 494],
+      anchor: 'middle',
+    },
+    { d: 'M150,440 V340', end: [150, 340], direction: 'up', label: flows.code, labelAt: [164, 396], anchor: 'start', isFocal: true },
   ] satisfies Arrow[],
-  legendY: 664,
+  legendY: 644,
 };
 
 const TALL = {
   width: 348,
-  height: 1740,
+  height: 1500,
   boxes: [
     { x: 36, y: 20, w: 264, h: 187, ...parts.glasses },
-    { x: 36, y: 317, w: 264, h: 214, ...parts.phone },
-    { x: 36, y: 681, w: 264, h: 214, ...parts.server },
-    { x: 36, y: 1005, w: 264, h: 187, ...parts.sources },
-    { x: 36, y: 1302, w: 264, h: 100, ...parts.kiosk },
-    { x: 36, y: 1512, w: 264, h: 100, ...parts.mirror },
+    { x: 36, y: 317, w: 264, h: 187, ...parts.phone },
+    { x: 36, y: 654, w: 264, h: 187, ...parts.server },
+    { x: 36, y: 951, w: 264, h: 160, ...parts.model },
+    { x: 36, y: 1251, w: 264, h: 135, ...parts.place },
   ] satisfies Box[],
   // A label beside a vertical line keeps 12 units from it, in the gap between two boxes.
   arrows: [
     { d: 'M90,207 V317', end: [90, 317], direction: 'down', label: flows.glassesToPhone, labelAt: [102, 245], anchor: 'start' },
     { d: 'M250,317 V207', end: [250, 207], direction: 'up', label: flows.phoneToGlasses, labelAt: [238, 295], anchor: 'end' },
-    { d: 'M70,531 V681', end: [70, 681], direction: 'down', label: flows.frames, labelAt: [82, 565], anchor: 'start' },
-    { d: 'M110,531 V681', end: [110, 681], direction: 'down', label: flows.answers, labelAt: [122, 612], anchor: 'start' },
-    { d: 'M250,681 V531', end: [250, 531], direction: 'up', label: flows.serverToPhone, labelAt: [238, 660], anchor: 'end' },
-    { d: 'M90,895 V1005', end: [90, 1005], direction: 'down', label: flows.toSources, labelAt: [102, 955], anchor: 'start' },
-    { d: 'M300,830 H308 Q316,830 316,838 V1344 Q316,1352 308,1352 H300', end: [300, 1352], direction: 'left', label: flows.toKiosk, labelAt: [304, 1252], anchor: 'end' },
-    { d: 'M300,780 H324 Q332,780 332,788 V1554 Q332,1562 324,1562 H300', end: [300, 1562], direction: 'left', label: flows.toMirror, labelAt: [320, 1462], anchor: 'end' },
-    { d: 'M36,1352 H26 Q18,1352 18,1344 V121 Q18,113 26,113 H36', end: [36, 113], direction: 'right', label: flows.qr, labelAt: [30, 1252], anchor: 'start', isFocal: true },
+    { d: 'M90,504 V654', end: [90, 654], direction: 'down', label: flows.phoneToServer, labelAt: [102, 545], anchor: 'start' },
+    { d: 'M250,654 V504', end: [250, 504], direction: 'up', label: flows.serverToPhone, labelAt: [238, 625], anchor: 'end' },
+    { d: 'M90,841 V951', end: [90, 951], direction: 'down', label: flows.toModel, labelAt: [102, 900], anchor: 'start' },
+    {
+      d: 'M300,760 H308 Q316,760 316,768 V1308 Q316,1316 308,1316 H300',
+      end: [300, 1316],
+      direction: 'left',
+      start: [300, 760],
+      startDirection: 'left',
+      label: flows.serverAndPlace,
+      labelAt: [304, 1170],
+      anchor: 'end',
+    },
+    { d: 'M36,1316 H26 Q18,1316 18,1308 V121 Q18,113 26,113 H36', end: [36, 113], direction: 'right', label: flows.code, labelAt: [30, 1214], anchor: 'start', isFocal: true },
   ] satisfies Arrow[],
-  legendY: 1672,
+  legendY: 1432,
 };
 
 function arrowHead([x, y]: [number, number], direction: Direction): string {
@@ -124,6 +144,9 @@ function Drawing(props: { layout: typeof WIDE | typeof TALL; slug: string; state
             <m.path d={arrow.d} variants={lineVariants} custom={index} />
           )}
           <m.polygon points={arrowHead(arrow.end, arrow.direction)} variants={fadeVariants} custom={0.85 + index * 0.08} />
+          {arrow.start && arrow.startDirection ? (
+            <m.polygon points={arrowHead(arrow.start, arrow.startDirection)} variants={fadeVariants} custom={0.85 + index * 0.08} />
+          ) : null}
         </g>
       ))}
       {layout.arrows.map((arrow, index) => {

@@ -1,12 +1,11 @@
 import { Icon } from '@astryxdesign/core/Icon';
 import { Theme } from '@astryxdesign/core/theme';
 import { defaultThemeSlug, themes } from '../astryx-themes';
-import { Captions, Hand, ShieldCheck, Languages, type LucideIcon } from 'lucide-react';
+import { Captions } from 'lucide-react';
 import { KioskScreen } from '../components/KioskScreen';
 import { Picture } from '../components/Picture';
-import { CHAPTERS, CONTROL, FEATURES_INTRO, VOICE_LINES, type Chapter } from '../content/site';
+import { CHAPTERS, DEMO, VOICE_LINES, type Chapter } from '../content/site';
 import { TEAM } from '../content/team';
-import { CardLift } from '../motion/Lift';
 import { Reveal } from '../motion/Reveal';
 
 const PHONE = { widths: [390, 780], width: 780, height: 1688, sizes: '(min-width: 64rem) 18rem, (min-width: 37.5rem) 16rem, 70vw' } as const;
@@ -31,14 +30,14 @@ function PhoneShot(props: { name: string; alt: string }) {
 function VoiceLines() {
   return (
     <Theme theme={themes[defaultThemeSlug]} mode="dark">
-    <div className="voice">
-      <p className="voice__title">
-        <Icon icon={Captions} size="sm" />
-        <span>{VOICE_LINES.title}</span>
-      </p>
-      <p className="voice__line voice__line--older">{VOICE_LINES.older}</p>
-      <p className="voice__line">{VOICE_LINES.newest}</p>
-    </div>
+      <div className="voice">
+        <p className="voice__title">
+          <Icon icon={Captions} size="sm" />
+          <span>{VOICE_LINES.title}</span>
+        </p>
+        <p className="voice__line voice__line--older">{VOICE_LINES.older}</p>
+        <p className="voice__line">{VOICE_LINES.newest}</p>
+      </div>
     </Theme>
   );
 }
@@ -87,7 +86,6 @@ function ChapterBlock(props: { chapter: Chapter; index: number }) {
   return (
     <Reveal as="article" id={chapter.id} labelledBy={titleId} className={index % 2 === 1 ? 'chapter chapter--reverse' : 'chapter'}>
       <div className="chapter__copy">
-        <p className="eyebrow">{chapter.eyebrow}</p>
         <h3 id={titleId} className="chapter__title">
           {chapter.heading}
         </h3>
@@ -101,49 +99,31 @@ function ChapterBlock(props: { chapter: Chapter; index: number }) {
           ))}
         </ul>
       </div>
-      <figure className={`stage stage--${chapter.media}`}>
-        <CardLift className="stage__media">
+      <div className={`stage stage--${chapter.media}`}>
+        <div className="stage__media">
           <ChapterMedia media={chapter.media} />
-        </CardLift>
-        <figcaption className="stage__caption">{chapter.mediaCaption}</figcaption>
-      </figure>
+        </div>
+      </div>
     </Reveal>
   );
 }
 
-const CONTROL_GLYPHS: readonly LucideIcon[] = [Hand, ShieldCheck, Languages];
-
-export function Features() {
+/** The store, the first demo of the loop: a product in the hand, a warning, the pocket, privacy, and the payment. */
+export function Demo() {
   return (
-    <section id="features" className="section" aria-labelledby="features-title">
+    <section id="demo" className="section" aria-labelledby="demo-title">
       <div className="container">
         <Reveal className="section-head section-head--center">
-          <h2 id="features-title" className="section-title">
-            {FEATURES_INTRO.heading}
+          <h2 id="demo-title" className="section-title">
+            {DEMO.heading}
           </h2>
-          <p className="lead">{FEATURES_INTRO.body}</p>
+          <p className="lead">{DEMO.lead}</p>
         </Reveal>
         <div className="chapters">
           {CHAPTERS.map((chapter, index) => (
             <ChapterBlock key={chapter.id} chapter={chapter} index={index} />
           ))}
         </div>
-        <section className="control" aria-labelledby="control-title">
-          <h3 id="control-title" className="control__title">
-            {CONTROL.heading}
-          </h3>
-          <ul className="control__list">
-            {CONTROL.items.map((item, index) => (
-              <Reveal as="li" key={item.title} className="control__item" index={index}>
-                <span className="control__glyph" aria-hidden="true">
-                  <Icon icon={CONTROL_GLYPHS[index] ?? Hand} size="lg" />
-                </span>
-                <span className="control__item-title">{item.title}</span>
-                <span className="control__item-body">{item.body}</span>
-              </Reveal>
-            ))}
-          </ul>
-        </section>
       </div>
     </section>
   );

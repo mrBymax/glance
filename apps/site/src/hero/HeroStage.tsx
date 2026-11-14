@@ -1,22 +1,17 @@
-import { Button } from '@astryxdesign/core/Button';
-import { Icon } from '@astryxdesign/core/Icon';
-import { Pause, Play, RotateCcw } from 'lucide-react';
 import { useReducedMotion, useScroll, useTransform } from 'motion/react';
 import * as m from 'motion/react-m';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { assetUrl, Picture } from '../components/Picture';
 import type { HeroAnimation } from './animation';
 
-/** playing: the clip runs. holding: the clip has ended and the card sways. ended: the card stands still on its last frame. */
-type Phase = 'poster' | 'loading' | 'playing' | 'holding' | 'paused' | 'ended' | 'failed';
+/** poster: the still last frame. playing: the clip runs once. ended: the clip rests on its last frame. */
+type Phase = 'poster' | 'loading' | 'playing' | 'ended' | 'failed';
 
 /** The query flag of scripts/capture-poster.mjs: the stage shows the last frame on a clear background and stops. */
 const isPosterCapture = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('poster');
 
-const prefersLessMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
 function canAutoplay(): boolean {
-  if (prefersLessMotion()) return false;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
   if (connection?.saveData) return false;
   return hasWebGl();
@@ -50,11 +45,12 @@ function afterLoadAndIdle(run: () => void): () => void {
 }
 
 /**
- * The animation of the Meta Glance mark. The static poster shows first, at the same size, so the animation moves no
- * other content. Three.js loads only after the page load, and only when the shopper allows motion; a button plays it
- * on request in each other case.
+ * The animation of the Meta Glance mark, which ends on a Glance code. The poster of the last frame shows first, at the
+ * same size, so the animation moves no other content. Three.js loads after the page load, only when motion is
+ * allowed. The clip plays once, in less than 5 seconds, and rests on its last frame, so it needs no pause control.
+ * With reduced motion or Save-Data, the poster stays.
  */
-export function HeroStage(props: { caption: string }) {
+export function HeroStage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<HeroAnimation | null>(null);
   // One renderer for the canvas: a second start while the first one loads would draw into the same context.
@@ -69,13 +65,7 @@ export function HeroStage(props: { caption: string }) {
     setPhase('loading');
     try {
       const { startHeroAnimation } = await import('./animation');
-      const hasIdleMotion = !prefersLessMotion() && !posterCapture;
-      const animation = await startHeroAnimation({
-        canvas,
-        qrSource: assetUrl('kiosk-code.png'),
-        hasIdleMotion,
-        onEnd: () => setPhase(hasIdleMotion ? 'holding' : 'ended'),
-      });
+      const animation = await startHeroAnimation({ canvas, qrSource: assetUrl('kiosk-code.png'), onEnd: () => setPhase('ended') });
       animationRef.current = animation;
       if (posterCapture) {
         // The QR texture loads after the GLB. One second is ample on a local server.
@@ -83,7 +73,7 @@ export function HeroStage(props: { caption: string }) {
           animation.seek(animation.duration);
           document.documentElement.dataset.posterReady = 'true';
         }, 1000);
-        setPhase('paused');
+        setPhase('ended');
         return;
       }
       animation.play();
@@ -108,62 +98,29 @@ export function HeroStage(props: { caption: string }) {
 
   useEffect(() => () => animationRef.current?.dispose(), []);
 
-  const control = () => {
-    const animation = animationRef.current;
-    if (!animation) {
-      void start();
-      return;
-    }
-    if (phase === 'playing') {
-      animation.pause();
-      setPhase('paused');
-    } else if (phase === 'holding') {
-      animation.pause();
-      setPhase('ended');
-    } else if (phase === 'ended') {
-      animation.restart();
-      setPhase('playing');
-    } else {
-      animation.play();
-      setPhase('playing');
-    }
-  };
-
-  // As the hero scrolls away, the object sinks back a little. With reduced motion it stays still.
+  // As the hero scrolls away, the object sinks back a little. With reduced motion it stays still. It is not a control.
   const reduceMotion = useReducedMotion();
   const { scrollY } = useScroll();
   const depth = useTransform(scrollY, [0, 700], [1, 0.9]);
   const fade = useTransform(scrollY, [0, 700], [1, 0.4]);
 
-  const isMoving = phase === 'playing' || phase === 'holding';
-  const showsCanvas = isMoving || phase === 'paused' || phase === 'ended';
-  const label = isMoving ? 'Pause the animation' : phase === 'ended' ? 'Play the animation again' : 'Play the animation';
-  const glyph = isMoving ? Pause : phase === 'ended' ? RotateCcw : Play;
+  const showsCanvas = phase === 'playing' || phase === 'ended';
 
   return (
-    <figure className="hero-media" data-phase={phase} data-capture={posterCapture ? 'poster' : undefined}>
+    <div className="hero-media" data-phase={phase} data-capture={posterCapture ? 'poster' : undefined}>
       <m.div className="hero-media__frame" style={reduceMotion || posterCapture ? undefined : { scale: depth, opacity: fade }}>
         <Picture
           className="hero-media__poster"
           name="hero-poster"
           widths={[480, 960, 1440]}
           sizes="(min-width: 64rem) 40rem, 80vw"
-          alt=""
+          alt="The Meta Glance mark as a card that holds a Glance code."
           width={1440}
           height={1440}
           isPriority
         />
         <canvas ref={canvasRef} className="hero-media__canvas" data-visible={showsCanvas} aria-hidden="true" />
       </m.div>
-      <div className="hero-media__bar">
-        <figcaption className="hero-media__caption">
-          <span className="visually-hidden">Animation of the Meta Glance mark. </span>
-          {props.caption}
-        </figcaption>
-        {phase === 'failed' || posterCapture ? null : (
-          <Button label={label} isIconOnly icon={<Icon icon={glyph} />} size="lg" isLoading={phase === 'loading'} onClick={control} tooltip={label} />
-        )}
-      </div>
-    </figure>
+    </div>
   );
 }

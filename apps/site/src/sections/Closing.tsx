@@ -3,7 +3,6 @@ import { Link } from '@astryxdesign/core/Link';
 import { Picture } from '../components/Picture';
 import { Logo } from '../components/Logo';
 import { CLOSING, FOOTER, SECTIONS } from '../content/site';
-import { ActionLift } from '../motion/Lift';
 import { Reveal } from '../motion/Reveal';
 
 export function Closing() {
@@ -16,9 +15,7 @@ export function Closing() {
         </h2>
         <p className="lead">{CLOSING.body}</p>
         <div className="action-row action-row--center">
-          <ActionLift>
-            <Button label={CLOSING.primaryAction.label} variant="primary" size="lg" href={CLOSING.primaryAction.href} />
-          </ActionLift>
+          <Button label={CLOSING.primaryAction.label} variant="primary" size="lg" href={CLOSING.primaryAction.href} />
           <Button label={CLOSING.secondaryAction.label} size="lg" href={CLOSING.secondaryAction.href} />
         </div>
       </Reveal>

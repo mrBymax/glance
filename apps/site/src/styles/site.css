@@ -166,13 +166,6 @@ main:focus {
   text-align: center;
 }
 
-.eyebrow {
-  color: var(--color-text-secondary);
-  font-size: var(--site-small);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.02em;
-}
-
 .statement {
   font-size: var(--site-statement);
   font-weight: var(--font-weight-semibold);
@@ -221,15 +214,15 @@ main:focus {
   font-size: var(--site-body);
 }
 
-/* The wrapper of ActionLift: it moves the button and takes no space of its own. */
-.lift {
-  display: inline-flex;
-}
-
-@media (max-width: 37.49rem) {
-  .action-row .lift {
-    display: flex;
-  }
+/*
+ * A button keeps its place under the pointer: no move and no scale on hover, focus, or press. Astryx scales a pressed
+ * button to 0.98; the owner asked for color changes only, which Astryx also gives.
+ */
+.site .astryx-button,
+.site .astryx-button:hover,
+.site .astryx-button:active,
+.site .astryx-button:focus-visible {
+  transform: none !important;
 }
 
 /* Header */
@@ -367,18 +360,18 @@ main:focus {
 }
 
 /*
- * Hero: a dark stage in each color scheme, as a full-bleed film would be. It fills the first viewport with the header:
- * its height is the viewport (100dvh, with 100vh for older browsers) less the header height that SiteHeader measures
- * into --site-header-measured, and less its own top margin. Its bottom is the bottom of the viewport.
+ * Hero: a dark stage in each color scheme, as a full-bleed film would be. With the header and one gap above and one
+ * below, it fills the first viewport: its height is the viewport (100dvh, with 100vh for older browsers) less the header
+ * height that SiteHeader measures into --site-header-measured, and less two gaps. The gap is the same on all four sides.
  */
 .hero {
-  --hero-gap: var(--spacing-2);
+  --hero-gap: clamp(0.5rem, 1.5vw, 1.5rem);
   display: grid;
-  block-size: calc(100vh - var(--site-header-measured, var(--site-header-height)) - var(--hero-gap));
-  block-size: calc(100dvh - var(--site-header-measured, var(--site-header-height)) - var(--hero-gap));
-  min-block-size: 34rem;
+  block-size: calc(100vh - var(--site-header-measured, var(--site-header-height)) - 2 * var(--hero-gap));
+  block-size: calc(100dvh - var(--site-header-measured, var(--site-header-height)) - 2 * var(--hero-gap));
+  min-block-size: 32rem;
   max-block-size: 68rem;
-  margin: var(--hero-gap) var(--site-gutter) 0;
+  margin: var(--hero-gap);
   overflow: clip;
   border-radius: var(--radius-page);
   /* A soft spot of light behind the object, from the text color of the dark theme. */
@@ -390,8 +383,7 @@ main:focus {
 
 @media (max-width: 37.49rem) {
   .hero {
-    min-block-size: 36rem;
-    margin-inline: var(--hero-gap);
+    min-block-size: 34rem;
   }
 }
 
@@ -403,12 +395,9 @@ main:focus {
       var(--color-background-surface);
   }
 
-  .site .band {
-    background: var(--color-background-surface);
-  }
-
   .site .phone,
-  .site .kiosk {
+  .site .kiosk,
+  .site .bus-scene__plate {
     background: color-mix(in srgb, var(--color-background-body) 55%, black);
     box-shadow: inset 0 0 0 1px var(--color-border-emphasized);
   }
@@ -436,6 +425,18 @@ main:focus {
 }
 
 .hero__title {
+  display: grid;
+  gap: var(--spacing-2);
+}
+
+.hero__name {
+  color: var(--color-text-secondary);
+  font-size: var(--site-lead);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+}
+
+.hero__claim {
   font-size: var(--site-display);
   font-weight: var(--font-weight-bold);
   line-height: 1.02;
@@ -476,7 +477,7 @@ main:focus {
 
 .hero-media {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   justify-self: stretch;
   inline-size: 100%;
   min-block-size: 0;
@@ -511,36 +512,8 @@ main:focus {
 }
 
 .hero-media[data-phase='playing'] .hero-media__poster,
-.hero-media[data-phase='holding'] .hero-media__poster,
-.hero-media[data-phase='paused'] .hero-media__poster,
 .hero-media[data-phase='ended'] .hero-media__poster {
   opacity: 0;
-}
-
-.hero-media__bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-3);
-  margin-block-start: var(--spacing-1);
-}
-
-@media (max-width: 37.49rem) {
-  .hero-media__bar {
-    justify-content: space-between;
-    text-align: start;
-  }
-}
-
-.hero-media__caption {
-  color: var(--color-text-secondary);
-  font-size: var(--site-small);
-}
-
-.hero-media__bar .astryx-button {
-  flex: none;
-  min-inline-size: 2.75rem;
-  min-block-size: 2.75rem;
 }
 
 /* The poster capture of scripts/capture-poster.mjs: a square frame on a clear page. */
@@ -686,8 +659,6 @@ main:focus {
 
 .stage {
   display: grid;
-  gap: var(--spacing-3);
-  margin: 0;
 }
 
 .stage__media {
@@ -701,14 +672,11 @@ main:focus {
   overflow: hidden;
 }
 
-.stage__caption {
-  color: var(--color-text-secondary);
-  font-size: var(--site-small);
-}
-
 /* A phone screen of the app, in a plain device outline. */
 .phone {
+  align-self: center;
   inline-size: min(100%, 17rem);
+  block-size: max-content;
   padding: 0.5rem;
   border-radius: 2.25rem;
   background: var(--color-accent);
@@ -724,6 +692,7 @@ main:focus {
 
 .phone-pair {
   display: flex;
+  align-items: flex-start;
   justify-content: center;
   gap: clamp(0.75rem, 0.25rem + 2vw, 2rem);
   inline-size: 100%;
@@ -735,6 +704,152 @@ main:focus {
 
 .phone-pair .phone:nth-child(2) {
   margin-block-start: clamp(1.5rem, 1rem + 3vw, 4rem);
+}
+
+/* Use cases: cards on the canvas. The bus card spans two columns and shows its code and its spoken line. */
+.use-cases {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--spacing-4);
+}
+
+@media (min-width: 40rem) {
+  .use-cases {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .use-case--feature {
+    grid-column: 1 / -1;
+  }
+}
+
+/* In two columns, five small cards leave one alone: the last one takes the full row. */
+@media (min-width: 40rem) and (max-width: 63.99rem) {
+  .use-case:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 64rem) {
+  .use-cases {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .use-case--feature {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+}
+
+.use-case {
+  display: grid;
+  align-content: start;
+  gap: var(--spacing-2);
+  padding: clamp(1.25rem, 1rem + 1vw, 2rem);
+  border-radius: var(--radius-page);
+  background: var(--color-background-card);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.use-case__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-end: var(--spacing-2);
+}
+
+.use-case__glyph {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border-radius: var(--radius-full);
+  background: var(--color-neutral);
+  color: var(--color-text-primary);
+}
+
+.use-case--feature .use-case__glyph {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.use-case__tag {
+  padding: var(--spacing-1) var(--spacing-3);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: var(--site-small);
+  font-weight: var(--font-weight-semibold);
+}
+
+.use-case__title {
+  font-size: 1.375rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+}
+
+.use-case--feature .use-case__title {
+  font-size: var(--site-chapter);
+}
+
+.use-case__body {
+  max-inline-size: 34rem;
+  color: var(--color-text-secondary);
+}
+
+.use-case--feature .use-case__body {
+  color: var(--color-text-primary);
+  font-size: var(--site-lead);
+  line-height: 1.5;
+}
+
+/* The bus scene: the code on a white plate, as by a door, and the line that the voice says. */
+.bus-scene {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--spacing-5);
+  margin-block-start: var(--spacing-6);
+}
+
+.bus-scene__plate {
+  padding: var(--spacing-2);
+  border-radius: var(--radius-container);
+  background: var(--color-accent);
+}
+
+.bus-scene__plate img {
+  display: block;
+  inline-size: clamp(6rem, 4rem + 6vw, 9rem);
+  block-size: auto;
+  border-radius: var(--radius-element);
+}
+
+.bus-scene__voice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+  padding: var(--spacing-4) var(--spacing-5);
+  border: 1px solid var(--color-border-emphasized);
+  border-radius: var(--radius-container);
+  background: var(--color-background-body);
+  color: var(--color-text-primary);
+  font-size: clamp(1.125rem, 1rem + 0.8vw, 1.5rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+}
+
+.bus-scene__voice svg {
+  flex: none;
+  margin-block-start: 0.3em;
+  color: var(--color-icon-secondary);
+}
+
+@media (max-width: 37.49rem) {
+  .bus-scene {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
 }
 
 /* The spoken lines, in the dark captions window of the phone app. */
@@ -870,21 +985,9 @@ main:focus {
   font-variant-numeric: tabular-nums;
 }
 
-.control {
-  margin-block-start: clamp(5rem, 3rem + 6vw, 9rem);
-}
-
-.control__title {
-  margin-block-end: var(--spacing-8);
-  font-size: var(--site-title);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.12;
-  text-align: center;
-}
-
 .control__list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12.5rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
   gap: var(--spacing-8);
 }
 
@@ -907,6 +1010,7 @@ main:focus {
 
 .control__item-title {
   margin-block-start: var(--spacing-2);
+  line-height: 1.3;
   font-size: 1.25rem;
   font-weight: var(--font-weight-semibold);
 }
@@ -1054,55 +1158,6 @@ main:focus {
 .specs dd {
   margin: 0;
   color: var(--color-text-secondary);
-}
-
-/* Status: a dark band, as the captions window of the app. */
-
-.band {
-  margin-inline: var(--site-gutter);
-  border-radius: var(--radius-page);
-  background: var(--color-background-body);
-  color: var(--color-text-primary);
-}
-
-@media (max-width: 37.49rem) {
-  .band {
-    margin-inline: var(--spacing-2);
-  }
-}
-
-.status-columns {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  gap: var(--spacing-10);
-}
-
-.status-list__title {
-  margin-block-end: var(--spacing-4);
-  font-size: var(--site-chapter);
-  font-weight: var(--font-weight-semibold);
-}
-
-.status-list ul {
-  display: grid;
-}
-
-.status-list li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--spacing-3);
-  padding-block: var(--spacing-4);
-  border-block-start: 1px solid var(--color-border);
-}
-
-.status-list__glyph {
-  display: inline-grid;
-  padding-block-start: 0.15em;
-  color: var(--color-icon-secondary);
-}
-
-.status-list__glyph--real {
-  color: var(--color-icon-success);
 }
 
 /* Team */

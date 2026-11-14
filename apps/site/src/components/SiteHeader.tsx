@@ -4,7 +4,6 @@ import * as m from 'motion/react-m';
 import { useEffect, useRef, useState } from 'react';
 import { EASE_OUT } from '../motion/Reveal';
 import { HERO, SECTIONS, type SectionId } from '../content/site';
-import { ActionLift } from '../motion/Lift';
 import { Logo } from './Logo';
 
 /**
@@ -118,9 +117,7 @@ export function SiteHeader() {
         </a>
         <SectionLinks current={current} />
         <div className="site-header__action">
-          <ActionLift>
-            <Button label={HERO.primaryAction.label} variant="primary" href={HERO.primaryAction.href} />
-          </ActionLift>
+          <Button label={HERO.primaryAction.label} variant="primary" href={HERO.primaryAction.href} />
         </div>
       </div>
     </header>
