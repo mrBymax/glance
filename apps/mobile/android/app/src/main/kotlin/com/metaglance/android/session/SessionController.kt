@@ -29,6 +29,7 @@ import com.metaglance.core.contract.NativeToPage
 import com.metaglance.core.contract.PageToNative
 import com.metaglance.core.contract.Profile
 import com.metaglance.core.contract.Profiles
+import com.metaglance.core.contract.ServerEvent
 import com.metaglance.core.contract.ServerToDevice
 import com.metaglance.core.frame.FrameHeader
 import com.metaglance.core.gesture.HeadGestureConfig
@@ -37,6 +38,8 @@ import com.metaglance.core.image.UploadGate
 import com.metaglance.core.input.HeadInput
 import com.metaglance.core.input.KeyInput
 import com.metaglance.core.input.MainYesResolver
+import com.metaglance.core.input.PaymentConfirm
+import com.metaglance.core.input.PromptOutcome
 import com.metaglance.core.input.PromptTracker
 import com.metaglance.core.input.TouchInput
 import com.metaglance.core.input.VoiceInput
@@ -128,6 +131,7 @@ class SessionController(
         onPromptDone = ::onPromptDone
     )
     private val announcer = ConnectionAnnouncer()
+    private val paymentConfirm = PaymentConfirm()
     private var headInput = newHeadInput()
 
     private var page: ((NativeToPage) -> Unit)? = null
@@ -206,6 +210,8 @@ class SessionController(
     }
 
     fun attachPage(send: (NativeToPage) -> Unit, activity: MainActivity) {
+        // The payment prompt belongs to the old activity, and its outcome can get lost with that activity.
+        if (this.activity !== activity) abandonPaymentPrompt()
         page = send
         this.activity = activity
         // A new activity has a new page, and that page is not in pocket mode.
@@ -216,6 +222,7 @@ class SessionController(
     /** A new activity can attach before the old one is destroyed. So only the attached activity detaches. */
     fun detachPage(activity: MainActivity) {
         if (this.activity !== activity) return
+        abandonPaymentPrompt()
         page = null
         this.activity = null
     }
@@ -472,7 +479,10 @@ class SessionController(
             }
             is ServerToDevice.Event -> {
                 toPage(NativeToPage.Event(message.event))
-                Codec.decodeServerEvent(message.event)?.let(prompts::onEvent)
+                val event = Codec.decodeServerEvent(message.event)
+                event?.let(prompts::onEvent)
+                // The checkout ended on the server, for example after 30 seconds with no kiosk code in view.
+                if (event is ServerEvent.CheckoutCancelled) closePaymentPrompt()
             }
             is ServerToDevice.Snapshot -> {
                 toPage(NativeToPage.Snapshot(message.session))
@@ -481,11 +491,48 @@ class SessionController(
             // The cart stays on the server, and the socket stays open. The next start makes a new DAT session.
             is ServerToDevice.SessionRest -> stopDat()
             is ServerToDevice.SessionEnd -> onServerSessionEnd()
-            is ServerToDevice.BiometricRequest -> log("biometric.request has no handler yet")
+            is ServerToDevice.BiometricRequest -> onBiometricRequest()
         }
     }
 
+    /** The server asks for it before a payment above 50 EUR. Each request gets one `biometric.result`. */
+    private fun onBiometricRequest() {
+        val activity = activity
+        if (activity == null) {
+            log("biometric.request: no screen shows the prompt")
+            send(DeviceToServer.BiometricResult(false))
+            return
+        }
+        when (paymentConfirm.onRequest(activity.paymentAvailable())) {
+            PaymentConfirm.Start.SHOW -> activity.confirmPayment(::onPaymentOutcome)
+            PaymentConfirm.Start.ALREADY_OPEN -> log("biometric.request: the prompt is open")
+            PaymentConfirm.Start.UNAVAILABLE -> {
+                send(DeviceToServer.BiometricResult(false))
+                sendError(NativeErrors.BIOMETRIC_UNAVAILABLE)
+            }
+        }
+    }
+
+    private fun onPaymentOutcome(outcome: PromptOutcome) {
+        val ok = paymentConfirm.onOutcome(outcome) ?: return
+        log("payment prompt: ok=$ok")
+        send(DeviceToServer.BiometricResult(ok))
+    }
+
+    /** Closes an open payment prompt. The prompt then reports an error, and the app sends `ok: false`. */
+    private fun closePaymentPrompt() {
+        if (paymentConfirm.open) activity?.cancelPayment()
+    }
+
+    /** Answers an open payment prompt with `ok: false` now, because its activity goes away. */
+    private fun abandonPaymentPrompt() {
+        if (!paymentConfirm.open) return
+        activity?.cancelPayment()
+        onPaymentOutcome(PromptOutcome.ERROR)
+    }
+
     private fun onServerSessionEnd() {
+        closePaymentPrompt()
         stopDat()
         // The ID and the token stay for data.delete.
         serverSession?.let { saveServerSession(StoredSession(it.sessionId, it.token, it.wsUrl, live = false)) }
@@ -549,6 +596,7 @@ class SessionController(
     private fun deleteData() {
         stopTicket += 1
         waitingForGlasses = false
+        closePaymentPrompt()
         stopDat()
         val session = serverSession
         closeSocket()

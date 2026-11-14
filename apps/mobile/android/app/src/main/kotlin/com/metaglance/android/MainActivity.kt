@@ -31,6 +31,7 @@ import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionError
 import com.metaglance.android.bridge.UiAssetsHandler
 import com.metaglance.android.bridge.WebBridge
+import com.metaglance.core.input.PromptOutcome
 import com.metaglance.core.state.NativeErrors
 import java.io.IOException
 import kotlinx.coroutines.launch
@@ -48,6 +49,9 @@ class MainActivity : AppCompatActivity() {
 
     /** The volume keys whose key down was an answer to a prompt. Android does not get their repeat events and their key up. */
     private val answerKeys = HashSet<Int>()
+
+    private var pocket = false
+    private var paymentPromptOpen = false
 
     private var afterBluetooth: (Boolean) -> Unit = {}
     private val bluetoothRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -134,15 +138,47 @@ class MainActivity : AppCompatActivity() {
      * blocks the touches. `SessionController` keeps the screen on.
      */
     fun setPocket(on: Boolean) {
-        window.attributes = window.attributes.apply {
-            screenBrightness = if (on) POCKET_BRIGHTNESS else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-        }
+        pocket = on
+        applyBrightness()
         val bars = WindowCompat.getInsetsController(window, window.decorView)
         if (on) {
             bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             bars.hide(WindowInsetsCompat.Type.systemBars())
         } else {
             bars.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    /** False for a phone with no screen lock and no biometric. Such a phone cannot confirm a payment. */
+    fun paymentAvailable(): Boolean = glance.paymentPrompt.available(this)
+
+    /**
+     * Shows the prompt that confirms a payment above 50 EUR. `onOutcome` gets each outcome of the prompt.
+     * In pocket mode the screen is bright while the prompt shows, and dim again after it.
+     */
+    fun confirmPayment(onOutcome: (PromptOutcome) -> Unit) {
+        // The biometric library shows no prompt after onSaveInstanceState, and it reports nothing then.
+        if (supportFragmentManager.isStateSaved) {
+            Log.w(TAG, "payment prompt: the activity is in the background")
+            onOutcome(PromptOutcome.ERROR)
+            return
+        }
+        paymentPromptOpen = true
+        applyBrightness()
+        glance.paymentPrompt.show(this) { outcome ->
+            if (outcome != PromptOutcome.ATTEMPT_FAILED) {
+                paymentPromptOpen = false
+                applyBrightness()
+            }
+            onOutcome(outcome)
+        }
+    }
+
+    fun cancelPayment() = glance.paymentPrompt.cancel()
+
+    private fun applyBrightness() {
+        window.attributes = window.attributes.apply {
+            screenBrightness = if (pocket && !paymentPromptOpen) POCKET_BRIGHTNESS else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         }
     }
 

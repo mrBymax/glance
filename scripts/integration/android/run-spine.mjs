@@ -7,15 +7,16 @@
 // A second server runs for each run: the fake server of the app, apps/mobile/android/tools/fake-server, on a free
 // port of 127.0.0.1. A test uses it for a message that the server of apps/server cannot send on request.
 //
-// The three tests of the brief are three suites, and the other inputs have a suite of their own:
+// The three tests of the brief are three suites. The other inputs and the extras have a suite each:
 //   spine  SpineTest: one shop from the first frame to the payment
 //   state  DeviceStatesTest, SetupFlowTest, and RecognitionSlowTest: each device and error state
 //   page   PhoneUiPageTest: the phone UI in the WebView
 //   input  VolumeKeysTest, TouchpadInputTest, and VoiceCommandsTest: the volume keys, the touchpad, and the voice
+//   extra  PaymentPromptTest: the fingerprint above 50 EUR
 //
 // Use, in scripts/integration:
 //   node android/run-spine.mjs                 the spine suite, one time
-//   node android/run-spine.mjs --integration   the four suites, each with a new server
+//   node android/run-spine.mjs --integration   each suite, each with a new server
 //   node android/run-spine.mjs --suite state   one suite. A list takes commas: --suite state,page
 //   node android/run-spine.mjs --runs 3        each selected suite three times, each time with a new server
 //   node android/run-spine.mjs --all           each instrumented test class
@@ -46,6 +47,7 @@ const SUITES = {
   state: [STATES_CLASS, `${APP_ID}.SetupFlowTest`, `${APP_ID}.RecognitionSlowTest`],
   page: [`${APP_ID}.PhoneUiPageTest`],
   input: [`${APP_ID}.VolumeKeysTest`, `${APP_ID}.TouchpadInputTest`, `${APP_ID}.VoiceCommandsTest`],
+  extra: [`${APP_ID}.PaymentPromptTest`],
 };
 /** The clip of the kiosk that declines each payment, in the cache folder of the app. */
 const FAIL_KIOSK_CLIP = 'kiosk-fail.mp4';
