@@ -239,6 +239,7 @@ The still photo:
 - `LabelStill` reads the still on the phone first, with the scanner and with OCR. A code of the decoder counts with its check digit, because one still has no second image that can agree. It does not count when the digits under its bars give another code: ML Kit read blurred bars as a wrong code with a right check digit in one test image. Such a still goes to the server. With no decoded code, the digits count when the still holds exactly one code. With no region in the still, only 12 or 13 digits count, because 8 digits in a photo can be a date.
 - A still with a code gives `barcode.seen`, and the still stays on the phone.
 - A still with no code goes to the server as a frame with `kind: label` and `blurred: true`: the full photo with no crop, each face pixelated, a long side of 1600 pixels at most, and JPEG quality 85. If face detection fails, the still is dropped.
+- Each 10 seconds the frame path logs `frame path: scan <n>x mean <ms> max <ms> ms, product ..., faces ..., pixelate ..., jpeg ...`: the time of the code scan and the product read of each frame, and of the face detection, the crop with pixelation, and the JPEG of each upload.
 - The log line `label still asked: region <box> in <w>x<h>` or `label still asked: server request` says why the phone takes a still.
 
 The still of a reference picture:

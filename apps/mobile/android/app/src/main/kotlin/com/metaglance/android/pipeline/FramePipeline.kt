@@ -71,6 +71,7 @@ class FramePipeline(
     private val stillGaveCode = AtomicBoolean()
     private val picker = SharpestFramePicker<RawFrame>()
     private val damageLog = DamageLog()
+    private val times = StepTimes()
     private var seq = 0
     private var lastSkip: UploadSkip? = null
     private val failedSteps = HashSet<String>()
@@ -78,13 +79,16 @@ class FramePipeline(
     /** Call it for each frame, on one background thread. It blocks while ML Kit reads the frame. */
     fun onFrame(frame: RawFrame) {
         val nowMs = SystemClock.elapsedRealtime()
+        times.report(nowMs)?.let(log)
         val damaged = FrameDamage.isDamaged(frame.i420, frame.width, frame.height)
         damageLog.onFrame(nowMs, damaged)?.let(log)
         // The one NV21 copy of the frame. The steps for a region read the Y plane of the frame itself.
-        val hits = reading("code scan", emptyList()) { scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height) }
+        val hits = times.of("scan") {
+            reading("code scan", emptyList()) { scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height) }
+        }
         val kioskCodes = hits.filter { it.isQr }.mapNotNull { hit -> hit.text?.let(KioskCode::parse)?.let { SeenCode(it, hit.areaPx) } }
         dwell.onFrame(nowMs, kioskCodes)?.let { onKioskText(KioskCode.format(it)) }
-        readProduct(nowMs, frame, if (damaged) emptyList() else hits.filterNot { it.isQr })
+        times.of("product") { readProduct(nowMs, frame, if (damaged) emptyList() else hits.filterNot { it.isQr }) }
 
         val picked = picker.offer(nowMs, frame, Sharpness.of(frame.i420, frame.width, frame.height), damaged) ?: return
 
@@ -95,15 +99,16 @@ class FramePipeline(
         }
         if (skip != null) return
 
-        val faces = findFaces?.invoke(picked) ?: FaceResult.NotRun
-        val prepared = FramePrep.prepare(picked, faces, crop)
+        val faces = times.of("faces") { findFaces?.invoke(picked) ?: FaceResult.NotRun }
+        val prepared = times.of("pixelate") { FramePrep.prepare(picked, faces, crop) }
         if (prepared == null) {
             log("frame dropped: face detection failed")
             return
         }
-        val bitmap = Bitmap.createBitmap(prepared.argb, prepared.width, prepared.height, Bitmap.Config.ARGB_8888)
-        val jpeg = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }.toByteArray()
-        bitmap.recycle()
+        val jpeg = times.of("jpeg") {
+            val bitmap = Bitmap.createBitmap(prepared.argb, prepared.width, prepared.height, Bitmap.Config.ARGB_8888)
+            ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }.toByteArray().also { bitmap.recycle() }
+        }
 
         seq = nextSeq?.invoke() ?: (seq + 1)
         onUpload(FrameHeader(seq, System.currentTimeMillis(), prepared.width, prepared.height, prepared.blurred), jpeg)
