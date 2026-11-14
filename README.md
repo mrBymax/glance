@@ -33,7 +33,7 @@ One shop runs from the first glance to the mock payment with the fake server. On
 | `apps/mobile/ui` | `@glance/phone-ui`: the phone UI that the Android app shows in a WebView. |
 | `apps/website` | `@glance/website`: the landing page, the privacy page, the kiosk page, and the mirror page. |
 | `apps/display-pow` | `@glance/display-pow`: the Display HUD mockup, one screen on the Display toolkit. It plays a recording, or it follows a live session. |
-| `agents` | `recognition.md`, the instruction for the recognition model, `answers.md`, the instruction for the model that answers a question, and `label.md`, the instruction for the model that reads the still of a barcode. |
+| `agents` | `recognition.md`, the instruction for the recognition model, `answers.md`, the instruction for the model that answers a question, and `label.md`, the instruction for the model that reads the still of a barcode. `observe.md` and `verify.md` are the instructions of the observe pipeline, which is off by default. |
 | `infra` | The Docker image of the server and the Caddy proxy, for one machine with HTTPS. |
 | `scripts/integration` | The tests that run the apps against the server in fake mode. |
 | `skills` | The agent skills of the project (part "Agent Skills"). |
@@ -103,6 +103,7 @@ curl http://localhost:8080/healthz
 - `STORE_LIST_PATH` is the file with the items that the store sells: the barcode, the price, and the name of each. The default is `catalog/store-list.dev.json`, as a path from `apps/server`. A barcode that the file does not hold gets the line "This product is not in this store."
 - `RECOGNITION_CONCURRENCY` is the number of recognition calls that one session runs at the same time, from 1 to 12. The default is 8. The rate limit of the Gemini key must allow that for each shopper.
 - `RECOGNITION_REFERENCES` is the number of reference pictures of one store item in each recognition call for a frame, from 0 to 3. The default is 3, and `0` means none.
+- `RECOGNITION_PIPELINE` is `frame` or `observe`. The default `frame` is the pipeline for the demo. `observe` describes the held product with a call that holds no store data, searches the store list, and verifies. See "The observe pipeline" in `apps/server/README.md`.
 - `LABEL_MIN_CONFIDENCE` is the confidence from which the server takes the store item that the label call chose, from 0 to 1. The default is 0.7.
 - `REFERENCE_DIR` is the folder with the reference pictures of the store items. The default is `catalog/reference`, as a path from `apps/server`.
 - `FAKE_PRODUCT_INFO=1` makes the server read the allergens and the diets of a scanned product from `apps/server/fixtures/product-info`, with no call to Open Food Facts. The flag `--fake` of `dev:fake` turns it on.

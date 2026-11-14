@@ -14,8 +14,9 @@ import type { Verifier, VerifyAnswer, VerifyCandidate } from './verify';
 export const MAX_VERIFY_CANDIDATES = 5;
 export const KEPT_FRAMES = 3;
 /**
- * The verify call needs this number of frames in which the observe call read print. Measured on 2026-11-14: with
- * fewer, the verify call named a wrong item in 7 of 51 calls, and with 2 or more it named none wrong.
+ * The verify call needs this number of frames in which the observe call read print. Measured on 2026-11-14 on 48
+ * verify calls: an answer by text from 2 such frames was right in 8 of 8, and each other answer with an item was
+ * wrong in 7 of 18.
  */
 export const VERIFY_LEGIBLE_FRAMES = 2;
 /**

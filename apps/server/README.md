@@ -27,6 +27,10 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `fixtures/product-info/` | One saved answer of Open Food Facts for each item of the dev store list. `FAKE_PRODUCT_INFO` and the tests read them. |
 | `catalog/catalog.json` | The 12 product slots of the demo, with `FILL_` texts and the price 0. A person fills them, and `catalog:check` reports each price of 0 as an error. |
 | `src/recognition/` | The recognition of a frame, and the script player that stands in for it. See "Recognition" and "Fake mode". |
+| `src/observe/` | The observe pipeline: the observe call, the tracker of a held product, the verify call, and the recognizer of a session. See "The observe pipeline". |
+| `src/search/` | `ProductSearch`: the search of the store list by the text of a package. See "The observe pipeline". |
+| `agents/observe.md`, `agents/verify.md` (repository root) | The instructions of the observe call and of the verify call. |
+| `scripts/observe-probe.ts` | `npm run observe:probe`: a replay of labeled appearances through the observe pipeline. See "Measured: the observe pipeline". |
 | `agents/recognition.md` (repository root) | The instruction for the recognition model, with the placeholders `{{catalog}}` and `{{storeItems}}`. |
 | `fixtures/fake-script.json` | The default script of fake recognition. |
 | `scripts/check-model.ts` | `npm run model:check`: a check of the model ID with the real service. |
@@ -38,7 +42,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `scripts/live-probe.ts` | `npm run live:probe`: the delay and the answers of a Gemini Live session on saved frames. See "Measured: a Gemini Live session". |
 | `scripts/smoke.ts` | `npm run smoke`: a check of a running server through its REST paths, its device socket, and its events stream. See "Checks". |
 | `src/sessions/` | The cart rules as the pure function `step`, the session runtime, and the registry. See "Rules" and "Session runtime". |
-| `src/speech/` | The text of each spoken line, and the speech clips. See "Spoken text" and "Speech clips". |
+| `src/speech/` | The text of each spoken line, the speech clips, and the warm-up of the prompt clips. See "Spoken text" and "Speech clips". |
 | `src/kiosk/` | The kiosks and the mock payment. See "Kiosk and payment". |
 | `src/db/` | The `Store` interface with a memory store and a MongoDB store. See "Storage". |
 | `src/http/` | The session paths, the kiosk paths, the speech path, the demo path, the events streams, and the token check. See "REST paths". |
@@ -60,12 +64,12 @@ Check it:
 
 ```bash
 curl http://localhost:8080/healthz
-# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"fakeProductInfo":true,"store":"memory","saveFrames":false}
+# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"fakeProductInfo":true,"store":"memory","saveFrames":false,"recognitionPipeline":"frame"}
 curl -X POST http://localhost:8080/api/sessions
 # {"sessionId":"...","token":"...","wsUrl":"ws://localhost:8080/ws/device?session=...&token=..."}
 ```
 
-At the start the server logs `store: memory` or `store: mongo`, the number of products, `store list: <path>, <n> items`, `reference pictures: <dir>, <n> items, <m> pictures, <k> in a frame call`, `product info: fake` or the address of Open Food Facts, `recognition: fake` or the model, and `speech: fake` or the speech model. With real product details it also logs the start and the end of the warm-up of the product cache. See "Product details from Open Food Facts".
+At the start the server logs `store: memory` or `store: mongo`, the number of products, `store list: <path>, <n> items`, `reference pictures: <dir>, <n> items, <m> pictures, <k> in a frame call`, `product info: fake` or the address of Open Food Facts, `recognition: fake` or the model with `pipeline frame` or `pipeline observe`, and `speech: fake` or the speech model. With real speech it also logs the warm-up of the prompt clips. See "Speech clips". With real product details it also logs the start and the end of the warm-up of the product cache. See "Product details from Open Food Facts".
 
 With real recognition and real speech (`npm run dev` with both keys in `.env` and both fake switches empty), each frame is one paid Gemini call, and each new line is one paid ElevenLabs call. A phone sends one frame each 150 ms, and at most one label still each 6 seconds with the default still gap of the app.
 
@@ -83,6 +87,8 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `GEMINI_API_KEY` | not set | Needed when `FAKE_RECOGNITION` is off. |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | The recognition model. Keep the default: two larger models named no more products and were slower. See "Measured: the product in the hand, and items that look alike". |
 | `GEMINI_MEDIA_RESOLUTION` | `default` | `default` or `low`. |
+| `RECOGNITION_PIPELINE` | `frame` | `frame` or `observe`. `frame`: one call for each frame, with the store list and the reference pictures. `observe`: describe, look up, verify. See "The observe pipeline". |
+| `VERIFY_MIN_CONFIDENCE` | `0.9` | A number from 0 to 1. The verify call of the observe pipeline names an item from this confidence on. |
 | `RECOGNITION_CONCURRENCY` | `8` | An integer from 1 to 12. The number of recognition calls that one session runs at the same time. See "Recognition". |
 | `RECOGNITION_REFERENCES` | `3` | An integer from 0 to 3. The number of reference pictures of one store item in each recognition call for a frame. `0` means none. See "Reference pictures in a frame call". |
 | `RECOGNITION_MIN_CONFIDENCE` | `0.6` | A number from 0 to 1. An `identified` answer below it counts as `unsure`. |
@@ -94,6 +100,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `ELEVENLABS_VOICE_EN` | not set | Needed when `FAKE_SPEECH` is off. |
 | `ELEVENLABS_VOICE_IT` | not set | The voice for Italian lines. With no value, they get the English voice. |
 | `SPEECH_CACHE_DIR` | `.cache/speech` | The folder for speech clips. |
+| `SPEECH_WARM_UP` | on | `0` means off. The start then makes no clip for the product prompts of the store items. It has no effect with `FAKE_SPEECH`. See "Speech clips". |
 | `SAVE_FRAMES` | not set | A directory for frames. When it is set, the server writes each frame there. See "Stored frames". Keep it not set for the demo and on the deployed server. |
 | `PAYMENT_DELAY_MS` | `1500` | The length of the mock payment. |
 | `SECOND_LOOK_WAIT_MS` | `0` | How long the look-alike line waits for the result of a still, in milliseconds, from 0 to 10000. `0` means off. See "Sharp second look". |
@@ -181,7 +188,7 @@ curl -s -X POST "http://localhost:8080/api/sessions/<sessionId>/intents?token=<t
 
 ## Recognition
 
-With `FAKE_RECOGNITION` off, each frame of the phone goes to Gemini, and the answer goes to the rules.
+With `FAKE_RECOGNITION` off, each frame of the phone goes to Gemini, and the answer goes to the rules. `RECOGNITION_PIPELINE` selects how: this section describes `frame`, the default. See "The observe pipeline" for `observe`.
 
 ```mermaid
 sequenceDiagram
@@ -399,6 +406,292 @@ CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.j
 - Each frame is one paid Gemini call. The frames of a test show a room and people: keep the labels file and the frames outside the repository.
 - This section took 584 recognition calls and 12 label calls.
 
+### The observe pipeline
+
+`RECOGNITION_PIPELINE=observe` selects a second pipeline for the stream frames: describe, look up, verify. The default is `frame`, the pipeline of the sections above. The design, the measurements, and the reasons are in `docs/superpowers/specs/2026-11-14-observe-lookup-verify-design.md`.
+
+The frame pipeline puts each store item and its pictures into each request. Its request has 6551 prompt tokens for 4 items, so it does not fit a store with thousands of items. The observe pipeline sends no store data with a frame.
+
+```mermaid
+sequenceDiagram
+  participant Phone
+  participant Worker as RecognitionWorker
+  participant Pipeline as Observe pipeline of the session
+  participant Gemini
+  participant Search as ProductSearch
+  participant Rules as SessionRuntime
+  Phone->>Worker: frame
+  Worker->>Pipeline: recognize(JPEG)
+  Pipeline->>Gemini: observe call: the frame alone
+  Gemini-->>Pipeline: held, box, kind, colors, legible, brand, name, variant, size, texts, digits
+  Note over Pipeline: the tracker merges the frames of one held product
+  Pipeline->>Search: search(merged text)
+  Search-->>Pipeline: candidates with scores
+  alt the text selects one item
+    Pipeline-->>Worker: identified
+  else 2 frames have readable print
+    Pipeline->>Gemini: verify call: kept frames, candidates, their pictures, two functions
+    opt no candidate fits
+      Gemini-->>Pipeline: search_products or get_product
+      Pipeline->>Search: the same search
+      Pipeline->>Gemini: the items
+    end
+    Gemini-->>Pipeline: gtin or null, confidence, seen, reason
+    Pipeline-->>Worker: identified, or ambiguous, unknown, unsure
+  else 3 frames and no readable print
+    Pipeline-->>Worker: unsure
+  end
+  Worker->>Rules: dispatch(recognition result), in frame order
+```
+
+| File | Content |
+|---|---|
+| `agents/observe.md` (repository root) | The instruction of the observe call. It holds no placeholder and no store item |
+| `agents/verify.md` (repository root) | The instruction of the verify call |
+| `src/observe/observation.ts` | `Observation`, `parseObservation`, and the JSON Schema of the observe answer |
+| `src/observe/gemini.ts` | `createGeminiObserver`: one `generateContent` call for each frame |
+| `src/observe/tracker.ts` | `AppearanceTracker`: the frames of one held product, merged. Pure code with the clock of the caller |
+| `src/observe/verify.ts` | `createGeminiVerifier`: the verify call, its two functions, and the guard for its answer |
+| `src/observe/pipeline.ts` | `createObservePipeline`: the recognizer of a session, and the map to a `RecognitionResult` |
+| `src/search/normalize.ts` | `wordsOf`, `sizeKey`, and `wordMatch`: the compare of package text |
+| `src/search/productSearch.ts` | `ProductSearch`, `createProductSearch` for a store list in memory, and `pickOne` |
+| `scripts/observe-probe.ts` | `npm run observe:probe`: a replay of labeled appearances with the real service |
+
+The observe call:
+
+- The request holds the frame and the instruction `agents/observe.md`. It has 1798 prompt tokens: 698 of text and 1100 of the image. The frame pipeline has 6551.
+- The answer says what the frame shows of the product in the hand. `held` is the first field. Then come `box`, `kind`, `colors`, `legible`, `brand`, `name`, `variant`, `size`, `texts`, `digits`, and `aimHint`.
+- The call knows no store item. So it cannot copy an ID as "digits that it read", and it cannot name a product from a list.
+- `legible` is `none`, `some`, or `clear`: how much of the print the model read.
+- `box` is the place of the product as `[top, left, bottom, right]`, each from 0 to 1000. The tracker keeps the frames with the largest product. The box adds about 55 ms to a call.
+- An answer with `held` false loses each other field, and the frame is `none` for the rules.
+- The call makes one attempt. The worker ends it after 4 seconds, as each frame call.
+
+The tracker:
+
+- One appearance is one held product, from its first frame to 3 seconds with no held product (`TIMING.viewMs`).
+- A text field counts when 2 frames agree, or when one frame with `legible: clear` has it. The compare has no regard to case and accents.
+- The value with the most votes wins. Two values with equal votes give no value.
+- Another brand, or another kind of package, in 2 held frames in a row starts a new appearance. One stray frame changes nothing.
+- The tracker keeps 3 frames of an appearance in memory: the most readable ones, then those with the largest box. It holds no other JPEG.
+- An observation can arrive after the observation of a newer frame. The tracker takes it by the arrival time of its frame.
+
+The look-up:
+
+- `ProductSearch.search(query, limit)` ranks the store items for a brand, a name, a variant, a size, other words, and digits. It uses no model.
+- The index holds the name, the brand, and the pack size of the store list. It also holds the names of each language, the brands, and the keywords of Open Food Facts. So "Kartonkipikari / Pappersmugg" finds an item with the name "Paper cups".
+- A word weighs by how few items have it. "Kili" is the brand of three items, and "Vadelma" is the word of one. So "Kili" with "Vadelma" selects one item, and "Kili Cascara" selects none.
+- A read word matches an item word that is equal, that it starts, or that differs in one letter, from 5 letters on. Numbers must be equal.
+- "330 ml", "0.33 l", "0,33L", and "33 cl" are one size. A read size that differs from the size of an item counts against it.
+- Digits with a right check digit that the store list holds select their item at once. Two codes of two items select none.
+- `pickOne` takes the first candidate only with a word of its brand, a word of its own, a score of 0.6, no other size, and a lead of 0.1.
+- The warm-up of the product details gives the index the new texts of each item that it read. A restart is not needed for them.
+
+The verify call:
+
+- It runs when the search selects no item and 2 frames of the appearance have `legible` some or clear.
+- The request holds up to 5 candidates, each with up to 3 reference pictures at the low media resolution. Then come the kept frames at the default resolution, and the merged observation as text.
+- The candidates are the items of the search. With no such item, a store list of at most 5 items gives each item as a candidate. A larger store gives none, and the model must search.
+- The model has two functions: `search_products(query, brand, limit)` and `get_product(gtin)`. The server runs them on the same `ProductSearch`. The model gets at most 2 rounds. The third call takes no function.
+- One request holds the functions and the JSON Schema of the answer. The Gemini 3 models take both (https://aistudio.google.com/docs/function-calling, read on 2026-11-14). A run on 2026-11-14 with `gemini-3.5-flash-lite` gave function calls with a thought signature, and then a JSON answer.
+- The history holds the content of the model as it came. A Gemini 3 model rejects a function call that comes back with no thought signature.
+- The answer is `gtin`, `confidence`, `seen` (`text`, `look`, or `none`), and `reason`.
+- The server takes an item only with `seen: text` and a confidence of `VERIFY_MIN_CONFIDENCE` (default 0.9). The item must be a candidate, or an item that a search of this call returned, and the store search must know it.
+- An appearance gets at most 2 verify calls. The second one runs after 4 more readable frames, with the kept frames of that time.
+- A verify call has 2.8 seconds. A late or failed call gives `unsure`.
+
+The result of a frame:
+
+| Case | Result |
+|---|---|
+| No product in a hand | `none` |
+| The search selected an item, or a verify call named one | `identified`, for this frame and for each later frame of the appearance |
+| A held product, fewer than 3 frames, and no name yet | `none`. The rules then ask for no still while the stream can still name the product |
+| 3 frames or more, and fewer than 2 with readable print | `unsure` with the aim hint of the frame. The rules ask the phone for a still |
+| A verify call named no item, and the read brand fits 2 or more items with one score | `ambiguous` with these items |
+| A verify call found no item, and 2 frames agree on a brand or a name that no item has | `unknown` |
+| Each other end of a verify call | `unsure` |
+
+- The item of an appearance never changes. A later word that selects another item has no effect until the next appearance.
+- While a verify call runs, each frame of the appearance waits for it. So the results reach the rules in frame order, and the worker drops none of them for its order.
+- After a decision, each frame of the appearance repeats it. So the rule of the session that wants 2 equal results in a row gets them one frame apart. The pipeline adds no agreement of its own to that rule.
+- A skipped item is `none` for 10 seconds (R9), as in the frame pipeline.
+- The digits of a frame also go to the lookup of a barcode, as before.
+- A still with the kind `still` gets one observe call and one verify call of its own. A label frame goes to the label call, as before.
+- A catalog product with a `gtin` of the store list keeps its catalog ID. A catalog product with no code is not in the search, so this pipeline never names it.
+
+Calls and pace:
+
+- The pipeline runs behind the recognition worker. Up to `RECOGNITION_CONCURRENCY` observe calls run at the same time for a session, and at most one verify call.
+- The saved sessions of 2026-11-14 with real recognition have 1.3 to 5.1 frames each second. An observe call takes about 1 second. So 2 to 6 calls run at the same time.
+- When no call is free, one frame waits, and a newer frame takes its place. The server never queues more than one frame.
+- A frame that waits for a verify call holds its place. A verify call of 1.3 seconds holds up to 7 frames at 5 frames each second.
+
+Log lines, at `info` level:
+
+```text
+appearance session=<id> n=<number> outcome=<13 digits> by=search frames=2 legible=2 ms=412 matched=["brand: kili","name: vadelma"]
+appearance session=<id> n=<number> outcome=<13 digits|unsure|ambiguous|unknown> by=verify frames=13 legible=11 ms=4703 verifyMs=1268 calls=1 lookups=0 confidence=0.9 seen=text
+```
+
+`ms` is the time since the first frame of the appearance. `calls` counts the model calls of the verify call, and `lookups` counts the functions that the server ran.
+
+#### Measured: the observe pipeline
+
+Measured on 2026-11-14 with the real service, `gemini-3.5-flash-lite`, the demo catalog, and the demo store list of 4 cans with 3 reference pictures each.
+
+The set: 146 frames that a person labeled by eye, and 18 appearances.
+
+| Part | Frames |
+|---|---|
+| The 82 frames of "Measured: the product in the hand", 288 x 448 and 402 x 626 | 67 with a can in a hand, 15 with none |
+| 56 frames of a newer session, 504 x 896 and 720 x 1280 | 44 with a can in a hand, 12 with none. 7 of the 12 show hands on a keyboard |
+| 8 frames of an older session, 402 x 626 | 6 with a pack of paper cups, which the store does not sell, and 2 with hands on a keyboard |
+| 18 appearances: runs of frames of one session, 3 to 12 seconds each | 14 with a store item (3 of the white and red can, 3 Yuzu, 4 Mango, 4 Vadelma), 1 with the paper cups, 3 with no product |
+
+One call, one call at a time, on 8 frames:
+
+| Call | Median | Prompt tokens | Output tokens |
+|---|---|---|---|
+| Text only, the answer "ok" | 617 ms | 7 | 1 |
+| A frame, the answer `{held}` | 748 ms | 1118 | 9 |
+| The observe call with no box | 946 ms | 1744 | 95 |
+| The observe call with a box | 1001 ms | 1798 | 132 |
+| The frame call of today, 3 calls at a time on 146 frames | 1228 ms, 90th percentile 1401 ms | 6551 | about 90 |
+| The observe call with a box, 3 calls at a time on 146 frames | 1136 ms, 90th percentile 1513 ms | 1798 | 127 |
+
+- A call with one word of text takes 617 ms from this computer. So no call of this service answers in less.
+- The low media resolution saved no time for the observe call: 954 ms.
+
+What the observe call read in the 111 labeled frames with a store item in a hand:
+
+| Group | Frames | `held` true | Brand right | Flavor or type right | Words of another item | `legible` clear, some, none |
+|---|---|---|---|---|---|---|
+| 288 x 448 and 402 x 626, front | 44 | 41 | 0 | 0 | 0 | 0, 14, 27 |
+| 288 x 448 and 402 x 626, back or cut off | 23 | 16 | 0 | 0 | 0 | 0, 1, 15 |
+| 504 x 896 and 720 x 1280, front | 31 | 20 | 1 | 0 | 0 | 0, 11, 9 |
+| 504 x 896 and 720 x 1280, back or cut off | 13 | 6 | 0 | 0 | 0 | 0, 0, 6 |
+
+- The observe call read the brand in 1 of 111 frames, and the flavor in none. It wrote no word of another item.
+- It read "HELL" and "HELLO" for the white and red can, and "CASCADIA", "SIT" for a Yuzu can at 720 x 1280. No frame gave digits.
+- For the 29 frames with no product in a hand, it answered `held` false in 28. It answered `held` true for 5 of the 6 frames with the paper cups.
+- So the text search names no item from these frames. The frames carry no readable text: the can is about 90 pixels wide, and the stream is blurred.
+- The colors of the answer follow the item: "gold, brown" for Yuzu, "pink, red" for Mango, "purple, silver" for Vadelma, "white, red" for the white and red can. The room had purple light. The pipeline does not name an item by a color.
+
+The verify call, 48 calls on the 14 appearances with a store item, each with up to 3 frames of the appearance and the 4 items as candidates:
+
+| Answer | Calls | Right item | Wrong item |
+|---|---|---|---|
+| An item, `seen: text`, confidence 0.9 or more, and the observe call read print in 2 or more of the frames | 8 | 8 | 0 |
+| An item, `seen: text`, confidence 0.9 or more, and print in fewer than 2 of the frames | 4 | 2 | 2 |
+| An item, `seen: look` or a lower confidence | 14 | 9 | 5 |
+| No item | 22 | | |
+
+- A verify call took 1047 to 1608 ms, with a median of 1265 ms. One took 2406 ms.
+- The answers by the look of the package were wrong in 5 of 14 calls, at a confidence of 0.5 to 0.95. So the server takes only `seen: text`.
+- The 2 wrong answers with `seen: text` had one frame, and the observe call read no print in it. So a verify call needs 2 frames with readable print.
+- 8 answers that the server takes are few. The rule gave no wrong name here, and that is no proof for another room.
+- With no candidate and a sharp still, the model called `search_products` and `get_product`, and then named the right can. That call had 3 model calls and took 2828 ms.
+
+The 18 appearances, end to end. "Frame" is the frame pipeline on each third frame of an appearance, with its measured call times. "Observe" is `npm run observe:probe`: each frame at the time of its session, 8 calls at a time.
+
+| Appearance | Frame: first right name | Frame: 2 right names in a row | Observe: first right name | Observe: verify calls and their end |
+|---|---|---|---|---|
+| White and red can, front, 288 x 448 | 2534 ms | 4125 ms | none | 2: the right item by its look both times, not taken |
+| White and red can, front, short | 1071 ms | 1753 ms | 2599 ms | 1: the right item by its text |
+| White and red can, back then front, 504 x 896 | 3169 ms | none | none | 2: no item, then a wrong item by its look, not taken |
+| Yuzu, back then front, 288 x 448 | none | none | none | 2: no item, then a wrong item by its look, not taken |
+| Yuzu, back then front, 288 x 448 | none | none | none | 1: no item |
+| Yuzu, front, 720 x 1280 | 1675 ms | 2272 ms | 3923 ms | 2: the right item by its look, then by its text |
+| Mango, front, 288 x 448 | 4081 ms | none | none | 0 |
+| Mango, back then front, 288 x 448 | none | none | none | 0 |
+| Mango, front, 504 x 896 | none, and 1 wrong name | none | none | 1: the right item by its look, not taken |
+| Mango, front, 720 x 1280 | none | none | none | 0 |
+| Vadelma, front then back, 288 x 448 | none | none | none | 0 |
+| Vadelma, front, low bit rate | none | none | none | 0 |
+| Vadelma, back | none | none | none: `held` false in each frame | 0 |
+| Vadelma, front, 504 x 896 | none, and 1 wrong name | none | none: `held` false in each frame | 0 |
+| Paper cups | `unknown` in 1 of 15 frames | | `none` in each frame | 1: no item |
+| 3 runs with no product | `none` in each frame | | `none` in each frame | 0 |
+
+- The times count from the first frame that shows the product in a hand to the result. The upload, the rules, and the voice are not in them.
+- The replay sent each second frame of the 288 x 448 session and each frame of the other sessions: 2.4 to 2.6 frames each second.
+- 4 rows come from a second run, with 2 verify calls for an appearance: the first and the third white and red can, the first Yuzu can, and the Yuzu can at 720 x 1280. Each other row comes from the first run, with at most 1.
+- The observe pipeline gave no wrong name in 644 model calls. The frame pipeline gave 3 wrong names in 317 calls, each one in a single frame. One of them named a can for a frame with no product in a hand.
+- The observe pipeline named 2 of the 14 appearances with a store item. The frame pipeline named 3 with 2 right results in a row, and 5 with one.
+- "2 right names in a row" counts the sampled frames, which are 3 frames apart. In a session the next frame follows after 200 to 450 ms.
+- The observe pipeline is slower to the first name: 2.6 and 3.9 seconds against 1.1 and 1.7 seconds. It needs one observe call and one verify call in a row.
+- For the cans of one design, both pipelines name nothing in the small frames. The still stays the path for them.
+- An appearance of 3 to 12 seconds cost 10 to 58 observe calls and 0 to 2 verify calls.
+- The observe call answered `held` false for each frame of 2 appearances with a can in the hand. Their frames have a low bit rate. The frame pipeline answered `none` for most of them too.
+- Not measured: a session with the rules and the phone, a store with more than 4 items, a second room, and the `unknown` answer for a readable product that the store does not sell.
+
+Where each pipeline stands:
+
+- Use `frame` for the demo of 4 items. It names more appearances and is faster.
+- The observe pipeline is the form for a larger store. Its request does not grow with the store, its text search is exact, and its guards gave no wrong name.
+- The observe pipeline needs frames with readable print. The frames of today have none. A crop of the held product at the size of the stream, made on the phone, is the next step. See the design document.
+
+Run the replay. Each frame is one paid call:
+
+```bash
+CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.json npm run observe:probe --workspace @glance/server -- --appearances <appearances.json> --only yuzu
+```
+
+- The file is `{ "appearances": [{ "id": "<name>", "product": "<product ID>", "firstHeld": <seq>, "frames": [{ "file": "<jpg>", "seq": <n>, "t": <arrival time in ms> }] }] }`. `product` is `"other"` for a product that the store does not sell, and `null` for no product.
+- `--only <text>` takes the appearances with this text in their ID. `--every <n>` takes each n-th frame. `--concurrency <n>` and `--out <rows.jsonl>` set the calls at a time and a file for each result.
+- The output has one line for each appearance: one letter for each result in frame order (`R` right name, `W` wrong name, `a` ambiguous, `u` unsure, `k` unknown, `.` none), the model calls, the median call time, and the time to the first right name. The `appearance` lines of the pipeline follow.
+- The exit code is 1 when an appearance got a wrong name. The frames of a test show a room and people: keep the file and the frames outside the repository.
+
+#### A search by picture, measured and not built
+
+A second channel was measured on 2026-11-14: an embedding of the held product, compared with the embeddings of the reference pictures. It did not tell the 4 cans apart, so the server has no such channel.
+
+The query was the labeled frame, as the whole frame, as a fixed crop, and as the crop of the box of the observe call. The boxes were good: 23 of 23 crops that a person looked at hold the product and little else. Of 170 boxes, the middle is at 71 percent of the width and 63 percent of the height, and the box has 26 percent of the width and 37 percent of the height.
+
+| Model | Runs on | One image | Gallery: the 13 reference pictures. Right item in 83 box crops | Gallery: box crops of the other appearances. Right item |
+|---|---|---|---|---|
+| `Xenova/clip-vit-base-patch32`, fp32, 352 MB | this computer, `@huggingface/transformers` 4.3.2 | 38 ms | 23 (28 percent) | 29 (35 percent) |
+| `Xenova/dinov2-small`, fp32, 88 MB | this computer | 50 to 74 ms | 29 (35 percent), with "Mango" as the answer for 79 of 83 | 30 (36 percent) |
+| `Xenova/siglip-base-patch16-224`, 8 bit, 99 MB | this computer | 192 ms | 26 (31 percent) | 40 (48 percent) |
+| `Xenova/clip-vit-base-patch16`, 8 bit, 87 MB | this computer | 173 ms | not run | 32 (39 percent) |
+| `gemini-embedding-2`, 768 values | the Gemini API | 494 ms | 55 (66 percent) | 51 (61 percent) |
+
+- The computer has an Intel Core i7-11800H with 16 threads, and the models ran on the CPU. The two 8 bit models ran while other measurements used the CPU. 4 items give 25 percent by chance.
+- The whole frame and the fixed crops gave 14 to 32 percent with each local model.
+- Open Food Facts has a front image for each of the 4 items. As the gallery, these 4 images gave 18, 18, and 20 right items of 83, with CLIP, DINOv2, and `gemini-embedding-2`.
+- No threshold gave a rule with no wrong name and a use: the best rules took 0 to 15 of 83 frames, and such a rule is fitted to these 83 frames.
+- A linear classifier on the embeddings, trained on the other appearances, gave 12 to 33 percent. A color histogram of the box crop gave 51 percent.
+- The nearest other frame was a frame of the same item in 60 to 65 of 83 cases. Such a frame is mostly a frame of the same appearance. So the embeddings follow the pose, the hand, and the background more than the print of the can.
+- The cans differ in one flavor word and in their colors, and the purple light moves each color. The can is about 90 pixels wide.
+- A local model adds `@huggingface/transformers`, `onnxruntime-node`, and `sharp` to the server, and 88 to 352 MB of model files. The numbers do not support that, so the server has no such dependency.
+- What can change the result: pictures of each item through the glasses under the light of the store (`npm run reference`), a crop at the size of the stream, and a model that was trained on packages. None of them is measured.
+
+#### A database or an ERP in place of the index
+
+`ProductSearch` in `src/search/productSearch.ts` is the interface:
+
+```ts
+export interface ProductSearch {
+  search(query: SearchQuery | string, limit: number): Promise<Candidate[]>;
+  get(gtin13: string): Promise<StoreEntry | undefined>;
+}
+export type SearchQuery = { brand?: string | null; name?: string | null; variant?: string | null; size?: string | null; texts?: readonly string[]; digits?: readonly string[] };
+export type Candidate = { gtin: string; score: number; reasons: string[]; matched: { code: boolean; brand: boolean; name: boolean; sizeConflict: boolean } };
+```
+
+- `createProductSearch` builds the index of a store list in memory. It is for a demo store.
+- For a database or the ERP of a supermarket, write a function that returns a `ProductSearch`, and give it to `createObservePipeline` and `createGeminiVerifier` in `src/main.ts`. This part is not built.
+- `search` with a plain text is the text search of that system: `search("kili vadelma", 5)`. With a `SearchQuery`, the client can use the brand and the size as filters.
+- `score` goes from 0 to 1, best first. `matched` tells `pickOne` if a brand word and a word of the item itself matched. A client that cannot tell must set both to false: the verify call then decides.
+- For example with MongoDB: an Atlas Search index on the names of each language, the brand, and the keywords, with the `gtin` as the key of `get`.
+- A search by picture would be a second method that takes a vector, behind a vector index. See "A search by picture, measured and not built".
+
+The same two functions as an MCP server:
+
+- `search_products` and `get_product` are plain functions on a `ProductSearch`: `runVerifyFunction` in `src/observe/verify.ts`. Inside this server the model calls them through the function calling of Gemini, with no second process.
+- An MCP server can register the same two tools with the same JSON Schemas (`VERIFY_FUNCTIONS`) and call `runVerifyFunction` for each tool call. Then another client, such as a chat agent of the store, can search the same store list. This part is not built.
+
 ### Stored frames
 
 Without `SAVE_FRAMES` the server stores no frame of a shop. A frame lives in memory from its socket message to the end of its recognition call. The server writes no such frame to disk, to the store, or to a log.
@@ -599,9 +892,10 @@ The store list gives the name and the price of a product. Open Food Facts gives 
 
 Contains data from Open Food Facts, available under the Open Database License. See https://world.openfoodfacts.org and https://opendatacommons.org/licenses/odbl/1-0/.
 
-- The call is `GET <OFF_BASE_URL>/api/v2/product/<code>?fields=code,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags`, with the header `User-Agent` from `PRODUCT_INFO_USER_AGENT` and a time limit of 2000 ms. It needs no key.
+- The call is `GET <OFF_BASE_URL>/api/v2/product/<code>?fields=code,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags,product_name,generic_name,_keywords,categories_tags` plus `product_name_<lang>` and `generic_name_<lang>` for 12 languages (`OFF_NAME_LANGS` in `src/products/productInfo.ts`: en, fi, sv, it, de, fr, es, da, nb, et, nl, pl), with the header `User-Agent` from `PRODUCT_INFO_USER_AGENT` and a time limit of 2000 ms. It needs no key.
 - The status 404, and a body with `"status": 0`, mean "not found". Each other status than 200, a body that is no JSON, a body with the status 200 and no product, and a network error are a failed read.
-- The name of a product is always the `name` of the store list, in each language. The server does not read the name of Open Food Facts: it is often in another language, or only a part of the name ("bueno" for Kinder Bueno, "Spaghetti Nº5").
+- The name of a product is always the `name` of the store list, in each language. No spoken line uses the name of Open Food Facts: it is often in another language, or only a part of the name ("bueno" for Kinder Bueno, "Spaghetti Nº5").
+- The names of each language, each brand, the keywords, and the words of the categories go to `ProductDetails.texts`. Only the search by package text reads them. See "The observe pipeline".
 - `allergens_tags` and `traces_tags` map to the 14 allergens of `@glance/shared`, as one list. With no allergen in `allergens_tags` the product has no allergen data (`null`), also when traces exist. A wheat pasta with traces of mustard and no entry for gluten would else read as "no gluten".
 - `vegan` is true for the tag `en:vegan`, false for `en:non-vegan`, and `null` for each other case. `vegetarian` works the same way.
 - The parser reads each field alone. A field with a wrong type counts as no data, and the other fields stay.
@@ -611,6 +905,7 @@ Contains data from Open Food Facts, available under the Open Database License. S
 The cache:
 
 - A hit stays for 30 days and a miss for 1 day, in memory and as the file `<PRODUCT_CACHE_DIR>/<13 digits>.json`. A failed read is not kept as an answer.
+- A cache file holds `version`, which is 2 (`OFF_CACHE_VERSION`). Version 2 added the texts. A file with no version still gives its allergens and diets, and the next read of its code asks the database again. If that read fails, the older details answer.
 - After a failed read, the next request for that code waits 30 seconds. The phone repeats a code each second, and each report in that time gets a product with no allergen data and no new call.
 - After the status 429, the server makes no request for each code for 60 seconds.
 - The calls for one code that run at the same time share one request.
@@ -619,7 +914,7 @@ The cache:
 
 The warm-up of the start:
 
-- With `FAKE_PRODUCT_INFO` off, the start reads the details of each store item that the cache does not hold, and that the catalog does not hold. The reads run in the background, one read each 5 seconds, which is 12 reads each minute.
+- With `FAKE_PRODUCT_INFO` off, the start reads the details of each store item that the cache does not hold, and that the catalog does not hold. An item with a cache file of an older version counts as not held, so the first start after an update reads each item one time. The reads run in the background, one read each 5 seconds, which is 12 reads each minute.
 - The server listens before the first read ends. The warm-up has no effect on the start time.
 - The log has `product info: warm-up started. <n> of <m> store items are not in the cache, one read each 5 s` and `product info: warm-up ended. read=<n> failed=<n> ms=<n>`, at `info` level.
 - Each read puts the product with its details into the index of the rules. So an `identified` store item whose details are in the cache opens its prompt with no wait.
@@ -869,7 +1164,7 @@ export type ReferenceImage = { gtin: string; file: string; bytes: number; addedA
 
 ```bash
 curl http://localhost:8080/healthz
-# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"fakeProductInfo":true,"store":"memory","saveFrames":false}
+# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"fakeProductInfo":true,"store":"memory","saveFrames":false,"recognitionPipeline":"frame"}
 curl -s -X POST http://localhost:8080/api/sessions -H "content-type: application/json" -d "{}"
 curl -N "http://localhost:8080/api/sessions/<sessionId>/events?token=<token>"
 # at second 10: {"type":"glance.pending","promptId":"p-0002","kind":"new","product":{"id":"gtin-8076800195057","name":"Spaghetti n.5","packSize":"500 g","priceCents":109},"warnings":[],"qtyInCart":0}
@@ -914,6 +1209,7 @@ CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.j
 The settings of the demo server, after the measurement of 2026-11-14 (see "Measured: the product in the hand, and items that look alike"):
 
 - Set `CATALOG_PATH=catalog/catalog.demo.json` and `STORE_LIST_PATH=catalog/store-list.demo.json`.
+- Do not set `RECOGNITION_PIPELINE`: the frame pipeline names more products in the frames of today. See "Measured: the observe pipeline".
 - Do not set `GEMINI_MODEL`, `GEMINI_MEDIA_RESOLUTION`, `RECOGNITION_REFERENCES`, `RECOGNITION_CONCURRENCY`, and `RECOGNITION_MIN_CONFIDENCE`. The defaults are the measured request: `gemini-3.5-flash-lite`, the default media resolution, and 3 reference pictures for each item before the frame.
 - Take 3 reference pictures of each item: its front, its back, and the side with its name.
 - Do not set `SECOND_LOOK_WAIT_MS`. A can of one design then gets the look-alike line at once, and the still names it some seconds later. A wait of 5000 ms would hold the line for that still. Nobody tested it: in the session of 2026-11-14 the phone sent the still 2.9 to 3.3 seconds after the event, and the call of a still follows.
@@ -933,6 +1229,13 @@ With `FAKE_SPEECH` off, each line gets an MP3 clip from ElevenLabs, and the `spe
 
 - The name of a clip is the SHA-256 hash of its text, language, voice ID, and model. One line in one voice is one file, `<SPEECH_CACHE_DIR>/<hash>.mp3`.
 - A clip in the directory needs no call. So a line costs one call, the first time a session needs it.
+- The start makes the clips of the product prompts of each store item that the catalog does not hold, in the background (`src/speech/prewarm.ts`). A prompt whose clip exists waits for no call. In the tests of 2026-11-14, 28 of 39 prompts had their clip, and each other one waited 241 to 2542 ms for it.
+- Each item has 3 prompt texts for the default profile: with the yes phrase ("Nod to add."), with no yes phrase, and for one unit in the cart. The rules speak the first form in the first 2 prompts of a session, and the second form after them. `promptLines` in `src/speech/seed.ts` renders these texts with the function that renders a prompt, so a clip of the start has the text that the shopper hears.
+- The price is a part of each text. A new price gives new texts, and the next start makes their clips.
+- The warm-up makes one call at a time, with 250 ms between two calls. A text with a clip costs no call and no pause. After the warm-up of the product details read an item, its prompt texts get their clips again, because the pack size can be new.
+- The log has `speech: warm-up started. <n> prompt lines of <m> store items have no clip, one call each 250 ms` and `speech: warm-up ended. made=<n> failed=<n>`. With each clip in the cache it has no line.
+- A store list of 4 items costs at most 12 calls at the first start, and none at the next one. A list of 1000 items costs 3000 calls: set `SPEECH_WARM_UP=0` for it, or seed the clips before.
+- Not in the warm-up: a prompt with an allergen or diet warning, the Italian texts, the levels `brief` and `detailed`, the count "Two are in your cart", and the catalog products, which `catalog:seed` covers. These get their clip with their first use.
 - A miss calls `POST https://api.elevenlabs.io/v1/text-to-speech/<voiceId>/stream?output_format=mp3_44100_128` with the model `eleven_flash_v2_5` and a time limit of 3 seconds.
 - Two requests for one clip at the same time share one call.
 - If the call fails, the line goes out with `url: null`, and the server logs `speech: no clip. <cause>`. The prompt still takes a yes. The next line with that text tries again.
@@ -1586,7 +1889,7 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 | `GET /api/speech/<hash>.mp3` | | 200, the MP3 of a clip |
 | `GET /api/demo/latest?key=<DEMO_KEY>` | | 200, `LatestSessionResponse` |
 | `POST`, `GET`, `DELETE /api/demo/reference?key=<DEMO_KEY>` | | The reference pictures. See "Reference pictures". |
-| `GET /healthz` | | 200, the state of the switches: `fakeRecognition`, `fakeSpeech`, `fakeProductInfo`, `store` (`memory` or `mongo`), and `saveFrames` |
+| `GET /healthz` | | 200, the state of the switches: `fakeRecognition`, `fakeSpeech`, `fakeProductInfo`, `store` (`memory` or `mongo`), `saveFrames`, and `recognitionPipeline` (`frame` or `observe`) |
 
 - `wsUrl` of a new session is `PUBLIC_BASE_URL` with `ws` in place of `http`, plus `/ws/device?session=<id>&token=<token>`.
 - A body that fails its schema gets 400 with `{ "error": "bad_request" }`. An unknown session gets 404 with `{ "error": "not_found" }`. An unknown key in a profile patch is dropped.
@@ -1653,7 +1956,7 @@ The store tests of `src/db/mongo.test.ts` need a MongoDB server. Without `MONGOD
 MONGODB_URI_TEST=<connection string> npm test --workspace @glance/server -- mongo
 ```
 
-Four checks call a vendor and are not part of the tests: `npm run replay` (see "Replay a test set"), `npm run reference:probe` (see "Reference pictures in a frame call"), and the two below. Run each one by hand, one time:
+Some checks call a vendor and are not part of the tests: `npm run replay` (see "Replay a test set"), `npm run reference:probe` (see "Reference pictures in a frame call"), `npm run held:probe`, `npm run observe:probe` (see "Measured: the observe pipeline"), and the two below. Run each one by hand, one time:
 
 ```bash
 # The model ID, with no cost. With a JPEG path it also makes one recognition call.
