@@ -34,11 +34,16 @@ import com.meta.wearable.dat.motion.types.Vector3
 import com.metaglance.android.GlanceApp
 import com.metaglance.android.audio.PhoneVoice
 import com.metaglance.android.dat.DatLink
+import com.metaglance.android.dat.ProbeDecisions
 import com.metaglance.android.mock.MockGlassesController
 import com.metaglance.android.pipeline.QrScanner
 import com.metaglance.core.gesture.GyroSample
 import com.metaglance.core.gesture.GyroStats
+import com.metaglance.core.gesture.HeadGesture
+import com.metaglance.core.gesture.HeadGestureConfig
+import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.gesture.MotionCsv
+import com.metaglance.core.gesture.Sensitivity
 import com.metaglance.core.image.I420
 import com.metaglance.core.image.RawFrame
 import java.io.File
@@ -69,6 +74,7 @@ class ProbeActivity : AppCompatActivity() {
     private var qrJob: Job? = null
     private var recordJob: Job? = null
     private var enduranceJob: Job? = null
+    private var gestureJob: Job? = null
     private val voice: PhoneVoice by lazy { PhoneVoice(this) }
 
     private val bluetoothRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -109,6 +115,7 @@ class ProbeActivity : AppCompatActivity() {
         qrJob?.cancel()
         recordJob?.cancel()
         enduranceJob?.cancel()
+        gestureJob?.cancel()
         voice.shutdown()
         log.onLine = {}
         super.onDestroy()
@@ -168,6 +175,11 @@ class ProbeActivity : AppCompatActivity() {
         addButton("Speech") { datLink.attachSpeech() }
         addButton("Speak line") { speakLine() }
         addButton("Axis test") { axisTest() }
+        lateinit var gestureButton: Button
+        gestureButton = addButton("Gesture test: off") {
+            val on = toggleGestureTest()
+            gestureButton.text = if (on) "Gesture test: on" else "Gesture test: off"
+        }
         addButton("Still") { lifecycleScope.launch { datLink.captureStill() } }
         lateinit var recordButton: Button
         recordButton = addButton("Record motion: off") {
@@ -247,6 +259,37 @@ class ProbeActivity : AppCompatActivity() {
                     "strongest=${report.strongest} firstSign=${report.firstSign} samples=${samples.size}"
             )
         }
+    }
+
+    // The walk test counts each gesture with no head window, so each false nod and each false shake shows.
+    private fun toggleGestureTest(): Boolean {
+        gestureJob?.let {
+            it.cancel()
+            gestureJob = null
+            return false
+        }
+        val config = HeadGestureConfig.of(
+            Sensitivity.NORMAL,
+            ProbeDecisions.PITCH_AXIS,
+            ProbeDecisions.PITCH_DOWN_SIGN,
+            ProbeDecisions.YAW_AXIS
+        )
+        gestureJob = lifecycleScope.launch {
+            val detector = HeadGestureDetector(config)
+            var nods = 0
+            var shakes = 0
+            log.line("gesture test start pitch=${config.pitchAxis} down=${config.pitchDownSign} yaw=${config.yawAxis}")
+            try {
+                datLink.gyro.collect { sample ->
+                    val gesture = detector.onSample(sample) ?: return@collect
+                    if (gesture == HeadGesture.NOD) nods += 1 else shakes += 1
+                    log.line("gesture $gesture nods=$nods shakes=$shakes")
+                }
+            } finally {
+                log.line("gesture test end nods=$nods shakes=$shakes")
+            }
+        }
+        return true
     }
 
     private fun toggleMotionRecording(): Boolean {

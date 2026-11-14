@@ -48,6 +48,7 @@ Open "Glance Probe" on the phone. The text field above the buttons gives the lab
 | `Motion`, `Inputs`, `Speech` | Adds the capability to the session. `Speech` needs the microphone permission. |
 | `Speak line` | Speaks one product line with `PhoneVoice`. Logs the audio outputs, and the frame size before and after the line. |
 | `Axis test` | Reads the gyroscope for 4 seconds. Logs the RMS rate of each axis, the strongest axis, and the sign of its first movement. |
+| `Gesture test` | Runs the head gesture detector on the gyroscope with no head window. Logs each nod and each shake with a count. |
 | `Still` | Takes a photo. Logs its size, its variant, and the time. |
 | `Record motion` | Appends each motion sample to `probe/motion/<label>.csv`, in the CSV format of MockDeviceKit |
 | `Endurance 10 min` | Speaks the line each 30 seconds. Logs battery, thermal level, frame count, frame size, and motion sample count each minute. |
@@ -61,7 +62,7 @@ Open "Glance Probe" on the phone. The text field above the buttons gives the lab
 
 The probe folder on the phone is `/sdcard/Android/data/com.metaglance.android/files/probe`. Get it with `adb pull` in PowerShell.
 
-The second tap on `QR log`, `Record motion`, or `Endurance 10 min` stops it.
+The second tap on `QR log`, `Gesture test`, `Record motion`, or `Endurance 10 min` stops it.
 
 ## Machine needs
 
