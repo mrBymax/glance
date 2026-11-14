@@ -4,7 +4,7 @@ import type { BarcodeReport } from '../products/barcodes';
 import type { StoreList } from '../products/storeList';
 import type { SessionRuntime } from '../sessions/runtime';
 import type { RuleInputBody } from '../sessions/types';
-import { LABEL_TIMEOUT_MS, createLabelHandler } from './intake';
+import { LABEL_EVERY_MS, LABEL_TIMEOUT_MS, createLabelHandler } from './intake';
 import { type LabelAnswer, type LabelReader, NO_LABEL } from './reader';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
@@ -15,6 +15,8 @@ const storeList: StoreList = { byGtin: async () => nutella, all: async () => [nu
 let inputs: RuleInputBody[];
 let stopListeners: (() => void)[];
 let stopped: boolean;
+let phase: string;
+let now: number;
 let session: SessionRuntime;
 let lines: string[];
 let report: ReturnType<typeof vi.fn<BarcodeReport>>;
@@ -23,8 +25,11 @@ beforeEach(() => {
   inputs = [];
   stopListeners = [];
   stopped = false;
+  phase = 'shopping';
+  now = 1_000_000;
   session = {
     id: 's-1',
+    get state() { return { phase }; },
     get stopped() { return stopped; },
     dispatch: (input: RuleInputBody) => { inputs.push(input); },
     onStop: (listener: () => void) => { stopListeners.push(listener); return () => undefined; },
@@ -38,7 +43,7 @@ function handler(reader: LabelReader) {
   const write = (line: string): void => { lines.push(line); };
   return createLabelHandler({
     reader, storeList, report, log: { info: write, warn: write } as unknown as FastifyBaseLogger,
-    minConfidence: 0.6, requireBlur: false, saveFrame: null,
+    minConfidence: 0.6, requireBlur: false, saveFrame: null, clock: { now: () => now },
   });
 }
 const pending = (): { reader: LabelReader; answer: (value: LabelAnswer) => void; signals: AbortSignal[] } => {
@@ -80,8 +85,37 @@ it('drops a label frame while a call of the session runs', async () => {
   expect(lines.join('\n')).toContain('label frame dropped: a label call runs. seq=5');
   call.answer(NO_LABEL);
   await vi.waitFor(() => expect(inputs).toContainEqual({ type: 'label', read: 'failed' }));
+  now += LABEL_EVERY_MS;
   onFrame(session, { header: { ...header, seq: 6 }, jpeg: JPEG });
   expect(call.signals).toHaveLength(2);
+});
+it('starts at most one call each 5 seconds for a session, so a phone that sends too many stills costs no call', async () => {
+  expect(LABEL_EVERY_MS).toBe(5000);
+  const read = vi.fn<LabelReader['read']>(async () => NO_LABEL);
+  const onFrame = handler({ read });
+  onFrame(session, { header, jpeg: JPEG });
+  await vi.waitFor(() => expect(inputs).toContainEqual({ type: 'label', read: 'failed' }));
+  inputs = [];
+  now += LABEL_EVERY_MS - 1;
+  onFrame(session, { header: { ...header, seq: 5 }, jpeg: JPEG });
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(inputs).toEqual([]);
+  expect(lines.join('\n')).toContain('label frame dropped: the last label call started 4999 ms ago. seq=5');
+  // Another session has its own time.
+  onFrame({ ...session, id: 's-2', state: { phase: 'shopping' }, stopped: false } as unknown as SessionRuntime, { header, jpeg: JPEG });
+  expect(read).toHaveBeenCalledTimes(2);
+  now += 1;
+  onFrame(session, { header: { ...header, seq: 6 }, jpeg: JPEG });
+  expect(read).toHaveBeenCalledTimes(3);
+});
+it('drops a label frame of a session that does not shop, with no call', () => {
+  const read = vi.fn<LabelReader['read']>(async () => NO_LABEL);
+  for (phase of ['resting', 'paid', 'ended']) handler({ read })(session, { header, jpeg: JPEG });
+  expect(read).not.toHaveBeenCalled();
+  expect(inputs).toEqual([]);
+  phase = 'checkout';
+  handler({ read })(session, { header, jpeg: JPEG });
+  expect(read).toHaveBeenCalledTimes(1);
 });
 it('ends a call after 4 seconds, and the read counts as failed', async () => {
   expect(LABEL_TIMEOUT_MS).toBe(4000);

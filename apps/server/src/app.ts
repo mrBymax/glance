@@ -244,6 +244,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     storeList: deps.storeList,
     report: reportBarcode,
     log: app.log,
+    clock: deps.clock,
     minConfidence: config.minConfidence,
     requireBlur: config.requireBlur,
     saveFrame,

@@ -299,7 +299,8 @@ it('in fake mode a script with no label answer reads nothing, and the voice says
   expect(await phone.next(isSpeak)).toMatchObject({ text: 'I cannot read this code. Hold it closer.', promptId: null });
   expect(lines.join('')).toContain('frame seq=9 w=1440 h=1080 blurred=true kind=label bytes=4');
   phone.sendFrame({ ...label, seq: 10 }, JPEG);
-  await vi.waitFor(() => expect(lines.join('')).toMatch(/label session=\S+ seq=10 match=none/));
+  // The second still comes too early for a second call.
+  await vi.waitFor(() => expect(lines.join('')).toMatch(/label frame dropped: the last label call started \d+ ms ago. seq=10/));
   expect(phone.messages.filter(isSpeak)).toHaveLength(1);
 });
 it('in fake mode a barcode step reports its code as the phone does', async () => {
