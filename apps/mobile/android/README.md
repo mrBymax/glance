@@ -5,7 +5,45 @@ The Android app of Meta Glance. This folder holds a Gradle project with two modu
 - `core` is pure Kotlin on the JVM. It holds each rule that a unit test can check.
 - `app` is the Android application `com.metaglance.android`. Its debug build holds the probe screen "Glance Probe".
 
-The probe is the only screen at this time. It shows a list of buttons above a log. It writes each log line to Logcat with the tag `Glance`, and to `Android/data/com.metaglance.android/files/probe/probe-<start time>.log` on the phone.
+The probe is the only screen at this time. It shows a list of buttons above a log. The debug APK has about 110 MB, because it holds the ML Kit models and the libraries of the DAT SDK. The probe writes each log line to Logcat with the tag `Glance`, and to `Android/data/com.metaglance.android/files/probe/probe-<start time>.log` on the phone.
+
+## Parts
+
+```mermaid
+flowchart LR
+    Probe[ProbeActivity, debug build] --> Link[DatLink]
+    Probe --> Mock[MockGlassesController]
+    Probe --> Qr[QrScanner, ML Kit]
+    Link --> Sdk[DAT SDK]
+    Mock --> Kit[MockDeviceKit]
+    Kit --> Sdk
+    Sdk --> Glasses[Glasses through Meta AI]
+    Link --> Core[core: DatSnapshot, DatFault, RawFrame]
+```
+
+- `GlanceApp` owns one `DatLink` and one `MockGlassesController`.
+- `DatLink` is the one connection to the DAT SDK. It gives a `snapshot` of the state, the `faults` of the SDK, and the `frames` of the stream. Call its functions on the main thread.
+- A frame is a `RawFrame` in I420 layout. `frames` holds the newest frame only.
+- A stopped DAT session is final. `startSession` creates a new session each time.
+- `MockGlassesController` pairs mock glasses of MockDeviceKit. Call `DatLink.initialize` after `enable` and after `disable`.
+
+## The probe
+
+Open "Glance Probe" on the phone. The text field above the buttons gives the label of a saved frame.
+
+| Button | Action |
+|---|---|
+| `Bluetooth permission` | Asks for `BLUETOOTH_CONNECT`, then starts the DAT SDK |
+| `Register` | Starts the registration in the Meta AI app |
+| `Camera permission`, `Mic permission` | Asks for the DAT permission in the Meta AI app |
+| `Start session`, `Start session (no camera)`, `Stop session` | Starts a session with or without the stream at 720 x 1280 and 7 frames per second, or stops it |
+| `Save frame` | Saves the next frame as `probe/frames/<label>-<nn>.jpg` |
+| `QR log` | Logs each QR code in the stream, at most 2 lines each second |
+| `Mock: enable and pair` | Enables MockDeviceKit and pairs mock glasses that are on, open, and on the face |
+| `Mock: phone camera` | Uses the back camera of the phone as the stream of the mock glasses |
+| `Mock: disable` | Stops the session and disables MockDeviceKit |
+
+The probe folder on the phone is `/sdcard/Android/data/com.metaglance.android/files/probe`. Get it with `adb pull` in PowerShell.
 
 ## Machine needs
 
