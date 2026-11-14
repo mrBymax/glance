@@ -1,0 +1,9 @@
+/* Astryx controls are 28, 32, and 36 px high. Spec section 10 requires touch targets of 48 px or more. */
+:root {
+  --size-element-sm: 48px;
+  --size-element-md: 48px;
+  --size-element-lg: 56px;
+}
+.astryx-button {
+  min-inline-size: 48px;
+}
