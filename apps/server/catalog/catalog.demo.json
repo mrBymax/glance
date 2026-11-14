@@ -1,0 +1,18 @@
+[
+  {
+    "id": "oat-drink-barista-1l",
+    "gtin": "7394376616037",
+    "name": { "en": "Barista oat drink" },
+    "spokenName": { "en": "Barista oat drink" },
+    "brand": "Oatly",
+    "packSize": "1 L",
+    "spokenPack": { "en": "one litre" },
+    "spokenPackDetailed": { "en": "one litre carton" },
+    "priceCents": 229,
+    "allergens": ["gluten"],
+    "vegan": true,
+    "vegetarian": true,
+    "visual": "Tall carton, grey and white, the word OATLY in large black letters and the words BARISTA EDITION below it.",
+    "lookAlikes": []
+  }
+]

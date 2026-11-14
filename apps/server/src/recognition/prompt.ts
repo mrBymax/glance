@@ -34,13 +34,14 @@ export function buildSystemInstruction(template: string, products: readonly Prod
 /**
  * The JSON Schema of the answer: the six fields of spec section 11.1, and the code of the frame.
  * The product fields take only the given IDs, so the model cannot write an ID outside the catalog and the store list.
+ * With no ID the answer can name no product: an enum with no value is no schema that the API takes.
  */
 export function recognitionResponseSchema(productIds: readonly string[]): unknown {
-  const id = z.enum(productIds as [string, ...string[]]);
+  const id = productIds.length > 0 ? z.enum(productIds as [string, ...string[]]) : null;
   return z.toJSONSchema(z.object({
     status: z.enum(['identified', 'ambiguous', 'unsure', 'unknown', 'none']),
-    productId: id.nullable(),
-    candidates: z.array(id),
+    productId: id === null ? z.null() : id.nullable(),
+    candidates: id === null ? z.array(z.string()).max(0) : z.array(id),
     confidence: z.number().min(0).max(1),
     aimHint: AimHintSchema,
     gesture: z.enum(['none', 'thumbs_up', 'thumbs_down']),

@@ -91,6 +91,24 @@ it('with real recognition and no answer service a question gets the failed line'
     error.mockRestore();
   }
 });
+it('starts with the demo catalog and the demo store list, and with an empty catalog', async () => {
+  const demo = readCatalogFile(fileURLToPath(new URL('../catalog/catalog.demo.json', import.meta.url)));
+  const storeList = readStoreListFile(fileURLToPath(new URL('../catalog/store-list.demo.json', import.meta.url)));
+  const config = loadConfig({ GEMINI_API_KEY: 'test', FAKE_SPEECH: '1', FAKE_PRODUCT_INFO: '1' }, []);
+  for (const list of [demo, []]) {
+    const real = await buildApp({ ...deps(), config, store: new MemoryStore(list), catalog: indexCatalog(list), storeList });
+    try {
+      expect((await real.inject({ method: 'GET', url: '/healthz' })).json()).toMatchObject({ ok: true, fakeRecognition: false });
+      // The paper cups of the demo store list are a product of the rules from the start.
+      const created = (await real.inject({ method: 'POST', url: '/api/sessions' })).json<{ sessionId: string }>();
+      const session = (await real.sessions.get(created.sessionId))!;
+      session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'gtin-6438574558384', confidence: 0.9 }, still: false });
+      expect(session.state.prompt).toMatchObject({ kind: 'product', productId: 'gtin-6438574558384' });
+    } finally {
+      await real.close();
+    }
+  }
+});
 it('runs each close function when the app closes', async () => {
   const other = await buildApp(deps());
   let closed = 0;

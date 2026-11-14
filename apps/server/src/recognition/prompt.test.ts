@@ -72,6 +72,11 @@ it('limits the answer to the catalog IDs', () => {
   expect(schema.properties.candidates!.items!.enum).toEqual(['a', 'b']);
   expect(schema.properties.aimHint!.enum).toEqual(['none', 'left', 'right', 'up', 'down', 'closer', 'farther', 'turn']);
 });
+it('with no product the answer can name none', () => {
+  const schema = recognitionResponseSchema([]) as Schema & { properties: { candidates: { maxItems?: number } } };
+  expect(schema.properties.productId).toEqual({ type: 'null' });
+  expect(schema.properties.candidates.maxItems).toBe(0);
+});
 it('asks for the code of the frame', () => {
   const { code } = (recognitionResponseSchema(['a']) as Schema).properties;
   expect(code!.required).toEqual(['visible', 'digits']);

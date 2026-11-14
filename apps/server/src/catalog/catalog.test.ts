@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
 import { ProductSchema } from '@glance/shared';
 import oatDrink from '@glance/shared/fixtures/catalog/oat-drink-1l.json';
+import { priceConflicts } from '../products/resolver';
+import { readStoreListFile } from '../products/storeList';
 import { indexCatalog, readCatalogFile } from './catalog';
 
 const dev = readCatalogFile('catalog/catalog.dev.json');
@@ -34,6 +36,19 @@ it('names only products of the catalog as look-alikes', () => {
   const index = indexCatalog(dev);
   const missing = dev.flatMap((p) => p.lookAlikes).filter((id) => !index.get(id));
   expect(missing).toEqual([]);
+});
+it('the demo catalog holds only the products of the dev catalog that have a barcode, so it holds no invented product', async () => {
+  const demo = readCatalogFile('catalog/catalog.demo.json');
+  expect(demo.map((p) => p.id)).toEqual(['oat-drink-barista-1l']);
+  for (const product of demo) {
+    // A look-alike of the dev catalog that is invented is not in this file.
+    expect({ ...product, lookAlikes: [] }).toEqual({ ...indexCatalog(dev).get(product.id), lookAlikes: [] });
+    expect(product.gtin).toBeDefined();
+    expect(product.lookAlikes.filter((id) => !indexCatalog(demo).get(id))).toEqual([]);
+  }
+  const items = await readStoreListFile('catalog/store-list.demo.json').all();
+  expect(items.map((item) => item.gtin)).toContain('7394376616037');
+  expect(priceConflicts(demo, items)).toEqual([]);
 });
 it('rejects a duplicate ID', () => {
   expect(() => indexCatalog([dev[0]!, dev[0]!])).toThrow(/oat-drink-1l/);

@@ -92,6 +92,16 @@ it('knows the store items: the instruction lists them, the schema takes their ID
   // R9: the exclude list also drops a store item.
   expect((await recognizer({ storeEntries: [cups] }).recognize(JPEG, opts({ exclude: ['gtin-6438574558384'] }))).status).toBe('none');
 });
+it('works with an empty catalog: a store item is still a product, and with no store item each answer names none', async () => {
+  const empty = (storeEntries: StoreEntry[]) => createGeminiRecognizer({
+    apiKey: 'test-key', model: 'gemini-3.5-flash-lite', mediaResolution: 'default', minConfidence: 0.6,
+    catalog: indexCatalog([]), storeEntries, template, fetch: fetchStub,
+  });
+  reply = modelSays(JSON.stringify({ ...answer, productId: 'gtin-6438574558384' }));
+  expect(await empty([cups]).recognize(JPEG, opts())).toMatchObject({ status: 'identified', productId: 'gtin-6438574558384' });
+  expect(await empty([]).recognize(JPEG, opts())).toMatchObject({ status: 'unknown', productId: null });
+  expect(JSON.stringify(calls[1]!.body.systemInstruction)).toContain('(The catalog is empty.)');
+});
 it('asks for the low media resolution for a frame, and not for a still', async () => {
   const low = recognizer({ mediaResolution: 'low' });
   await low.recognize(JPEG, opts());
