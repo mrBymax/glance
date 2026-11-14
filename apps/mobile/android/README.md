@@ -230,6 +230,15 @@ The still photo:
 - A still with a code gives `barcode.seen`, and the still stays on the phone.
 - A still with no code goes to the server as a frame with `kind: label` and `blurred: true`: the full photo with no crop, each face pixelated, a long side of 1600 pixels at most, and JPEG quality 85. If face detection fails, the still is dropped.
 - The log line `label still asked: region <box> in <w>x<h>` or `label still asked: server request` says why the phone takes a still.
+
+The still of a reference picture:
+
+- A person at the computer asks the server for a reference picture of a store item, and the server sends `still.request` with the purpose `reference`. `apps/server/README.md` has the command, in "Reference pictures".
+- This still does not go through `LabelPolicy`. `StillPolicy.tryStartNow` starts it at once, and refuses it only while another capture runs. The next still of the app keeps its distance from it.
+- The phone reads no code in this still. It always goes to the server as a frame with `kind: label`: the full photo, each face pixelated, a long side of 1600 pixels at most. If face detection fails, the still is dropped.
+- The still plays no sound and gives no vibration.
+- The log has `reference still seq=<n> <w>x<h> <n> bytes sent, <n> ms`, or `reference still dropped: <cause>`.
+- No instrumented test covers this still yet. The tests of `:core` cover `StillPolicy.tryStartNow` and the purpose of the message.
 - The log line `stream size <w>x<h>` comes with the first frame of a stream and with each change of the frame size. The glasses lower the size when Bluetooth is slow, and a smaller frame makes each code harder to read.
 - The log line `label still <w>x<h>: ...` has the size of the photo and the milliseconds from the trigger to the result. `DatLink` logs `still <w>x<h> <variant> <ms> ms` for the capture alone.
 

@@ -46,6 +46,7 @@ flowchart LR
 | `PRODUCT_INFO_USER_AGENT` | The contact that Open Food Facts asks for: the name of the app, its version, and an address. |
 | `PRODUCT_CACHE_DIR` | `/data/speech/products`. The user of the image can write only to the volume of the speech clips. |
 | `DEMO_KEY` | A random word of 12 characters or more. Without it the mirror page cannot find the session of the phone. |
+| `REFERENCE_DIR` | `/data/speech/reference`. The reference pictures of the store items, on the volume of the speech clips. A picture can show a room and people. |
 | `REQUIRE_BLUR` | `1` when the phone runs face detection. |
 | `SECOND_LOOK_WAIT_MS` | `2500` when the phone sends a still for look-alike products. Empty means off. |
 

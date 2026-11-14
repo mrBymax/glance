@@ -21,6 +21,8 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `catalog/catalog.demo.json`, `catalog/store-list.demo.json` | The files of a demo with real products: a catalog with no invented product, and the dev store list with five more items. See "A demo with real products". |
 | `src/products/` | The store list, the product details of Open Food Facts, and the lookup of a barcode. See "Barcode scan". |
 | `src/label/` | The model call that reads the still of a label, and its match against the store list. See "Label frames". |
+| `src/reference/images.ts` | `ReferenceImages`: the reference pictures of the store items, as a folder. See "Reference pictures". |
+| `scripts/reference.ts` | `npm run reference`: takes a reference picture through the glasses of a running server. See "Reference pictures". |
 | `agents/label.md` (repository root) | The instruction for the label call, with the placeholder `{{storeList}}`. |
 | `fixtures/product-info/` | One saved answer of Open Food Facts for each item of the dev store list. `FAKE_PRODUCT_INFO` and the tests read them. |
 | `catalog/catalog.json` | The 12 product slots of the demo, with `FILL_` texts and the price 0. A person fills them, and `catalog:check` reports each price of 0 as an error. |
@@ -61,7 +63,7 @@ curl -X POST http://localhost:8080/api/sessions
 # {"sessionId":"...","token":"...","wsUrl":"ws://localhost:8080/ws/device?session=...&token=..."}
 ```
 
-At the start the server logs `store: memory` or `store: mongo`, the number of products, `store list: <path>, <n> items`, `product info: fake` or the address of Open Food Facts, `recognition: fake` or the model, and `speech: fake` or the speech model.
+At the start the server logs `store: memory` or `store: mongo`, the number of products, `store list: <path>, <n> items`, `reference pictures: <dir>, <n> items, <m> pictures`, `product info: fake` or the address of Open Food Facts, `recognition: fake` or the model, and `speech: fake` or the speech model.
 
 With real recognition and real speech (`npm run dev` with both keys in `.env` and both fake switches empty), each frame is one paid Gemini call, and each new line is one paid ElevenLabs call. A phone sends 2 frames each second, and at most one label still each 6 seconds with the default still gap of the app.
 
@@ -91,7 +93,8 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `SAVE_FRAMES` | not set | A directory for frames. When it is set, the server writes each frame there. See "Stored frames". Keep it not set for the demo and on the deployed server. |
 | `PAYMENT_DELAY_MS` | `1500` | The length of the mock payment. |
 | `SECOND_LOOK_WAIT_MS` | `0` | How long the look-alike line waits for the result of a still, in milliseconds, from 0 to 10000. `0` means off. See "Sharp second look". |
-| `DEMO_KEY` | not set | The key of `GET /api/demo/latest`. With no key, that path answers 404. |
+| `DEMO_KEY` | not set | The key of the paths under `/api/demo`. With no key, those paths answer 404. |
+| `REFERENCE_DIR` | `catalog/reference` | The folder with the reference pictures of the store items. See "Reference pictures". |
 | `STORE_LIST_PATH` | `catalog/store-list.dev.json` | The items that the store sells, with the barcode and the price of each. See "Barcode scan". |
 | `FAKE_PRODUCT_INFO` | off | `1` means on. The server then reads the details of a scanned product from `fixtures/product-info`. |
 | `OFF_BASE_URL` | `https://world.openfoodfacts.org` | The address of Open Food Facts. It must start with `http://` or `https://`. |
@@ -237,7 +240,7 @@ The worker:
 
 ### Stored frames
 
-Without `SAVE_FRAMES` the server stores no frame. A frame lives in memory from its socket message to the end of its recognition call. The server writes no frame to disk, to the store, or to a log.
+Without `SAVE_FRAMES` the server stores no frame of a shop. A frame lives in memory from its socket message to the end of its recognition call. The server writes no such frame to disk, to the store, or to a log.
 
 - A log line about a frame holds its sequence number, its width and height, the `blurred` value, its kind, and its byte count. It holds no bytes of the image. With real recognition this line has the `debug` level.
 - `SAVE_FRAMES=<directory>` is for the test set of the recognition model. The server then writes each frame that it accepts to `<directory>/<sessionId>/<seq>.jpg`. A frame with a sequence number that the folder already holds replaces the older file.
@@ -246,7 +249,7 @@ Without `SAVE_FRAMES` the server stores no frame. A frame lives in memory from i
 - A write that fails gets the log line `frame not saved. seq=<n> <message> session=<id>`, and the recognition call goes on.
 - At its start the server logs `SAVE_FRAMES is on. The server writes each frame to <directory>.` at `warn` level.
 - `GET /healthz` answers `"saveFrames": true` while the switch is on. Check for `false` before the demo (spec section 11.1).
-- `src/recognition/save.ts` is the only file on the frame path that imports the file system. A test checks this.
+- `src/recognition/save.ts` is the only file on the path of a stream frame that imports the file system. A test checks this. A label frame of a marked session is the one other frame that the server writes: a person asked for it. See "Reference pictures".
 
 ### Replay a test set
 
@@ -495,7 +498,8 @@ A store item has a name and a price, and no description of its package. With a c
 
 A frame with the kind `label` is the still of a package that the phone could not read. It goes to one model call, and never to recognition.
 
-- The call uses `GEMINI_API_KEY` and `GEMINI_MODEL`, the instruction `agents/label.md`, a response schema of its own, the default media resolution, one attempt, and a time limit of 4 seconds.
+- The call uses `GEMINI_API_KEY` and `GEMINI_MODEL`, the instruction `agents/label.md`, a response schema of its own, the default media resolution for the still, one attempt, and a time limit of 4 seconds.
+- The call also gets the reference pictures of the store items, when the folder of `REFERENCE_DIR` holds some. See "Reference pictures".
 - The instruction holds the store list in place of `{{storeList}}`: one line for each item, with its `gtin`, its name, and its brand and pack size when the store list or the product cache has them. It holds no price. The server builds the instruction and the schema one time, at its start.
 - The answer is `digits` (a list of digit runs), `brand`, `name`, `packSize`, `confidence`, `item`, and `itemConfidence`. `item` is the `gtin` of the one store item that the package is, or `null`. The schema lets it take only a code of the store list. An answer that fails the schema counts as an empty one.
 - The instruction says: the package text can be in another language than the name in the store list ("Kartonkipikari / Pappersmugg" is "Paper cups"), choose an item only when the package is that product and not a similar one, answer `null` when not sure, and never guess a digit.
@@ -510,8 +514,107 @@ A frame with the kind `label` is the still of a package that the phone could not
 - One label call runs at a time for each session, and a session starts at most one call each 5 seconds. A label frame that arrives during a call, or too early, is dropped with a `label frame dropped` warning.
 - A label frame of a session that rests, is paid, or ended is dropped with no call.
 - With `REQUIRE_BLUR=1` the server drops a label frame with `blurred: false`. With `SAVE_FRAMES` it saves each label frame that it accepts.
-- Each label frame gets the frame log line at `info` level, and each call gets `label session=<id> seq=<n> match=<13 digits|none> ms=<n>`. Before it, the line `label answer seq=<n> digits=[...] brand=... name=... confidence=<n> item=<13 digits|null> itemConfidence=<n> session=<id>` shows what the model read, so a person can see why a still gave no product.
+- Each label frame gets the frame log line at `info` level, and each call gets `label session=<id> seq=<n> match=<13 digits|none> ms=<n> references=<n>`, with the number of reference pictures in the request. Before it, the line `label answer seq=<n> digits=[...] brand=... name=... confidence=<n> item=<13 digits|null> itemConfidence=<n> session=<id>` shows what the model read, so a person can see why a still gave no product.
 - With real recognition, each label call is one paid Gemini call. The phone sends at most one still each 6 seconds by default. A person can set that gap on the phone, down to 2 seconds, and the limit of 5 seconds on the server holds for a phone that sends more.
+
+### Reference pictures
+
+A store item has a name and no description of its package. So the label call can also compare the still with photos of the items: the reference pictures. A person takes them through the glasses before the demo.
+
+```mermaid
+sequenceDiagram
+  participant Person as Person at the computer
+  participant Server
+  participant Phone
+  participant Store as ReferenceImages
+  participant Gemini
+  Person->>Server: POST /api/demo/reference?key=...&gtin=3017624010701
+  Note over Server: marks the newest live session, for 15 seconds
+  Server->>Phone: still.request with the purpose reference
+  Note over Phone: one still, outside the still limits. No code read. Each face pixelated
+  Phone->>Server: frame with the kind label
+  Server->>Store: add(gtin, JPEG)
+  Note over Server: no label call, no rule input, no line
+  Server-->>Person: 201 with the file name and the picture size
+  Phone->>Server: a later frame with the kind label
+  Server->>Store: all(), then read of each selected picture
+  Server->>Gemini: label call: text and picture for each reference, then "The photo to read" and the still
+```
+
+Take the pictures:
+
+1. Start the server with `DEMO_KEY` set, and with the store list that holds the products.
+2. Start a session on the phone, with the glasses on. The camera must run.
+3. Hold one product up, with its front to the glasses, at the distance of a shopper.
+4. Run the command with the code of the product. It prints the file name and the picture size.
+5. Turn the product, and run the command again for the barcode side.
+6. Do steps 3 to 5 for each product. Then run the command with `list`.
+
+```bash
+npm run reference --workspace @glance/server -- 3017624010701
+# reference: saved 1763128800123.jpg for 3017624010701 Nutella, 1200 x 1600, 412345 bytes, 1 picture
+npm run reference --workspace @glance/server -- list
+# 3017624010701  2  Nutella
+# 8076800195057  0  Spaghetti n.5
+# reference: 10 items, 2 pictures
+npm run reference --workspace @glance/server -- remove 3017624010701
+# reference: removed 2 pictures of 3017624010701
+```
+
+- The command reads `apps/server/.env`. The key is `DEMO_KEY`. The address is `--url <address>`, else `PUBLIC_BASE_URL`, else `http://localhost:<PORT>`. The numbers in the example above show the format.
+- A reference picture is a photo of the room of the person who takes it. It can show the room and people. The phone pixelates each face before the upload, and it drops a still when face detection fails. Git ignores `catalog/reference/`. Do not commit a picture, and delete the folder after a demo in a private room.
+- The pictures need no restart: each label call reads the folder again.
+- A person can also copy a JPEG into `<REFERENCE_DIR>/<13 digits>/`. Such a file has the time of its last change.
+
+The paths. Each one needs `?key=<DEMO_KEY>`, and answers 404 with no `DEMO_KEY` and with a wrong key:
+
+| Call | Answer |
+|---|---|
+| `POST /api/demo/reference?key=<key>&gtin=<digits>` | 201 with `gtin`, `name`, `file`, `bytes`, `width`, `height`, and `count`, when the picture is saved |
+| `GET /api/demo/reference?key=<key>` | 200 with `items`: `gtin`, `name`, and `pictures` for each store item. Pictures of a code that the store list does not hold have the name `null` |
+| `DELETE /api/demo/reference?key=<key>&gtin=<digits>` | 200 with `gtin` and `removed`, the number of pictures that the server removed |
+
+- `POST` answers 400 for a code with a wrong check digit and for a code that the store list does not hold. A code of 8 or 12 digits becomes 13 digits, as for a barcode.
+- `POST` answers 409 with `no_session` when no session is live, and with `no_phone` when the newest live session has no phone on its socket.
+- `POST` marks the newest live session and sends `still.request` with the purpose `reference` at once. This request does not go through the rules, so the limits of a still for a code do not count for it.
+- The next label frame of the marked session is the picture. It goes to no label call and to no rule, so the voice says nothing for it. `SAVE_FRAMES` does not save it a second time. With `REQUIRE_BLUR=1`, a frame with `blurred: false` is no picture, and the mark waits for the next frame.
+- The mark ends after one frame, or after 15 seconds. Then `POST` answers 504 with `timeout`. A second `POST` for the session ends the first one with 409 and `replaced`.
+- The log has `reference picture saved. gtin=<13 digits> file=<name> bytes=<n> seq=<n> session=<id>`.
+- The server stores the still as the phone sent it: a JPEG with a long side of 1600 pixels at most. It has no image library and makes no smaller copy.
+
+The label call with pictures:
+
+- Each picture is one image part, after a text part with its item: `Reference picture of item <gtin>: <name>`. The still is the last image, after the text `The photo to read`. With no picture, the request is the still and the text `Read this label.`, as before.
+- A reference part has the media resolution `MEDIA_RESOLUTION_LOW` of its part. `@google/genai` 3.3.0 has this field (`Part.mediaResolution`), and the documentation of Gemini gives it to Gemini 3 models and later, with 280 tokens for one image. The still keeps the default, because the digits under a barcode are small.
+- A call gets at most 3 pictures of one item: the newest ones.
+- A call gets at most 24 pictures and at most 9 MB of JPEG bytes. The Gemini API takes 20 MB in one request with inline data. Base64 makes 12 MB of 9 MB, and the still and the instruction fit in the rest. 24 pictures cost 6720 tokens.
+- When the limits leave pictures out, each item gets its newest picture before an item gets a second one. The order is that of the store list.
+- Only an item of the store list gets its pictures into a call.
+- A reference store that fails costs the pictures of that call, with the log line `reference pictures not read. <message> session=<id>`. The call still runs.
+- `agents/label.md` says: a reference picture can show the item from another side or in other light, the background of a reference picture means nothing, and `item` is the product of a reference picture or the match of the store list text. The model reads `digits`, `brand`, and `name` only from the photo to read.
+- `matchLabel` does not change: digits with a right check digit first, then `item` from `LABEL_MIN_CONFIDENCE` on, then the words.
+- Recognition by sight gets no reference picture. It makes 2 calls each second, and each picture costs upload time and tokens in each call.
+- The upload of the pictures is part of the 4 seconds of a label call. With many large pictures on a slow line, a call can fail with `no answer in 4000 ms`. Then remove pictures.
+
+Not measured: no label call with reference pictures has run with the real model. If the API rejects the media resolution of a part for the model of `GEMINI_MODEL`, each label call with pictures fails, and the log shows `label call failed` with the message of the API. Remove the pictures then, and the call works as before.
+
+A database in place of the folder. `ReferenceImages` in `src/reference/images.ts` is the interface:
+
+```ts
+export interface ReferenceImages {
+  list(gtin: string): Promise<ReferenceImage[]>;
+  all(): Promise<Map<string, ReferenceImage[]>>;
+  add(gtin: string, jpeg: Uint8Array): Promise<ReferenceImage>;
+  read(image: ReferenceImage): Promise<Uint8Array>;
+  remove(gtin: string): Promise<number>;
+}
+export type ReferenceImage = { gtin: string; file: string; bytes: number; addedAt: number };
+```
+
+- To use a database, write a function that returns a `ReferenceImages`, and give it to `buildApp` as `references` in `src/main.ts`.
+- For example with MongoDB: GridFS holds each JPEG, with `gtin` and `addedAt` in the metadata of the file. `list` and `all` read the metadata only, and `read` opens the download stream of one file.
+- A store with thousands of items cannot send a picture of each item. Then keep one embedding vector for each picture, with a vector index, and add a method that returns the nearest items for the still. The label handler then gives the call the pictures and the store list lines of these items only. This part is not built.
+- `list` and `all` give the pictures newest first. `gtin` has 13 digits.
 
 ### Try it in fake mode
 
@@ -970,7 +1073,7 @@ Only the server computes a total, and each price comes from the catalog or from 
 - Each line goes to the phone as `speak` and to the bus as a `caption` event with the same ID (`s-1`, `s-2`). If the clip fails, the line goes out with `url: null`.
 - The effect `payment.start` starts the mock payment. After each step, the kiosk service reads the checkout of the session and updates the kiosk.
 - The effect `biometric.request` goes to the phone as the message `biometric.request`, through the outbox, so it follows the fingerprint line.
-- The effect `still.request` goes to the phone at once as the message `still.request` with the purpose `label`. It does not wait in the outbox.
+- The effect `still.request` goes to the phone at once as the message `still.request` with the purpose `label`. It does not wait in the outbox. `POST /api/demo/reference` sends the same message with the purpose `reference`, with no rule.
 - The effect `ask` starts the text call for a question. The runtime dispatches the input `answer` with the text, or with `null` after a failure or after 4 seconds. A stopped session gets no answer.
 - The runtime keeps the last 20 captions for the snapshot.
 - With no phone attached, the runtime drops the device messages. Events and captions still go to the bus.
@@ -1068,6 +1171,7 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 | `GET /api/kiosks/:id/events` | | a stream of `KioskEvent`. The first message is the current view. |
 | `GET /api/speech/<hash>.mp3` | | 200, the MP3 of a clip |
 | `GET /api/demo/latest?key=<DEMO_KEY>` | | 200, `LatestSessionResponse` |
+| `POST`, `GET`, `DELETE /api/demo/reference?key=<DEMO_KEY>` | | The reference pictures. See "Reference pictures". |
 | `GET /healthz` | | 200, the state of the switches: `fakeRecognition`, `fakeSpeech`, `fakeProductInfo`, `store` (`memory` or `mongo`), and `saveFrames` |
 
 - `wsUrl` of a new session is `PUBLIC_BASE_URL` with `ws` in place of `http`, plus `/ws/device?session=<id>&token=<token>`.
@@ -1093,11 +1197,11 @@ The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2.
 - One phone holds a session. A second socket for the same session takes over, and the server closes the older one. No message goes to both.
 - `intent`, `prompt.done`, `device.state`, `cart.edit`, and `profile.set` go to the rules. After `profile.set` the phone gets a new `snapshot`.
 - `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished. Each other text becomes the input `question`.
-- A binary message is a frame. A frame that decodes goes to the recognition worker of the session, or to the log line of fake recognition. A frame with the kind `label` goes to the label reader. The server logs a frame that does not decode and drops it.
+- A binary message is a frame. A frame that decodes goes to the recognition worker of the session, or to the log line of fake recognition. A frame with the kind `label` goes to the label reader, or to the reference pictures when the session has a mark. The server logs a frame that does not decode and drops it.
 - The server logs and drops a text message that is no `DeviceToServer`. The socket stays open.
 - `kiosk.seen` goes to the kiosk service. `biometric.result` goes to the rules.
 - `barcode.seen` goes to the lookup of a barcode, and its outcome goes to the rules.
-- The server sends `still.request` when the model sees a barcode that nobody read. See "The model also reads the code".
+- The server sends `still.request` with the purpose `label` when the model sees a barcode that nobody read. See "The model also reads the code". It sends the purpose `reference` when a person asks for a reference picture.
 - A message can have at most 2 MB. A larger one closes the socket.
 - The server sends a ping each 20 seconds, and ends a socket that sent no pong since the last ping.
 - When the phone leaves, the session stays.

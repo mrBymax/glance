@@ -58,7 +58,8 @@ flowchart LR
   socket -- "barcode.seen" --> products
   recognition -- "digits of a code" --> products
   socket -- "frames with the kind label" --> label
-  label -- "one still for each call" --> gemini
+  label -- "one still for each call, with the reference pictures of the store items" --> gemini
+  rest -- "POST /api/demo/reference: mark for one reference picture" --> label
   label -- "code of the matched store item" --> products
   products -- "product read by code, when the cache has none" --> off
   products -- "barcode with its outcome" --> runtime
@@ -71,6 +72,7 @@ flowchart LR
   runtime -- "text of a line" --> speech
   speech -- "text of a new line" --> eleven
   runtime -- "speak, session.rest, session.end, biometric.request, still.request" --> socket
+  rest -- "still.request with the purpose reference" --> socket
   runtime -- "ServerEvent, caption" --> bus
   kiosks -- "KioskEvent" --> bus
   bus --> socket
@@ -119,6 +121,7 @@ Facts that the diagram does not show:
 | Android app, browser | Server | `DELETE /api/sessions/:id` | No body |
 | Server | Browser, mirror page, Display HUD | `GET /api/sessions/:id/events` | A stream of `ServerEvent` |
 | Mirror page | Server | `GET /api/demo/latest` | Answer `LatestSessionResponse`: the ID and the token of the newest live session |
+| `npm run reference` | Server | `POST`, `GET`, `DELETE /api/demo/reference` | The reference pictures of the store items: take one through the glasses, list them, remove them |
 | Kiosk page | Server | `POST /api/kiosks` | `CreateKioskRequest`, answer `CreateKioskResponse` |
 | Server | Kiosk page | `GET /api/kiosks/:id/events` | A stream of `KioskEvent` |
 | Android app, mirror page | Server | `GET /api/speech/<hash>.mp3` | Answer: the MP3 of a line |
@@ -366,6 +369,7 @@ Rules of this path:
 - One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight speaks no unknown line and no aim hint. The same holds while the server waits for a still that it asked for, and for its label call. The recognition instruction also gives the status `none` to a package shown with its barcode side.
 - 2 frames with a product that sight cannot name ask for a still, with the limits of a still for a code. The unknown line waits for the still and its label call, and plays only when they gave no product.
 - The phone takes a label still by itself when a barcode region was in view for the barcode wait with no accepted code, and after each `still.request`. It takes at most one each still gap.
+- The label call also gets the reference pictures of the store items: photos that a person took through the glasses before the demo, in the folder of `REFERENCE_DIR`. Each picture is one image part at the low media resolution, after a text part with the code and the name of its item. A call gets the newest 3 pictures of an item, and 24 pictures and 9 MB at most. Recognition by sight gets no picture. `apps/server/README.md` has the capture and the limits, in "Reference pictures".
 - A label call is one more Gemini call. The server asks for a still at most one time each 6 seconds for a session, and each 30 seconds after 2 requests with no code read. It starts at most one label call each 5 seconds for a session, and none for a session that does not shop.
 - A lookup result that arrives after the result of a later report of another code is dropped.
 - In fake mode a script step `barcode` reports a code as the phone does, a `result` step can set `code`, and the field `label` of the script is the answer of the label reader. With `FAKE_PRODUCT_INFO` the details come from fixture files, and no call goes to Open Food Facts.
