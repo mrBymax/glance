@@ -29,6 +29,24 @@ android {
         buildConfigField("String", "UI_DEV_URL", "\"${local("glance.uiDevUrl", "")}\"")
         testInstrumentationRunner = "com.metaglance.android.support.GlanceTestRunner"
     }
+    // The demo build is the APK for the testers: not debuggable, with no probe screen and no cleartext traffic,
+    // because both are in app/src/debug. The keystore and its passwords are not in git.
+    signingConfigs {
+        create("demo") {
+            storeFile = file(local("glance.demoStoreFile", "glance-demo.jks"))
+            storePassword = local("glance.demoStorePassword", "")
+            keyAlias = local("glance.demoKeyAlias", "glance-demo")
+            keyPassword = local("glance.demoKeyPassword", "")
+        }
+    }
+    buildTypes {
+        create("demo") {
+            isDebuggable = false
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("demo")
+            matchingFallbacks += listOf("release")
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
