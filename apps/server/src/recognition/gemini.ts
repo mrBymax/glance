@@ -1,0 +1,59 @@
+import { GoogleGenAI, MediaResolution } from '@google/genai';
+import { TIMING } from '@glance/shared';
+import type { CatalogIndex } from '../catalog/catalog';
+import { buildSystemInstruction, recognitionResponseSchema, userText } from './prompt';
+import { NO_RESULT, type RecognitionResult, normalizeResult } from './result';
+
+/** Names the product of one frame. A call that fails rejects, and the caller counts it. */
+export interface Recognizer {
+  recognize(jpeg: Uint8Array, opts: { exclude: readonly string[]; still: boolean; signal: AbortSignal }): Promise<RecognitionResult>;
+}
+
+/** The path of the instruction template, from the working directory apps/server. */
+export const RECOGNITION_TEMPLATE_PATH = '../../agents/recognition.md';
+
+/**
+ * One generateContent call for each frame, with no state between the calls.
+ * The call shape matches the type definitions of @google/genai 3.3.0.
+ */
+export function createGeminiRecognizer(deps: {
+  apiKey: string; model: string; mediaResolution: 'default' | 'low'; minConfidence: number;
+  catalog: CatalogIndex; template: string;
+  /** In place of the global fetch, for a test. */
+  fetch?: typeof fetch;
+}): Recognizer {
+  const ai = new GoogleGenAI({ apiKey: deps.apiKey, ...(deps.fetch ? { httpOptions: { fetch: deps.fetch } } : {}) });
+  const systemInstruction = buildSystemInstruction(deps.template, deps.catalog.products);
+  const responseSchema = recognitionResponseSchema(deps.catalog.products.map((product) => product.id));
+
+  return {
+    async recognize(jpeg, opts) {
+      // A still is the sharp second look at a package, so it keeps the default resolution.
+      const low = deps.mediaResolution === 'low' && !opts.still;
+      const response = await ai.models.generateContent({
+        model: deps.model,
+        contents: [
+          { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(jpeg).toString('base64') } },
+          { text: userText(opts.exclude) },
+        ],
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+          responseJsonSchema: responseSchema,
+          abortSignal: opts.signal,
+          // The SDK default is 5 attempts with a wait between them. One glance has 4 seconds, so one attempt is all it gets.
+          httpOptions: { timeout: TIMING.recognitionTimeoutMs, retryOptions: { attempts: 1 } },
+          ...(low ? { mediaResolution: MediaResolution.MEDIA_RESOLUTION_LOW } : {}),
+        },
+      });
+
+      let raw: unknown;
+      try {
+        raw = JSON.parse(response.text ?? '');
+      } catch {
+        return NO_RESULT;
+      }
+      return normalizeResult(raw, { catalog: deps.catalog, exclude: opts.exclude, minConfidence: deps.minConfidence });
+    },
+  };
+}

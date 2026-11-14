@@ -8,6 +8,7 @@
     "dev:fake": "tsx watch src/main.ts --fake",
     "start": "node --import tsx src/main.ts",
     "test": "vitest run",
+    "model:check": "tsx --env-file-if-exists=.env scripts/check-model.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
