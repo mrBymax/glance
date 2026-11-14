@@ -1,5 +1,6 @@
 import { EMPTY_CART, type Profile, TIMING } from '@glance/shared';
 import { onAnswer, onCartEdit, onPromptDone, onUndo } from './answers';
+import { expireCheckout, onKioskSeen, onPaymentResult } from './checkout';
 import { onRecognition } from './glance';
 import { type Turn, emit } from './turn';
 import type { Effect, RuleContext, RuleInput, SessionState, SpeakEffect } from './types';
@@ -54,6 +55,12 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
     case 'cart.edit':
       onCartEdit(turn, input);
       break;
+    case 'kiosk.seen':
+      onKioskSeen(turn, input);
+      break;
+    case 'payment.result':
+      onPaymentResult(turn, input);
+      break;
     default:
       break;
   }
@@ -99,4 +106,6 @@ function expire(turn: Turn): void {
       s.prompt = null;
     }
   }
+
+  expireCheckout(turn);
 }

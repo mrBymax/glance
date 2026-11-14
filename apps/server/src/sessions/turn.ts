@@ -22,8 +22,17 @@ export function nextPromptId(s: SessionState): string {
   return `p-${String(s.promptSeq).padStart(4, '0')}`;
 }
 
+export function emitSessionState(turn: Turn): void {
+  emit(turn, { type: 'session.state', phase: turn.s.phase, cameraOn: turn.s.cameraOn });
+}
+
 export function qtyInCart(s: SessionState, productId: string): number {
   return s.cart.items.find((item) => item.productId === productId)?.qty ?? 0;
+}
+
+/** The number of units in the cart. */
+export function itemCount(s: SessionState): number {
+  return s.cart.items.reduce((count, item) => count + item.qty, 0);
 }
 
 /** True while the product of the current prompt is in view. */

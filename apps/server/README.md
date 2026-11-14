@@ -92,6 +92,7 @@ flowchart LR
 | `step.ts` | `createSessionState`, `step`, and the rules that depend on time alone |
 | `glance.ts` | Recognition results: the glance prompt, the unknown line, and the aim hint |
 | `answers.ts` | The answers: yes, no, undo, the cart edit, and `accepts`, which tells if an answer counts |
+| `checkout.ts` | The kiosk code, the pay prompt, and the result of the payment |
 | `say.ts` | The priority, the sound, and the interrupt value of each line |
 | `view.ts` | `inView`, and `excludeList` for the recognition worker |
 | `turn.ts` | The helpers that the handlers share |
@@ -110,6 +111,29 @@ The rules that exist:
 - After an add, a no removes that unit for 8 seconds, and a second yes gets one hint (R10). On the prompt for "add another", a no removes one unit (R11).
 - An undo removes the last added unit that the cart still holds (R12). A cart edit sets the quantity of a cart line from 0 to 99.
 - A yes or a no with no valid target gets one hint, if a prompt finished in the last 15 seconds (R20). Silence adds nothing (R21).
+- A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code.
+- A yes pays only as an answer to the pay prompt (R16). The effect `payment.start` asks the runtime for the payment, and the input `payment.result` brings its result.
+- A product held up during a checkout suspends it. The pay prompt returns with the new total when the product has left the view and the code is in view (R17).
+- A no on the pay prompt cancels the checkout, and the kiosk is muted until its code has left the view (R18).
+- A checkout ends when its code was out of view for 30 seconds (R19). The cart stays.
+- A cart change during a pay prompt gives a new pay prompt with the new total. The old prompt cannot pay.
+- While the payment runs, no answer, no undo, and no cart edit has an effect.
+
+The steps of a checkout:
+
+```mermaid
+stateDiagram-v2
+  [*] --> offered: kiosk code in view, cart has items
+  offered --> suspended: product held up
+  suspended --> offered: product left the view, code in view
+  offered --> offered: cart change, or the code comes back after the head window
+  offered --> paying: accepted yes on the pay prompt
+  offered --> [*]: no, empty cart, or code out of view for 30 seconds
+  suspended --> [*]: code out of view for 30 seconds
+  paying --> [*]: payment result
+```
+
+A paid checkout sets the phase `paid`, empties the cart, and ends the session. A failed payment keeps the cart, and the shopper looks at the code again.
 
 Only the server computes a total, and each price comes from the catalog. Each timing number comes from `TIMING` of `@glance/shared`.
 

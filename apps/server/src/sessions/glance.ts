@@ -1,4 +1,5 @@
 import { type Product, TIMING, toProductRef } from '@glance/shared';
+import { isPaying, suspendCheckoutFor } from './checkout';
 import { say } from './say';
 import { type Turn, emit, nextPromptId, promptProductInView, qtyInCart, speak } from './turn';
 import type { RuleInput } from './types';
@@ -15,6 +16,7 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
   const { result } = input;
   if (result.status === 'none') return;
   s.lastTargetAt = now;
+  if (isPaying(s)) return;
 
   switch (result.status) {
     case 'identified':
@@ -49,6 +51,8 @@ function onIdentified(turn: Turn, productId: string): void {
 function openProductPrompt(turn: Turn, product: Product): void {
   const { s } = turn;
   if (s.prompt?.kind === 'product') emit(turn, { type: 'glance.cleared', promptId: s.prompt.id });
+
+  suspendCheckoutFor(turn, product.id);
 
   const id = nextPromptId(s);
   const qty = qtyInCart(s, product.id);
