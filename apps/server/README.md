@@ -17,6 +17,11 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/catalog/check.ts` | `checkCatalog` finds the errors of a catalog file. See "Catalog". |
 | `scripts/catalog-check.ts`, `scripts/catalog-seed.ts` | `npm run catalog:check` and `npm run catalog:seed`. See "Catalog". |
 | `catalog/catalog.dev.json` | The dev catalog with four products. The tests use its IDs and prices. |
+| `catalog/store-list.dev.json` | The dev store list: 10 real barcodes with invented prices. See "Barcode scan". |
+| `src/products/` | The store list, the product details of Open Food Facts, and the lookup of a barcode. See "Barcode scan". |
+| `src/label/` | The model call that reads the still of a label, and its match against the store list. See "Label frames". |
+| `agents/label.md` (repository root) | The instruction for the label call. |
+| `fixtures/product-info/` | One saved answer of Open Food Facts for each item of the dev store list. `FAKE_PRODUCT_INFO` and the tests read them. |
 | `catalog/catalog.json` | The 12 product slots of the demo, with `FILL_` texts and the price 0. A person fills them, and `catalog:check` reports each price of 0 as an error. |
 | `src/recognition/` | The recognition of a frame, and the script player that stands in for it. See "Recognition" and "Fake mode". |
 | `agents/recognition.md` (repository root) | The instruction for the recognition model, with the placeholder `{{catalog}}`. |
@@ -40,7 +45,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 Run `npm install` at the repository root first. Then run the commands in `apps/server`, or add `--workspace @glance/server` at the root.
 
 ```bash
-npm run dev:fake    # port 8080, both fake switches on, needs no key and no database
+npm run dev:fake    # port 8080, the three fake switches on, needs no key and no database
 npm run dev         # reads .env if the file exists, and restarts on a change
 npm start           # runs with the environment of the shell
 PORT=18473 npm run dev:fake   # another port, when 8080 is in use
@@ -50,14 +55,14 @@ Check it:
 
 ```bash
 curl http://localhost:8080/healthz
-# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"store":"memory","saveFrames":false}
+# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"fakeProductInfo":true,"store":"memory","saveFrames":false}
 curl -X POST http://localhost:8080/api/sessions
 # {"sessionId":"...","token":"...","wsUrl":"ws://localhost:8080/ws/device?session=...&token=..."}
 ```
 
-At the start the server logs `store: memory` or `store: mongo`, the number of products, `recognition: fake` or the model, and `speech: fake` or the speech model.
+At the start the server logs `store: memory` or `store: mongo`, the number of products, `store list: <path>, <n> items`, `product info: fake` or the address of Open Food Facts, `recognition: fake` or the model, and `speech: fake` or the speech model.
 
-With real recognition and real speech (`npm run dev` with both keys in `.env` and both fake switches empty), each frame is one paid Gemini call, and each new line is one paid ElevenLabs call. A phone sends 2 frames each second.
+With real recognition and real speech (`npm run dev` with both keys in `.env` and both fake switches empty), each frame is one paid Gemini call, and each new line is one paid ElevenLabs call. A phone sends 2 frames each second, and at most one label still each 6 seconds.
 
 ## Settings
 
@@ -85,16 +90,22 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `PAYMENT_DELAY_MS` | `1500` | The length of the mock payment. |
 | `SECOND_LOOK_WAIT_MS` | `0` | How long the look-alike line waits for the result of a still, in milliseconds, from 0 to 10000. `0` means off. See "Sharp second look". |
 | `DEMO_KEY` | not set | The key of `GET /api/demo/latest`. With no key, that path answers 404. |
+| `STORE_LIST_PATH` | `catalog/store-list.dev.json` | The items that the store sells, with the barcode and the price of each. See "Barcode scan". |
+| `FAKE_PRODUCT_INFO` | off | `1` means on. The server then reads the details of a scanned product from `fixtures/product-info`. |
+| `OFF_BASE_URL` | `https://world.openfoodfacts.org` | The address of Open Food Facts. It must start with `http://` or `https://`. |
+| `PRODUCT_INFO_USER_AGENT` | `MetaGlance/0.1 (https://github.com/mrBymax/glance)` | The `User-Agent` of each call to Open Food Facts: the name of the app, its version, and a contact. |
+| `PRODUCT_CACHE_DIR` | `.cache/products` | The folder for the answers of Open Food Facts. |
 
 - An empty value counts as not set.
-- The flag `--fake` turns both fake switches on. A variable that is set wins over the flag.
-- Each path is relative to the working directory, which is `apps/server`. The server also reads `../../agents/recognition.md` and `../../agents/answers.md` from there when recognition is real.
-- With a missing key the server prints `config: <message>` and exits with code 1. The message names the variable and the switch that removes the need.
+- The flag `--fake` turns the three fake switches on. A variable that is set wins over the flag.
+- Each path is relative to the working directory, which is `apps/server`. The server also reads `../../agents/recognition.md`, `../../agents/answers.md`, and `../../agents/label.md` from there when recognition is real.
+- With a missing key the server prints `config: <message>` and exits with code 1. The message names the variable and the switch that removes the need. Open Food Facts needs no key.
+- A store list file that the server cannot use stops the start. The message names the file and the entry.
 - With `MONGODB_URI` the products come from the database, and `CATALOG_PATH` has no effect. If the database holds no product, the server prints `products is empty. Run npm run catalog:seed.` and exits with code 1. See "Catalog" for the seed.
 
 ## Fake mode
 
-Two switches let the other apps work with no key. `npm run dev:fake` turns both on.
+Three switches let the other apps work with no key and no call to another service. `npm run dev:fake` turns each one on.
 
 `FAKE_RECOGNITION`:
 
@@ -104,7 +115,10 @@ Two switches let the other apps work with no key. `npm run dev:fake` turns both 
 - Each 500 ms the player gives the rules the result that the script holds for the time since its start. Outside each step the result is `none`.
 - A session that starts from the events stream, with no phone, first gets the state of glasses that stream. A browser client then gets the "Camera on" caption. A phone that opens its socket to this session later hears "Back online.", because the session already has a device state.
 - In a `kiosk` step the session sees the kiosk one time each second. `"newest"` names the kiosk that registered last. Each other value is a kiosk code.
+- In a `barcode` step the session gets the code one time each second, as `barcode.seen` of a phone with the source `barcode`.
+- A `result` step can set `code`, with `visible` and `digits`. Digits go to the lookup with the source `model`.
 - The device socket still decodes each frame. It logs `frame seq=<n> w=<w> h=<h> blurred=<b> kind=<k> bytes=<n>` at `info` level and drops the frame. With `SAVE_FRAMES` it saves the frame first.
+- A frame with the kind `label` goes to a fake label reader. Its answer is the field `label` of the script. With no such field it reads nothing. See "Label frames".
 - The server has one kiosk from the start: `Checkout 3` at `Demo Market` with the code `K3X7`. A printed `GL1 K3X7` code starts a checkout.
 
 A script file, as `fixtures/fake-script.json`:
@@ -115,6 +129,7 @@ A script file, as `fixtures/fake-script.json`:
   "lengthMs": 60000,
   "steps": [
     { "atMs": 3000, "forMs": 6000, "result": { "status": "identified", "productId": "oat-drink-1l" } },
+    { "atMs": 10000, "forMs": 3000, "barcode": "8076800195057" },
     { "atMs": 24000, "forMs": 3000, "result": { "status": "unsure", "aimHint": "left" } },
     { "atMs": 40000, "forMs": 15000, "kiosk": "newest" }
   ]
@@ -123,7 +138,16 @@ A script file, as `fixtures/fake-script.json`:
 
 - A step covers the times from `atMs` up to, and not including, `atMs + forMs`. With `loop`, the script starts again after `lengthMs`.
 - A `result` holds some fields of a recognition result. The other fields come from the empty result, with the confidence 0.95.
+- A `barcode` holds 8 to 14 digits. The script does not check them: a code with a wrong check digit, and a code that the store does not sell, are valid steps.
+- The optional field `label` beside `steps` holds `digits`, `brand`, `name`, `packSize`, and `confidence`.
 - A file that is no script, an unknown key, and a product ID that the catalog does not have stop the server at its start. The message names the file and the step, counted from 1.
+
+`FAKE_PRODUCT_INFO`:
+
+- The server makes no call to Open Food Facts.
+- The details of a scanned product come from `fixtures/product-info/<13 digits>.json`. Each file is a saved answer of Open Food Facts, with the fields that the server reads.
+- A code with no file counts as "not found": the product then has the name of the store list and no allergen data.
+- The store list is real in each mode. It is a file, and it needs no service.
 
 `FAKE_SPEECH`:
 
@@ -138,6 +162,7 @@ curl -s -X POST http://localhost:8080/api/sessions -H "content-type: application
 curl -N "http://localhost:8080/api/sessions/<sessionId>/events?token=<token>"
 # after 3 seconds: glance.pending for the oat drink. Answer it with its promptId:
 curl -s -X POST "http://localhost:8080/api/sessions/<sessionId>/intents?token=<token>" -H "content-type: application/json" -d '{"kind":"yes","source":"phone","promptId":"<promptId>"}'
+# at second 10: glance.pending for the barcode of the Barilla spaghetti. See "Barcode scan".
 # at second 33: glance.ambiguous for the two oat drinks.
 # at second 40: checkout.offered. The same call with its promptId gives checkout.paid.
 ```
@@ -168,7 +193,7 @@ sequenceDiagram
 
 | File in `src/recognition` | Content |
 |---|---|
-| `result.ts` | `RecognitionResult`, and `normalizeResult`, which checks an answer of the model |
+| `result.ts` | `RecognitionResult` with the code of the frame, and `normalizeResult`, which checks an answer of the model |
 | `prompt.ts` | The system instruction with the catalog, the JSON Schema of the answer, and the text of a request |
 | `gemini.ts` | `createGeminiRecognizer`: one `generateContent` call of `@google/genai` for each frame |
 | `worker.ts` | `RecognitionWorker`: the calls of one session |
@@ -180,7 +205,8 @@ sequenceDiagram
 The request:
 
 - The system instruction is `agents/recognition.md` with one line for each product in place of `{{catalog}}`: ID, name, brand, pack size, look, and look-alikes. It holds no price.
-- The answer is JSON with the six fields of spec section 11.1. Its schema lets `productId` and `candidates` take only catalog IDs.
+- The answer is JSON with the six fields of spec section 11.1 and the field `code`. Its schema lets `productId` and `candidates` take only catalog IDs.
+- `code` is `{ visible, digits }`: the barcode of the frame, as the model sees it. See "The model also reads the code".
 - The text part is `Exclude: none.` or `Exclude: <id>, <id>.`, with the products that the shopper skipped in the last 10 seconds (R9).
 - The call makes one attempt, with a time limit of 4 seconds. The SDK default is 5 attempts.
 - `GEMINI_MEDIA_RESOLUTION=low` asks for the low resolution for a stream frame. A still keeps the default.
@@ -190,6 +216,7 @@ The request:
 - An answer that fails the schema counts as no product.
 - `identified` with an ID outside the catalog becomes `unknown`. With an excluded ID it becomes `none`. Below `RECOGNITION_MIN_CONFIDENCE` it becomes `unsure`.
 - `ambiguous` keeps the candidates that are in the catalog and not excluded. With one candidate left it becomes `unsure` with the aim hint `turn`. With none it becomes `unknown`.
+- Each status keeps the code. The digits lose their spaces, and digits with another character become `null`. A code with digits counts as visible. An answer with no code, or with a bad one, keeps its other fields.
 
 The worker:
 
@@ -200,6 +227,7 @@ The worker:
 - The worker holds a frame only for the time of its call.
 - The worker stops when its session stops and when the app closes.
 - Each result gets the log line `recognition session=<id> seq=<n> status=<status> ms=<n>`. It gives the server share of the time from glance to voice.
+- The digits of the code of a result go to the lookup of a barcode. A frame with the kind `label` never reaches the worker.
 
 ### Stored frames
 
@@ -246,6 +274,219 @@ latency: median 1340 ms, p95 2210 ms
 - The numbers of the table above are an example of the format. No replay with the real service has run yet.
 
 Frames with `blurred: false` did not go through face detection on the phone. Without `REQUIRE_BLUR` they still go to Gemini, and the server logs `frame not blurred: the phone did not run face detection` one time for each session. With `REQUIRE_BLUR=1` the server drops them and logs `frame dropped: not blurred` one time for each session.
+
+## Barcode scan
+
+The shopper shows the barcode of a product. The phone reads the code and sends `barcode.seen`. The server finds the product and gives the usual prompt, with the price of the store. The design is `docs/superpowers/specs/2026-11-14-barcode-lookup-design.md`.
+
+```mermaid
+sequenceDiagram
+  participant Phone
+  participant Socket as Device socket
+  participant Reports as createBarcodeReports
+  participant Resolver as ProductResolver
+  participant List as StoreList
+  participant Info as ProductInfo
+  participant Runtime as SessionRuntime
+  Phone->>Socket: barcode.seen with code and source
+  Socket->>Reports: code, source
+  Note over Reports: normalizeGtin: 13 digits, right check digit
+  Reports->>Resolver: resolve(gtin)
+  alt a catalog product has the code
+    Resolver-->>Reports: the catalog product
+  else
+    Resolver->>List: byGtin(gtin)
+    List-->>Resolver: item with price, or nothing
+    Resolver->>Info: byGtin(gtin), with what is left of 2500 ms
+    Info-->>Resolver: name, allergens, diets, or nothing
+    Resolver-->>Reports: product gtin-<13 digits>, or null
+  end
+  Reports->>Runtime: dispatch(barcode, outcome product, notInStore, or invalid)
+  Runtime-->>Phone: glance.pending and the glance line, or "This product is not in this store."
+```
+
+| File | Content |
+|---|---|
+| `src/products/storeList.ts` | `StoreList`, and `readStoreListFile`, which reads the file of `STORE_LIST_PATH` |
+| `src/products/productInfo.ts` | `ProductInfo`, `ProductDetails`, and `parseOffAnswer`, which reads an answer of Open Food Facts |
+| `src/products/openFoodFacts.ts` | `createOpenFoodFactsInfo`: the call, the time limit, and the cache |
+| `src/products/fakeProductInfo.ts` | `createFakeProductInfo`: the reader of `FAKE_PRODUCT_INFO` |
+| `src/products/scanned.ts` | `scannedProduct` builds the product of a store item. `ScannedProducts` keeps these products, and `withScanned` adds them to the index of the rules |
+| `src/products/resolver.ts` | `ProductResolver.resolve`: the catalog, then the store list, then the details |
+| `src/products/barcodes.ts` | `createBarcodeReports`: the check of a code, its lookup, and the rule input `barcode` |
+| `src/sessions/barcode.ts`, `src/sessions/code.ts` | The rules |
+| `src/label/` | The label frame: the model call, the match against the store list, and the frame handler |
+
+### The store list
+
+The store list decides what the store sells. A code that the list does not hold is never added to a cart.
+
+`catalog/store-list.dev.json` is a JSON array. Each entry has `gtin` (8, 12, or 13 digits), `priceCents`, `name`, and the optional fields `brand` and `packSize`:
+
+```json
+[
+  { "gtin": "3017624010701", "priceCents": 399, "name": "Nutella", "brand": "Ferrero", "packSize": "400 g" }
+]
+```
+
+- The server keeps each code as 13 digits. A wrong check digit, a price of 0, an unknown key, and a code that the file holds two times stop the server at its start. The message names the file and the entry.
+- The dev list has 10 products that Italian supermarkets sell. Each code was read from Open Food Facts on 2026-11-14. The prices are invented for the demo.
+- `8076809513753` is the Barilla pesto alla genovese, and `8076800195057` is the Barilla spaghetti n.5.
+- A catalog product with a `gtin` wins over the store list: a barcode then gives the catalog product, with the price and the spoken texts of the catalog. The Barista oat drink of the dev catalog has the code `7394376616037`. If the two prices of one code differ, the server logs one `store list:` warning at its start.
+- An item with no `brand` never matches a label by its name. See "Label frames".
+
+### An ERP in place of the file
+
+The file stands in for the ERP of a supermarket. `StoreList` is the interface:
+
+```ts
+export interface StoreList {
+  byGtin(gtin13: string): Promise<StoreItem | undefined>;
+  all(): Promise<readonly StoreItem[]>;
+}
+export type StoreItem = { gtin: string; priceCents: number; name: string; brand?: string; packSize?: string };
+```
+
+To use an ERP, write a function that returns a `StoreList`, and return it from `openStoreList` in `src/main.ts`.
+
+- `byGtin` gets 13 digits with a right check digit. It resolves `undefined` for a code that the store does not sell, and it rejects when the ERP fails.
+- The answer must come inside 2500 ms, and the product details share that time. A late or failed answer drops the report, with the log line `barcode lookup failed`. The phone repeats its report each second, so the next one tries again.
+- The phone reports a code one time each second while it is in view, and each report calls `byGtin`. So the client must cache its answers.
+- `all` runs for each label frame. The client must keep the list in memory.
+- `gtin` of each item has 13 digits. `priceCents` is an integer above 0.
+
+### Product details from Open Food Facts
+
+Open Food Facts gives the name in English and Italian, the allergens, and the diets. The store gives the price, and its own brand and pack size win when the list has them.
+
+Contains data from Open Food Facts, available under the Open Database License. See https://world.openfoodfacts.org and https://opendatacommons.org/licenses/odbl/1-0/.
+
+- The call is `GET <OFF_BASE_URL>/api/v2/product/<code>?fields=code,product_name,product_name_en,product_name_it,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags`, with the header `User-Agent` from `PRODUCT_INFO_USER_AGENT` and a time limit of 2000 ms. It needs no key.
+- The status 404, and a body with `"status": 0`, mean "not found". Each other status than 200, a body that is no JSON, and a network error are a failed read.
+- The name of a product is `product_name_<lang>` for the language of the profile, then `product_name`, then the name of the store list.
+- `allergens_tags` and `traces_tags` map to the 14 allergens of `@glance/shared`, as one list. With no allergen in `allergens_tags` the product has no allergen data (`null`), also when traces exist. A wheat pasta with traces of mustard and no entry for gluten would else read as "no gluten".
+- `vegan` is true for the tag `en:vegan`, false for `en:non-vegan`, and `null` for each other case. `vegetarian` works the same way.
+- The parser reads each field alone. A field with a wrong type counts as no data, and the other fields stay.
+- A product that Open Food Facts does not have, a failed read, and a late answer all give a product with the name of the store and no allergen data. A shopper with an allergen or a diet in the profile then hears "Allergen data is missing for this product."
+- The server never asks for a code that starts with `2`, `02`, or `04`. Such a code belongs to one store, and only the store list can know it.
+
+The cache:
+
+- A hit stays for 30 days and a miss for 1 day, in memory and as the file `<PRODUCT_CACHE_DIR>/<13 digits>.json`. A failed read is not kept.
+- The calls for one code that run at the same time share one request.
+- A new process reads the files, so a restart makes no new call for a known code. To read a product again, delete its file and restart the server.
+- A cache file that the server cannot write gets the log line `product info: cache file not written`, and the lookup goes on.
+
+Limits of Open Food Facts:
+
+- It allows 15 product reads each minute for one address, and it can block an address that reads more. Each shopper shares the address of the server. The cache is the only guard: the server has no rate limit of its own.
+- Its users write the data. The terms say that it is "for indicative information" and not for medical use. No line says that a product is safe.
+- A name can be in another language than its field says, and an allergen list can be empty for a product with allergens. A person must check each product of the store list before a real shop.
+- It has no price, and the server makes no search by brand and name.
+- The documentation calls the v2 path deprecated and still supported.
+- The server code made no call to Open Food Facts yet. Each test uses a fetch function of its own, or the fixtures.
+
+### Rules
+
+- The server makes 13 digits of each code: a UPC-A code gets a leading 0, and an EAN-8 code gets five. A code of 8 digits counts as EAN-8, so the phone must expand a UPC-E code to 12 digits before it sends it.
+- The lookup runs before the rules, as the lookup of a kiosk code does. Its outcome is the rule input `barcode`.
+- `product`: the product takes the path of a product that recognition named. One appearance gets one prompt (R1), a yes adds one unit at the price of the store (R7), and a no skips it (R8, R9). The phone repeats its report each second, and reports less than 3 seconds apart are one appearance.
+- `notInStore`: the voice says "This product is not in this store." one time for each appearance of that code. No prompt and no event follows. The line waits while the product of a prompt is in view.
+- `invalid`: a code with a wrong check digit, or with 14 digits, has no effect.
+- A scanned product has the ID `gtin-<13 digits>`. The cart, the warnings, the snapshot, a question, the cart by voice, the spot check, and a new profile language find it by that ID as they find a catalog product.
+- The recognition prompt lists only the catalog products, and the clip seed makes no clip for a scanned product. With real speech, each new line of a scanned product is one ElevenLabs call.
+- One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight gives no unknown line and no aim hint. So a shopper who shows a barcode does not hear "Turn the front to me."
+- A result that arrives after the session stopped is dropped.
+- The scanned products live in the memory of the process. When a stored session loads after a restart, the server resolves the scanned products of its cart again. A product that the store list no longer holds stays a cart line with its old price: the shopper can remove it, and the voice does not name it.
+
+Each lookup gets the log line `barcode session=<id> source=<barcode|ocr|model|label> gtin=<digits> outcome=<product|notInStore|invalid> ms=<n>`.
+
+### The model also reads the code
+
+The scanner of the phone can miss a barcode. So the recognition call of each stream frame also answers `code: { visible, digits }`.
+
+```mermaid
+sequenceDiagram
+  participant Phone
+  participant Server
+  participant Gemini
+  Phone->>Server: frame
+  Server->>Gemini: recognition call
+  Gemini-->>Server: status, and code with visible and digits
+  alt digits with a right check digit, and the store sells the code
+    Note over Server: the lookup of barcode.seen, source model
+    Server-->>Phone: glance.pending and the glance line
+  else code visible in 2 frames inside 2 seconds, and no code read in the last 3 seconds
+    Server-->>Phone: still.request with the purpose label
+    alt the phone reads a code in its still
+      Phone->>Server: barcode.seen
+    else
+      Phone->>Server: frame with the kind label
+      Server->>Gemini: label call, default media resolution
+      Gemini-->>Server: digits, brand, name, packSize, confidence
+      Note over Server: matchLabel against the store list
+      Server-->>Phone: glance.pending and the glance line, or "I cannot read this code. Hold it closer."
+    end
+  end
+```
+
+- `visible` is true when the frame shows a barcode, or the package side with its barcode. `digits` holds the printed digits when the model can read each one. `agents/recognition.md` says: never guess a digit.
+- A model reads print and can write digits that are not there. So digits of the model count only with a right check digit and a product of the catalog or the store list. Then one frame is enough. Each other code of the model has no effect: the voice never says "not in this store" for digits that only the model read.
+- A package shown with its barcode side gets the status `none`, so the voice does not ask for the front.
+- The server sends `still.request` when the model saw a code in 2 frames less than 2 seconds apart, no code was read in the last 3 seconds, and the session got no request in the last 6 seconds. The rule is `onFrameCode` in `src/sessions/code.ts`.
+- The lookup of the digits can take up to 2500 ms for a product that the cache does not hold. A second frame in that time can still ask for a still. The still then gives the same product, and one appearance gets one prompt.
+
+### Label frames
+
+A frame with the kind `label` is the still of a barcode that the phone could not read. It goes to one model call, and never to recognition.
+
+- The call uses `GEMINI_API_KEY` and `GEMINI_MODEL`, the instruction `agents/label.md`, a response schema of its own, the default media resolution, one attempt, and a time limit of 4 seconds.
+- The answer is `digits` (a list of digit runs), `brand`, `name`, `packSize`, and `confidence`. An answer that fails the schema counts as an empty one.
+- `matchLabel` in `src/label/match.ts` selects the store item. Free text of the model never becomes a product by itself:
+  1. Digits count with a right check digit and an item of the store list. Two codes of two items give no product.
+  2. Else the brand and the name must select exactly one item. The answer must hold each word of the brand of the item and at least half of the words of its name, with no regard to case and accents. This way also needs a confidence of `RECOGNITION_MIN_CONFIDENCE` or more.
+  3. Between items with one brand and one name, the pack size selects. Two matches or none give no product.
+- A match goes through the lookup of `barcode.seen`, with the source `label`.
+- With no match, and when the call fails or is late, the voice says "I cannot read this code. Hold it closer.", at most one time each 10 seconds.
+- One label call runs at a time for each session. A label frame that arrives during a call is dropped.
+- With `REQUIRE_BLUR=1` the server drops a label frame with `blurred: false`. With `SAVE_FRAMES` it saves each label frame that it accepts.
+- Each label frame gets the frame log line at `info` level, and each call gets `label session=<id> seq=<n> match=<13 digits|none> ms=<n>`.
+- With real recognition, each label frame is one paid Gemini call. The phone sends at most one still each 6 seconds.
+
+### Try it in fake mode
+
+`npm run dev:fake` reads the details from `fixtures/product-info`, and the default script shows the barcode of the Barilla spaghetti from second 10 to second 13.
+
+```bash
+curl http://localhost:8080/healthz
+# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"fakeProductInfo":true,"store":"memory","saveFrames":false}
+curl -s -X POST http://localhost:8080/api/sessions -H "content-type: application/json" -d "{}"
+curl -N "http://localhost:8080/api/sessions/<sessionId>/events?token=<token>"
+# at second 10: {"type":"glance.pending","promptId":"p-0002","kind":"new","product":{"id":"gtin-8076800195057","name":"Spaghetti Nº5","packSize":"500 g","priceCents":109},"warnings":[],"qtyInCart":0}
+# then the caption "Spaghetti Nº5, five hundred grams, one oh nine. Nod to add."
+curl -s -X POST "http://localhost:8080/api/sessions/<sessionId>/intents?token=<token>" -H "content-type: application/json" -d '{"kind":"yes","source":"phone","promptId":"p-0002"}'
+# cart.updated with one line of 109 cents, and the caption "Added Spaghetti Nº5. Total one oh nine."
+```
+
+For a code that the store does not sell, and for a label frame, write a script of your own and start the server with `FAKE_RECOGNITION=<path> FAKE_SPEECH=1 FAKE_PRODUCT_INFO=1 npm start`:
+
+```json
+{
+  "loop": false,
+  "lengthMs": 60000,
+  "label": { "digits": ["3017624010701"], "brand": "Ferrero", "name": "Nutella", "packSize": "400 g", "confidence": 0.9 },
+  "steps": [
+    { "atMs": 2000, "forMs": 3000, "barcode": "4006381333931" },
+    { "atMs": 8000, "forMs": 4000, "result": { "code": { "visible": true, "digits": null } } }
+  ]
+}
+```
+
+- At second 2 the events stream gets the caption "This product is not in this store."
+- At second 8.5 a phone on the device socket gets `still.request`. A browser client has no device socket and gets nothing.
+- `label` is the answer of the fake label reader for each label frame of a phone. Here a label frame gives `glance.pending` for the Nutella. A script with no `label` reads nothing, and the voice says "I cannot read this code. Hold it closer."
+
+Not measured: nobody has read a barcode with the real glasses, and no label call has run with the real model. The distance at which the phone or the model reads a code is not known.
 
 ## Speech clips
 
@@ -302,6 +543,7 @@ A catalog file is a JSON array. Each entry is a `Product` of `@glance/shared`. P
 - `readCatalogFile` stops at the first entry that fails the schema. Its message names the file, the index of the entry, and the ID.
 - `indexCatalog` rejects a catalog that holds one ID two times.
 - In `allergens`, `null` means "no data", and an empty list means "no allergen". The potato crisps of the dev catalog have no data.
+- A product with a `gtin` also answers its barcode. The Barista oat drink of the dev catalog has the code `7394376616037`, read from Open Food Facts. The other three products are invented and have no code.
 
 ### Check a catalog
 
@@ -351,7 +593,7 @@ npm run catalog:seed --workspace @glance/server -- catalog/catalog.json --lang i
 
 The clips:
 
-- `seedLines` in `src/speech/seed.ts` lists the texts: 3 for each product (the glance line with and with no hint, and the "in your cart" line) and 31 lines that have no product. That is 43 texts for the dev catalog and 67 for 12 products.
+- `seedLines` in `src/speech/seed.ts` lists the texts: 3 for each product (the glance line with and with no hint, and the "in your cart" line) and 34 lines that have no product. That is 46 texts for the dev catalog and 70 for 12 products. A scanned product gets no clip from the seed.
 - With `--lang it`, the check runs with `--lang it` and stops the seed when a product has no Italian text. Then the seed makes the English clips and the same number of Italian clips, with the voice `ELEVENLABS_VOICE_IT`. The dev catalog fails that check: only the oat drink has Italian texts.
 - With no `--lang`, the texts are in English, for the default profile. A line with a total, the pay prompt, and each line for another input than the nod get their clips during the shop.
 - Each text with no clip in the cache is one paid ElevenLabs call. Before the calls, the command prints the number of lines and characters. A second run makes no call for the clips that exist.
@@ -367,7 +609,7 @@ flowchart LR
   input["RuleInput with now"] --> step
   state["SessionState"] --> step
   step --> next["new SessionState"]
-  step --> effects["Effect list: event, speak, session.rest, session.end, payment.start, biometric.request, ask"]
+  step --> effects["Effect list: event, speak, session.rest, session.end, payment.start, biometric.request, ask, still.request"]
 ```
 
 | File in `src/sessions` | Content |
@@ -379,6 +621,8 @@ flowchart LR
 | `checkout.ts` | The kiosk code, the pay prompt, and the result of the payment |
 | `general.ts` | The device state, the profile patch, and the intents stop, repeat, total, cart, help, and ask |
 | `ask.ts` | The question window, the product that a question is about, and the answer line |
+| `barcode.ts` | The outcome of a barcode lookup, and the label frame that gave no product |
+| `code.ts` | The code state of a session: the quiet time of recognition, and the request for a still |
 | `say.ts` | The priority, the sound, and the interrupt value of each line |
 | `view.ts` | `inView`, `excludeList` for the recognition worker, and `toSnapshot` for a client that connects |
 | `warnings.ts` | `warningsFor`: the allergen and diet warnings of a product for one profile |
@@ -413,6 +657,8 @@ The rules that exist:
 - A checkout needs items in the cart. When the cart gets empty, the checkout ends, also while a product suspends it. So an empty cart never gets a pay prompt.
 - While the payment runs, no answer, no undo, and no cart edit has an effect.
 - A total above 50 EUR needs a fingerprint check on the phone before the payment. See "Fingerprint above 50 EUR".
+- A barcode of a product that the store sells gets the prompt of that product. A code that the store does not sell gets one line. See "Barcode scan".
+- While the shopper shows a barcode, and for 3 seconds after, recognition gives no unknown line and no aim hint.
 
 ### Allergen guard
 
@@ -447,7 +693,7 @@ An `ambiguous` result names two or more candidates. The model cannot tell which 
 
 ### Sharp second look
 
-A stream frame is small and compressed. For look-alike products the phone can take a still photo with more pixels, and the model reads that still at the default media resolution. The contract has no message that asks for a still, so the event `glance.ambiguous` is the signal for the phone. `SECOND_LOOK_WAIT_MS` tells the server to wait for the result of the still before it speaks the look-alike line.
+A stream frame is small and compressed. For look-alike products the phone can take a still photo with more pixels, and the model reads that still at the default media resolution. The message `still.request` asks only for the still of a barcode, so the event `glance.ambiguous` is the signal for the phone. `SECOND_LOOK_WAIT_MS` tells the server to wait for the result of the still before it speaks the look-alike line.
 
 ```mermaid
 sequenceDiagram
@@ -631,7 +877,7 @@ stateDiagram-v2
   ended --> [*]
 ```
 
-Only the server computes a total, and each price comes from the catalog. Each timing number comes from `TIMING` of `@glance/shared`.
+Only the server computes a total, and each price comes from the catalog or from the store list. Each timing number comes from `TIMING` of `@glance/shared`.
 
 ## Session runtime
 
@@ -642,6 +888,7 @@ Only the server computes a total, and each price comes from the catalog. Each ti
 - Each line goes to the phone as `speak` and to the bus as a `caption` event with the same ID (`s-1`, `s-2`). If the clip fails, the line goes out with `url: null`.
 - The effect `payment.start` starts the mock payment. After each step, the kiosk service reads the checkout of the session and updates the kiosk.
 - The effect `biometric.request` goes to the phone as the message `biometric.request`, through the outbox, so it follows the fingerprint line.
+- The effect `still.request` goes to the phone at once as the message `still.request` with the purpose `label`. It does not wait in the outbox.
 - The effect `ask` starts the text call for a question. The runtime dispatches the input `answer` with the text, or with `null` after a failure or after 4 seconds. A stopped session gets no answer.
 - The runtime keeps the last 20 captions for the snapshot.
 - With no phone attached, the runtime drops the device messages. Events and captions still go to the bus.
@@ -677,6 +924,7 @@ sequenceDiagram
 - `get` looks in the memory first and then in the store. So a phone that connects again after a restart of the server finds its session and its cart.
 - A stored session with an open checkout comes back with no checkout and no pay prompt. Its kiosk is free after the restart, so the shopper looks at the code again. The cart stays.
 - A stored session with a payment that the restart cut off gets a failed payment. The cart stays.
+- Before a stored session becomes a runtime, the server resolves the scanned products of its cart, its prompt, and its last add again. The memory of the old process held them.
 - One timer sends a `tick` each second to each session in the phase `shopping` or `checkout`. The rules that depend on time alone need it.
 - The speak counter starts again at `s-1` after a restart, and the captions of the old process are gone.
 
@@ -694,6 +942,9 @@ The rules select a line by its key, and `renderLine(line, profile)` in `src/spee
 - The warning texts are "Warning: contains gluten, milk and nuts.", "Warning: not vegan.", "Warning: not vegetarian.", and "Allergen data is missing for this product." They equal the texts of the phone UI.
 - At the level `detailed`, an allergen warning names each allergen of the product, and the "Contains" sentence is left out.
 - With no allergen in the profile, the voice says nothing about allergens for a product with no allergen data. It never says that a product is safe.
+- The barcode lines are "This product is not in this store." and "I cannot read this code. Hold it closer." The Italian texts are "Questo prodotto non è in questo negozio." and "Non riesco a leggere questo codice. Avvicinalo."
+- A scanned product has no spoken texts of its own. Its spoken name is its name, and its name stays as the database writes it inside a sentence: "Added Nutella."
+- `spokenPack` in `src/products/scanned.ts` writes the pack size of a scanned product as words: "500 g" is "five hundred grams" and "cinquecento grammi". It knows one number and the units g, kg, ml, cl, and l. Each other text stays as it is.
 
 Italian, for the profile language `it`:
 
@@ -735,7 +986,7 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 | `GET /api/kiosks/:id/events` | | a stream of `KioskEvent`. The first message is the current view. |
 | `GET /api/speech/<hash>.mp3` | | 200, the MP3 of a clip |
 | `GET /api/demo/latest?key=<DEMO_KEY>` | | 200, `LatestSessionResponse` |
-| `GET /healthz` | | 200, the state of the switches: `fakeRecognition`, `fakeSpeech`, `store` (`memory` or `mongo`), and `saveFrames` |
+| `GET /healthz` | | 200, the state of the switches: `fakeRecognition`, `fakeSpeech`, `fakeProductInfo`, `store` (`memory` or `mongo`), and `saveFrames` |
 
 - `wsUrl` of a new session is `PUBLIC_BASE_URL` with `ws` in place of `http`, plus `/ws/device?session=<id>&token=<token>`.
 - A body that fails its schema gets 400 with `{ "error": "bad_request" }`. An unknown session gets 404 with `{ "error": "not_found" }`. An unknown key in a profile patch is dropped.
@@ -760,9 +1011,11 @@ The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2.
 - One phone holds a session. A second socket for the same session takes over, and the server closes the older one. No message goes to both.
 - `intent`, `prompt.done`, `device.state`, `cart.edit`, and `profile.set` go to the rules. After `profile.set` the phone gets a new `snapshot`.
 - `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished. Each other text becomes the input `question`.
-- A binary message is a frame. A frame that decodes goes to the recognition worker of the session, or to the log line of fake recognition. The server logs a frame that does not decode and drops it.
+- A binary message is a frame. A frame that decodes goes to the recognition worker of the session, or to the log line of fake recognition. A frame with the kind `label` goes to the label reader. The server logs a frame that does not decode and drops it.
 - The server logs and drops a text message that is no `DeviceToServer`. The socket stays open.
 - `kiosk.seen` goes to the kiosk service. `biometric.result` goes to the rules.
+- `barcode.seen` goes to the lookup of a barcode, and its outcome goes to the rules.
+- The server sends `still.request` when the model sees a barcode that nobody read. See "The model also reads the code".
 - A message can have at most 2 MB. A larger one closes the socket.
 - The server sends a ping each 20 seconds, and ends a socket that sent no pong since the last ping.
 - When the phone leaves, the session stays.
@@ -790,7 +1043,7 @@ npm run typecheck --workspace @glance/server
 npm run lint                                         # at the repository root, for each workspace
 ```
 
-No test calls a vendor, and no test needs a key. The tests of the Gemini call and of the ElevenLabs call give the code a fetch function of their own.
+No test calls a vendor or Open Food Facts, and no test needs a key. The tests of the Gemini calls, of the ElevenLabs call, and of the Open Food Facts call give the code a fetch function of their own. `testApp` reads the product details from the fixtures.
 
 Each test that needs a server starts one with `testApp` of `src/testing.ts`, on a free port of `127.0.0.1`, and closes it.
 
