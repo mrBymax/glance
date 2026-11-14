@@ -64,3 +64,10 @@ it('has no control below 48 px on each setup step', () => {
     unmount();
   }
 });
+it('shows the text and the button of the step below the list, where they have the full width', () => {
+  renderWithUi(<SetupScreen />);
+  const list = screen.getByRole('list', { name: 'Setup' });
+  expect(screen.getByRole('heading', { level: 2, name: 'Ready' })).toBeInTheDocument();
+  expect(list).not.toContainElement(screen.getByRole('button', { name: 'Start shopping' }));
+  expect(list).not.toContainElement(screen.getByText(EN.readyText));
+});

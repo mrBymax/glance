@@ -45,19 +45,17 @@ function bodyOf(step: 0 | 1 | 2, native: NativeState, strings: Strings, send: (m
   };
 }
 
-/** The three setup steps: link the glasses, allow the camera, start. Only the current step shows its text and its button. */
+/**
+ * The three setup steps: link the glasses, allow the camera, start. Only the current step shows its text and its button.
+ * The text and the button sit below the list of steps, not inside the step. A vertical step indents its content,
+ * and at a large font size the label of the button did not fit into the rest of a 360 px screen.
+ */
 export function SetupScreen() {
   const { state, strings, send } = useUi();
   const { native } = state;
   if (!native) return null;
   const step = setupStepOf(native);
   const body = bodyOf(step, native, strings, send);
-  const content = (
-    <VStack gap={3}>
-      {body.texts.map((text) => <Text key={text}>{text}</Text>)}
-      {body.button}
-    </VStack>
-  );
   const labels = [strings.stepLink, strings.stepCamera, strings.stepReady];
   return (
     <VStack as="main" padding={4} gap={4}>
@@ -65,9 +63,14 @@ export function SetupScreen() {
       <Heading level={1}>{strings.setupTitle}</Heading>
       <Stepper orientation="vertical" label={strings.setupSteps} activeStep={step}>
         {labels.map((label, index) => (
-          <Step key={label} step={index} label={label}>{index === step ? content : null}</Step>
+          <Step key={label} step={index} label={label} />
         ))}
       </Stepper>
+      <VStack as="section" gap={3}>
+        <Heading level={2}>{labels[step]}</Heading>
+        {body.texts.map((text) => <Text key={text}>{text}</Text>)}
+        {body.button}
+      </VStack>
     </VStack>
   );
 }
