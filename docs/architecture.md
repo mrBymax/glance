@@ -199,6 +199,36 @@ sequenceDiagram
 - Volume up is a yes and volume down is a no, only when `mainYes` of the profile is `key` and a prompt is current. In each other case the key changes the volume of the phone.
 - Speech needs the microphone permission of the glasses. The app asks for it when the page sets `mainYes` to `voice`, and when the page sends the intent `ask`.
 
+### The fingerprint and the still photo in the Android app
+
+Two extras have their Android side: the fingerprint above 50 EUR, and the sharp second look. Each one starts with a message of the server.
+
+```mermaid
+sequenceDiagram
+  participant Glasses as Glasses, or mock glasses
+  participant Shopper
+  participant App as Android app
+  participant Socket as Device socket
+  alt fingerprint above 50 EUR
+    Socket->>App: biometric.request
+    App->>Shopper: biometric prompt of Android, "Confirm payment"
+    Shopper-->>App: fingerprint, face, or screen lock
+    App->>Socket: biometric.result with ok true
+    Note over App: a cancel and each error of the prompt send ok false
+  else sharp second look
+    Socket->>App: event glance.ambiguous
+    Note over App: StillPolicy allows one capture at a time, and one each 5 seconds
+    App->>Glasses: capturePhoto
+    Glasses-->>App: photo
+    Note over App: crop, long side 1440 at most, each face pixelated, JPEG
+    App->>Socket: frame with kind still and blurred true
+  end
+```
+
+- A phone with no screen lock and no biometric shows no prompt. The app sends `ok: false`, and the page gets the `error` event `native.biometric_unavailable`.
+- The app closes an open prompt when the checkout ends: at `checkout.cancelled` and at `session.end`.
+- The contract has no request for a still, so the event `glance.ambiguous` is the signal. If face detection fails on the phone, the still does not leave the phone.
+
 The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. The server README lists each rule from R1 to R24.
 
 ## Phases of a session
@@ -270,7 +300,9 @@ stateDiagram-v2
 - The server never sends the events `glance.ambiguous`, `budget.exceeded`, `checkout.spotcheck`, and `error`. An `error` event comes only from the Android app, with a code that starts with `native.`.
 - Nobody has run the touchpad, the voice, and the volume keys with the real glasses. The app has each path, and the tests use mock glasses. With the real glasses a session attaches Speech only after the probe sets `ProbeDecisions.SPEECH` to true.
 - The intent `ask` has no effect on the server.
-- `biometric.request` and `biometric.result` have no effect.
+- The server never sends `biometric.request`, and it drops `biometric.result`. The Android app has its side of both messages, and its tests use the fake server of the app.
+- The server does not wait for a frame with `kind: still`. The Android app sends a still after each `glance.ambiguous`, and its tests use the fake server of the app.
+- Nobody has put a finger on the payment prompt, and nobody has taken a still with the real glasses.
 - The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
 - The phone UI has the session screen only. No screen shows the pay prompt or the receipt.
 - The server has English lines only.
