@@ -29,9 +29,10 @@ function PayView(props: { prompt: PayPrompt; answer: Answer | null; onAnswer(kin
       <Heading level={2}>{strings.payee(prompt.kiosk.name, prompt.kiosk.store)}</Heading>
       <Text>{strings.items(prompt.itemCount)}</Text>
       <Text type="display-1">{eur(prompt.totalCents)}</Text>
+      {prompt.needsBiometric ? <Banner status="info" title={strings.fingerprint} /> : null}
       {state.error ? <Banner status="warning" title={state.error.message} /> : null}
       <Button
-        label={strings.pay}
+        label={prompt.needsBiometric ? strings.payFingerprint : strings.pay}
         variant="primary"
         size="lg"
         width="100%"

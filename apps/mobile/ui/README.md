@@ -284,6 +284,7 @@ The button "Pocket mode" sends `pocket.set` with `on: true`. `SessionScreen` the
 
 - The pay view names the kiosk, the store, the item count, and the total of the server. Pay sends `intent` with `yes` and the ID of the pay prompt. Cancel sends `no`.
 - The server sends no event when a payment starts. So the sheet keeps its answer to each prompt ID: after Pay the button shows a spinner, and the sheet sends nothing more for that ID. A new `checkout.offered` has a new ID, and the sheet takes one answer again.
+- With `needsBiometric` in the pay prompt, the pay view shows the info banner "Over fifty euros. Confirm with your fingerprint on the phone.", and the pay button has the name "Pay with fingerprint". The button sends the same yes. The page shows no fingerprint prompt of its own.
 - After Cancel the sheet closes at once. A dismissed pay view (the back key, Escape) counts as Cancel. A dismissed sheet after Pay sends nothing.
 - An `error` event shows inside the pay view, because the main screen is under the sheet then.
 - The receipt view shows the total, the kiosk, each line, the order ID, the time, and the line "Demo payment. No money moved.". Done runs `local.reset`.
