@@ -22,7 +22,7 @@ export const TIMING = {
   // R22: the camera stops after this time with no product and no kiosk in view.
   restAfterIdleMs: 180000,
   // Section 9.5: the phone uploads the sharpest frame of each interval of this length.
-  uploadEveryMs: 300,
+  uploadEveryMs: 150,
   // Section 11.1: the server drops a recognition call that takes more than this time.
   recognitionTimeoutMs: 4000,
   // Section 11.1: the voice gives at most one aim hint in this time.

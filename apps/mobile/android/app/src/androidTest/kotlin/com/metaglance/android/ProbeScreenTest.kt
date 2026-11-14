@@ -115,8 +115,9 @@ class ProbeScreenTest {
             assertTrue("upload $seq is ${width}x$height", maxOf(width.toInt(), height.toInt()) <= MAX_LONG_SIDE)
             assertTrue("upload $seq has $bytes bytes", bytes.toInt() < MAX_JPEG_BYTES)
         }
-        // The pipeline sends the sharpest frame of each 300 ms, and it reports a code in view one time each second.
-        assertGap("uploads", lines().filter { UPLOAD_LINE.containsMatchIn(it) }, 180, 540)
+        // The pipeline sends the sharpest frame of each 150 ms, and it reports a code in view one time each second.
+        // The test stream has 7 frames each second, and most windows hold one frame: the mean is about 154 ms.
+        assertGap("uploads", lines().filter { UPLOAD_LINE.containsMatchIn(it) }, 100, 270)
         assertGap("kiosk lines", lines().filter { it.endsWith(" kiosk ${TestClips.KIOSK_TEXT}") }, 700, 1500)
     }
 

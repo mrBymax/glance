@@ -144,7 +144,7 @@ sequenceDiagram
   participant Clips as Speech clips
 
   Glasses->>App: video frames
-  Note over App: FramePipeline selects the sharpest frame of each 300 ms
+  Note over App: FramePipeline selects the sharpest frame of each 150 ms
   App->>Socket: binary frame with FrameHeader and JPEG
   Socket->>Worker: submit(frame)
   Worker->>Gemini: generateContent with the JPEG and the exclude line
@@ -184,9 +184,9 @@ A shopper who waits for the end of the line gets the old order: the app sends `p
 
 Rules of this path:
 
-- The phone uploads one frame each 300 ms at most. The JPEG has the quality 80 and a long side of 768 pixels at most. It is the center of the camera frame (80 percent of the width, 70 percent of the height), and the phone pixelates each face in it before the upload.
+- The phone uploads one frame each 150 ms at most. The JPEG has the quality 80 and a long side of 768 pixels at most. It is the center of the camera frame (80 percent of the width, 70 percent of the height), and the phone pixelates each face in it before the upload.
 - The upload stops while the socket is down, while an earlier frame is not sent yet, and while the glasses are off the face.
-- The recognition worker runs up to 3 calls at the same time for each session (`RECOGNITION_CONCURRENCY`). With no free call, the newest frame waits. A call that takes 4 seconds is dropped. The rules get the results in the order of the frames: the worker drops the result of an older frame that arrives after the result of a newer frame.
+- The recognition worker runs up to 8 calls at the same time for each session (`RECOGNITION_CONCURRENCY`). Each call starts with the reference pictures of the store items, up to 3 for each item (`RECOGNITION_REFERENCES`). With no free call, the newest frame waits. A call that takes 4 seconds is dropped. The rules get the results in the order of the frames: the worker drops the result of an older frame that arrives after the result of a newer frame.
 - Results for one product inside 3 seconds belong to one appearance, and one appearance gets one prompt.
 - `glance.pending` and the glance line carry the allergen and diet warnings of the product for the profile of the session. A line with a warning has the sound `warning`. No message says that a product is safe.
 - The head window is on the phone. For a product prompt it opens 1200 ms after the line starts to play, and for a pay prompt when the line ended. It ends `headWindowMs` of the profile after the end of the line: 8 seconds by default. `HeadInput` keeps it in the time of the motion samples: a sample counts when the glasses took it inside the window, also when it arrives up to 6 seconds late. The time of the window does not run in a stall of the samples or during a still, for 15 seconds more at most.

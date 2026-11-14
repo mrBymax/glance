@@ -1,5 +1,6 @@
 package com.metaglance.core.image
 
+import com.metaglance.core.contract.Timing
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -31,8 +32,8 @@ class SelectionTest {
         Sharpness.of(ByteArray(6), 2, 2)
     }
 
-    @Test fun `picks the sharpest frame of each 300 ms window`() {
-        val p = SharpestFramePicker<String>()
+    @Test fun `picks the sharpest frame of each window`() {
+        val p = SharpestFramePicker<String>(everyMs = 300)
         assertNull(p.offer(0, "a", 3.0))
         assertNull(p.offer(143, "b", 9.0))
         assertNull(p.offer(286, "c", 5.0))
@@ -42,8 +43,35 @@ class SelectionTest {
         assertEquals("e", p.offer(600, "g", 0.5))
     }
 
-    @Test fun `never picks a damaged frame, and a window with only damaged frames gives none`() {
+    @Test fun `the window of an upload is 150 ms`() {
+        assertEquals(150L, Timing.uploadEveryMs)
         val p = SharpestFramePicker<String>()
+        assertNull(p.offer(0, "a", 3.0))
+        assertNull(p.offer(149, "b", 9.0))
+        assertEquals("b", p.offer(150, "c", 1.0))
+    }
+
+    @Test fun `keeps the pace of the window with a stream of 7 frames each second`() {
+        // A frame each 143 ms never falls on the end of a window of 150 ms. A window that started at its late frame
+        // would hold two frames each time, and the phone would upload one frame each 286 ms.
+        val p = SharpestFramePicker<Int>(everyMs = 150)
+        val picked = (0..69).mapNotNull { frame -> p.offer(frame * 143L, frame, 1.0) }
+        // 70 frames are 10 seconds: 66 windows of 150 ms, and the frame of the last window still waits.
+        assertEquals(65, picked.size)
+        // Frame 1 is in the first window with frame 0. From then on each window has one frame for a long time.
+        assertEquals(listOf(0, 2, 3, 4, 5), picked.take(5))
+    }
+
+    @Test fun `after a gap of the stream the window starts at the next frame`() {
+        val p = SharpestFramePicker<String>(everyMs = 150)
+        assertNull(p.offer(0, "a", 1.0))
+        assertEquals("a", p.offer(2000, "b", 1.0))
+        assertNull(p.offer(2143, "c", 5.0))
+        assertEquals("c", p.offer(2150, "d", 1.0))
+    }
+
+    @Test fun `never picks a damaged frame, and a window with only damaged frames gives none`() {
+        val p = SharpestFramePicker<String>(everyMs = 300)
         assertNull(p.offer(0, "a", 3.0))
         assertNull(p.offer(143, "b", 90.0, damaged = true))
         assertEquals("a", p.offer(300, "c", 50.0, damaged = true))

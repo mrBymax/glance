@@ -29,7 +29,7 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * The path of each frame of the stream: the code scan, then the upload of the sharpest frame of each 300 ms.
+ * The path of each frame of the stream: the code scan, then the upload of the sharpest frame of each 150 ms.
  * No frame is written to storage.
  *
  * One scan of the frame gives the kiosk code and the product barcode. A barcode region that did not decode is

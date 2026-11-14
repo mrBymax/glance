@@ -36,7 +36,7 @@ export function privacyCopy(probe: Probe, facts: PrivacyFacts, links: Links): Pr
         heading: 'Camera frames',
         lines: [
           'The camera runs from the start of a session to its end.',
-          'The phone picks at most four frames each second.',
+          'The phone picks at most seven frames each second.',
           'The phone pixelates faces and crops each frame. If that step fails, the phone drops the frame.',
           'The phone sends each frame to the Glance server over TLS.',
           'The server holds a frame in memory for one recognition call. It never writes a frame to a disk, a database, or a log.',
