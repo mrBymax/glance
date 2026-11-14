@@ -15,6 +15,9 @@ export const NativeStateSchema = z.object({
   metaAiInstalled: z.boolean(),
   registration: z.enum(['unavailable', 'available', 'registering', 'registered']),
   cameraPermission: z.enum(['unknown', 'granted', 'denied']),
+  // The permission of the phone to show notifications. 'unknown' means that the app did not ask yet.
+  // A session runs with each value. Without the permission, its notification does not show.
+  notificationPermission: z.enum(['unknown', 'granted', 'denied']),
   device: z.object({
     name: z.string().nullable(),
     link: z.enum(['connected', 'disconnected']),
@@ -38,6 +41,7 @@ export const PageToNativeSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('ui.ready') }),
   z.object({ t: z.literal('setup.register') }),
   z.object({ t: z.literal('setup.requestCamera') }),
+  z.object({ t: z.literal('setup.requestNotifications') }),
   z.object({ t: z.literal('setup.openUpdate') }),
   z.object({ t: z.literal('session.start') }),
   z.object({ t: z.literal('session.end') }),

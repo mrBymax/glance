@@ -41,6 +41,19 @@ enum class CameraPermission {
     DENIED
 }
 
+/** The permission of the phone to show notifications. `UNKNOWN` means that the app did not ask yet. */
+@Serializable
+enum class NotificationPermission {
+    @SerialName("unknown")
+    UNKNOWN,
+
+    @SerialName("granted")
+    GRANTED,
+
+    @SerialName("denied")
+    DENIED
+}
+
 @Serializable
 enum class SessionStatus {
     @SerialName("idle")
@@ -92,6 +105,7 @@ data class NativeState(
     val metaAiInstalled: Boolean,
     val registration: Registration,
     val cameraPermission: CameraPermission,
+    val notificationPermission: NotificationPermission,
     val device: NativeDevice?,
     val session: SessionStatus,
     val stream: StreamStatus,
@@ -114,6 +128,10 @@ sealed interface PageToNative {
     @Serializable
     @SerialName("setup.requestCamera")
     data object SetupRequestCamera : PageToNative
+
+    @Serializable
+    @SerialName("setup.requestNotifications")
+    data object SetupRequestNotifications : PageToNative
 
     @Serializable
     @SerialName("setup.openUpdate")

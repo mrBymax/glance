@@ -49,10 +49,12 @@ it('answers ui.ready with the native state and the profile', () => {
   bridge.send({ t: 'ui.ready' });
   expect(seen).toEqual([{ t: 'native.state', state: NATIVE_NEW }, { t: 'profile', profile: DEFAULT_PROFILE }]);
 });
-it('fakes the link step and the camera permission', () => {
+it('fakes the link step and the two permissions', () => {
   const { bridge, seen } = offline();
   bridge.send({ t: 'setup.register' });
   bridge.send({ t: 'setup.requestCamera' });
+  expect(lastNative(seen)).toMatchObject({ cameraPermission: 'granted', notificationPermission: 'unknown' });
+  bridge.send({ t: 'setup.requestNotifications' });
   expect(lastNative(seen)).toEqual(NATIVE_READY);
 });
 it('starts a session with no server and no network call', () => {

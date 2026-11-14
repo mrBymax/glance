@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.Network
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -36,6 +37,7 @@ import com.metaglance.core.contract.IntentSource
 import com.metaglance.core.contract.MainYes
 import com.metaglance.core.contract.NativeState
 import com.metaglance.core.contract.NativeToPage
+import com.metaglance.core.contract.NotificationPermission
 import com.metaglance.core.contract.PageToNative
 import com.metaglance.core.contract.Profile
 import com.metaglance.core.contract.Profiles
@@ -124,7 +126,8 @@ class SessionController(
     private val scope: CoroutineScope,
     val dat: DatLink,
     val store: ProfileStore,
-    private val vibrate: (LongArray) -> Unit
+    private val vibrate: (LongArray) -> Unit,
+    private val notificationsGranted: () -> Boolean
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val audio = app.getSystemService(AudioManager::class.java)
@@ -154,6 +157,7 @@ class SessionController(
     /** `debugDropSocket` sets it. No socket opens before this time. */
     private var socketBlockedUntilMs = 0L
     private var phoneOnline = true
+    private var notificationPermission = readNotificationPermission()
 
     private val voice = PhoneVoice(app)
     private val player = ExoLinePlayer(app, voice) { url -> api().clipUrl(url) }
@@ -326,6 +330,7 @@ class SessionController(
             is PageToNative.DataDelete -> deleteData()
             is PageToNative.SetupRegister -> setupRegister()
             is PageToNative.SetupRequestCamera -> setupRequestCamera()
+            is PageToNative.SetupRequestNotifications -> activity?.requestNotifications()
             is PageToNative.SetupOpenUpdate -> activity?.let(dat::openUpdate)
         }
     }
@@ -343,6 +348,21 @@ class SessionController(
 
     /** Sends an `error` event to the page. The activity uses it for a failure that it sees itself. */
     fun reportError(error: NativeError) = sendError(error)
+
+    /**
+     * Reads the notification permission of the phone again. The activity calls it at each resume and after the
+     * answer to a request, because the shopper can change the permission in the settings of Android.
+     */
+    fun refreshNotificationPermission() {
+        notificationPermission = readNotificationPermission()
+        refreshNativeState()
+    }
+
+    private fun readNotificationPermission(): NotificationPermission = StateMapper.notificationPermission(
+        needed = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
+        granted = notificationsGranted(),
+        asked = store.notificationsAsked
+    )
 
     /** Stops the camera stream, as `session.rest` of the server does. The server session and the socket stay. */
     fun stopCamera() = stopDat()
@@ -1146,7 +1166,13 @@ class SessionController(
         toPage(NativeToPage.NativeStateChanged(state))
     }
 
-    private fun mapNativeState(snapshot: DatSnapshot): NativeState = StateMapper.nativeState(snapshot, phoneOnline, socketExpected = serverSession?.live == true, socketOpen = socketOpen)
+    private fun mapNativeState(snapshot: DatSnapshot): NativeState = StateMapper.nativeState(
+        snapshot,
+        phoneOnline,
+        socketExpected = serverSession?.live == true,
+        socketOpen = socketOpen,
+        notifications = notificationPermission
+    )
 
     private fun saveServerSession(session: StoredSession) {
         serverSession = session

@@ -18,7 +18,9 @@ const tap = async (ui: ReturnType<typeof renderWithUi>, name: string) => ui.user
 const SCENES: [string, () => Promise<unknown>][] = [
   ['setup, link step', async () => renderWithUi(<App />, { native: NATIVE_NEW })],
   ['setup, camera step', async () => renderWithUi(<App />, { native: { ...NATIVE_NEW, registration: 'registered' } })],
+  ['setup, notification step', async () => renderWithUi(<App />, { native: NATIVE_PRESETS.notificationsNotAsked })],
   ['setup, ready step', async () => renderWithUi(<App />)],
+  ['setup, ready step with denied notifications', async () => renderWithUi(<App />, { native: NATIVE_PRESETS.notificationsDenied })],
   ['setup, no Meta AI app', async () => renderWithUi(<App />, { native: NATIVE_PRESETS.metaAiMissing })],
   ['session', async () => renderWithUi(<App />, { messages: session })],
   ['checkout', async () => renderWithUi(<App />, { messages: [...session, eventMessage('checkout.offered')] })],

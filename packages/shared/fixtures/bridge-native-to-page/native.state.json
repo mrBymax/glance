@@ -4,6 +4,7 @@
     "metaAiInstalled": true,
     "registration": "registered",
     "cameraPermission": "granted",
+    "notificationPermission": "granted",
     "device": {
       "name": "Mock glasses",
       "link": "connected",

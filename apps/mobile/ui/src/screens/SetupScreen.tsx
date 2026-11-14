@@ -9,12 +9,12 @@ import { Step, Stepper } from '@astryxdesign/core/Stepper';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
 import type { NativeState, PageToNative } from '@glance/shared';
-import { Camera, Check, Glasses, type LucideIcon } from 'lucide-react';
+import { Bell, Camera, Check, Glasses, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useUi } from '../bridge/BridgeContext';
 import { Mark } from '../components/Mark';
 import { StateBanner } from '../components/StateBanner';
-import { setupStepOf } from '../state/selectors';
+import { setupStepOf, type SetupStep } from '../state/selectors';
 import type { Strings } from '../text/strings';
 
 /** The Play Store page of the Meta AI app, from the DAT docs (dat/display-overview, Requirements). */
@@ -23,10 +23,11 @@ export const META_AI_STORE_URL = 'https://play.google.com/store/apps/details?id=
 /**
  * The content of one step. `warning` says why the last try failed, `lead` says what the step is for,
  * and `steps` are the taps of the jump to Meta AI, in their order. `waiting` replaces the button while Meta AI is open.
+ * `second` is an action that the shopper can leave out.
  */
-type StepBody = { warning?: string; lead?: string; steps?: string[]; waiting?: string; button: ReactNode };
+type StepBody = { warning?: string; lead?: string; steps?: string[]; waiting?: string; button: ReactNode; second?: ReactNode };
 
-const GLYPHS: readonly [LucideIcon, LucideIcon, LucideIcon] = [Glasses, Camera, Check];
+const GLYPHS: readonly [LucideIcon, LucideIcon, LucideIcon, LucideIcon] = [Glasses, Camera, Bell, Check];
 
 function linkBody(native: NativeState, strings: Strings, send: (message: PageToNative) => void): StepBody {
   const register = (label: string) => (
@@ -43,7 +44,7 @@ function linkBody(native: NativeState, strings: Strings, send: (message: PageToN
   return { steps: [strings.linkOpens, strings.linkConfirm, strings.linkReturn], button: register(strings.stepLink) };
 }
 
-function bodyOf(step: 0 | 1 | 2, native: NativeState, strings: Strings, send: (message: PageToNative) => void): StepBody {
+function bodyOf(step: SetupStep, native: NativeState, strings: Strings, send: (message: PageToNative) => void): StepBody {
   if (step === 0) return linkBody(native, strings, send);
   if (step === 1) {
     return {
@@ -53,14 +54,22 @@ function bodyOf(step: 0 | 1 | 2, native: NativeState, strings: Strings, send: (m
       button: <Button label={strings.stepCamera} variant="primary" size="lg" width="100%" onClick={() => send({ t: 'setup.requestCamera' })} />,
     };
   }
+  const allowNotifications = (variant?: 'primary') => (
+    <Button label={strings.stepNotifications} variant={variant} size="lg" width="100%" onClick={() => send({ t: 'setup.requestNotifications' })} />
+  );
+  if (step === 2) return { lead: strings.notificationsWhy, button: allowNotifications('primary') };
+  const denied = native.notificationPermission === 'denied';
   return {
+    warning: denied ? strings.notificationsDenied : undefined,
     lead: strings.readyText,
     button: <Button label={strings.start} variant="primary" size="lg" width="100%" onClick={() => send({ t: 'session.start' })} />,
+    second: denied ? allowNotifications() : undefined,
   };
 }
 
 /**
- * The three setup steps: link the glasses, allow the camera, start. Only the current step shows its text and its button.
+ * The four setup steps: link the glasses, allow the camera, allow notifications, start. Only the current step shows its
+ * text and its button. The shopper can deny the notifications and still start.
  * The text and the button sit in a card below the list of steps, not inside the step. A vertical step indents its content,
  * and at a large font size the label of the button did not fit into the rest of a 360 px screen.
  */
@@ -70,7 +79,7 @@ export function SetupScreen() {
   if (!native) return null;
   const step = setupStepOf(native);
   const body = bodyOf(step, native, strings, send);
-  const labels = [strings.stepLink, strings.stepCamera, strings.stepReady];
+  const labels = [strings.stepLink, strings.stepCamera, strings.stepNotifications, strings.stepReady];
   return (
     <VStack as="main" className="glance-page" paddingBlock={4} gap={6}>
       <StateBanner />
@@ -86,7 +95,7 @@ export function SetupScreen() {
       <Card className="glance-card" elevation="low">
         <VStack as="section" gap={4}>
           <HStack gap={3} vAlign="center">
-            <Mark icon={GLYPHS[step]} tone={step === 2 ? 'success' : 'muted'} />
+            <Mark icon={GLYPHS[step]} tone={step === 3 ? 'success' : 'muted'} />
             <Heading level={2}>{labels[step]}</Heading>
           </HStack>
           {body.warning ? <Banner status="warning" title={body.warning} /> : null}
@@ -98,6 +107,7 @@ export function SetupScreen() {
           ) : null}
           {body.waiting ? <Spinner size="lg" label={body.waiting} /> : null}
           {body.button}
+          {body.second}
         </VStack>
       </Card>
     </VStack>

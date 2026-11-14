@@ -11,6 +11,7 @@ export const NATIVE_NEW: NativeState = {
   metaAiInstalled: true,
   registration: 'available',
   cameraPermission: 'unknown',
+  notificationPermission: 'unknown',
   device: null,
   session: 'idle',
   stream: 'stopped',
@@ -19,15 +20,17 @@ export const NATIVE_NEW: NativeState = {
   mock: true,
 };
 
-/** Linked, camera allowed, glasses connected. */
+/** Linked, camera and notifications allowed, glasses connected. */
 export const NATIVE_READY: NativeState = {
   ...NATIVE_NEW,
   registration: 'registered',
   cameraPermission: 'granted',
+  notificationPermission: 'granted',
   device: MOCK_GLASSES,
 };
 
-export type NativePresetKey = 'ready' | 'metaAiMissing' | 'notRegistered' | 'cameraDenied' | 'glassesNotFound' | 'updateRequired'
+export type NativePresetKey = 'ready' | 'metaAiMissing' | 'notRegistered' | 'cameraDenied' | 'notificationsNotAsked' | 'notificationsDenied'
+  | 'glassesNotFound' | 'updateRequired'
   | 'paused' | 'stopped' | 'offFace' | 'battery20' | 'battery10' | 'tooWarm' | 'batteryFlat' | 'offline';
 
 const withDevice = (change: Partial<Device>): NativeState => ({ ...NATIVE_READY, device: { ...MOCK_GLASSES, ...change } });
@@ -39,6 +42,8 @@ export const NATIVE_PRESETS: Record<NativePresetKey, NativeState> = {
   metaAiMissing: { ...NATIVE_NEW, metaAiInstalled: false, registration: 'unavailable' },
   notRegistered: NATIVE_NEW,
   cameraDenied: { ...NATIVE_READY, cameraPermission: 'denied' },
+  notificationsNotAsked: { ...NATIVE_READY, notificationPermission: 'unknown' },
+  notificationsDenied: { ...NATIVE_READY, notificationPermission: 'denied' },
   glassesNotFound: { ...NATIVE_READY, device: null },
   updateRequired: withDevice({ updateRequired: true }),
   paused: { ...NATIVE_READY, session: 'paused', stream: 'paused' },

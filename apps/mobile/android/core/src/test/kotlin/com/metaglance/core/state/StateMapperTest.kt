@@ -7,6 +7,7 @@ import com.metaglance.core.contract.Link
 import com.metaglance.core.contract.NativeDevice
 import com.metaglance.core.contract.NativeState
 import com.metaglance.core.contract.Network
+import com.metaglance.core.contract.NotificationPermission
 import com.metaglance.core.contract.Registration
 import com.metaglance.core.contract.SessionStatus
 import com.metaglance.core.contract.StreamStatus
@@ -34,7 +35,24 @@ class StateMapperTest {
         mock = false
     )
 
-    private fun native(dat: DatSnapshot, phoneOnline: Boolean = true, expected: Boolean = true, open: Boolean = true) = StateMapper.nativeState(dat, phoneOnline, expected, open)
+    private fun native(dat: DatSnapshot, phoneOnline: Boolean = true, expected: Boolean = true, open: Boolean = true) = StateMapper.nativeState(dat, phoneOnline, expected, open, NotificationPermission.GRANTED)
+
+    @Test fun `the notification permission is unknown before the first request and denied after it`() {
+        assertEquals(NotificationPermission.UNKNOWN, StateMapper.notificationPermission(needed = true, granted = false, asked = false))
+        assertEquals(NotificationPermission.DENIED, StateMapper.notificationPermission(needed = true, granted = false, asked = true))
+        assertEquals(NotificationPermission.GRANTED, StateMapper.notificationPermission(needed = true, granted = true, asked = false))
+        // The shopper can allow the notifications in the settings of Android, with no request of the app.
+        assertEquals(NotificationPermission.GRANTED, StateMapper.notificationPermission(needed = true, granted = true, asked = true))
+    }
+
+    @Test fun `a phone before Android 13 needs no notification permission`() {
+        assertEquals(NotificationPermission.GRANTED, StateMapper.notificationPermission(needed = false, granted = false, asked = false))
+    }
+
+    @Test fun `the native state carries the notification permission`() {
+        val state = StateMapper.nativeState(live, phoneOnline = true, socketExpected = true, socketOpen = true, notifications = NotificationPermission.DENIED)
+        assertEquals(NotificationPermission.DENIED, state.notificationPermission)
+    }
 
     @Test fun `maps a live session`() {
         val n = native(live)
@@ -43,6 +61,7 @@ class StateMapperTest {
                 true,
                 Registration.REGISTERED,
                 CameraPermission.GRANTED,
+                NotificationPermission.GRANTED,
                 NativeDevice("Ray-Ban Meta", Link.CONNECTED, 80, true, true, 0, false),
                 SessionStatus.STARTED,
                 StreamStatus.STREAMING,

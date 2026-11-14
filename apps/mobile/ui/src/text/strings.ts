@@ -26,6 +26,7 @@ export const EN = {
   loading: 'Starting Glance.',
   stepLink: 'Link glasses',
   stepCamera: 'Allow camera',
+  stepNotifications: 'Allow notifications',
   stepReady: 'Ready',
   linkOpens: 'This opens the Meta AI app.',
   linkConfirm: 'Confirm there that Glance may connect to your glasses.',
@@ -39,6 +40,8 @@ export const EN = {
   cameraOpens: 'This opens the Meta AI app again.',
   cameraChoose: 'Choose Allow always or Allow once.',
   cameraDenied: 'The camera permission was denied. Glance cannot name a product without it.',
+  notificationsWhy: 'Glance keeps your shop running with the screen off. Its notification shows your total and a button that stops the camera.',
+  notificationsDenied: 'Notifications are off. Your shop still runs with the screen off, but the phone shows no total and no button that stops the camera.',
   readyText: 'Hold a product up to hear its price. Nod to add it. Look at a checkout code and nod to pay.',
   start: 'Start shopping',
 
@@ -187,6 +190,7 @@ export const IT: Strings = {
   loading: 'Avvio di Glance.',
   stepLink: 'Collega gli occhiali',
   stepCamera: 'Consenti la fotocamera',
+  stepNotifications: 'Consenti le notifiche',
   stepReady: 'Pronto',
   linkOpens: "Si apre l'app Meta AI.",
   linkConfirm: 'Conferma lì che Glance può collegarsi ai tuoi occhiali.',
@@ -200,6 +204,8 @@ export const IT: Strings = {
   cameraOpens: "Si apre di nuovo l'app Meta AI.",
   cameraChoose: 'Scegli Consenti sempre o Consenti una volta.',
   cameraDenied: "L'autorizzazione per la fotocamera è stata negata. Senza di essa Glance non può riconoscere un prodotto.",
+  notificationsWhy: 'Glance continua la spesa anche con lo schermo spento. La sua notifica mostra il totale e un pulsante che spegne la fotocamera.',
+  notificationsDenied: 'Le notifiche sono disattivate. La spesa continua anche con lo schermo spento, ma il telefono non mostra il totale né il pulsante che spegne la fotocamera.',
   readyText: 'Solleva un prodotto per sentire il prezzo. Annuisci per aggiungerlo. Guarda un codice della cassa e annuisci per pagare.',
   start: 'Inizia la spesa',
 

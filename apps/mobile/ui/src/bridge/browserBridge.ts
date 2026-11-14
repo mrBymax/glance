@@ -120,6 +120,9 @@ export class BrowserBridge implements GlanceBridge {
       case 'setup.requestCamera':
         this.setNative({ cameraPermission: 'granted' });
         return;
+      case 'setup.requestNotifications':
+        this.setNative({ notificationPermission: 'granted' });
+        return;
       case 'setup.openUpdate':
         return;
       case 'session.start':

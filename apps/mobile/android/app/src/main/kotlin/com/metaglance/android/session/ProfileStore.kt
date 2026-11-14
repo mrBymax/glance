@@ -106,6 +106,14 @@ class ProfileStore(context: Context) {
         get() = prefs.getBoolean(KEY_RECORD_MOTION, false)
         set(value) = prefs.edit().putBoolean(KEY_RECORD_MOTION, value).apply()
 
+    /**
+     * True after the app showed the notification request of Android one time. A missing permission then means
+     * "denied". It is a fact about the phone, so `clear` keeps it.
+     */
+    var notificationsAsked: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFICATIONS_ASKED, false)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATIONS_ASKED, value).apply()
+
     /** Sets `profile`, `wantedMainYes`, and `serverSession` back to their defaults. The settings of the app stay. */
     fun clear() {
         val edit = prefs.edit().remove(KEY_PROFILE).remove(KEY_WANTED_MAIN_YES)
@@ -138,6 +146,7 @@ class ProfileStore(context: Context) {
         const val KEY_RECORD_MOTION = "recordMotion"
         const val KEY_STREAM_QUALITY = "streamQuality"
         const val KEY_STREAM_FPS = "streamFps"
+        const val KEY_NOTIFICATIONS_ASKED = "notificationsAsked"
         val SESSION_KEYS = listOf(KEY_SESSION_ID, KEY_SESSION_TOKEN, KEY_SESSION_WS_URL, KEY_SESSION_LIVE)
     }
 }

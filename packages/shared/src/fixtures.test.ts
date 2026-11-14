@@ -37,7 +37,7 @@ describe('fixtures', () => {
     }
   });
   it('has one bridge fixture for each message variant, and the file name is the t value', () => {
-    for (const [folder, count] of [['bridge-page-to-native', 10], ['bridge-native-to-page', 4]] as const) {
+    for (const [folder, count] of [['bridge-page-to-native', 11], ['bridge-native-to-page', 4]] as const) {
       const fixtures = readFolder(folder);
       expect(fixtures.length, folder).toBe(count);
       for (const { file, json } of fixtures) {

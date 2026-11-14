@@ -9,6 +9,7 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -58,6 +59,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val notificationRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        glance.profileStore.notificationsAsked = true
+        glance.session.refreshNotificationPermission()
+    }
+
     private var microphoneAsked = false
     private val microphoneRequest = registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
         microphoneAsked = false
@@ -100,6 +106,8 @@ class MainActivity : AppCompatActivity() {
             glance.bluetoothAsked = true
             if (glance.askBluetoothAtStart) requestBluetooth {}
         }
+        // The shopper can return from the settings of Android with a new notification permission.
+        glance.session.refreshNotificationPermission()
         // The shopper returns from Meta AI through this path, and a permission can be new.
         if (dat.ready) lifecycleScope.launch { dat.refreshPermissions() }
     }
@@ -124,6 +132,20 @@ class MainActivity : AppCompatActivity() {
         if (microphoneAsked) return
         microphoneAsked = true
         microphoneRequest.launch(Permission.MICROPHONE)
+    }
+
+    /**
+     * Asks for the permission to show notifications, which Android has from version 13. After two denied
+     * requests Android shows its prompt no more, and then this opens the notification settings of the app.
+     */
+    fun requestNotifications() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val permission = Manifest.permission.POST_NOTIFICATIONS
+        if (glance.profileStore.notificationsAsked && !shouldShowRequestPermissionRationale(permission)) {
+            startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+        } else {
+            notificationRequest.launch(permission)
+        }
     }
 
     /** False for a phone with no screen lock and no biometric. Such a phone cannot confirm a payment. */

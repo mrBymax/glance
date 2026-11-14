@@ -7,6 +7,7 @@ import com.metaglance.android.support.waitUntil
 import com.metaglance.core.contract.CameraPermission
 import com.metaglance.core.contract.Link
 import com.metaglance.core.contract.NativeState
+import com.metaglance.core.contract.NotificationPermission
 import com.metaglance.core.contract.PageToNative
 import com.metaglance.core.contract.Registration
 import com.metaglance.core.state.NativeErrors
@@ -40,6 +41,38 @@ class SetupFlowTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
     override fun tearDown() {
         onMain { glance.session.tap = null }
         super.tearDown()
+    }
+
+    // A test cannot take a permission away from its own process, so it replaces the check of the app.
+    @Test
+    fun theNotificationPermissionIsUnknownBeforeTheRequestAndDeniedAfterIt() {
+        val grantedBefore = glance.notificationsGranted
+        val askedBefore = glance.profileStore.notificationsAsked
+        try {
+            onMain {
+                glance.notificationsGranted = { false }
+                glance.profileStore.notificationsAsked = false
+                glance.session.refreshNotificationPermission()
+            }
+            assertEquals(NotificationPermission.UNKNOWN, native.notificationPermission)
+
+            onMain {
+                glance.profileStore.notificationsAsked = true
+                glance.session.refreshNotificationPermission()
+            }
+            assertEquals(NotificationPermission.DENIED, native.notificationPermission)
+
+            // The shopper allows the notifications in the settings of Android, and returns to the app.
+            onMain { glance.notificationsGranted = { true } }
+            scenarioRule.scenario.recreate()
+            waitUntil("the notification permission is granted", STEP_MS, ::state) { native.notificationPermission == NotificationPermission.GRANTED }
+        } finally {
+            onMain {
+                glance.notificationsGranted = grantedBefore
+                glance.profileStore.notificationsAsked = askedBefore
+                glance.session.refreshNotificationPermission()
+            }
+        }
     }
 
     @Test

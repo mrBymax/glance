@@ -72,6 +72,7 @@ element('skip').addEventListener('click', () => send({ t: 'intent', kind: 'no', 
 const BUTTONS = [
   ['setup.register', { t: 'setup.register' }],
   ['setup.requestCamera', { t: 'setup.requestCamera' }],
+  ['setup.requestNotifications', { t: 'setup.requestNotifications' }],
   ['setup.openUpdate', { t: 'setup.openUpdate' }],
   ['session.start', { t: 'session.start' }],
   ['session.end', { t: 'session.end' }],

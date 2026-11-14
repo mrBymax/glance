@@ -6,13 +6,13 @@ import { uncoveredTouchTargets } from '../test/touchTargets';
 import { EN } from '../text/strings';
 import { META_AI_STORE_URL, SetupScreen } from './SetupScreen';
 
-it('shows three steps and marks the current one', () => {
+it('shows four steps and marks the current one', () => {
   renderWithUi(<SetupScreen />, { native: NATIVE_NEW });
   const steps = within(screen.getByRole('list', { name: 'Setup' })).getAllByRole('listitem');
-  expect(steps).toHaveLength(3);
+  expect(steps).toHaveLength(4);
   expect(steps[0]).toHaveAttribute('aria-current', 'step');
   expect(steps.map((step) => step.textContent)).toEqual([
-    expect.stringContaining('Link glasses'), expect.stringContaining('Allow camera'), expect.stringContaining('Ready'),
+    expect.stringContaining('Link glasses'), expect.stringContaining('Allow camera'), expect.stringContaining('Allow notifications'), expect.stringContaining('Ready'),
   ]);
 });
 it('says what opens, what to confirm, and how to return, then links the glasses', async () => {
@@ -36,6 +36,27 @@ it('explains a denied camera permission and asks again', () => {
   expect(screen.getByText(EN.cameraDenied)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Allow camera' })).toBeInTheDocument();
 });
+it('says what the notification is for, then asks for the permission', async () => {
+  const { bridge, user } = renderWithUi(<SetupScreen />, { native: { ...NATIVE_READY, notificationPermission: 'unknown' } });
+  expect(screen.getByRole('heading', { level: 2, name: 'Allow notifications' })).toBeInTheDocument();
+  expect(screen.getByText(EN.notificationsWhy)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Start shopping' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Allow notifications' }));
+  expect(bridge.sent).toContainEqual({ t: 'setup.requestNotifications' });
+  expect(await screen.findByRole('button', { name: 'Start shopping' })).toBeInTheDocument();
+});
+it('starts with denied notifications, says what is missing, and offers the permission again', async () => {
+  const { bridge, user } = renderWithUi(<SetupScreen />, { native: { ...NATIVE_READY, notificationPermission: 'denied' } });
+  expect(screen.getByText(EN.notificationsDenied)).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Start shopping' }));
+  expect(bridge.sent).toContainEqual({ t: 'session.start' });
+  await user.click(screen.getByRole('button', { name: 'Allow notifications' }));
+  expect(bridge.sent).toContainEqual({ t: 'setup.requestNotifications' });
+});
+it('offers no notification button on the ready step when the permission is granted', () => {
+  renderWithUi(<SetupScreen />);
+  expect(screen.queryByRole('button', { name: 'Allow notifications' })).toBeNull();
+});
 it('offers the store when the Meta AI app is missing', () => {
   renderWithUi(<SetupScreen />, { native: { ...NATIVE_NEW, metaAiInstalled: false, registration: 'unavailable' } });
   expect(screen.getByRole('link', { name: 'Get Meta AI' })).toHaveAttribute('href', META_AI_STORE_URL);
@@ -58,7 +79,12 @@ it('starts the session from the ready step', async () => {
   expect(bridge.sent).toContainEqual({ t: 'session.start' });
 });
 it('has no control below 48 px on each setup step', () => {
-  for (const native of [NATIVE_NEW, { ...NATIVE_NEW, metaAiInstalled: false }, { ...NATIVE_NEW, registration: 'registered' as const }, NATIVE_READY]) {
+  const notifications = (notificationPermission: 'unknown' | 'denied') => ({ ...NATIVE_READY, notificationPermission });
+  const states = [
+    NATIVE_NEW, { ...NATIVE_NEW, metaAiInstalled: false }, { ...NATIVE_NEW, registration: 'registered' as const },
+    notifications('unknown'), notifications('denied'), NATIVE_READY,
+  ];
+  for (const native of states) {
     const { container, unmount } = renderWithUi(<SetupScreen />, { native });
     expect(uncoveredTouchTargets(container)).toEqual([]);
     unmount();

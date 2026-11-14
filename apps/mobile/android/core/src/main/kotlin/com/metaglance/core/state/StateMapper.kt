@@ -7,6 +7,7 @@ import com.metaglance.core.contract.Link
 import com.metaglance.core.contract.NativeDevice
 import com.metaglance.core.contract.NativeState
 import com.metaglance.core.contract.Network
+import com.metaglance.core.contract.NotificationPermission
 import com.metaglance.core.contract.Registration
 import com.metaglance.core.contract.SessionStatus
 import com.metaglance.core.contract.StreamStatus
@@ -18,7 +19,13 @@ object StateMapper {
      * A denied Bluetooth permission gives the registration `UNAVAILABLE`, because the SDK does not run without it.
      * Mock glasses use no Bluetooth, so they keep their registration.
      */
-    fun nativeState(dat: DatSnapshot, phoneOnline: Boolean, socketExpected: Boolean, socketOpen: Boolean): NativeState = NativeState(
+    fun nativeState(
+        dat: DatSnapshot,
+        phoneOnline: Boolean,
+        socketExpected: Boolean,
+        socketOpen: Boolean,
+        notifications: NotificationPermission
+    ): NativeState = NativeState(
         metaAiInstalled = dat.metaAiInstalled,
         registration = if (dat.bluetoothGranted || dat.mock) registration(dat.registration) else Registration.UNAVAILABLE,
         cameraPermission = when (dat.cameraPermission) {
@@ -26,6 +33,7 @@ object StateMapper {
             DatPermission.GRANTED -> CameraPermission.GRANTED
             DatPermission.DENIED -> CameraPermission.DENIED
         },
+        notificationPermission = notifications,
         device = dat.device?.let { device ->
             NativeDevice(
                 name = device.name.ifEmpty { null },
@@ -49,6 +57,17 @@ object StateMapper {
         capabilities = Capabilities(motion = dat.motionStarted, inputs = dat.inputsActive, speech = dat.speechStarted),
         mock = dat.mock
     )
+
+    /**
+     * `needed` is false before Android 13, where an app shows notifications with no permission. `asked` is true
+     * after the app showed the request of Android one time. Android tells no app if the shopper denied a request,
+     * so a permission that is missing after a request counts as denied.
+     */
+    fun notificationPermission(needed: Boolean, granted: Boolean, asked: Boolean): NotificationPermission = when {
+        !needed || granted -> NotificationPermission.GRANTED
+        asked -> NotificationPermission.DENIED
+        else -> NotificationPermission.UNKNOWN
+    }
 
     /** With no device, the link is `DISCONNECTED` and the four readings are null. */
     fun deviceState(dat: DatSnapshot): DeviceState {

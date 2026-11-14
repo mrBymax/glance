@@ -17,7 +17,7 @@ export type Ui = {
 const UiContext = createContext<Ui | null>(null);
 
 // The shopper tries a setup step or a start again, so the error of the last attempt goes away.
-const ATTEMPTS: ReadonlySet<PageToNative['t']> = new Set(['setup.register', 'setup.requestCamera', 'session.start']);
+const ATTEMPTS: ReadonlySet<PageToNative['t']> = new Set(['setup.register', 'setup.requestCamera', 'setup.requestNotifications', 'session.start']);
 
 export function BridgeProvider(props: { bridge: GlanceBridge; children: ReactNode }) {
   const { bridge, children } = props;
