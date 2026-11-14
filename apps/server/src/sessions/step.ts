@@ -1,4 +1,5 @@
 import { EMPTY_CART, type Profile, TIMING } from '@glance/shared';
+import { onAnswer, onCartEdit, onPromptDone, onUndo } from './answers';
 import { onRecognition } from './glance';
 import { type Turn, emit } from './turn';
 import type { Effect, RuleContext, RuleInput, SessionState, SpeakEffect } from './types';
@@ -44,6 +45,15 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
     case 'recognition':
       onRecognition(turn, input);
       break;
+    case 'prompt.done':
+      onPromptDone(turn, input);
+      break;
+    case 'intent':
+      onIntent(turn, input);
+      break;
+    case 'cart.edit':
+      onCartEdit(turn, input);
+      break;
     default:
       break;
   }
@@ -51,6 +61,20 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
   const lastSpeak = lastSpeakOf(turn.out);
   if (lastSpeak) turn.s.lastSpeak = lastSpeak;
   return { state: turn.s, effects: turn.out };
+}
+
+function onIntent(turn: Turn, input: Extract<RuleInput, { type: 'intent' }>): void {
+  switch (input.kind) {
+    case 'yes':
+    case 'no':
+      onAnswer(turn, input.kind, input.source, input.promptId);
+      break;
+    case 'undo':
+      onUndo(turn);
+      break;
+    default:
+      break;
+  }
 }
 
 function lastSpeakOf(effects: Effect[]): SpeakEffect | undefined {

@@ -91,6 +91,7 @@ flowchart LR
 | `types.ts` | `SessionState`, `RuleInput`, `Effect`, and `Line`, a spoken line before it has a text |
 | `step.ts` | `createSessionState`, `step`, and the rules that depend on time alone |
 | `glance.ts` | Recognition results: the glance prompt, the unknown line, and the aim hint |
+| `answers.ts` | The answers: yes, no, undo, the cart edit, and `accepts`, which tells if an answer counts |
 | `say.ts` | The priority, the sound, and the interrupt value of each line |
 | `view.ts` | `inView`, and `excludeList` for the recognition worker |
 | `turn.ts` | The helpers that the handlers share |
@@ -104,7 +105,13 @@ The rules that exist:
 - A product in the cart gets the prompt for "add another" (R11).
 - An unknown product gets one line for each appearance (R13). An aim hint plays at most one time each 5 seconds.
 
-No input adds a product to the cart yet. Each timing number comes from `TIMING` of `@glance/shared`.
+- A yes or a no counts only with the ID of the current prompt (R3). From the head it also needs a finished prompt, the product in view, and the head window (R4). From voice, touchpad, key, or camera it needs a finished prompt (R5). From the phone or the HUD it needs the ID alone (R6).
+- An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
+- After an add, a no removes that unit for 8 seconds, and a second yes gets one hint (R10). On the prompt for "add another", a no removes one unit (R11).
+- An undo removes the last added unit that the cart still holds (R12). A cart edit sets the quantity of a cart line from 0 to 99.
+- A yes or a no with no valid target gets one hint, if a prompt finished in the last 15 seconds (R20). Silence adds nothing (R21).
+
+Only the server computes a total, and each price comes from the catalog. Each timing number comes from `TIMING` of `@glance/shared`.
 
 ## Checks
 
