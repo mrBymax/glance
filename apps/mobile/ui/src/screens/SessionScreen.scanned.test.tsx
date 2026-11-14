@@ -54,6 +54,10 @@ it('shows each scanned product on the receipt', () => {
   expect(sheet.getByText('1,5 kg, 2 x 12.49 EUR')).toBeInTheDocument();
   expect(sheet.getByText('28.27 EUR')).toBeInTheDocument();
 });
+it('names a scanned product in full in the spot check', () => {
+  renderWithUi(<SessionScreen />, { messages: [cartMessage, eventMessage('checkout.spotcheck', { product: SCANNED[1]! })] });
+  expect(screen.getByText(`Show me the ${SCANNED[1]!.name}.`)).toBeInTheDocument();
+});
 it('takes a scanned product from the app, with each accent of the name', () => {
   const host: NativeHost = { GlanceNative: { postMessage: () => undefined } };
   const seen: NativeToPage[] = [];
