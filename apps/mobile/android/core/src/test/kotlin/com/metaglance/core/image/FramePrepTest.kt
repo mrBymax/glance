@@ -1,7 +1,9 @@
 package com.metaglance.core.image
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -76,5 +78,28 @@ class FramePrepTest {
     @Test fun `marks a frame as blurred only when face detection ran`() {
         assertFalse(FramePrep.prepare(frame(360, 640, 128), FaceResult.NotRun, false)!!.blurred)
         assertTrue(FramePrep.prepare(frame(360, 640, 128), FaceResult.Found(emptyList()), false)!!.blurred)
+    }
+
+    /** A frame with no color, in which each luma byte differs from its neighbors. */
+    private fun noiseFrame(w: Int, h: Int) = RawFrame(ByteArray(w * h * 3 / 2) { i -> (if (i < w * h) 16 + (i * 37 + i / w * 101) % 200 else 128).toByte() }, w, h, 0)
+
+    @Test fun `pixelates a found face in the output`() {
+        val f = noiseFrame(720, 1280)
+        val out = FramePrep.prepare(f, FaceResult.Found(listOf(RectPx(300, 600, 120, 120))), crop = true)!!
+        val x = ((300 - 72) * 494 / 576) + 20
+        val y = ((600 - 192) * 768 / 896) + 20
+        assertEquals(out.argb[y * out.width + x], out.argb[y * out.width + x + 1])
+        assertTrue(out.blurred)
+        assertEquals(494 to 768, out.width to out.height)
+        // The same two pixels differ with no face, so the test frame is noise at that place.
+        val plain = FramePrep.prepare(f, FaceResult.Found(emptyList()), crop = true)!!
+        assertNotEquals(plain.argb[y * plain.width + x], plain.argb[y * plain.width + x + 1])
+    }
+
+    @Test fun `leaves the output as it is for a face outside the crop`() {
+        val f = noiseFrame(720, 1280)
+        val out = FramePrep.prepare(f, FaceResult.Found(listOf(RectPx(0, 0, 50, 50))), crop = true)!!
+        val plain = FramePrep.prepare(f, FaceResult.NotRun, crop = true)!!
+        assertArrayEquals(plain.argb, out.argb)
     }
 }

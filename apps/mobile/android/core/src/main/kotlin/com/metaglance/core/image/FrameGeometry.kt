@@ -29,6 +29,26 @@ object FrameGeometry {
         return nearestEven(crop.width * scale) to nearestEven(crop.height * scale)
     }
 
+    /**
+     * Maps a box in frame pixels to the pixels of the output: the part of the box inside `crop`, scaled to
+     * `outWidth` x `outHeight`. The left and top edges are rounded down, and the right and bottom edges up,
+     * so the result never covers less than the box. Returns null for a box outside the crop.
+     */
+    fun mapBox(box: RectPx, crop: RectPx, outWidth: Int, outHeight: Int): RectPx? {
+        val left = maxOf(box.left, crop.left) - crop.left
+        val top = maxOf(box.top, crop.top) - crop.top
+        val right = minOf(box.left + box.width, crop.left + crop.width) - crop.left
+        val bottom = minOf(box.top + box.height, crop.top + crop.height) - crop.top
+        if (left >= right || top >= bottom) return null
+        val outLeft = left * outWidth / crop.width
+        val outTop = top * outHeight / crop.height
+        val outRight = ceilDiv(right * outWidth, crop.width)
+        val outBottom = ceilDiv(bottom * outHeight, crop.height)
+        return RectPx(outLeft, outTop, outRight - outLeft, outBottom - outTop)
+    }
+
+    private fun ceilDiv(value: Int, divisor: Int) = (value + divisor - 1) / divisor
+
     private fun even(value: Int) = value and 1.inv()
 
     private fun nearestEven(value: Double) = 2 * (value / 2).roundToInt()
