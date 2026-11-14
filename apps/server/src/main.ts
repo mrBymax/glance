@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { buildApp } from './app';
+import { ANSWERS_TEMPLATE_PATH, answerQuestion } from './ask/ask';
+import { createGeminiGenerate } from './ask/gemini';
+import { type AppDeps, buildApp } from './app';
 import { type CatalogIndex, indexCatalog, readCatalogFile } from './catalog/catalog';
 import { systemClock } from './clock';
 import { type Config, ConfigError, loadConfig } from './config';
@@ -37,15 +39,24 @@ function openRecognizer(config: Config, catalog: CatalogIndex): Recognizer | und
   });
 }
 
+/** The answers to spoken questions, or undefined with fake recognition. It uses the key and the model of recognition. */
+function openAsk(config: Config): AppDeps['ask'] {
+  if (config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
+  const generate = createGeminiGenerate({ apiKey: config.geminiApiKey, model: config.geminiModel });
+  const template = readFileSync(ANSWERS_TEMPLATE_PATH, 'utf8');
+  return (question, product, lang) => answerQuestion(generate, template, { question, product, lang });
+}
+
 async function main(): Promise<void> {
   const config = loadConfig(process.env, process.argv.slice(2));
   const store = await openStore(config);
   const catalog = indexCatalog(await store.listProducts());
   const recognizer = openRecognizer(config, catalog);
+  const ask = openAsk(config);
   // loadConfig has checked that the key exists when FAKE_SPEECH is off.
   const synthesize = config.fakeSpeech || config.elevenlabsApiKey === null ? undefined : createSynthesize(config.elevenlabsApiKey);
   const app = await buildApp({
-    config, clock: systemClock, store, catalog, ...(recognizer ? { recognizer } : {}), ...(synthesize ? { synthesize } : {}),
+    config, clock: systemClock, store, catalog, ...(recognizer ? { recognizer } : {}), ...(ask ? { ask } : {}), ...(synthesize ? { synthesize } : {}),
     ...(config.saveFramesDir === null ? {} : { saveFrame: createFrameSaver(config.saveFramesDir) }),
   });
   app.addHook('onClose', () => store.close());

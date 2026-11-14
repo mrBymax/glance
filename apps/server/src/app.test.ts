@@ -1,10 +1,13 @@
 import { fileURLToPath } from 'node:url';
-import { afterAll, expect, it } from 'vitest';
+import { afterAll, expect, it, vi } from 'vitest';
+import type { ServerEvent } from '@glance/shared';
 import { type AppDeps, buildApp } from './app';
+import { sessionTopic } from './bus';
 import { indexCatalog, readCatalogFile } from './catalog/catalog';
 import { systemClock } from './clock';
 import { loadConfig } from './config';
 import { MemoryStore } from './db/memory';
+import { NO_RESULT } from './recognition/result';
 
 const products = readCatalogFile(fileURLToPath(new URL('../catalog/catalog.dev.json', import.meta.url)));
 const deps = (): AppDeps => ({
@@ -46,6 +49,42 @@ it('answers a body that fails to parse with 400', async () => {
     headers: { 'content-type': 'application/json' }, payload: '{"a":' });
   expect(res.statusCode).toBe(400);
   expect(res.json()).toEqual({ error: 'bad_request' });
+});
+/** Asks one question about the oat drink, and returns the caption that follows "Listening." */
+async function askAbout(target: Awaited<ReturnType<typeof buildApp>>, lang: 'en' | 'it'): Promise<string> {
+  const session = await target.sessions.create({ lang });
+  const captions: string[] = [];
+  target.bus.subscribe(sessionTopic(session.id), (message) => {
+    const event = message as ServerEvent;
+    if (event.type === 'caption') captions.push(event.text);
+  });
+  session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'oat-drink-1l' }, still: false });
+  session.dispatch({ type: 'intent', kind: 'ask', source: 'phone' });
+  session.dispatch({ type: 'question', text: 'Does it contain nuts?' });
+  await vi.waitFor(() => expect(captions).toHaveLength(3));
+  return captions[2]!;
+}
+
+it('with fake recognition a question gets one fixed answer, and no answer service runs', async () => {
+  const ask = vi.fn<NonNullable<AppDeps['ask']>>(async () => 'From the model.');
+  const fake = await buildApp({ ...deps(), ask });
+  try {
+    expect(await askAbout(fake, 'en')).toBe('I do not have that information.');
+    expect(await askAbout(fake, 'it')).toBe('Non ho questa informazione.');
+    expect(ask).not.toHaveBeenCalled();
+  } finally {
+    await fake.close();
+  }
+});
+it('with real recognition and no answer service a question gets the failed line', async () => {
+  const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const real = await buildApp({ ...deps(), config: loadConfig({ GEMINI_API_KEY: 'test', FAKE_SPEECH: '1' }, []) });
+  try {
+    expect(await askAbout(real, 'en')).toBe('I could not answer that.');
+  } finally {
+    await real.close();
+    error.mockRestore();
+  }
 });
 it('runs each close function when the app closes', async () => {
   const other = await buildApp(deps());

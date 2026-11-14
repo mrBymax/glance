@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CreateSessionResponseSchema, type ServerToDevice, formatKioskCode } from '@glance/shared';
 import { NO_RESULT } from '../recognition/result';
 import { STREAMING } from '../sessions/harness';
-import type { SessionRuntime } from '../sessions/runtime';
+import type { RuntimeDeps, SessionRuntime } from '../sessions/runtime';
 import type { RuleInputBody } from '../sessions/types';
 import { type TestApp, type TestPhone, connectPhone, testApp, upgradeStatus } from '../testing';
 import type { FrameHandler } from './device';
@@ -14,6 +14,7 @@ const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
 const isSpeak = (m: ServerToDevice) => m.t === 'speak';
 
 let onFrame: ReturnType<typeof vi.fn<FrameHandler>>;
+let ask: ReturnType<typeof vi.fn<RuntimeDeps['ask']>>;
 let t: TestApp;
 let id: string;
 let token: string;
@@ -22,7 +23,8 @@ let phone: TestPhone;
 
 beforeEach(async () => {
   onFrame = vi.fn<FrameHandler>();
-  t = await testApp({}, { onFrame });
+  ask = vi.fn<RuntimeDeps['ask']>(async () => 'It contains gluten.');
+  t = await testApp({}, { onFrame, ask });
   const res = await fetch(`${t.base}/api/sessions`, { method: 'POST' });
   ({ sessionId: id, token } = CreateSessionResponseSchema.parse(await res.json()));
   session = (await t.app.sessions.get(id))!;
@@ -93,6 +95,26 @@ it('drops speech with a low confidence and speech that is no command', async () 
   await serverReadAll();
   expect(session.state.cart.items).toEqual([]);
 });
+it('speech that is no command is a question, after the microphone button or a double tap', async () => {
+  session.dispatch(seeOat);
+  phone.send({ t: 'speech.final', text: 'Does it contain nuts?', confidence: 0.9, locale: 'en-US' });
+  await serverReadAll();
+  expect(ask).not.toHaveBeenCalled();
+  phone.send({ t: 'intent', kind: 'ask', source: 'phone' });
+  expect(await phone.next((m) => m.t === 'speak' && m.text === 'Listening.')).toMatchObject({ interrupt: true, promptId: null });
+  phone.send({ t: 'speech.final', text: ' Does it contain nuts? ', confidence: 0.5, locale: 'en-US' });
+  expect(await phone.next((m) => m.t === 'speak' && m.text === 'It contains gluten.')).toMatchObject({ priority: 'low' });
+  expect(ask).toHaveBeenCalledTimes(1);
+  expect(ask.mock.calls[0]).toMatchObject(['Does it contain nuts?', { id: 'oat-drink-1l' }, 'en']);
+});
+it('a command word in the question window stays a command, and the window stays open', async () => {
+  session.dispatch(seeOat);
+  phone.send({ t: 'intent', kind: 'ask', source: 'phone' });
+  phone.send({ t: 'speech.final', text: 'help', confidence: 0.9, locale: 'en-US' });
+  await phone.next((m) => m.t === 'speak' && m.text.startsWith('Hold a product up to hear'));
+  expect(ask).not.toHaveBeenCalled();
+  expect(session.state.askUntil).not.toBeNull();
+});
 it('the word remove takes back the last add when no prompt is current', async () => {
   session.dispatch(seeOat);
   phone.send({ t: 'prompt.done', promptId: 'p-0001' });
@@ -122,7 +144,39 @@ it('the word pay never adds a product', async () => {
   await serverReadAll();
   expect(session.state.cart.items).toEqual([]);
 });
-it('drops kiosk.seen for a code that no kiosk has, and biometric.result', async () => {
+it('a payment above 50 EUR waits for the fingerprint result of the phone', async () => {
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
+  phone.send({ t: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
+  const kiosk = await t.app.kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
+  phone.send({ t: 'kiosk.seen', text: formatKioskCode(kiosk.code) });
+  const offered = await phone.next((m) => m.t === 'event' && m.event.type === 'checkout.offered');
+  expect(offered).toMatchObject({ event: { totalCents: 5670, needsBiometric: true } });
+  phone.send({ t: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
+  await phone.next((m) => m.t === 'biometric.request');
+  const texts = phone.messages.flatMap((m) => (m.t === 'speak' ? [m.text] : []));
+  expect(texts.at(-1)).toBe('Over fifty euros. Confirm with your fingerprint on the phone.');
+  // The mock payment of a test takes 10 ms, so a payment that started would be over now.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(session.state.checkout!.step).toBe('biometric');
+  phone.send({ t: 'biometric.result', ok: true });
+  await vi.waitFor(() => expect(session.state.phase).toBe('paid'));
+  expect(session.state.lastReceipt).toMatchObject({ totalCents: 5670 });
+});
+it('a failed fingerprint check cancels the checkout, and the cart stays', async () => {
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
+  session.dispatch({ type: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
+  const kiosk = await t.app.kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
+  phone.send({ t: 'kiosk.seen', text: formatKioskCode(kiosk.code) });
+  await phone.next((m) => m.t === 'event' && m.event.type === 'checkout.offered');
+  phone.send({ t: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
+  await phone.next((m) => m.t === 'biometric.request');
+  phone.send({ t: 'biometric.result', ok: false });
+  await phone.next((m) => m.t === 'speak' && m.text === 'Checkout cancelled. Your cart is safe.');
+  expect(session.state).toMatchObject({ phase: 'shopping', checkout: null, cart: { totalCents: 5670 } });
+});
+it('drops kiosk.seen for a code that no kiosk has, and biometric.result with no request', async () => {
   phone.send({ t: 'kiosk.seen', text: 'GL1 K3X7' });
   phone.send({ t: 'biometric.result', ok: true });
   await serverReadAll();

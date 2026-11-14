@@ -1,11 +1,12 @@
-import type { Caption, KioskRef, Lang, ServerToDevice, SessionSnapshot } from '@glance/shared';
+import type { Caption, KioskRef, Lang, Product, ServerToDevice, SessionSnapshot } from '@glance/shared';
+import { ASK_TIMEOUT_MS } from '../ask/ask';
 import { type EventBus, sessionTopic } from '../bus';
 import type { CatalogIndex } from '../catalog/catalog';
 import type { Clock } from '../clock';
 import type { SessionRecord, Store } from '../db/store';
 import { renderLine } from '../speech/render';
 import { step } from './step';
-import type { RuleInputBody, SessionState, SpeakEffect } from './types';
+import type { RuleContext, RuleInputBody, SessionState, SpeakEffect } from './types';
 import { toSnapshot } from './view';
 
 /** The phone of a session, as the runtime sees it. */
@@ -14,11 +15,15 @@ export type DeviceSink = { send(message: ServerToDevice): void; close(): void };
 export type RuntimeDeps = {
   clock: Clock;
   catalog: CatalogIndex;
+  /** The wait of the rules for the result of a still. Not set means 0, which is off. */
+  secondLookWaitMs?: number;
   store: Store;
   bus: EventBus;
   /** The address of the speech clip, or null when no clip exists. */
   clipUrl: (text: string, lang: Lang) => Promise<string | null>;
   startPayment: (session: SessionRuntime, kiosk: KioskRef, totalCents: number) => void;
+  /** Answers a question about one product. A call that fails rejects. */
+  ask: (question: string, product: Product, lang: Lang) => Promise<string>;
   /** Runs after each step, with the state from before the step. */
   afterStep: (session: SessionRuntime, before: SessionState) => void;
 };
@@ -63,7 +68,7 @@ export class SessionRuntime {
   /** Runs the rules for one input with the clock time, and then the effects in their order. */
   dispatch(input: RuleInputBody): void {
     const before = this.state;
-    const next = step(before, { ...input, now: this.deps.clock.now() }, { catalog: this.deps.catalog });
+    const next = step(before, { ...input, now: this.deps.clock.now() }, this.ruleContext());
     this.state = next.state;
 
     let changed = input.type === 'profile.set';
@@ -88,6 +93,13 @@ export class SessionRuntime {
         case 'payment.start':
           this.deps.startPayment(this, effect.kiosk, effect.totalCents);
           break;
+        case 'biometric.request':
+          // The outbox keeps the order, so the phone gets the fingerprint line first.
+          this.enqueue(async () => this.sink?.send({ t: 'biometric.request' }));
+          break;
+        case 'ask':
+          this.ask(effect.question, effect.product);
+          break;
       }
     }
 
@@ -96,7 +108,11 @@ export class SessionRuntime {
   }
 
   snapshot(): SessionSnapshot {
-    return toSnapshot(this.id, this.state, this.captions, { catalog: this.deps.catalog });
+    return toSnapshot(this.id, this.state, this.captions, this.ruleContext());
+  }
+
+  private ruleContext(): RuleContext {
+    return { catalog: this.deps.catalog, secondLookWaitMs: this.deps.secondLookWaitMs ?? 0 };
   }
 
   /** Makes `sink` the phone of the session. An older sink closes, so one phone gets each message. */
@@ -183,6 +199,22 @@ export class SessionRuntime {
       this.captions.push(caption);
       if (this.captions.length > KEPT_CAPTIONS) this.captions.shift();
       this.deps.bus.publish(sessionTopic(this.id), { type: 'caption', ...caption });
+    });
+  }
+
+  /** Gives the rules the answer, or null when the call fails or takes longer than its limit. */
+  private ask(question: string, product: Product): void {
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), ASK_TIMEOUT_MS);
+    });
+    const answer = this.deps.ask(question, product, this.state.profile.lang).catch((error) => {
+      console.error(`session ${this.id}: no answer to a question:`, error);
+      return null;
+    });
+    void Promise.race([answer, late]).then((text) => {
+      clearTimeout(timer);
+      if (!this.hasStopped) this.dispatch({ type: 'answer', text });
     });
   }
 

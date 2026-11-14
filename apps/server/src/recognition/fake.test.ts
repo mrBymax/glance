@@ -44,7 +44,7 @@ afterAll(() => rmSync(tempDir, { recursive: true, force: true }));
 async function oneSession(): Promise<SessionRuntime> {
   const registry = new SessionRegistry({
     clock: systemClock, catalog, store: new MemoryStore(products), bus: new EventBus(),
-    clipUrl: async () => null, startPayment: () => undefined, afterStep: () => undefined,
+    clipUrl: async () => null, startPayment: () => undefined, ask: async () => '', afterStep: () => undefined,
   });
   return registry.create();
 }

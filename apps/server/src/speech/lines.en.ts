@@ -1,4 +1,4 @@
-import { type Product, type Profile, localize } from '@glance/shared';
+import { type Product, type Profile, type Warning, localize } from '@glance/shared';
 import type { Line } from '../sessions/types';
 import { numberToWords, spokenPrice } from './numbers';
 import { answersWithNod, yesPhrases } from './phrases';
@@ -15,26 +15,43 @@ const AIM: Record<Extract<Line, { key: 'glance.partial' }>['aimHint'], string> =
   turn: 'Turn the front to me.',
 };
 
-function capitalize(text: string): string {
+export function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** Joins the sentences that are not empty. */
-function sentences(...parts: string[]): string {
+export function sentences(...parts: string[]): string {
   return parts.filter((part) => part !== '').join(' ');
 }
 
-function startsWithBrand(name: string, product: Product): boolean {
+export function startsWithBrand(name: string, product: Product): boolean {
   return name.toLowerCase().startsWith(product.brand.toLowerCase());
 }
 
-function nameAtStart(product: Product, profile: Profile): string {
+/** The spoken name in the language of the profile. */
+export function nameAtStart(product: Product, profile: Profile): string {
   return localize(product.spokenName, profile.lang);
 }
 
 /** A brand keeps its capital letter. Each other name starts in lower case inside a sentence. */
-function nameInside(product: Product, profile: Profile): string {
-  const name = nameAtStart(product, profile);
+export function nameInside(product: Product, profile: Profile): string {
+  return insideSentence(nameAtStart(product, profile), product);
+}
+
+/**
+ * The longest run of words that ends each name, compared with no case. Empty when the names share no last word.
+ * The words come from the first name.
+ */
+function commonEnd(names: readonly string[]): string {
+  const [first = [], ...others] = names.map((name) => name.split(' '));
+  let count = 0;
+  while (count < first.length && others.every((words) => (
+    count < words.length && words[words.length - 1 - count]!.toLowerCase() === first[first.length - 1 - count]!.toLowerCase()
+  ))) count += 1;
+  return count === 0 ? '' : first.slice(-count).join(' ');
+}
+
+function insideSentence(name: string, product: Product): string {
   return startsWithBrand(name, product) ? name : name.charAt(0).toLowerCase() + name.slice(1);
 }
 
@@ -47,6 +64,35 @@ function wordList(words: readonly string[]): string {
   return `${words.slice(0, -1).join(', ')}, and ${words.at(-1)}`;
 }
 
+/** The list of a warning has no comma before "and", as the warning on the phone has none. */
+function warningList(words: readonly string[]): string {
+  if (words.length <= 2) return words.join(' and ');
+  return `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
+}
+
+export function hasAllergenWarning(warnings: readonly Warning[]): boolean {
+  return warnings.some((warning) => warning.kind === 'allergen');
+}
+
+/**
+ * One sentence for each warning. No sentence says that a product is safe.
+ * At the detailed level an allergen warning names each allergen of the product, not only those of the profile.
+ */
+function warningText(warnings: readonly Warning[], product: Product, profile: Profile): string {
+  return sentences(...warnings.map((warning) => {
+    switch (warning.kind) {
+      case 'allergen': {
+        const own = profile.detail === 'detailed' ? product.allergens ?? [] : [];
+        return `Warning: contains ${warningList(own.length > 0 ? own : warning.allergens)}.`;
+      }
+      case 'diet':
+        return `Warning: not ${warning.diet}.`;
+      case 'allergenDataMissing':
+        return 'Allergen data is missing for this product.';
+    }
+  }));
+}
+
 function total(totalCents: number, profile: Profile): string {
   return `Total ${spokenPrice(totalCents, profile.lang, 'short')}.`;
 }
@@ -56,22 +102,25 @@ function glanceNew(line: Extract<Line, { key: 'glance.new' }>, profile: Profile)
   const { lang } = profile;
   const name = nameAtStart(product, profile);
   const hint = line.hint ? yesPhrases(profile).add : '';
+  const warning = warningText(line.warnings, product, profile);
 
   if (profile.detail === 'brief') {
-    return sentences(`${name}, ${spokenPrice(product.priceCents, lang, 'short')}.`, hint);
+    return sentences(`${name}, ${spokenPrice(product.priceCents, lang, 'short')}.`, warning, hint);
   }
   if (profile.detail === 'detailed') {
     const fullName = startsWithBrand(name, product) ? name : `${product.brand} ${nameInside(product, profile)}`;
     const pack = localize(product.spokenPackDetailed, lang);
     // A product with no allergen data gets no sentence. The voice never says that a product is safe.
-    const contains = product.allergens && product.allergens.length > 0 ? `Contains ${wordList(product.allergens)}.` : '';
-    return sentences(`${fullName}, ${pack}, ${spokenPrice(product.priceCents, lang, 'full')}.`, contains, hint);
+    // An allergen warning names each allergen of the product, so the Contains sentence would say it two times.
+    const own = hasAllergenWarning(line.warnings) ? [] : product.allergens ?? [];
+    const contains = own.length > 0 ? `Contains ${wordList(own)}.` : '';
+    return sentences(`${fullName}, ${pack}, ${spokenPrice(product.priceCents, lang, 'full')}.`, contains, warning, hint);
   }
   const pack = localize(product.spokenPack, lang);
-  return sentences(`${name}, ${pack}, ${spokenPrice(product.priceCents, lang, 'short')}.`, hint);
+  return sentences(`${name}, ${pack}, ${spokenPrice(product.priceCents, lang, 'short')}.`, warning, hint);
 }
 
-/** The table "Spoken lines" of Plan 1, with its text rules. */
+/** The English text of each line of the table "Spoken lines" of Plan 1, with its text rules. */
 export const LINES_EN: LineTemplates = {
   'session.start': () => 'Camera on. Hold a product up to hear its price.',
   'session.rest': () => 'Camera off. Your cart is safe.',
@@ -79,15 +128,26 @@ export const LINES_EN: LineTemplates = {
   'glance.inCart': (line, profile) => {
     const phrases = yesPhrases(profile);
     const count = `${capitalize(numberToWords(line.qty, profile.lang))} ${line.qty === 1 ? 'is' : 'are'} in your cart.`;
-    return sentences(`${nameAtStart(line.product, profile)}.`, count, phrases.addAnother, phrases.remove);
+    const warning = warningText(line.warnings, line.product, profile);
+    return sentences(`${nameAtStart(line.product, profile)}.`, count, warning, phrases.addAnother, phrases.remove);
   },
   'glance.unknown': () => 'I do not know this product.',
+  'glance.ambiguous': (line, profile) => {
+    const [first, second] = line.products;
+    if (!first || !second) return 'I cannot tell which product this is. Turn the front to me.';
+    const common = commonEnd(line.products.map((product) => nameAtStart(product, profile)));
+    if (common !== '') return `I cannot tell which ${insideSentence(common, first)} this is. Turn the front to me.`;
+    return `I cannot tell if this is ${nameInside(first, profile)} or ${nameInside(second, profile)}. Turn the front to me.`;
+  },
   'glance.partial': (line) => `I can see part of it. ${AIM[line.aimHint]}`,
   'glance.skipped': () => 'Skipped.',
-  'cart.added': (line, profile) => sentences(
-    `Added ${nameInside(line.product, profile)}.`,
-    profile.detail === 'brief' ? '' : total(line.totalCents, profile),
-  ),
+  'cart.added': (line, profile) => {
+    const added = `Added ${nameInside(line.product, profile)}.`;
+    if (line.budgetCents === null) return sentences(added, profile.detail === 'brief' ? '' : total(line.totalCents, profile));
+    // The brief level also names the total here, because the budget sentence compares with it.
+    const budget = `That is over your budget of ${spokenPrice(line.budgetCents, profile.lang, 'full')}.`;
+    return sentences(added, total(line.totalCents, profile), budget);
+  },
   'cart.removed': (line, profile) => sentences(
     `Removed ${nameInside(line.product, profile)}.`,
     profile.detail === 'brief' ? '' : total(line.totalCents, profile),
@@ -107,6 +167,9 @@ export const LINES_EN: LineTemplates = {
   'checkout.paid': (line, profile) =>
     `Paid. ${capitalize(spokenPrice(line.totalCents, profile.lang, 'full'))}. Your receipt is on your phone. Camera off.`,
   'checkout.failed': () => 'Payment failed. Nothing was charged. Look at the code to try again.',
+  'checkout.biometric': () => 'Over fifty euros. Confirm with your fingerprint on the phone.',
+  'spotcheck.ask': (line, profile) => `Quick check. Show me the ${nameInside(line.product, profile)}.`,
+  'spotcheck.thanks': () => 'Thank you.',
   'info.total': (line, profile) => `${capitalize(itemCount(line.itemCount, profile))}. ${total(line.totalCents, profile)}`,
   'info.cart': (line, profile) => sentences(
     ...line.items.map((item) => `${nameAtStart(item.product, profile)}, ${numberToWords(item.qty, profile.lang)}.`),
@@ -126,4 +189,8 @@ export const LINES_EN: LineTemplates = {
   'device.battery': (line, profile) => `Glasses battery at ${numberToWords(line.percent, profile.lang)} percent.`,
   'net.backOnline': () => 'Back online.',
   'recognition.slow': () => 'Recognition is slow right now.',
+  'ask.listening': () => 'Listening.',
+  'ask.noProduct': () => 'Hold a product up, then ask.',
+  'ask.failed': () => 'I could not answer that.',
+  'ask.answer': (line) => line.text,
 };

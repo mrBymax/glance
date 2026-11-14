@@ -11,6 +11,7 @@ export type Line =
   | { key: 'glance.new'; product: Product; hint: boolean; warnings: Warning[] }
   | { key: 'glance.inCart'; product: Product; qty: number; warnings: Warning[] }
   | { key: 'glance.unknown' } | { key: 'glance.skipped' }
+  | { key: 'glance.ambiguous'; products: Product[] }
   | { key: 'glance.partial'; aimHint: Exclude<AimHint, 'none'> }
   | { key: 'cart.added'; product: Product; totalCents: number; budgetCents: number | null }
   | { key: 'cart.removed'; product: Product; totalCents: number }
@@ -19,19 +20,31 @@ export type Line =
   | { key: 'checkout.offer'; kiosk: KioskRef; itemCount: number; totalCents: number }
   | { key: 'checkout.empty' } | { key: 'checkout.busy' } | { key: 'checkout.cancelled' } | { key: 'checkout.failed' }
   | { key: 'checkout.paid'; totalCents: number }
+  | { key: 'checkout.biometric' }
+  | { key: 'spotcheck.ask'; product: Product } | { key: 'spotcheck.thanks' }
   | { key: 'info.total'; itemCount: number; totalCents: number }
   | { key: 'info.cart'; items: { product: Product; qty: number }[]; more: boolean; totalCents: number }
   | { key: 'info.help' }
   | { key: 'device.cameraOff' } | { key: 'device.regularCheckout' } | { key: 'device.paused' }
   | { key: 'device.battery'; percent: 20 | 10 }
-  | { key: 'net.backOnline' } | { key: 'recognition.slow' };
+  | { key: 'net.backOnline' } | { key: 'recognition.slow' }
+  | { key: 'ask.listening' } | { key: 'ask.noProduct' } | { key: 'ask.failed' } | { key: 'ask.answer'; text: string };
 
 /** doneAt is the time when the phone reported the end of the clip, or null while the clip plays. */
 export type PromptState =
   | { id: string; kind: 'product'; mode: 'new' | 'inCart'; productId: string; doneAt: number | null }
   | { id: string; kind: 'pay'; kioskId: string; doneAt: number | null };
 
-export type CheckoutState = { kiosk: KioskRef; step: 'offered' | 'suspended' | 'paying'; suspendedBy: string | null };
+/**
+ * spotcheck: the kiosk asked for a spot check, and the voice waits for one product of the cart. No pay prompt exists yet.
+ * biometric: the shopper said yes to a total above the limit, and the phone checks the fingerprint.
+ * suspended with suspendedBy null: the next report of the code gives the pay prompt.
+ */
+export type CheckoutState = {
+  kiosk: KioskRef; step: 'spotcheck' | 'offered' | 'suspended' | 'biometric' | 'paying'; suspendedBy: string | null;
+  /** The product that the shopper must show in the step spotcheck. null in each other step. */
+  spotProductId: string | null;
+};
 
 /** The rule numbers in the comments are those of spec section 6.2. Each time is a clock value in milliseconds. */
 export type SessionState = {
@@ -60,11 +73,21 @@ export type SessionState = {
   /** R13. */
   unknownAt: number | null;
   aimHintAt: number | null;
+  /** The sorted candidate IDs of the last ambiguous result, with one space between two IDs. */
+  ambiguousKey: string | null;
+  ambiguousAt: number | null;
+  /**
+   * The look-alike line that waits for the result of a still: the candidate IDs and the time of their result.
+   * null when no line waits. Only a session with a second look wait holds a line.
+   */
+  heldAmbiguous: { products: string[]; since: number } | null;
   /** said: the voice gave the "busy" or "empty" line for this appearance of the code. */
   kioskSeen: { kioskId: string; at: number; said: boolean } | null;
   /** R18. */
   mutedKioskId: string | null;
   checkout: CheckoutState | null;
+  /** The end of the question window, or null while the server waits for no question. */
+  askUntil: number | null;
   /** The last product or kiosk in view (R22). */
   lastTargetAt: number;
   /** For the repeat intent. */
@@ -88,7 +111,13 @@ export type RuleInputBody =
   /** 3 recognition calls in a row failed. */
   | { type: 'recognition.slow' }
   /** The device socket of the session opened. */
-  | { type: 'socket.open' };
+  | { type: 'socket.open' }
+  /** The result of the fingerprint check on the phone. */
+  | { type: 'biometric.result'; ok: boolean }
+  /** Speech of the shopper that is no command. */
+  | { type: 'question'; text: string }
+  /** The answer to the last `ask` effect, or null when no answer came. */
+  | { type: 'answer'; text: string | null };
 export type RuleInput = RuleInputBody & { now: number };
 
 export type SpeakEffect = {
@@ -100,6 +129,11 @@ export type Effect =
   | SpeakEffect
   | { type: 'session.rest' }
   | { type: 'session.end' }
-  | { type: 'payment.start'; kiosk: KioskRef; totalCents: number };
+  | { type: 'payment.start'; kiosk: KioskRef; totalCents: number }
+  /** The runtime asks the phone for a fingerprint check. The phone answers with `biometric.result`. */
+  | { type: 'biometric.request' }
+  /** The runtime asks the model and answers with an `answer` input. */
+  | { type: 'ask'; question: string; product: Product };
 
-export type RuleContext = { catalog: CatalogIndex };
+/** secondLookWaitMs: how long the look-alike line waits for the result of a still. 0 means that it does not wait. */
+export type RuleContext = { catalog: CatalogIndex; secondLookWaitMs: number };

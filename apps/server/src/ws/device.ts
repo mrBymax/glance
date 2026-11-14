@@ -185,8 +185,8 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
       case 'kiosk.seen':
         deps.onKioskSeen(session, message.text);
         return;
-      // No fingerprint check exists yet.
       case 'biometric.result':
+        session.dispatch({ type: 'biometric.result', ok: message.ok });
         return;
     }
   };
@@ -195,7 +195,12 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
     app.log.info(`speech.final text=${JSON.stringify(message.text)} confidence=${message.confidence}`);
     if (message.confidence < MIN_SPEECH_CONFIDENCE) return;
     const command = parseVoiceCommand(message.text);
-    if (!command) return;
+    if (!command) {
+      // The rules drop a question outside the question window.
+      const text = message.text.trim();
+      if (text !== '') session.dispatch({ type: 'question', text });
+      return;
+    }
 
     const prompt = session.state.prompt;
     // "add" must never pay, and "pay" must never add. With no prompt, "remove" can still take back the last add (R10).

@@ -1,5 +1,6 @@
-import { type DeviceState, type IntentKind, TIMING } from '@glance/shared';
-import { closeCheckout, isPaying } from './checkout';
+import { type DeviceState, type IntentKind, TIMING, localize } from '@glance/shared';
+import { openAskWindow } from './ask';
+import { closeCheckout, isConfirmed, isPaying } from './checkout';
 import { say } from './say';
 import { type Turn, emit, emitSessionState, itemCount, speak } from './turn';
 import type { RuleInput } from './types';
@@ -41,7 +42,8 @@ export function onDeviceState(turn: Turn, input: Extract<RuleInput, { type: 'dev
   } else if (stream === 'stopped' && s.cameraOn) {
     s.cameraOn = false;
     // R24: with no camera the shopper cannot look at the code. A payment that runs still ends by itself.
-    if (s.checkout && !isPaying(s)) {
+    // A shopper who confirms with the fingerprint looks at the phone, so that checkout stays, and R19 limits its time.
+    if (s.checkout && !isConfirmed(s)) {
       closeCheckout(s);
       emit(turn, { type: 'checkout.cancelled' });
     }
@@ -79,10 +81,22 @@ export function onSocketOpen(turn: Turn): void {
 }
 
 export function onProfileSet(turn: Turn, input: Extract<RuleInput, { type: 'profile.set' }>): void {
-  turn.s.profile = { ...turn.s.profile, ...input.patch };
+  const { s, ctx } = turn;
+  const before = s.profile.lang;
+  s.profile = { ...s.profile, ...input.patch };
+  const { lang } = s.profile;
+  if (lang === before || s.cart.items.length === 0) return;
+
+  // A cart line holds its name as text, so a new language writes each name again. The total stays.
+  const items = s.cart.items.map((item) => {
+    const product = ctx.catalog.get(item.productId);
+    return product ? { ...item, name: localize(product.name, lang) } : item;
+  });
+  s.cart = { ...s.cart, items };
+  emit(turn, { type: 'cart.updated', cart: s.cart, change: null });
 }
 
-/** The intents that are no answer to a prompt. The intent `ask` has no effect yet. */
+/** The intents that are no answer to a prompt. */
 export function onGeneralIntent(turn: Turn, kind: Exclude<IntentKind, 'yes' | 'no' | 'undo'>): void {
   const { s } = turn;
   switch (kind) {
@@ -107,7 +121,9 @@ export function onGeneralIntent(turn: Turn, kind: Exclude<IntentKind, 'yes' | 'n
     case 'help':
       speak(turn, say({ key: 'info.help' }));
       return;
+    // The microphone button of the page. A current prompt stays current.
     case 'ask':
+      openAskWindow(turn);
       return;
   }
 }

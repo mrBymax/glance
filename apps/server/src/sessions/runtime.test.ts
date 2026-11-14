@@ -34,6 +34,7 @@ let store: MemoryStore;
 let clipDelays: number[];
 let startPayment: ReturnType<typeof vi.fn<RuntimeDeps['startPayment']>>;
 let afterStep: ReturnType<typeof vi.fn<RuntimeDeps['afterStep']>>;
+let ask: ReturnType<typeof vi.fn<RuntimeDeps['ask']>>;
 let deps: RuntimeDeps;
 let registry: SessionRegistry;
 let session: SessionRuntime;
@@ -47,6 +48,7 @@ beforeEach(async () => {
   clipDelays = [];
   startPayment = vi.fn<RuntimeDeps['startPayment']>();
   afterStep = vi.fn<RuntimeDeps['afterStep']>();
+  ask = vi.fn<RuntimeDeps['ask']>(async () => 'The data lists gluten only.');
   deps = {
     clock: { now: () => time },
     catalog: indexCatalog(products),
@@ -59,6 +61,7 @@ beforeEach(async () => {
       return null;
     },
     startPayment,
+    ask,
     afterStep,
   };
   registry = new SessionRegistry(deps);
@@ -180,6 +183,72 @@ it('starts the payment and calls afterStep', () => {
   expect(startPayment).toHaveBeenCalledWith(session, KIOSK, 189);
   expect(afterStep).toHaveBeenCalled();
   expect(afterStep.mock.calls[0]![1].cart.items).toEqual([]);
+});
+it('asks the phone for the fingerprint after the line, and starts the payment after the result', async () => {
+  session.attach(sink);
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
+  session.dispatch({ type: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
+  session.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
+  await session.settled();
+  expect(sink.sent.slice(-2)).toMatchObject([
+    { t: 'speak', text: 'Over fifty euros. Confirm with your fingerprint on the phone.', promptId: null },
+    { t: 'biometric.request' },
+  ]);
+  expect(startPayment).not.toHaveBeenCalled();
+  session.dispatch({ type: 'biometric.result', ok: true });
+  expect(startPayment).toHaveBeenCalledWith(session, KIOSK, 5670);
+});
+const askOat = (): void => {
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'ask', source: 'phone' });
+  session.dispatch({ type: 'question', text: 'Does it contain nuts?' });
+};
+const spoken = (): string[] => sink.sent.flatMap((m) => (m.t === 'speak' ? [m.text] : []));
+
+it('asks about the product in the language of the profile, and speaks the answer', async () => {
+  session.attach(sink);
+  askOat();
+  expect(ask).toHaveBeenCalledWith('Does it contain nuts?', deps.catalog.get('oat-drink-1l'), 'en');
+  await vi.waitFor(() => expect(spoken()).toContain('The data lists gluten only.'));
+  expect(sink.sent.at(-1)).toMatchObject({ t: 'speak', priority: 'low', interrupt: false, promptId: null });
+});
+it('says that it could not answer when the call fails', async () => {
+  ask.mockRejectedValueOnce(new Error('no service'));
+  const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  session.attach(sink);
+  askOat();
+  await vi.waitFor(() => expect(spoken()).toContain('I could not answer that.'));
+  expect(error).toHaveBeenCalledTimes(1);
+  error.mockRestore();
+});
+it('says that it could not answer when the call takes more than 4 seconds, and drops the late answer', async () => {
+  vi.useFakeTimers();
+  let finish: (text: string) => void = () => undefined;
+  ask.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  session.attach(sink);
+  askOat();
+  await vi.advanceTimersByTimeAsync(3999);
+  expect(spoken()).not.toContain('I could not answer that.');
+  await vi.advanceTimersByTimeAsync(1);
+  await session.settled();
+  expect(spoken()).toContain('I could not answer that.');
+  finish('Late.');
+  await vi.advanceTimersByTimeAsync(0);
+  await session.settled();
+  expect(spoken()).not.toContain('Late.');
+});
+it('drops an answer that arrives after the session stopped', async () => {
+  let finish: (text: string) => void = () => undefined;
+  ask.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  session.attach(sink);
+  askOat();
+  session.stop();
+  finish('Late.');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await session.settled();
+  expect(spoken()).not.toContain('Late.');
 });
 it('sends a tick to each live session each second', async () => {
   vi.useFakeTimers();

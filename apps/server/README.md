@@ -21,6 +21,9 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `agents/recognition.md` (repository root) | The instruction for the recognition model, with the placeholder `{{catalog}}`. |
 | `fixtures/fake-script.json` | The default script of fake recognition. |
 | `scripts/check-model.ts` | `npm run model:check`: a check of the model ID with the real service. |
+| `src/ask/` | The answer to a spoken question about one product. See "Questions about a product". |
+| `agents/answers.md` (repository root) | The instruction for the model that answers a question. |
+| `scripts/check-ask.ts` | `npm run ask:check`: one question to the real service. See "Checks". |
 | `scripts/replay.ts` | `npm run replay`: the accuracy of the real service on a folder of frames. See "Replay a test set". |
 | `scripts/smoke.ts` | `npm run smoke`: a check of a running server through its REST paths, its device socket, and its events stream. See "Checks". |
 | `src/sessions/` | The cart rules as the pure function `step`, the session runtime, and the registry. See "Rules" and "Session runtime". |
@@ -30,8 +33,6 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/http/` | The session paths, the kiosk paths, the speech path, the demo path, the events streams, and the token check. See "REST paths". |
 | `src/ws/device.ts` | The socket of the phone. See "Device socket". |
 | `src/testing.ts` | Test helpers: an app on a free port, a reader for an events stream, and a phone on the device socket. |
-
-Parts that do not exist yet: the spot check and the fingerprint check.
 
 ## Run it
 
@@ -77,15 +78,16 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `FAKE_SPEECH` | off | `1` means on. |
 | `ELEVENLABS_API_KEY` | not set | Needed when `FAKE_SPEECH` is off. |
 | `ELEVENLABS_VOICE_EN` | not set | Needed when `FAKE_SPEECH` is off. |
-| `ELEVENLABS_VOICE_IT` | not set | The voice for Italian. |
+| `ELEVENLABS_VOICE_IT` | not set | The voice for Italian lines. With no value, they get the English voice. |
 | `SPEECH_CACHE_DIR` | `.cache/speech` | The folder for speech clips. |
 | `SAVE_FRAMES` | not set | A directory for frames. When it is set, the server writes each frame there. See "Stored frames". Keep it not set for the demo and on the deployed server. |
 | `PAYMENT_DELAY_MS` | `1500` | The length of the mock payment. |
+| `SECOND_LOOK_WAIT_MS` | `0` | How long the look-alike line waits for the result of a still, in milliseconds, from 0 to 10000. `0` means off. See "Sharp second look". |
 | `DEMO_KEY` | not set | The key of `GET /api/demo/latest`. With no key, that path answers 404. |
 
 - An empty value counts as not set.
 - The flag `--fake` turns both fake switches on. A variable that is set wins over the flag.
-- Each path is relative to the working directory, which is `apps/server`. The server also reads `../../agents/recognition.md` from there when recognition is real.
+- Each path is relative to the working directory, which is `apps/server`. The server also reads `../../agents/recognition.md` and `../../agents/answers.md` from there when recognition is real.
 - With a missing key the server prints `config: <message>` and exits with code 1. The message names the variable and the switch that removes the need.
 - With `MONGODB_URI` the products come from the database, and `CATALOG_PATH` has no effect. If the database holds no product, the server prints `products is empty. Run npm run catalog:seed.` and exits with code 1. See "Catalog" for the seed.
 
@@ -96,6 +98,7 @@ Two switches let the other apps work with no key. `npm run dev:fake` turns both 
 `FAKE_RECOGNITION`:
 
 - The server makes no Gemini call and does not read `GEMINI_API_KEY`.
+- A question about a product gets the answer "I do not have that information.", or "Non ho questa informazione." for the profile language `it`.
 - One script player runs for each session. It starts when the phone opens the device socket, or when the first client opens the events stream of the session, whichever comes first.
 - Each 500 ms the player gives the rules the result that the script holds for the time since its start. Outside each step the result is `none`.
 - A session that starts from the events stream, with no phone, first gets the state of glasses that stream. A browser client then gets the "Camera on" caption. A phone that opens its socket to this session later hears "Back online.", because the session already has a device state.
@@ -134,6 +137,7 @@ curl -s -X POST http://localhost:8080/api/sessions -H "content-type: application
 curl -N "http://localhost:8080/api/sessions/<sessionId>/events?token=<token>"
 # after 3 seconds: glance.pending for the oat drink. Answer it with its promptId:
 curl -s -X POST "http://localhost:8080/api/sessions/<sessionId>/intents?token=<token>" -H "content-type: application/json" -d '{"kind":"yes","source":"phone","promptId":"<promptId>"}'
+# at second 33: glance.ambiguous for the two oat drinks.
 # at second 40: checkout.offered. The same call with its promptId gives checkout.paid.
 ```
 
@@ -288,7 +292,7 @@ sequenceDiagram
 - A second yes while the payment runs has no effect, so one checkout makes one order.
 - The store keeps each kiosk. After a restart of the server, no session holds a kiosk. A session that was in a checkout loads with no checkout, and its shopper starts again at the code.
 - If the server stops while a payment waits, that payment fails when the session loads again. No order exists for it.
-- The `spotCheck` value of a kiosk is stored and has no effect yet.
+- A kiosk that registered with `spotCheck: true` asks for one product before the pay prompt. See "Spot check".
 
 ## Catalog
 
@@ -334,6 +338,7 @@ npm run catalog:seed --workspace @glance/server -- catalog/catalog.dev.json --no
 # seed: no MONGODB_URI, products not stored
 # seed: --no-clips is set, no clip made
 # seed: 4 products, 0 clips, 0 failed
+npm run catalog:seed --workspace @glance/server -- catalog/catalog.json --lang it      # also the Italian clips
 ```
 
 `catalog:seed` reads `apps/server/.env`. It does these steps:
@@ -345,8 +350,9 @@ npm run catalog:seed --workspace @glance/server -- catalog/catalog.dev.json --no
 
 The clips:
 
-- `seedLines` in `src/speech/seed.ts` lists the texts: 3 for each product (the glance line with and with no hint, and the "in your cart" line) and 27 lines that have no product. That is 39 texts for the dev catalog and 63 for 12 products.
-- The texts are in English, for the default profile. A line with a total, the pay prompt, and each line for another input than the nod get their clips during the shop.
+- `seedLines` in `src/speech/seed.ts` lists the texts: 3 for each product (the glance line with and with no hint, and the "in your cart" line) and 31 lines that have no product. That is 43 texts for the dev catalog and 67 for 12 products.
+- With `--lang it`, the check runs with `--lang it` and stops the seed when a product has no Italian text. Then the seed makes the English clips and the same number of Italian clips, with the voice `ELEVENLABS_VOICE_IT`. The dev catalog fails that check: only the oat drink has Italian texts.
+- With no `--lang`, the texts are in English, for the default profile. A line with a total, the pay prompt, and each line for another input than the nod get their clips during the shop.
 - Each text with no clip in the cache is one paid ElevenLabs call. Before the calls, the command prints the number of lines and characters. A second run makes no call for the clips that exist.
 - A clip belongs to one voice. A new `ELEVENLABS_VOICE_EN` makes each clip again.
 - The seed needs no Gemini key. With `--no-clips` it needs no ElevenLabs key.
@@ -360,19 +366,21 @@ flowchart LR
   input["RuleInput with now"] --> step
   state["SessionState"] --> step
   step --> next["new SessionState"]
-  step --> effects["Effect list: event, speak, session.rest, session.end, payment.start"]
+  step --> effects["Effect list: event, speak, session.rest, session.end, payment.start, biometric.request, ask"]
 ```
 
 | File in `src/sessions` | Content |
 |---|---|
 | `types.ts` | `SessionState`, `RuleInput`, `Effect`, and `Line`, a spoken line before it has a text |
 | `step.ts` | `createSessionState`, `step`, and the rules that depend on time alone |
-| `glance.ts` | Recognition results: the glance prompt, the unknown line, and the aim hint |
+| `glance.ts` | Recognition results: the glance prompt, the unknown line, the look-alike answer, and the aim hint |
 | `answers.ts` | The answers: yes, no, undo, the cart edit, and `accepts`, which tells if an answer counts |
 | `checkout.ts` | The kiosk code, the pay prompt, and the result of the payment |
-| `general.ts` | The device state, the profile patch, and the intents stop, repeat, total, cart, and help |
+| `general.ts` | The device state, the profile patch, and the intents stop, repeat, total, cart, help, and ask |
+| `ask.ts` | The question window, the product that a question is about, and the answer line |
 | `say.ts` | The priority, the sound, and the interrupt value of each line |
 | `view.ts` | `inView`, `excludeList` for the recognition worker, and `toSnapshot` for a client that connects |
+| `warnings.ts` | `warningsFor`: the allergen and diet warnings of a product for one profile |
 | `turn.ts` | The helpers that the handlers share |
 | `harness.ts` | A test helper that plays inputs with a clock of its own |
 | `runtime.ts` | `SessionRuntime`: one session in the process. It runs `step` and then the effects |
@@ -385,12 +393,16 @@ The rules that exist:
 - Results inside the view time belong to one appearance. A product that comes back after it left the view gets a new prompt.
 - A product prompt ends when its product left the view for 15 seconds (R5).
 - A product in the cart gets the prompt for "add another" (R11).
+- A glance prompt carries the warnings of its product for the profile of the shopper. See "Allergen guard".
 - An unknown product gets one line for each appearance (R13). An aim hint plays at most one time each 5 seconds.
+- An `ambiguous` result gets the look-alike answer, and never a prompt. See "Look-alike products".
 - A yes or a no counts only with the ID of the current prompt (R3). From the head it also needs a finished prompt, the product in view, and the head window (R4). From voice, touchpad, key, or camera it needs a finished prompt (R5). From the phone or the HUD it needs the ID alone (R6).
 - An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
 - After an add, a no removes that unit for 8 seconds, and a second yes gets one hint (R10). On the prompt for "add another", a no removes one unit (R11).
 - An undo removes the last added unit that the cart still holds (R12). A cart edit sets the quantity of a cart line from 0 to 99.
+- An add that crosses the budget of the profile warns one time. See "Budget guard".
 - A yes or a no with no valid target gets one hint, if a prompt finished in the last 15 seconds (R20). Silence adds nothing (R21).
+- A double tap with no current prompt opens the question window in place of that hint. See "Questions about a product".
 - A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code. With its line, a busy kiosk also gives the event `error` with the code `kiosk.busy`.
 - A yes pays only as an answer to the pay prompt (R16). The effect `payment.start` asks the runtime for the payment, and the input `payment.result` brings its result.
 - A product held up during a checkout suspends it. The pay prompt returns with the new total when the product has left the view and the code is in view (R17).
@@ -399,6 +411,141 @@ The rules that exist:
 - A cart change during a pay prompt gives a new pay prompt with the new total. The old prompt cannot pay.
 - A checkout needs items in the cart. When the cart gets empty, the checkout ends, also while a product suspends it. So an empty cart never gets a pay prompt.
 - While the payment runs, no answer, no undo, and no cart edit has an effect.
+- A total above 50 EUR needs a fingerprint check on the phone before the payment. See "Fingerprint above 50 EUR".
+
+### Allergen guard
+
+`warningsFor(product, profile)` in `src/sessions/warnings.ts` compares a product with the allergens and the diets of the profile.
+
+| Profile | Product | Warning |
+|---|---|---|
+| Lists allergens | Holds one or more of them | `allergen`, with those allergens in the order of the profile |
+| Lists allergens | `allergens: null` | `allergenDataMissing` |
+| `vegan` | `vegan: false` | `diet` with `vegan` |
+| `vegetarian`, and no vegan warning | `vegetarian: false` | `diet` with `vegetarian` |
+| `vegan` or `vegetarian` | `null` for that diet | `allergenDataMissing`, because the contract has no warning for missing diet data |
+
+- The order of the list is: the allergen warning, the diet warning, the missing data warning. Each kind is in the list one time at most.
+- An empty list means that the guard found no match. The guard has no value and no line for "safe".
+- The event `glance.pending`, the lines `glance.new` and `glance.inCart`, and the prompt of the snapshot carry the list.
+- A glance line with a warning has the sound `warning`.
+- A profile patch does not change a prompt that is already spoken. The snapshot computes the list with the profile of that moment.
+
+### Look-alike products
+
+An `ambiguous` result names two or more candidates. The model cannot tell which of them the frame shows.
+
+- If the product of the current prompt is one of the candidates, the prompt ends with `glance.cleared`. The shopper cannot add a product that the model is no longer sure of.
+- If the current prompt is for another product, and that product is in view, the result has no effect.
+- In each other case the event `glance.ambiguous` carries the candidates as product references, and the voice speaks the line `glance.ambiguous`. The line has the priority `normal`, no sound, and no interrupt. It is no prompt, so a yes adds nothing.
+- One appearance gets one line. Results with the same candidates, each less than 3 seconds after the one before, are one appearance. The order of the candidates does not count.
+- A new product prompt ends the appearance. If the model then gives the same `ambiguous` result again, the prompt ends and the line plays again.
+- The line names the words that end each spoken name: "I cannot tell which oat drink this is. Turn the front to me." Names with no common last word give "I cannot tell if this is oat drink or rye bread. Turn the front to me.", with the first two candidates.
+- The line and the event say no price.
+- The default script of fake mode has such a result at second 33.
+
+### Sharp second look
+
+A stream frame is small and compressed. For look-alike products the phone can take a still photo with more pixels, and the model reads that still at the default media resolution. The contract has no message that asks for a still, so the event `glance.ambiguous` is the signal for the phone. `SECOND_LOOK_WAIT_MS` tells the server to wait for the result of the still before it speaks the look-alike line.
+
+```mermaid
+sequenceDiagram
+  participant Phone
+  participant Server
+  participant Gemini
+  Phone->>Server: frame
+  Server->>Gemini: frame
+  Gemini-->>Server: ambiguous, two candidates
+  Server-->>Phone: event glance.ambiguous
+  Note over Server: the look-alike line waits, SECOND_LOOK_WAIT_MS
+  Note over Phone: takes a still
+  Phone->>Server: frame with kind still
+  Server->>Gemini: still, default media resolution
+  alt the still names one product
+    Gemini-->>Server: identified
+    Server-->>Phone: event glance.pending, speak the glance line
+  else each other result, or no result in time
+    Server-->>Phone: speak "I cannot tell which oat drink this is. Turn the front to me."
+  end
+```
+
+- With `SECOND_LOOK_WAIT_MS=0`, which is the default, the look-alike line plays at once, and the result of a still counts as the result of a stream frame.
+- With a wait, an `ambiguous` result of a stream frame gives the event `glance.ambiguous` at once. The line waits in `SessionState.heldAmbiguous`.
+- An `identified` result drops the line that waits, for a still and for a stream frame. The product gets its usual prompt (R1).
+- Each other result of a still speaks the line at once: `ambiguous`, `unknown`, `unsure`, `none`, and a product ID that the catalog does not hold. That result has no other effect, so no second line and no second event follows.
+- With no result of a still, the line plays when the wait is over. The server checks the time with each input and with each tick, so the line can be up to one tick late.
+- A sure still that comes after the line still gives the usual prompt. A still that is not sure, with no line that waits, has no effect.
+- Results with the same candidates inside the view time are one appearance: one event, and one line that waits. Other candidates give a new event, and their line waits from the time of their result.
+- A session that stops, rests, or waits for a payment drops the line.
+- The worker keeps a still in its own slot, so a stream frame does not replace a still that waits for its call.
+- Set `SECOND_LOOK_WAIT_MS=2500` only when the phone sends stills. With no still, each look-alike line is late by the wait. One test took about 1 second for the capture (spec section 11.1). The recognition call of the still follows, and a call can take 4 seconds at most.
+- In fake mode the server drops each frame, also a still. With a wait, the look-alike line of the script plays after the wait.
+
+### Questions about a product
+
+The shopper asks a question about one product, and a text call of the model answers it from the catalog data of that product. The rules are in `src/sessions/ask.ts`, and the call is in `src/ask`.
+
+```mermaid
+sequenceDiagram
+  participant Phone
+  participant Socket as Device socket
+  participant Runtime as SessionRuntime
+  participant Rules as step
+  participant Gemini
+  Phone->>Socket: intent ask, or a double tap with no current prompt
+  Socket->>Runtime: dispatch(intent)
+  Runtime->>Rules: step
+  Rules-->>Runtime: askUntil is now plus 10 seconds, speak "Listening."
+  Runtime->>Socket: speak "Listening."
+  Phone->>Socket: speech.final that is no command
+  Socket->>Runtime: dispatch(question)
+  Runtime->>Rules: step
+  Rules-->>Runtime: effect ask with the question and the product
+  Runtime->>Gemini: generateContent with agents/answers.md, the question, and the data of the product
+  Gemini-->>Runtime: text
+  Runtime->>Rules: step with the input answer
+  Rules-->>Runtime: speak with the answer
+  Runtime->>Socket: speak with the answer
+```
+
+- The question window opens for 10 seconds (`ASK_WINDOW_MS`) with the line "Listening." Two inputs open it: the intent `ask` from each source, and a yes from the touchpad while no prompt is current.
+- The intent `ask` needs no prompt ID, and a current prompt stays current. The microphone button of the phone UI sends it.
+- A double tap still answers a current prompt. After an add, the first double tap gets the hint of R10, and a later one opens the window.
+- The device socket turns a `speech.final` that is no command, with a confidence of 0.5 or more, into the input `question`. A command word stays a command, also inside the window.
+- A question outside the window has no effect. A question inside it closes the window.
+- The question is about the product of the current prompt. With no product prompt it is about the product in view that was seen last. With no product in view it is about the product of the last add. With no such product the voice says "Hold a product up, then ask."
+- The runtime gives the call 4 seconds (`ASK_TIMEOUT_MS`). An answer gets the line `ask.answer` with its text, at the priority `low`. A failed or late call gets "I could not answer that."
+- The request names the language of the profile, the question, and one product as JSON: `name`, `brand`, `packSize`, `price`, `allergens`, `vegan`, and `vegetarian`. It holds no other product and no image.
+- `agents/answers.md` tells the model to answer only from that data, to say "I do not have that information." when the data does not hold the answer, and never to say that a product is safe.
+- `answerQuestion` cuts the answer at a sentence end to 200 characters or fewer.
+- The call uses `GEMINI_API_KEY` and `GEMINI_MODEL`. It makes one attempt and sets no response schema.
+- With real speech, each new answer text is one ElevenLabs call.
+- A browser client has no microphone. Its question window closes after 10 seconds with no question.
+
+### Budget guard
+
+The profile holds `budgetCents`, or `null` for no budget. The rule is in `changeQty` of `src/sessions/answers.ts`.
+
+- An add crosses the budget when the total before it is at most the budget and the total after it is more.
+- For that add, the event `budget.exceeded` follows `cart.updated`. It holds the budget and the new total.
+- The line of that add is `cart.added` with `budgetCents`, and its sound is `warning` in place of `added`.
+- Each other add has `budgetCents: null`, also when the total is already over the budget. So the warning plays one time.
+- The rule holds for a yes and for a higher quantity in a cart edit.
+- When a removal brings the total back to the budget or under it, the next add that crosses the budget warns again.
+- A profile patch that lowers the budget under the total gives no event. The phone UI compares the two numbers by itself.
+
+### Fingerprint above 50 EUR
+
+A nod is consent, not authentication. So a total above `BIOMETRIC_ABOVE_CENTS` (5000 cents) needs a fingerprint check on the phone. The rules are in `src/sessions/checkout.ts`.
+
+- `needsBiometric` in `checkout.offered` and in the pay prompt of the snapshot is true for a total above 50 EUR. A total of exactly 50 EUR needs no fingerprint.
+- An accepted yes on such a pay prompt starts no payment. The checkout gets the step `biometric`, and the pay prompt ends. The voice says "Over fifty euros. Confirm with your fingerprint on the phone." Then the phone gets the message `biometric.request`.
+- The phone answers with `biometric.result`. With `ok: true` the payment starts. With `ok: false` the checkout ends as for a no: the line is "Checkout cancelled. Your cart is safe.", and the kiosk is muted until its code has left the view.
+- A `biometric.result` counts only in the step `biometric`. Each other one has no effect, so a result alone never pays.
+- In the step `biometric`, a yes, a no, an undo, a cart edit, and a recognition result have no effect. A stopped camera stream does not end the checkout, because the shopper looks at the phone.
+- The checkout still ends when its code was out of view for 30 seconds (R19), and with a stop intent. A result that arrives later has no effect.
+- A browser client has no fingerprint check. Its checkout above 50 EUR ends after those 30 seconds.
+- After a restart of the server, a session that waited for the fingerprint loads with no checkout.
 
 The steps of a checkout:
 
@@ -408,11 +555,49 @@ stateDiagram-v2
   offered --> suspended: product held up
   suspended --> offered: product left the view, code in view
   offered --> offered: cart change, or the code comes back after the head window
-  offered --> paying: accepted yes on the pay prompt
+  offered --> paying: accepted yes on the pay prompt, total of 50 EUR or less
+  offered --> biometric: accepted yes on the pay prompt, total above 50 EUR
+  biometric --> paying: biometric.result with ok true
+  biometric --> [*]: biometric.result with ok false, or code out of view for 30 seconds
   offered --> [*]: no, empty cart, or code out of view for 30 seconds
   suspended --> [*]: empty cart, or code out of view for 30 seconds
   paying --> [*]: payment result
+  [*] --> spotcheck: kiosk code in view, cart has items, the kiosk asks for a spot check
+  spotcheck --> suspended: the product of the spot check is in view
+  spotcheck --> [*]: empty cart, or code out of view for 30 seconds
 ```
+
+### Spot check
+
+A kiosk that registered with `spotCheck: true` wants to see one product of the cart before the payment. The rules are in `src/sessions/checkout.ts`.
+
+```mermaid
+sequenceDiagram
+  participant Kiosk as Kiosk page
+  participant Server
+  participant Phone
+  Phone->>Server: kiosk.seen "GL1 K3X7"
+  Server-->>Phone: session.state checkout, checkout.spotcheck with the product
+  Server-->>Phone: speak "Quick check. Show me the rye bread."
+  Server-->>Kiosk: kiosk.state spotcheck, cart, total
+  Phone->>Server: frame with the rye bread
+  Server-->>Phone: speak "Thank you."
+  Server-->>Kiosk: kiosk.state connected
+  Phone->>Server: kiosk.seen "GL1 K3X7"
+  Server-->>Phone: checkout.offered, speak "Checkout 3 at Demo Market. ... Nod to pay."
+```
+
+- The checkout starts in the step `spotcheck`, with no pay prompt. So a yes cannot pay, and a no cancels nothing.
+- The product to show is the cart line with the highest unit price. The first line wins a tie.
+- The start gives `session.state`, then `checkout.spotcheck` with the product reference, then the line `spotcheck.ask`: "Quick check. Show me the rye bread." The line has the priority `high` and interrupts.
+- An `identified` result for that product passes the check. The voice says "Thank you." (`spotcheck.thanks`, priority `high`, no interrupt). The product gets no prompt until it has left the view, also when the shopper added it a moment before and still holds it.
+- The step is then `suspended` with `suspendedBy: null`, and the next `kiosk.seen` gives the pay prompt. No event reports the passed check: `checkout.offered` follows when the shopper looks at the code.
+- Another product in view gets its usual prompt, and a yes adds it. The step stays `spotcheck`.
+- If the product of the check leaves the cart, the check asks for the line that now has the highest price, with a new `checkout.spotcheck` and a new ask line. An empty cart ends the checkout.
+- The checkout ends when its code was out of view for 30 seconds (R19), when the camera stops, at rest, and with a stop intent, as in each other step.
+- The kiosk page gets `kiosk.state` with the state `spotcheck`, the cart, and the total. `KioskEvent` does not name the product.
+- A snapshot has no field for the spot check. A client that connects in the step `spotcheck` sees the phase `checkout`, the kiosk, and no prompt.
+- To try it with the fake server: register a kiosk with `POST /api/kiosks` and the body `{"name":"Checkout 4","store":"Demo Market","spotCheck":true}`. The `kiosk` step of the default script reports the kiosk that registered last. The kiosk `K3X7` of the fake server asks for no spot check.
 
 A paid checkout sets the phase `paid`, empties the cart, and ends the session. A failed payment keeps the cart, and the shopper looks at the code again.
 
@@ -455,6 +640,8 @@ Only the server computes a total, and each price comes from the catalog. Each ti
 - A line gets its text at once. Then it waits in the outbox of the session for its clip. The outbox sends one message at a time, so the phone gets the lines in the order of the rules, also when an early clip is slow.
 - Each line goes to the phone as `speak` and to the bus as a `caption` event with the same ID (`s-1`, `s-2`). If the clip fails, the line goes out with `url: null`.
 - The effect `payment.start` starts the mock payment. After each step, the kiosk service reads the checkout of the session and updates the kiosk.
+- The effect `biometric.request` goes to the phone as the message `biometric.request`, through the outbox, so it follows the fingerprint line.
+- The effect `ask` starts the text call for a question. The runtime dispatches the input `answer` with the text, or with `null` after a failure or after 4 seconds. A stopped session gets no answer.
 - The runtime keeps the last 20 captions for the snapshot.
 - With no phone attached, the runtime drops the device messages. Events and captions still go to the bus.
 - After a step with an event, and after a profile patch, the runtime writes the session to the store. `dispatch` does not wait for the write. A sighting alone writes nothing.
@@ -494,14 +681,31 @@ sequenceDiagram
 
 ## Spoken text
 
-The rules select a line by its key, and `renderLine(line, profile)` in `src/speech/render.ts` writes its text. `lines.en.ts` holds one template for each key, with the text of the table "Spoken lines" of the plan.
+The rules select a line by its key, and `renderLine(line, profile)` in `src/speech/render.ts` writes its text in the language of the profile. `lines.en.ts` holds one template for each key, with the text of the table "Spoken lines" of the plan. `lines.it.ts` holds the Italian templates.
 
 - `spokenPrice` in `numbers.ts` writes a price as words. The short form is "one eighty-nine". The full form is "one euro eighty-nine". The pay prompt and the paid line use the full form.
 - `yesPhrases` in `phrases.ts` names the input of the shopper: "Nod to add.", "Double tap to add.", "Say add.", "Press Add on your phone.", or "Press volume up to add.". A shopper with `headGestures: false` gets the phone phrases.
 - The detail level `brief` shortens the glance line, the added line, and the removed line. The level `detailed` adds the brand, the long pack text, and "Contains gluten." for a product that lists allergens.
+- The add that crosses the budget says "Added oat drink. Total twenty-one ten. That is over your budget of twenty euros." The budget has the full price form. The level `brief` also names the total in this line.
 - No level shortens the pay prompt.
-- The voice says nothing about allergens for a product with no allergen data. It never says that a product is safe.
-- The profile language `it` gives the English text. The Italian lines do not exist yet.
+- The spot check says "Quick check. Show me the oat drink." and "Thank you." The Italian texts are "Controllo rapido. Mostrami questo prodotto: bevanda di avena." and "Grazie."
+- A warning follows the price and comes before the yes phrase, at each detail level: "Oat drink, one litre, one eighty-nine. Warning: contains gluten. Nod to add." In the line for a product in the cart it follows the count.
+- The warning texts are "Warning: contains gluten, milk and nuts.", "Warning: not vegan.", "Warning: not vegetarian.", and "Allergen data is missing for this product." They equal the texts of the phone UI.
+- At the level `detailed`, an allergen warning names each allergen of the product, and the "Contains" sentence is left out.
+- With no allergen in the profile, the voice says nothing about allergens for a product with no allergen data. It never says that a product is safe.
+
+Italian, for the profile language `it`:
+
+- Each line has an Italian text, and `speak.lang` and `caption.lang` are `it`. A native speaker has not read `lines.it.ts` yet.
+- A product name, a pack text, and a kiosk name come from the data. A product with no Italian text keeps its English text.
+- `numberToWords` writes an Italian number as one word: "ventuno", "ventitré", "centottanta", "milleduecentotrentaquattro".
+- The short price is "uno e ottantanove", and "uno e zero cinque" for 1.05. The full price is "un euro e ottantanove", "venti euro", "sei euro e cinque centesimi", or "novantanove centesimi".
+- No sentence agrees with the gender of a product name: "Aggiunto: bevanda di avena.", "Nel carrello: due pezzi.", "Annuisci per aggiungerne ancora."
+- The look-alike line names both products: "Non distinguo tra bevanda di avena e rye bread. Mostrami il davanti." An Italian name starts with the words that two look-alike products share, so the line has no common name.
+- The warnings are "Attenzione: contiene glutine, latte e frutta a guscio.", "Attenzione: non per vegani.", "Attenzione: non per vegetariani.", and "Mancano i dati sugli allergeni di questo prodotto."
+- Voice commands stay English. The yes phrases for the voice input are "Di' add per aggiungere." and "Di' pay per pagare."
+- A profile patch that changes the language writes each cart name again in the new language, and gives the event `cart.updated` with `change: null`.
+- The answer to a question comes from the model in the language of the profile.
 
 ## Storage
 
@@ -554,10 +758,10 @@ The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2.
 - On open, the server sends a `snapshot`. Then it sends each event of the session as `event`, and each line as `speak`. A phone that comes back hears "Back online." after the snapshot.
 - One phone holds a session. A second socket for the same session takes over, and the server closes the older one. No message goes to both.
 - `intent`, `prompt.done`, `device.state`, `cart.edit`, and `profile.set` go to the rules. After `profile.set` the phone gets a new `snapshot`.
-- `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished.
+- `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished. Each other text becomes the input `question`.
 - A binary message is a frame. A frame that decodes goes to the recognition worker of the session, or to the log line of fake recognition. The server logs a frame that does not decode and drops it.
 - The server logs and drops a text message that is no `DeviceToServer`. The socket stays open.
-- `kiosk.seen` goes to the kiosk service. `biometric.result` has no effect yet.
+- `kiosk.seen` goes to the kiosk service. `biometric.result` goes to the rules.
 - A message can have at most 2 MB. A larger one closes the socket.
 - The server sends a ping each 20 seconds, and ends a socket that sent no pong since the last ping.
 - When the phone leaves, the session stays.
@@ -595,15 +799,19 @@ The store tests of `src/db/mongo.test.ts` need a MongoDB server. Without `MONGOD
 MONGODB_URI_TEST=<connection string> npm test --workspace @glance/server -- mongo
 ```
 
-Two checks call a vendor, cost money, and are not part of the tests. Run each one by hand, one time:
+Three checks call a vendor, cost money, and are not part of the tests. Run each one by hand, one time:
 
 ```bash
 # The model ID, with no cost. With a JPEG path it also makes one recognition call.
 npm run model:check --workspace @glance/server -- <frame.jpg>
 # Expected: "model: <name>", then a result with "status", and "ms:" under 4000.
+
+# One question about one catalog product: one text call.
+npm run ask:check --workspace @glance/server -- oat-drink-1l "Does it contain nuts?"
+# Expected: "answer:" with one or two sentences that name gluten and do not say that the product is safe, and "ms:" under 4000.
 ```
 
-`model:check` reads `apps/server/.env`. To read another file, run `npx tsx --env-file=<file> scripts/check-model.ts <frame.jpg>` in `apps/server`. The fake switches have no effect on this command.
+`model:check` and `ask:check` read `apps/server/.env`. To read another file, run `npx tsx --env-file=<file> scripts/check-model.ts <frame.jpg>` or `npx tsx --env-file=<file> scripts/check-ask.ts <productId> "<question>" [en|it]` in `apps/server`. The fake switches have no effect on these commands.
 
 ### Smoke check of a running server
 

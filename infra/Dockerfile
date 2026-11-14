@@ -7,7 +7,7 @@ COPY . .
 RUN npm ci --omit=dev --workspace @glance/server --include-workspace-root \
  && mkdir -p /data/speech && chown node:node /data/speech
 ENV NODE_ENV=production PORT=8080 SPEECH_CACHE_DIR=/data/speech
-# The server reads its catalog, its fake script, and ../../agents/recognition.md relative to this directory.
+# The server reads its catalog, its fake script, and the files of ../../agents relative to this directory.
 WORKDIR /app/apps/server
 USER node
 EXPOSE 8080

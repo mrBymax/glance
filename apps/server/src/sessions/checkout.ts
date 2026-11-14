@@ -1,12 +1,24 @@
-import { EMPTY_CART, type Receipt, TIMING } from '@glance/shared';
+import { EMPTY_CART, type Product, type Receipt, TIMING, toProductRef } from '@glance/shared';
 import { say } from './say';
 import { type Turn, emit, emitSessionState, itemCount, nextPromptId, speak } from './turn';
 import type { RuleInput, SessionState } from './types';
 import { inView } from './view';
 
+/** A payment above this total needs a fingerprint on the phone (spec section 13). */
+export const BIOMETRIC_ABOVE_CENTS = 5000;
+
+export function needsBiometric(totalCents: number): boolean {
+  return totalCents > BIOMETRIC_ABOVE_CENTS;
+}
+
 /** While the mock payment runs, no input changes the cart or the checkout. */
 export function isPaying(s: SessionState): boolean {
   return s.checkout?.step === 'paying';
+}
+
+/** True from the yes on the pay prompt to the end of the payment. No answer and no cart change counts in that time. */
+export function isConfirmed(s: SessionState): boolean {
+  return s.checkout?.step === 'biometric' || s.checkout?.step === 'paying';
 }
 
 export function onKioskSeen(turn: Turn, input: Extract<RuleInput, { type: 'kiosk.seen' }>): void {
@@ -35,9 +47,49 @@ export function onKioskSeen(turn: Turn, input: Extract<RuleInput, { type: 'kiosk
     return;
   }
   s.phase = 'checkout';
-  s.checkout = { kiosk, step: 'offered', suspendedBy: null };
+  const spotProduct = input.spotCheck ? spotCheckProduct(turn) : null;
+  s.checkout = { kiosk, step: spotProduct ? 'spotcheck' : 'offered', suspendedBy: null, spotProductId: null };
   emitSessionState(turn);
-  offer(turn, true);
+  if (spotProduct) askSpotCheck(turn, spotProduct);
+  else offer(turn, true);
+}
+
+/** The cart line with the highest unit price. The first line wins a tie. null when the catalog holds no product of the cart. */
+function spotCheckProduct(turn: Turn): Product | null {
+  let best: Product | null = null;
+  let bestCents = -1;
+  for (const item of turn.s.cart.items) {
+    if (item.unitPriceCents <= bestCents) continue;
+    const product = turn.ctx.catalog.get(item.productId);
+    if (!product) continue;
+    best = product;
+    bestCents = item.unitPriceCents;
+  }
+  return best;
+}
+
+function askSpotCheck(turn: Turn, product: Product): void {
+  const { s } = turn;
+  s.checkout!.spotProductId = product.id;
+  emit(turn, { type: 'checkout.spotcheck', product: toProductRef(product, s.profile.lang) });
+  speak(turn, say({ key: 'spotcheck.ask', product }));
+}
+
+/**
+ * For an identified product. True when it is the product of the spot check, which then gets no prompt.
+ * The step `suspended` with no product lets the next report of the code give the pay prompt.
+ */
+export function passSpotCheck(turn: Turn, productId: string): boolean {
+  const { s } = turn;
+  const checkout = s.checkout;
+  if (checkout?.step !== 'spotcheck' || checkout.spotProductId !== productId) return false;
+  checkout.step = 'suspended';
+  checkout.suspendedBy = null;
+  checkout.spotProductId = null;
+  // No prompt for the shown product until it has left the view.
+  if (!s.muted.includes(productId)) s.muted.push(productId);
+  speak(turn, say({ key: 'spotcheck.thanks' }));
+  return true;
 }
 
 function onCheckoutKioskSeen(turn: Turn, newAppearance: boolean): void {
@@ -75,14 +127,16 @@ function offer(turn: Turn, interrupt: boolean): void {
   const count = itemCount(s);
   const totalCents = s.cart.totalCents;
   s.prompt = { id, kind: 'pay', kioskId: kiosk.id, doneAt: null };
-  emit(turn, { type: 'checkout.offered', promptId: id, kiosk, totalCents, itemCount: count, needsBiometric: false });
+  emit(turn, {
+    type: 'checkout.offered', promptId: id, kiosk, totalCents, itemCount: count, needsBiometric: needsBiometric(totalCents),
+  });
   speak(turn, say({ key: 'checkout.offer', kiosk, itemCount: count, totalCents }, { promptId: id, interrupt }));
 }
 
-/** R17, for the prompt of a product that the shopper holds up during a checkout. */
+/** R17, for the prompt of a product that the shopper holds up during a checkout. A spot check stays open. */
 export function suspendCheckoutFor(turn: Turn, productId: string): void {
   const checkout = turn.s.checkout;
-  if (!checkout || checkout.step === 'paying') return;
+  if (!checkout || checkout.step === 'paying' || checkout.step === 'biometric' || checkout.step === 'spotcheck') return;
   if (checkout.step === 'offered') emit(turn, { type: 'checkout.suspended' });
   checkout.step = 'suspended';
   checkout.suspendedBy = productId;
@@ -94,29 +148,62 @@ export function suspendCheckoutFor(turn: Turn, productId: string): void {
  */
 export function afterCartChange(turn: Turn): void {
   const { s } = turn;
-  const step = s.checkout?.step;
-  if (step !== 'offered' && step !== 'suspended') return;
+  const checkout = s.checkout;
+  const step = checkout?.step;
+  if (!checkout || (step !== 'offered' && step !== 'suspended' && step !== 'spotcheck')) return;
   if (s.cart.items.length > 0) {
     // A suspended checkout gets its prompt with the new total when the code is in view again (R17).
     if (step === 'offered') offer(turn, false);
+    // The shopper cannot show a product that left the cart, so the spot check asks for another one.
+    if (step === 'spotcheck' && !s.cart.items.some((item) => item.productId === checkout.spotProductId)) {
+      const product = spotCheckProduct(turn);
+      if (product) {
+        askSpotCheck(turn, product);
+      } else {
+        checkout.step = 'suspended';
+        checkout.spotProductId = null;
+      }
+    }
     return;
   }
   endCheckout(turn);
-  // The shopper holds a product up. The next report of the code gives the line for an empty cart.
-  if (step === 'suspended') return;
+  // The shopper holds a product up, or shows one. The next report of the code gives the line for an empty cart.
+  if (step !== 'offered') return;
   // The code is still in view, and this line is the one that R15 gives for an empty cart.
   if (s.kioskSeen) s.kioskSeen.said = true;
   speak(turn, say({ key: 'checkout.empty' }));
 }
 
-// R16. The runtime starts the mock payment and answers with a payment.result input.
+/**
+ * R16, for an accepted yes on the pay prompt. A total above the limit first needs the fingerprint check of the phone.
+ * The runtime starts the mock payment and answers with a payment.result input.
+ */
 export function startPayment(turn: Turn): void {
   const { s } = turn;
   const checkout = s.checkout;
   if (!checkout) return;
-  checkout.step = 'paying';
   s.prompt = null;
+  if (needsBiometric(s.cart.totalCents)) {
+    checkout.step = 'biometric';
+    speak(turn, say({ key: 'checkout.biometric' }));
+    turn.out.push({ type: 'biometric.request' });
+    return;
+  }
+  pay(turn);
+}
+
+function pay(turn: Turn): void {
+  const { s } = turn;
+  const checkout = s.checkout!;
+  checkout.step = 'paying';
   turn.out.push({ type: 'payment.start', kiosk: checkout.kiosk, totalCents: s.cart.totalCents });
+}
+
+/** A result counts only while the checkout waits for it. A failed check ends the checkout as a no does (R18). */
+export function onBiometricResult(turn: Turn, input: Extract<RuleInput, { type: 'biometric.result' }>): void {
+  if (turn.s.checkout?.step !== 'biometric') return;
+  if (input.ok) pay(turn);
+  else cancelCheckout(turn);
 }
 
 // R18.
@@ -149,6 +236,7 @@ export function expireCheckout(turn: Turn): void {
     s.mutedKioskId = null;
   }
   // R19. The server cannot tell if the checkout screen of the phone is open, so the time decides alone.
+  // It also ends a checkout that waits for the fingerprint, and one that waits for the product of a spot check.
   if (s.checkout && !isPaying(s) && (!s.kioskSeen || now - s.kioskSeen.at >= TIMING.kioskIdleMs)) {
     endCheckout(turn);
     speak(turn, say({ key: 'checkout.cancelled' }));

@@ -45,14 +45,15 @@ flowchart LR
   socket -- "frames" --> recognition
   recognition -- "one JPEG for each call" --> gemini
   recognition -- "recognition result" --> runtime
-  socket -- "intent, prompt.done, device.state, cart.edit, profile.set" --> runtime
+  runtime -- "a question with the data of one product" --> gemini
+  socket -- "intent, prompt.done, device.state, cart.edit, profile.set, question, biometric.result" --> runtime
   rest -- "intent, cart.edit, profile.set" --> runtime
   socket -- "kiosk.seen" --> kiosks
   kiosks -- "kiosk.seen with the kiosk, payment.result" --> runtime
   runtime -- "payment.start" --> kiosks
   runtime -- "text of a line" --> speech
   speech -- "text of a new line" --> eleven
-  runtime -- "speak, session.rest, session.end" --> socket
+  runtime -- "speak, session.rest, session.end, biometric.request" --> socket
   runtime -- "ServerEvent, caption" --> bus
   kiosks -- "KioskEvent" --> bus
   bus --> socket
@@ -158,13 +159,72 @@ Rules of this path:
 - The upload stops while the socket is down, while an earlier frame is not sent yet, and while the glasses are off the face.
 - The recognition worker runs one call at a time for each session. While a call runs, the newest frame waits, and a call that takes 4 seconds is dropped.
 - Results for one product inside 3 seconds belong to one appearance, and one appearance gets one prompt.
+- `glance.pending` and the glance line carry the allergen and diet warnings of the product for the profile of the session. A line with a warning has the sound `warning`. No message says that a product is safe.
 - A yes from the head counts only with the ID of the current prompt, after `prompt.done`, with the product in view, and inside the head window of the profile. The default is 8 seconds.
 - A yes from the page carries the ID of the prompt on its card and needs no `prompt.done`. In the WebView the app sends it as an intent with the source `phone`. In a browser it is a `POST /api/sessions/:id/intents` call.
+- The server writes each line in the language of the profile, English or Italian. `speak` and `caption` carry that language as `lang`. A profile patch with a new language gives `cart.updated` with each cart name in that language.
 - The runtime sends the lines in the order of the rules. A line waits for its clip, and a clip that fails gives `url: null`.
 - After each step with an event, the runtime writes the session to the store.
 - In fake mode no frame goes to a worker. The server decodes each frame, logs it, and drops it. The `ScriptPlayer` dispatches the recognition results.
 
-The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. The server README lists each rule from R1 to R24.
+A result with the status `ambiguous` gives no prompt. The server sends the event `glance.ambiguous` with the candidates and speaks "I cannot tell which oat drink this is. Turn the front to me." If the pending product is one of the candidates, `glance.cleared` comes first, so a yes cannot add it.
+
+With `SECOND_LOOK_WAIT_MS` set on the server, the look-alike line waits for a still. The contract has no message that asks for a still, so the event is the signal for the phone.
+
+```mermaid
+sequenceDiagram
+  participant App as Android app
+  participant Socket as Device socket
+  participant Worker as RecognitionWorker
+  participant Gemini
+  participant Runtime as SessionRuntime
+
+  Worker->>Runtime: dispatch(recognition, status ambiguous)
+  Runtime->>Socket: event glance.ambiguous, through the EventBus
+  Note over Runtime: the look-alike line waits in heldAmbiguous
+  Socket->>App: event glance.ambiguous
+  Note over App: takes a still
+  App->>Socket: binary frame with kind still
+  Socket->>Worker: submit(frame), in the slot for a still
+  Worker->>Gemini: generateContent at the default media resolution
+  Gemini-->>Worker: JSON answer
+  Worker->>Runtime: dispatch(recognition, still true)
+  alt status identified
+    Runtime->>Socket: event glance.pending, speak the glance line
+  else each other status, or no result inside the wait
+    Runtime->>Socket: speak the look-alike line
+  end
+```
+
+The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. When an add takes the total over the budget of the profile, the event `budget.exceeded` follows `cart.updated`, and the added line has the sound `warning`. The server README lists each rule from R1 to R24.
+
+## A question about a product
+
+The intent `ask` opens a question window of 10 seconds, and the voice says "Listening." The microphone button of the page sends that intent. A yes from the touchpad with no current prompt opens the window too.
+
+```mermaid
+sequenceDiagram
+  participant App as Android app
+  participant Socket as Device socket
+  participant Runtime as SessionRuntime
+  participant Gemini
+
+  App->>Socket: intent ask
+  Socket->>Runtime: dispatch(intent)
+  Runtime->>Socket: speak "Listening."
+  App->>Socket: speech.final with a text that is no command
+  Socket->>Runtime: dispatch(question)
+  Note over Runtime: step selects the product and gives the effect ask
+  Runtime->>Gemini: generateContent with the question and the data of that product
+  Gemini-->>Runtime: text
+  Note over Runtime: dispatch(answer), with null after a failure or after 4 seconds
+  Runtime->>Socket: speak with the answer, or "I could not answer that."
+```
+
+- The question is about the product of the current prompt, else the product in view, else the product of the last add. With no such product the voice says "Hold a product up, then ask."
+- The model gets the name, the brand, the pack size, the price, the allergens, and the diet fields of that one product. It gets no frame. Its instruction is `agents/answers.md`.
+- A `speech.final` outside the window that is no command has no effect.
+- In fake mode no call goes to Gemini, and each question gets the answer "I do not have that information."
 
 ## Phases of a session
 
@@ -195,7 +255,7 @@ The Android app has two sessions. The server session holds the cart and has the 
 
 ## Steps of a checkout
 
-A checkout exists while `SessionState.checkout` is not null. Its `step` is `offered`, `suspended`, or `paying`. The phase of the session is `checkout` for that time.
+A checkout exists while `SessionState.checkout` is not null. Its `step` is `spotcheck`, `offered`, `suspended`, `biometric`, or `paying`. The phase of the session is `checkout` for that time.
 
 ```mermaid
 stateDiagram-v2
@@ -203,18 +263,27 @@ stateDiagram-v2
   offered --> suspended: a product gets a prompt
   suspended --> offered: the product left the view and the code is in view
   offered --> offered: cart change, or the code comes back after the head window
-  offered --> paying: accepted yes on the pay prompt
+  offered --> paying: accepted yes on the pay prompt, total of 50 EUR or less
+  offered --> biometric: accepted yes on the pay prompt, total above 50 EUR
+  biometric --> paying: biometric.result with ok true
+  biometric --> [*]: biometric.result with ok false, code out of view for 30 seconds, or stop intent
   offered --> [*]: no on the pay prompt
   offered --> [*]: empty cart, code out of view for 30 seconds, camera stopped, or stop intent
   suspended --> [*]: empty cart, code out of view for 30 seconds, camera stopped, or stop intent
   paying --> [*]: payment.result
+  [*] --> spotcheck: kiosk.seen for a free kiosk with spotCheck, cart has items, no product prompt
+  spotcheck --> suspended: identified result for the product of the spot check
+  spotcheck --> [*]: empty cart, code out of view for 30 seconds, camera stopped, or stop intent
 ```
 
 | Step | Event to the session clients | View of the kiosk page |
 |---|---|---|
 | A checkout starts | `session.state` with the phase `checkout`, then `checkout.offered` with a new prompt ID | `connected`, with the cart and the total |
+| A checkout starts at a kiosk with `spotCheck` | `session.state` with the phase `checkout`, then `checkout.spotcheck` with the product to show. The line is "Quick check. Show me the rye bread." | `spotcheck`, with the cart and the total |
+| The shopper shows that product | none. The line is "Thank you." The next `kiosk.seen` gives `checkout.offered` | `connected` |
 | `offered` again | `checkout.offered` with a new prompt ID and the new total | `connected` |
 | `suspended` | `checkout.suspended`, then `glance.pending` for the product | `connected` |
+| `biometric` | none. The phone gets the line "Over fifty euros. Confirm with your fingerprint on the phone." and then the message `biometric.request` | `connected` |
 | `paying` | none | `connected` |
 | The payment succeeds | `checkout.paid` with the receipt, `cart.updated` with an empty cart, `session.state` with the phase `paid` | `paid` with the receipt for 10 seconds, then `idle` |
 | The payment fails | `checkout.failed`, `session.state` with the phase `shopping` | `failed` for 10 seconds, then `idle` |
@@ -225,16 +294,18 @@ stateDiagram-v2
 - One session holds a kiosk from the start of its checkout to its end.
 - Each pay prompt has a new ID. An answer with the ID of an older pay prompt cannot pay.
 - The yes on the pay prompt gives the effect `payment.start`. The mock payment waits `PAYMENT_DELAY_MS`, writes an order to the store, and dispatches `payment.result`. No money moves.
+- `checkout.offered` has `needsBiometric: true` for a total above 50 EUR. The yes on that pay prompt starts no payment: the server sends `biometric.request`, and the phone answers with `biometric.result`. A result with `ok: false` ends the checkout as a no does. A result with no request has no effect.
+- While the step is `biometric`, no answer, no undo, no cart edit, and no recognition result has an effect. The checkout still ends when the code was out of view for 30 seconds, so a browser client, which has no fingerprint check, loses its checkout above 50 EUR after that time.
 - While the step is `paying`, no answer, no undo, no cart edit, and no stop intent has an effect.
 - After a no on the pay prompt, and after a failed payment, the kiosk is muted until its code has left the view. So the shopper looks away and back to start again.
 - A failed payment keeps the cart. A kiosk that registered with `failPayment: true` declines each payment.
+- A kiosk that registered with `spotCheck: true` starts its checkout in the step `spotcheck`. The product to show is the cart line with the highest unit price. Until an `identified` result names that product, no pay prompt exists. Another product in view gets its usual prompt, and the step stays. If the product leaves the cart, the server asks for another one with a new `checkout.spotcheck`.
 
 ## Parts that do not exist yet
 
-- No path of the server checks the token of a session or of a kiosk.
-- The server never sends the events `glance.ambiguous`, `budget.exceeded`, `checkout.spotcheck`, and `error`. An `error` event comes only from the Android app, with a code that starts with `native.`.
 - The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
-- `biometric.request` and `biometric.result` have no effect.
+- The Android app has no handler for `biometric.request` and sends no `biometric.result`. So a checkout above 50 EUR ends after 30 seconds with no payment.
 - The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
 - The phone UI has the session screen only. No screen shows the pay prompt or the receipt.
-- The server has English lines only.
+- The Android app takes no still for the event `glance.ambiguous`. So `SECOND_LOOK_WAIT_MS` stays at 0 on the server, and the look-alike line plays at once.
+- No native speaker has read the Italian lines of the server. The products of `apps/server/catalog/catalog.dev.json` have no Italian texts, except the oat drink.

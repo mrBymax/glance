@@ -77,7 +77,9 @@ export type Harness = {
   event<K extends ServerEvent['type']>(type: K): Extract<ServerEvent, { type: K }> | undefined;
 };
 
-export function harness(opts: { profile?: ProfilePatch; products?: Product[]; cart?: string[] } = {}): Harness {
+export function harness(
+  opts: { profile?: ProfilePatch; products?: Product[]; cart?: string[]; secondLookWaitMs?: number } = {},
+): Harness {
   const catalog = indexCatalog([...readCatalogFile(DEV_CATALOG), ...(opts.products ?? [])]);
   const profile = { ...DEFAULT_PROFILE, ...opts.profile };
   let state = createSessionState(profile, START);
@@ -96,7 +98,7 @@ export function harness(opts: { profile?: ProfilePatch; products?: Product[]; ca
   let lastDoneId: string | undefined;
   const h: Harness = {
     state,
-    ctx: { catalog },
+    ctx: { catalog, secondLookWaitMs: opts.secondLookWaitMs ?? 0 },
     now: START,
     effects: [],
     all: [],

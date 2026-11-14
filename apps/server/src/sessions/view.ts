@@ -1,5 +1,7 @@
 import { type Caption, type CurrentPrompt, type SessionSnapshot, TIMING, toProductRef } from '@glance/shared';
+import { needsBiometric } from './checkout';
 import type { RuleContext, SessionState } from './types';
+import { warningsFor } from './warnings';
 
 const SNAPSHOT_CAPTIONS = 20;
 
@@ -40,7 +42,7 @@ function currentPrompt(state: SessionState, ctx: RuleContext): CurrentPrompt | n
       kiosk: state.checkout.kiosk,
       totalCents: state.cart.totalCents,
       itemCount: state.cart.items.reduce((count, item) => count + item.qty, 0),
-      needsBiometric: false,
+      needsBiometric: needsBiometric(state.cart.totalCents),
     };
   }
 
@@ -51,7 +53,7 @@ function currentPrompt(state: SessionState, ctx: RuleContext): CurrentPrompt | n
     kind: 'product',
     mode: prompt.mode,
     product: toProductRef(product, state.profile.lang),
-    warnings: [],
+    warnings: warningsFor(product, state.profile),
     qtyInCart: state.cart.items.find((item) => item.productId === prompt.productId)?.qty ?? 0,
   };
 }

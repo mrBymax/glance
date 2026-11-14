@@ -1,5 +1,6 @@
 import { type IntentSource, type Product, TIMING, cartTotalCents, localize } from '@glance/shared';
-import { afterCartChange, cancelCheckout, isPaying, startPayment } from './checkout';
+import { openAskWindow } from './ask';
+import { afterCartChange, cancelCheckout, isConfirmed, startPayment } from './checkout';
 import { say } from './say';
 import { type Turn, emit, speak } from './turn';
 import type { RuleInput, SessionState } from './types';
@@ -48,7 +49,7 @@ export function onPromptDone(turn: Turn, input: Extract<RuleInput, { type: 'prom
 
 export function onAnswer(turn: Turn, kind: 'yes' | 'no', source: IntentSource, promptId: string | undefined): void {
   const { s, now } = turn;
-  if (isPaying(s)) return;
+  if (isConfirmed(s)) return;
 
   if (promptId !== undefined && accepts(s, { source, promptId }, now)) {
     if (s.prompt?.kind === 'product') answerProductPrompt(turn, kind, s.prompt);
@@ -64,7 +65,16 @@ export function onAnswer(turn: Turn, kind: 'yes' | 'no', source: IntentSource, p
     } else if (!s.lastAdd.hinted) {
       s.lastAdd.hinted = true;
       speak(turn, say({ key: 'hint.holdAgainForAnother' }));
+    } else if (source === 'touch' && s.prompt === null) {
+      // R10 gave its hint for this add, so a later double tap means "listen".
+      openAskWindow(turn);
     }
+    return;
+  }
+
+  // Spec section 16: a double tap means "listen" when no prompt waits. This replaces the hint of R20 for that case.
+  if (kind === 'yes' && source === 'touch' && s.prompt === null) {
+    openAskWindow(turn);
     return;
   }
 
@@ -100,7 +110,7 @@ function answerProductPrompt(turn: Turn, kind: 'yes' | 'no', prompt: Extract<Ses
 // R12.
 export function onUndo(turn: Turn): void {
   const { s } = turn;
-  if (isPaying(s)) return;
+  if (isConfirmed(s)) return;
   for (let index = s.adds.length - 1; index >= 0; index -= 1) {
     const productId = s.adds[index]!;
     if (s.cart.items.some((item) => item.productId === productId)) {
@@ -113,7 +123,7 @@ export function onUndo(turn: Turn): void {
 
 export function onCartEdit(turn: Turn, input: Extract<RuleInput, { type: 'cart.edit' }>): void {
   const { s } = turn;
-  if (isPaying(s)) return;
+  if (isConfirmed(s)) return;
   const item = s.cart.items.find((entry) => entry.productId === input.productId);
   if (!item) return;
   if (!Number.isInteger(input.qty) || input.qty < 0 || input.qty > MAX_LINE_QTY) return;
@@ -134,6 +144,7 @@ function changeQty(turn: Turn, productId: string, delta: number): boolean {
 
   const name = current?.name ?? localize(product!.name, s.profile.lang);
   const qty = (current?.qty ?? 0) + delta;
+  const totalBefore = s.cart.totalCents;
   let items = s.cart.items;
   if (!current) {
     items = [...items, cartLine(product!, name, qty)];
@@ -158,7 +169,15 @@ function changeQty(turn: Turn, productId: string, delta: number): boolean {
   emit(turn, { type: 'cart.updated', cart: s.cart, change: { kind: delta > 0 ? 'add' : 'remove', productId, name } });
   const totalCents = s.cart.totalCents;
   if (delta > 0) {
-    speak(turn, say({ key: 'cart.added', product: product!, totalCents, budgetCents: null }));
+    // Only the add that crosses the budget warns. A later add over the budget gets the usual line.
+    const budgetCents = s.profile.budgetCents;
+    if (budgetCents !== null && totalBefore <= budgetCents && totalCents > budgetCents) {
+      // The page drops its budget warning on cart.updated, so budget.exceeded follows it.
+      emit(turn, { type: 'budget.exceeded', budgetCents, totalCents });
+      speak(turn, say({ key: 'cart.added', product: product!, totalCents, budgetCents }, { sound: 'warning' }));
+    } else {
+      speak(turn, say({ key: 'cart.added', product: product!, totalCents, budgetCents: null }));
+    }
   } else if (product) {
     speak(turn, say({ key: 'cart.removed', product, totalCents }));
   }

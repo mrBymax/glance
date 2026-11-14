@@ -1,8 +1,9 @@
 import { EMPTY_CART, type Profile, TIMING } from '@glance/shared';
 import { onAnswer, onCartEdit, onPromptDone, onUndo } from './answers';
-import { expireCheckout, onKioskSeen, onPaymentResult } from './checkout';
+import { expireAskWindow, onAnswerText, onQuestion } from './ask';
+import { expireCheckout, onBiometricResult, onKioskSeen, onPaymentResult } from './checkout';
 import { onDeviceState, onGeneralIntent, onProfileSet, onRecognitionSlow, onSocketOpen, restWhenIdle } from './general';
-import { onRecognition } from './glance';
+import { expireSecondLook, onRecognition } from './glance';
 import { type Turn, emit } from './turn';
 import type { Effect, RuleContext, RuleInput, SessionState, SpeakEffect } from './types';
 import { inView } from './view';
@@ -24,9 +25,13 @@ export function createSessionState(profile: Profile, now: number): SessionState 
     lastDone: null,
     unknownAt: null,
     aimHintAt: null,
+    ambiguousKey: null,
+    ambiguousAt: null,
+    heldAmbiguous: null,
     kioskSeen: null,
     mutedKioskId: null,
     checkout: null,
+    askUntil: null,
     lastTargetAt: now,
     lastSpeak: null,
     device: null,
@@ -81,6 +86,15 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
     case 'socket.open':
       onSocketOpen(turn);
       break;
+    case 'biometric.result':
+      onBiometricResult(turn, input);
+      break;
+    case 'question':
+      onQuestion(turn, input);
+      break;
+    case 'answer':
+      onAnswerText(turn, input);
+      break;
     case 'tick':
       break;
   }
@@ -129,5 +143,7 @@ function expire(turn: Turn): void {
   }
 
   expireCheckout(turn);
+  expireAskWindow(turn);
+  expireSecondLook(turn);
   restWhenIdle(turn);
 }
