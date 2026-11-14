@@ -5,6 +5,7 @@ export * from './catalog';
 export * from './device';
 export * from './events';
 export * from './frame';
+export * from './gtin';
 export * from './kioskCode';
 export * from './languages';
 export * from './money';
