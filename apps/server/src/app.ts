@@ -172,14 +172,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     startPayment: payments,
     ask,
     restoreProducts: async (productIds) => {
-      for (const productId of productIds) {
-        const gtin = gtinOfScannedId(productId);
-        if (gtin === null) continue;
-        // A product that the store no longer sells stays a cart line, as a product that left the catalog does.
-        await resolver.resolve(gtin).catch((error: unknown) => {
-          app.log.warn(`product not restored. gtin=${gtin} ${error instanceof Error ? error.message : String(error)}`);
-        });
-      }
+      const gtins = productIds.flatMap((productId) => gtinOfScannedId(productId) ?? []);
+      // A product that the store no longer sells stays a cart line, as a product that left the catalog does.
+      await Promise.all(gtins.map((gtin) => resolver.resolve(gtin).catch((error: unknown) => {
+        app.log.warn(`product not restored. gtin=${gtin} ${error instanceof Error ? error.message : String(error)}`);
+      })));
     },
     afterStep: (session, before) => kiosks.sync(session, before),
   });
