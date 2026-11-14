@@ -55,6 +55,9 @@ declare module 'fastify' {
 /** The kiosk that the fake server has from its start. A printed "GL1 K3X7" code then starts a checkout. */
 const FAKE_KIOSK = { name: 'Checkout 3', store: 'Demo Market', code: 'K3X7' };
 
+/** The body of a request with the JSON content type and a text that is no JSON. */
+const NOT_JSON = Symbol('not JSON');
+
 const ERROR_NAMES: Record<number, string> = { 400: 'bad_request', 401: 'unauthorized', 404: 'not_found' };
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -97,11 +100,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     try {
       done(null, JSON.parse(body as string));
     } catch {
-      done(Object.assign(new Error('The body is not valid JSON.'), { statusCode: 400 }));
+      // No error here: an error would answer 400 before the handler checks the token.
+      // This value fails each body schema, so the handler answers 400 after its token check.
+      done(null, NOT_JSON);
     }
   });
 
-  app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'not_found' }));
+  // A body that is no JSON gets 400 on an unknown path too, as before the parser gave it to the handlers.
+  app.setNotFoundHandler((request, reply) => (request.body === NOT_JSON
+    ? reply.code(400).send({ error: 'bad_request' })
+    : reply.code(404).send({ error: 'not_found' })));
   app.setErrorHandler((error: { statusCode?: number }, request, reply) => {
     const status = error.statusCode ?? 500;
     if (status >= 500) {
@@ -150,7 +158,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ok: true,
     fakeRecognition: config.fakeRecognition !== null,
     fakeSpeech: config.fakeSpeech,
-    store: config.mongodbUri === null ? 'memory' : 'mongodb',
+    store: config.mongodbUri === null ? 'memory' : 'mongo',
     // The team checks this before the demo: the server must store no frame then.
     saveFrames: saveFrame !== null,
   }));
@@ -169,6 +177,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // so the team can collect frames for the test set with no recognition call.
   const logFrame: FrameHandler = (session, { header, jpeg }) => {
     app.log.info(frameLogLine(header, jpeg.length));
+    // As with real recognition, REQUIRE_BLUR keeps a frame with no face detection off the disk.
+    if (config.requireBlur && !header.blurred) return;
     // The JPEG is a view on the socket message, and the write ends later, so the saver gets a copy.
     if (saveFrame) saveFrameWith(saveFrame, app.log, session.id, { header, jpeg: new Uint8Array(jpeg) });
   };

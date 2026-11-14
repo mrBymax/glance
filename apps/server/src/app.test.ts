@@ -18,6 +18,15 @@ it('answers the health check', async () => {
   const res = await app.inject({ method: 'GET', url: '/healthz' });
   expect(res.json()).toEqual({ ok: true, fakeRecognition: true, fakeSpeech: true, store: 'memory', saveFrames: false });
 });
+it('names the MongoDB store in the health check as the start log does', async () => {
+  // buildApp opens no connection: the store of the test stays the memory store.
+  const withUri = await buildApp({ ...deps(), config: loadConfig({ MONGODB_URI: 'mongodb://127.0.0.1:1/none' }, ['--fake']) });
+  try {
+    expect((await withUri.inject({ method: 'GET', url: '/healthz' })).json()).toMatchObject({ store: 'mongo' });
+  } finally {
+    await withUri.close();
+  }
+});
 it('answers a preflight request and sets the CORS header', async () => {
   const res = await app.inject({ method: 'OPTIONS', url: '/api/sessions',
     headers: { origin: 'http://localhost:5173', 'access-control-request-method': 'POST' } });

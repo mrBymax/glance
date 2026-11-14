@@ -54,6 +54,15 @@ it('checks the token before the body', async () => {
   expect((await call('POST', `/api/sessions/${id}/intents?token=${token}`)).status).toBe(400);
   expect((await call('POST', `/api/sessions/${id}/cart?token=${token}`)).status).toBe(400);
 });
+it('checks the token before it reads a body that is no JSON', async () => {
+  const send = (path: string) => fetch(`${t.base}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: '{', signal: abort.signal,
+  });
+  expect((await send(`/api/sessions/${id}/intents?token=wrong`)).status).toBe(401);
+  expect((await send(`/api/sessions/${id}/cart`)).status).toBe(401);
+  expect((await send(`/api/sessions/nope/intents?token=${token}`)).status).toBe(404);
+  expect((await send(`/api/sessions/${id}/intents?token=${token}`)).status).toBe(400);
+});
 it('the kiosk stream needs the kiosk token', async () => {
   expect((await call('GET', `/api/kiosks/${kiosk.kioskId}/events`)).status).toBe(401);
   expect((await call('GET', `/api/kiosks/${kiosk.kioskId}/events?token=${token}`)).status).toBe(401);

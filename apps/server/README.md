@@ -202,7 +202,7 @@ Without `SAVE_FRAMES` the server stores no frame. A frame lives in memory from i
 
 - A log line about a frame holds its sequence number, its width and height, the `blurred` value, its kind, and its byte count. It holds no bytes of the image. With real recognition this line has the `debug` level.
 - `SAVE_FRAMES=<directory>` is for the test set of the recognition model. The server then writes each frame that it accepts to `<directory>/<sessionId>/<seq>.jpg`. A frame with a sequence number that the folder already holds replaces the older file.
-- With `REQUIRE_BLUR=1` and real recognition, the server drops a frame with `blurred: false` before the write.
+- With `REQUIRE_BLUR=1`, the server writes no frame with `blurred: false`, with real and with fake recognition.
 - The switch also works with fake recognition, which makes no recognition call. So the team can collect frames with no cost.
 - A write that fails gets the log line `frame not saved. seq=<n> <message> session=<id>`, and the recognition call goes on.
 - At its start the server logs `SAVE_FRAMES is on. The server writes each frame to <directory>.` at `warn` level.
@@ -530,13 +530,13 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 | `GET /api/kiosks/:id/events` | | a stream of `KioskEvent`. The first message is the current view. |
 | `GET /api/speech/<hash>.mp3` | | 200, the MP3 of a clip |
 | `GET /api/demo/latest?key=<DEMO_KEY>` | | 200, `LatestSessionResponse` |
-| `GET /healthz` | | 200, the state of the switches: `fakeRecognition`, `fakeSpeech`, `store`, and `saveFrames` |
+| `GET /healthz` | | 200, the state of the switches: `fakeRecognition`, `fakeSpeech`, `store` (`memory` or `mongo`), and `saveFrames` |
 
 - `wsUrl` of a new session is `PUBLIC_BASE_URL` with `ws` in place of `http`, plus `/ws/device?session=<id>&token=<token>`.
 - A body that fails its schema gets 400 with `{ "error": "bad_request" }`. An unknown session gets 404 with `{ "error": "not_found" }`. An unknown key in a profile patch is dropped.
 - A 204 says only that the server took the input. The outcome arrives as events.
 - Each path with a session ID needs `?token=<token>` with the token of that session. `GET /api/kiosks/:id/events` needs the token of the kiosk. `POST /api/sessions`, `POST /api/kiosks`, the speech path, and `GET /healthz` need no token.
-- A missing or wrong token gets 401 with `{ "error": "unauthorized" }`. So does a query string with two `token` keys. The server checks the ID first and the token second, and reads the body last: an unknown ID gets 404, and a wrong token with a bad body gets 401.
+- A missing or wrong token gets 401 with `{ "error": "unauthorized" }`. So does a query string with two `token` keys. The server checks the ID first and the token second, and reads the body last: an unknown ID gets 404, and a wrong token with a bad body gets 401, also when the body is no JSON. Two cases get 400 before the check: a body above the size limit of Fastify, and a body with a content type that is not JSON.
 - `tokenMatches` in `src/http/auth.ts` compares a token in constant time.
 - The request log holds the method and the path with no query string, because the query string holds the token.
 - `GET /api/demo/latest` gives the ID and the token of the newest session that has not stopped. The mirror page follows the session of the phone with it. The path answers 404 with `{ "error": "not_found" }` when `DEMO_KEY` is not set, when the key is wrong, and when no session is live. The key opens each session, so use a long random value.

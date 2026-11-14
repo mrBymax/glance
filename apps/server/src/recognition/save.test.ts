@@ -136,3 +136,10 @@ it('with fake recognition and a saver the server writes each frame and makes no 
   await vi.waitFor(() => expect(existsSync(join(dir, sessionId, '5.jpg'))).toBe(true));
   expect(recognize).not.toHaveBeenCalled();
 });
+it('with fake recognition and REQUIRE_BLUR the server writes no frame that is not blurred', async () => {
+  const { sessionId, phone } = await appWithPhone({ SAVE_FRAMES: dir, FAKE_RECOGNITION: '1', REQUIRE_BLUR: '1' }, createFrameSaver(dir));
+  phone.sendFrame({ ...frame(6).header, blurred: false }, frame(6).jpeg);
+  phone.sendFrame(frame(7).header, frame(7).jpeg);
+  await vi.waitFor(() => expect(existsSync(join(dir, sessionId, '7.jpg'))).toBe(true));
+  expect(readdirSync(join(dir, sessionId))).toEqual(['7.jpg']);
+});
