@@ -40,6 +40,40 @@ flowchart TD
 2. **OCR**: ML Kit text recognition v2 (bundled Latin model) on the barcode region, extended downward for the digits. It runs only when a region is in view and the decode failed.
 3. **Brand and name, last resort**: one still, sent with the new frame kind `label`. The server asks the model for the printed digits, the brand, and the product name. The server accepts the answer only when it selects exactly one item of the store list.
 
+## The model also reads the code
+
+Decision of the user, 2026-11-14: the model must be able to find the code when the scanner of the phone finds nothing, not even a region. So the server has two paths of its own.
+
+```mermaid
+sequenceDiagram
+    participant App as Android app
+    participant Server
+    participant Model as Gemini
+    App->>Server: frame (each 500 ms, as before)
+    Server->>Model: recognition call, which now also answers "code"
+    Model-->>Server: code.visible, code.digits
+    alt digits with a right check digit, in the store list
+        Server->>Server: the same path as barcode.seen, source model
+    else code.visible in 2 frames inside 2 s, and no code accepted
+        Server->>App: still.request, purpose label
+        App->>App: one still. Scanner and OCR on the phone first.
+        alt the phone reads a code
+            App->>Server: barcode.seen
+        else
+            App->>Server: frame with the kind label
+            Server->>Model: label call at the default resolution: digits, brand, name
+            Model-->>Server: answer
+            Server->>Server: match against the store list only
+        end
+    end
+```
+
+- The recognition call of each frame gets one more answer field: `code: { visible: boolean, digits: string | null }`. `visible` means that a barcode, or the side of a package with its barcode, is in the frame. `digits` are the digits under the bars when the model can read each one. The instruction says: never guess a digit.
+- A model reads the printed digits. It does not decode the bars. It can also write digits that are not there. So digits of the model count only with a right check digit and when the store list holds the code. With both, one read is enough.
+- The uploaded frame is small (494 x 768), so the digits are often not readable in it. Then `visible` alone asks the phone for a still: the server sends `still.request` at most one time each 6 seconds, and only while no code was accepted in the last 3 seconds. The phone answers through its `StillPolicy`, so the two triggers of a still (the region rule of the phone and the request of the server) share one limit.
+- The label call reads the still at the default media resolution. It is the same call as the last resort: digits first, then brand and name.
+- Cost: the recognition call already runs for each frame, so the new field costs no call. Each label call is one more model call, at most one each 6 seconds.
+
 ## Stability rules
 
 These rules are the reason for the design. Each one is pure logic in `:core` (phone) or in a pure function (server), with unit tests.
@@ -67,6 +101,7 @@ The research of 2026-11-13 and of today says that the stream gives 2 pixels for 
 
 - New device message: `{ "t": "barcode.seen", "code": "<digits>", "source": "barcode" | "ocr" }`.
 - New frame kind: `label`, beside `frame` and `still`.
+- New message of the server to the device: `{ "t": "still.request", "purpose": "label" }`.
 - `ProductRef`, `CartItem`, and each server event keep their shape. A product from a scan is a full `Product` on the server, so no client changes its types.
 - New line keys on the server: `barcode.notInStore`, `barcode.unreadable` (said one time when a label frame gave no product: "I cannot read this code. Hold it closer.").
 
