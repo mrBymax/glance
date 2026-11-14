@@ -85,7 +85,10 @@ sequenceDiagram
   B->>S: POST .../intents { kind: stop }
   S-->>B: session.state with the phase ended
   B-->>P: event
-  Note over B: closes the stream and forgets the session
+  Note over B: forgets the session, keeps the stream for 5 seconds
+  S-->>B: caption "Camera off."
+  B-->>P: event
+  Note over B: closes the stream
 ```
 
 Rules of `BrowserBridge` that a reader does not see at once:
@@ -93,6 +96,7 @@ Rules of `BrowserBridge` that a reader does not see at once:
 - The stream opens before the snapshot loads, so that no event is lost between the two. Each new `open` of the stream loads the snapshot again.
 - A stream error, or a call with no answer, sets `network` to `offline` in the fake native state. The next `open` of the stream sets `online`.
 - An answer with a status of 400 or more logs `bridge: <method> <path> failed with <status>`. The line holds no token.
+- `session.state` with the phase `paid` or `ended` ends the session for the page at once: `sessionQuery()` gives null, and the fake native state says `stopped`. The server sends its last spoken line after that event, when the clip is ready. So the stream stays open for `LAST_LINE_GRACE_MS` (5000 ms) and delivers `caption` events only. The next `session.start`, `data.delete`, or a stream error closes it at once.
 - Two fast `session.start` messages make one session. The fake native state says `starting` until the server answers.
 - A `session.end` or a `data.delete` while `POST /api/sessions` is open makes that call stale. When the server answers with a session, the bridge sends `DELETE /api/sessions/:id` for it, and the page does not get it.
 - `data.delete` sends `DELETE /api/sessions/:id`, forgets the session, and sets the profile to the default.
@@ -121,6 +125,7 @@ flowchart LR
   screen["SessionScreen"]
   banner["StateBanner"]
   card["PromptCard"]
+  lookalike["LookAlikeNotice"]
   captions["CaptionList"]
   cart["CartList"]
   checkout["CheckoutSheet"]
@@ -138,6 +143,7 @@ flowchart LR
   setup --> banner
   screen --> banner
   screen --> card
+  screen --> lookalike
   screen --> captions
   screen --> cart
   screen --> checkout
@@ -158,11 +164,19 @@ flowchart LR
 - The page never changes the cart. `reduce` stores the cart and the total that the server sends, and `CartList` shows that total.
 - `glance.cleared` clears the prompt only if the IDs are equal. An event that ends a checkout clears only a pay prompt. So a newer product prompt stays when an older event arrives late.
 - `PromptCard` sends one answer for each prompt ID, and then it disables both buttons. A second answer can undo an add on the server.
+- `PromptCard` shows one warning banner for each entry of `prompt.warnings`. `warningText` in `src/text/format.ts` writes the sentence that the voice speaks: "Warning: contains gluten and milk.", "Warning: not vegan.", or "Allergen data is missing for this product.". With no warning the card shows nothing, and it never says that a product is safe.
+- The server sends `budget.exceeded` one time, when an add crosses the budget. `reduce` keeps the warning, and `CartList` shows "Warning: over your budget." with the total of the cart and the budget above the total. The warning ends when a `cart.updated` has a total at or under the budget, and when a new budget is `null` or not under the total.
+- `glance.ambiguous` sets `lookAlikes`. While no product prompt is current, the prompt area shows `LookAlikeNotice`: "I cannot tell which product this is.", "Turn the front to me.", and the name and the pack size of each candidate. It shows no price, because the voice never guesses a price. The next `glance.pending`, the next `cart.updated`, and a snapshot clear it.
+- `checkout.spotcheck` sets `spotCheck` to its product. While it is set, the session screen shows one info banner above the prompt area: "Quick check." and "Show me the <product>.". A product prompt keeps its card under the banner. `checkout.offered`, `checkout.cancelled`, `checkout.paid`, and a snapshot clear it.
+- `useStrings()` gives the strings to a component that needs no other part of `useUi()`. With no `BridgeProvider` above, it gives the English strings.
 - A snapshot replaces the session data, and it clears the error, the budget warning, and the look-alike list.
 - An error stays until a sign of recovery: a stream that starts, a new prompt, a snapshot, a payment, or `local.attempt`. `send` runs `local.attempt` before `setup.register`, `setup.requestCamera`, and `session.start`.
 - The list of captions holds the last 20, and the screen shows the last 4. A caption with a known ID replaces the old one.
 - `useSpokenText` announces each new caption, and the line `Cart: 2 items, 4.49 EUR.` after each cart change. It does not announce the captions of a snapshot, also when the snapshot loads again after a lost connection. `BridgeProvider` gives it the captions of the last snapshot.
-- Each string of the page is in `src/text/strings.ts`. `src/text/format.ts` formats an amount as `1.89 EUR`.
+- Each string of the page is in `src/text/strings.ts`: the table `EN`, and the table `IT` with the same keys. `stringsFor(lang)` selects the table of `profile.lang`, so a change of the language shows at once. `src/text/format.ts` formats an amount as `1.89 EUR` in both languages.
+- `BridgeProvider` sets the `lang` attribute of the document to `profile.lang`. A screen reader selects its voice from it.
+- These texts stay English in the Italian page: the words of Astryx itself (for example "completed" in the list of steps and "Clear" in the name of the clear button), the debug panel, and each caption until the server speaks Italian. The page shows a caption as the server sends it.
+- `src/text/strings.test.ts` expects an Italian text for each English text, and the copy rules in both tables. No native speaker has read the Italian table yet.
 
 The field `checkout` follows the checkout events:
 
@@ -215,6 +229,7 @@ Each action that the shopper can do with the head or the voice also has a button
 
 | Button | Where | Sends |
 |---|---|---|
+| Ask, with a microphone icon and the name "Ask a question" | Action row. Shown in the phases `shopping` and `checkout`. | `ASK_MESSAGE` of `src/bridge/askMessage.ts`: `{ t: 'intent', kind: 'ask' }` |
 | Undo | Action row. Hidden while the cart is empty. | `{ t: 'intent', kind: 'undo' }` |
 | Repeat, with the name "Repeat the last line" | Under the captions. Hidden with no caption. | `{ t: 'intent', kind: 'repeat' }` |
 | Remove, with the name "Remove <product>" | Each cart line | `{ t: 'cart.edit', productId, qty }` with one unit less. The quantity 0 removes the line. |
@@ -222,6 +237,8 @@ Each action that the shopper can do with the head or the voice also has a button
 | End | Action row | Opens an `AlertDialog`. End sends `{ t: 'session.end' }`, and "Keep shopping" sends nothing. |
 
 End asks first, because the server takes no input for a session that ended.
+
+"Ask a question" needs no prompt ID. The Android app relays the intent, and `BrowserBridge` posts it as each other intent. The server takes the intent and does nothing with it yet: it has no question window.
 
 `hapticFor(before, action, after)` in `src/state/haptics.ts` returns the pattern for one message, or `null`. `BridgeProvider` calls it for each message of the bridge and sends `{ t: 'haptic', pattern }` for a result. The Android app vibrates only for these messages.
 
@@ -271,6 +288,7 @@ The button "Pocket mode" sends `pocket.set` with `on: true`. `SessionScreen` the
 
 - The pay view names the kiosk, the store, the item count, and the total of the server. Pay sends `intent` with `yes` and the ID of the pay prompt. Cancel sends `no`.
 - The server sends no event when a payment starts. So the sheet keeps its answer to each prompt ID: after Pay the button shows a spinner, and the sheet sends nothing more for that ID. A new `checkout.offered` has a new ID, and the sheet takes one answer again.
+- With `needsBiometric` in the pay prompt, the pay view shows the info banner "Over fifty euros. Confirm with your fingerprint on the phone.", and the pay button has the name "Pay with fingerprint". Its visible text stays "Pay", because the full name is cut at a font scale of 200 percent. The button sends the same yes. The page shows no fingerprint prompt of its own.
 - After Cancel the sheet closes at once. A dismissed pay view (the back key, Escape) counts as Cancel. A dismissed sheet after Pay sends nothing.
 - An `error` event shows inside the pay view, because the main screen is under the sheet then.
 - The receipt view shows the total, the kiosk, each line, the order ID, the time, and the line "Demo payment. No money moved.". Done runs `local.reset`.
@@ -287,11 +305,15 @@ The Settings button of the session screen opens `SettingsSheet`. `useUi().setPro
 | Gesture meaning | 2 segments | `{ yesGesture }` |
 | Head window | 3 segments | `{ headWindowMs }`: 8000, 15000, or `null` for "While in view" |
 | Main yes input | 5 segments | `{ mainYes }` |
+| Allergens | 14 checkboxes, one for each value of `EU_ALLERGENS` | `{ allergens }`: the full new list, in the order of `EU_ALLERGENS` |
+| Diet | 2 checkboxes: Vegan, Vegetarian | `{ vegan }` or `{ vegetarian }`: only the key that changed |
+| Budget | A number input in whole euros, from 1, with a clear button | `{ budgetCents }`: the value times 100, or `null` after Clear Budget |
+| Language | 2 segments: English, Italiano. Each name is in its own language (`LANGUAGE_NAMES`). | `{ lang }` |
 
 - A speech rate that is not in `SPEECH_RATES` marks the nearest value.
 - Play sample sends `intent` with the kind `help`. The bridge has no message for a speech sample, so the voice speaks the help line at the new speed.
 - Delete my data asks in an `AlertDialog`. Delete sends `data.delete`, runs `local.reset`, and closes the dialog and the sheet.
-- `src/styles/narrow.css` sets the inline padding of a segment to 4 px. With the stock 12 px, "While in view" and "Phone" are cut at a width of 360 px.
+- `src/styles/narrow.css` sets the inline padding of a segment to 4 px. With the stock 12 px, "While in view" and "Phone" are cut at a width of 360 px. The Italian table uses "In vista" and "App" there, because "Telefono" is cut also with 4 px.
 
 ### State banner
 
@@ -351,6 +373,7 @@ jsdom has no layout and no colors. Measure these three in a browser, at 360 x 80
 The design requires touch targets of 48 px or more. Astryx controls are 28, 32, and 36 px high.
 
 - `src/styles/touch.css` raises the three Astryx height tokens to 48, 48, and 56 px, and gives each `Button` a minimum width of 48 px.
+- `src/styles/touch.css` also sets the clear button of an input to a height of 48 px. Its stock height is 20 px, and Astryx grows its hit area to 44 px at most. In Chrome at 360 px the button "Clear Budget" then measured 48 x 48 px.
 - `SegmentedControl` needs `size="lg"`. `CheckboxList` needs `density="spacious"`. A smaller variant is below 48 px.
 - Do not use `Switch`, `Slider`, or a raw `button`. No rule covers them.
 - jsdom has no layout, so a test cannot measure a control. `uncoveredTouchTargets(root)` in `src/test/touchTargets.ts` lists each control that none of these rules covers. A screen test expects an empty list.

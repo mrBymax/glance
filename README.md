@@ -29,7 +29,7 @@ One shop runs from the first glance to the mock payment with the fake server. No
 | `apps/server` | `@glance/server`: recognition, the cart rules, the spoken lines, the kiosks, and the mock payment. |
 | `apps/mobile/android` | The Android app `com.metaglance.android`: a Gradle project with the modules `core` and `app`, and a fake server in `tools/fake-server`. |
 | `apps/mobile/ui` | `@glance/phone-ui`: the phone UI that the Android app shows in a WebView. |
-| `apps/website` | `@glance/website`: the kiosk page, and placeholders for the landing page, the privacy page, and the mirror page. |
+| `apps/website` | `@glance/website`: the landing page, the privacy page, the kiosk page, and the mirror page. |
 | `apps/display-pow` | Empty. |
 | `agents` | `recognition.md`, the instruction for the recognition model. |
 | `skills` | The agent skills of the project (part "Agent Skills"). |

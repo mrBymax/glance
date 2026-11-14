@@ -1,7 +1,6 @@
 // Integration test 2: the Glance server, the phone UI with BrowserBridge, the kiosk page, and the mirror page.
 // Starts the server in fake mode and the two Vite dev servers, plays one shop in the installed Chrome, and stops all of it.
-// Use: node scripts/integration/server-web.mjs [--strict]
-// With --strict, a known defect of a page also fails the run.
+// Use: node scripts/integration/server-web.mjs
 import { randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,7 +17,6 @@ const PRODUCT = { name: 'Oat drink', pack: '1 L', priceCents: 189, price: '1.89 
 const LOG_TAIL_LINES = 40;
 const PAID_LINE = 'Paid.';
 const DEMO_PAYMENT_LINE = 'Demo payment. No money moved.';
-const CAPTION_WAIT_MS = 3000;
 // The checkout sheet of the phone UI, for the pay prompt and for the receipt. The Astryx BottomSheet is a dialog element.
 const SHEET = 'dialog[open]';
 // The two columns of the mirror page: the spoken lines and the cart.
@@ -46,21 +44,7 @@ async function waitForEvent(phone, type) {
   }
 }
 
-/** Returns true when the phone UI shows the line of the payment in its captions before the wait ends. */
-async function showsPaidLine(phone) {
-  try {
-    await phone.waitForFunction(
-      (wanted) => [...document.querySelectorAll('li')].some((element) => element.textContent.includes(wanted)),
-      { polling: POLL_MS, timeout: CAPTION_WAIT_MS },
-      PAID_LINE,
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function playShop(server, phoneUrl, websiteUrl, browser, problems, knownDefects) {
+async function playShop(server, phoneUrl, websiteUrl, browser, problems) {
   const kiosk = await openPage(
     browser, 'kiosk', `${websiteUrl}/kiosk?name=${encodeURIComponent(KIOSK_NAME)}`, { width: 1920, height: 1080 }, problems,
   );
@@ -162,10 +146,10 @@ async function playShop(server, phoneUrl, websiteUrl, browser, problems, knownDe
   console.log('server: the snapshot has the phase paid, the receipt, and the line of the payment');
 
   // The server sends the caption of the payment after session.state with the phase paid.
-  // BrowserBridge closes the event stream at that session.state, so the page with ?api= does not get the caption.
-  if (!(await showsPaidLine(phone))) {
-    knownDefects.push(`phone UI: the captions do not show the line "${PAID_LINE} ..." that the server spoke after the payment.`);
-  }
+  // BrowserBridge keeps the event stream open for a grace time after that event, so the page gets the caption.
+  await waitForText(phone, 'phone UI', 'li', PAID_LINE);
+  check(await phone.evaluate(() => window.glanceBridge.sessionQuery()) === null, 'phone UI: the bridge still holds the paid session.');
+  console.log('phone UI: the captions show the line of the payment, and the bridge forgot the session');
 
   await phone.locator(button('Done')).click();
   await waitForText(phone, 'phone UI', 'h1', 'Set up Glance');
@@ -173,9 +157,7 @@ async function playShop(server, phoneUrl, websiteUrl, browser, problems, knownDe
 }
 
 async function main() {
-  const strict = process.argv.includes('--strict');
   const problems = [];
-  const knownDefects = [];
   const stops = [];
   let server = null;
   try {
@@ -190,7 +172,7 @@ async function main() {
     console.log(`pages: phone UI on ${phoneUi.url}, website on ${website.url}`);
     const browser = await startBrowser();
     stops.push(() => browser.close());
-    await playShop(server, phoneUi.url, website.url, browser, problems, knownDefects);
+    await playShop(server, phoneUi.url, website.url, browser, problems);
   } catch (error) {
     problems.push(error.message);
   } finally {
@@ -199,8 +181,6 @@ async function main() {
     }
     console.log('server, pages, and browser: stopped');
   }
-  for (const defect of knownDefects) console.log(`known defect: ${defect}`);
-  if (strict) problems.push(...knownDefects);
   if (problems.length === 0) {
     console.log('result: pass');
     return 0;

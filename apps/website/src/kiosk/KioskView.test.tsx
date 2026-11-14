@@ -28,7 +28,7 @@ const code = () => screen.getByRole('img', { name: `Checkout code ${base.code}` 
 it.each([
   ['idle', 'Look at this code to pay'],
   ['connected', 'Waiting for your nod'],
-  ['spotcheck', 'Waiting for your nod'],
+  ['spotcheck', 'Quick check'],
   ['paid', 'Paid'],
   ['failed', 'Payment failed. Nothing was charged.'],
 ] as const)('names the state %s in the main heading and keeps the code', (state, heading) => {
@@ -104,4 +104,22 @@ it('says that the server does not answer before a code exists', () => {
   renderWithTheme(<KioskView event={null} link="unreachable" />);
   expect(screen.getByRole('heading', { level: 1, name: 'The store server does not answer' })).toBeInTheDocument();
   expect(screen.getByText('The page tries again every 3 seconds.')).toBeInTheDocument();
+});
+it('names a spot check, and keeps the code and the cart', () => {
+  renderWithTheme(<KioskView event={at('spotcheck', { cart, totalCents: cart.totalCents })} link="open" />);
+  expect(screen.getByRole('heading', { level: 1, name: 'Quick check' })).toBeInTheDocument();
+  expect(screen.getByText('Show the product that the voice names to your glasses.')).toBeInTheDocument();
+  expect(screen.getByText('4.49 EUR')).toBeInTheDocument();
+  expect(code()).toBeInTheDocument();
+});
+it('shows no spot check line while the shopper only pays', () => {
+  renderWithTheme(<KioskView event={at('connected', { cart, totalCents: cart.totalCents })} link="open" />);
+  expect(screen.queryByText('Show the product that the voice names to your glasses.')).toBeNull();
+});
+it('shows fewer cart lines during a spot check, because its line takes the room of two', () => {
+  const items = Array.from({ length: 9 }, (_, n) => ({ ...cart.items[0]!, productId: `p-${n}`, name: `Product ${n}` }));
+  renderWithTheme(<KioskView event={at('spotcheck', { cart: { items, totalCents: 900 }, totalCents: 900 })} link="open" />);
+  expect(screen.getByText('Product 4')).toBeInTheDocument();
+  expect(screen.queryByText('Product 5')).toBeNull();
+  expect(screen.getByText('and 4 more items')).toBeInTheDocument();
 });

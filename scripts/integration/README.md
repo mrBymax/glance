@@ -92,7 +92,8 @@ sequenceDiagram
     Phone->>Server: POST .../intents yes
     Server-->>Phone: checkout.paid, cart.updated, session.state paid
     Server-->>Kiosk: kiosk.state paid
-    Note over Phone: receipt with the order ID
+    Server-->>Phone: caption "Paid. ..."
+    Note over Phone: receipt with the order ID, and the line "Paid. ..." in the captions
     Note over Kiosk: "Paid", the total, the receipt line
     Note over Mirror: "Paid. ...", an empty cart
     Test->>Server: GET /api/sessions/:id
@@ -110,11 +111,7 @@ sequenceDiagram
 - The mock payment takes 300 ms (`PAYMENT_DELAY_MS`). One run takes about 25 seconds.
 - Each page loads two times. With an empty Vite cache, Vite can load a page again after the first load, and the second load keeps the page stable. So the kiosk page registers two kiosks, and the test uses the second one.
 - The script gives the `/api` proxy of each dev server an agent of `node:http`. With no agent, the proxy of Vite 8.3.8 on Node 26.12.1 and Windows lost about one call in four with `ECONNRESET`, also with a plain Node server as its target. With an agent, 80 calls of 80 arrived.
-
-Known defect, which the test reports and which does not fail the run:
-
-- The phone UI with `?api=` does not show the caption "Paid. ...". The server sends it after `session.state` with the phase `paid`, and `BrowserBridge` closes the event stream at that event.
-- The run prints one line that starts with `known defect:`. With `node scripts/integration/server-web.mjs --strict`, a known defect fails the run. When the page shows the caption, the line goes away.
+- The server sends the caption "Paid. ..." after `session.state` with the phase `paid`. The test waits for that line in the captions of the phone UI, and then checks that `BrowserBridge` holds no session. The script has no list of known defects. It ignores the flag `--strict`, which an older version of the script had.
 
 ## Shared code
 

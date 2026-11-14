@@ -1,7 +1,7 @@
 import created from '@glance/shared/fixtures/rest/CreateKioskResponse.json';
 import fixture from '@glance/shared/fixtures/rest/KioskEvent.json';
 import { expect, it } from 'vitest';
-import { idleEvent, KIOSK_MAX_ROWS, kioskFlags, kioskRows, parseKioskEvent } from './kioskModel';
+import { idleEvent, KIOSK_MAX_ROWS, KIOSK_SPOT_ROWS, kioskFlags, kioskRows, parseKioskEvent } from './kioskModel';
 
 it('reads the flags of the address', () => {
   expect(kioskFlags('?name=Checkout%205&store=Corner%20Shop&spot=1&fail=1'))
@@ -27,6 +27,8 @@ it('shows at most 7 cart lines and counts the rest', () => {
   expect(kioskRows(cart).rows).toHaveLength(7);
   expect(kioskRows(cart).hiddenCount).toBe(2);
   expect(kioskRows(null)).toEqual({ rows: [], hiddenCount: 0 });
+  expect(KIOSK_SPOT_ROWS).toBe(5);
+  expect(kioskRows(cart, KIOSK_SPOT_ROWS)).toMatchObject({ rows: cart.items.slice(0, 5), hiddenCount: 4 });
 });
 it('makes the idle view of a new kiosk, which the schema accepts', () => {
   const event = idleEvent({ name: 'Checkout 5', store: 'Corner Shop' }, created);

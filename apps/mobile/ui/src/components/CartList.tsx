@@ -1,3 +1,4 @@
+import { Banner } from '@astryxdesign/core/Banner';
 import { Button } from '@astryxdesign/core/Button';
 import { Heading } from '@astryxdesign/core/Heading';
 import { HStack } from '@astryxdesign/core/HStack';
@@ -10,7 +11,7 @@ import { eur } from '../text/format';
 /** The cart lines and the total, as the server sent them. The page adds no prices. */
 export function CartList() {
   const { state, strings, send } = useUi();
-  const { cart } = state;
+  const { cart, budget } = state;
   return (
     <VStack as="section" gap={2}>
       <Heading level={2}>{strings.cart}</Heading>
@@ -30,6 +31,13 @@ export function CartList() {
               />
             ))}
           </List>
+          {budget ? (
+            <Banner
+              status="warning"
+              title={strings.budgetOver}
+              description={strings.budgetDetail(eur(cart.totalCents), eur(budget.budgetCents))}
+            />
+          ) : null}
           <HStack gap={3} hAlign="between" wrap="wrap">
             <Text weight="semibold">{strings.total}</Text>
             <Text weight="semibold">{eur(cart.totalCents)}</Text>

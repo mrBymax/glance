@@ -3,12 +3,14 @@ import { BottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Button } from '@astryxdesign/core/Button';
 import { CheckboxList, CheckboxListItem } from '@astryxdesign/core/CheckboxList';
 import { Heading } from '@astryxdesign/core/Heading';
+import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
-import type { Profile } from '@glance/shared';
+import { EU_ALLERGENS, LANGS, type Profile } from '@glance/shared';
 import { useState } from 'react';
 import { useUi } from '../bridge/BridgeContext';
+import { LANGUAGE_NAMES } from '../text/strings';
 
 /** Five steps in place of a slider: the thumb of the Astryx Slider is below 48 px. */
 export const SPEECH_RATES = [0.8, 1, 1.2, 1.5, 2] as const;
@@ -16,6 +18,7 @@ export const SPEECH_RATES = [0.8, 1, 1.2, 1.5, 2] as const;
 const DETAILS = ['brief', 'standard', 'detailed'] as const;
 const MAIN_YES = ['head', 'touch', 'voice', 'phone', 'key'] as const;
 const TOGGLES = ['headGestures', 'haptics'] as const;
+const DIETS = ['vegan', 'vegetarian'] as const;
 const IN_VIEW = 'inView';
 
 function nearestRate(rate: number): number {
@@ -42,9 +45,9 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
   const { profile } = state;
   const [isDeleteOpen, setDeleteOpen] = useState(false);
 
-  const onToggle = (values: string[]) => {
-    // The list reports all values. The patch holds only the key that changed.
-    for (const key of TOGGLES) {
+  // A list reports all its values. The patch holds only the key that changed.
+  const onSwitches = (keys: readonly ('headGestures' | 'haptics' | 'vegan' | 'vegetarian')[]) => (values: string[]) => {
+    for (const key of keys) {
       const isOn = values.includes(key);
       if (isOn !== profile[key]) setProfile({ [key]: isOn });
     }
@@ -90,7 +93,7 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
             label={strings.inputAndFeedback}
             density="spacious"
             value={TOGGLES.filter((key) => profile[key])}
-            onChange={onToggle}
+            onChange={onSwitches(TOGGLES)}
           >
             <CheckboxListItem value="headGestures" label={strings.headGestures} />
             <CheckboxListItem value="haptics" label={strings.haptics} />
@@ -114,6 +117,45 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
             onChange={(value) => {
               const mainYes = MAIN_YES.find((key) => key === value);
               if (mainYes) setProfile({ mainYes });
+            }}
+          />
+          <CheckboxList
+            label={strings.allergens}
+            density="spacious"
+            value={profile.allergens}
+            // The patch holds the full list, in the order of the EU list.
+            onChange={(values) => setProfile({ allergens: EU_ALLERGENS.filter((key) => values.includes(key)) })}
+          >
+            {EU_ALLERGENS.map((key) => <CheckboxListItem key={key} value={key} label={strings.allergenNames[key]} />)}
+          </CheckboxList>
+          <CheckboxList
+            label={strings.diet}
+            density="spacious"
+            value={DIETS.filter((key) => profile[key])}
+            onChange={onSwitches(DIETS)}
+          >
+            <CheckboxListItem value="vegan" label={strings.vegan} />
+            <CheckboxListItem value="vegetarian" label={strings.vegetarian} />
+          </CheckboxList>
+          <NumberInput
+            label={strings.budget}
+            units="EUR"
+            min={1}
+            isIntegerOnly
+            hasClear
+            size="lg"
+            width="100%"
+            value={profile.budgetCents === null ? null : profile.budgetCents / 100}
+            // With hasClear the input reports null for the clear button.
+            onChange={(value: number | null) => setProfile({ budgetCents: value === null ? null : Math.round(value * 100) })}
+          />
+          <Choice
+            label={strings.language}
+            value={profile.lang}
+            options={LANGS.map((lang): Option => [lang, LANGUAGE_NAMES[lang]])}
+            onChange={(value) => {
+              const lang = LANGS.find((key) => key === value);
+              if (lang) setProfile({ lang });
             }}
           />
           <VStack gap={3}>

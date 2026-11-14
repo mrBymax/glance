@@ -9,7 +9,7 @@ import type { CartItem, KioskEvent } from '@glance/shared';
 import { defaultThemeSlug, themes } from '../astryx-themes';
 import { eur } from '../lib/format';
 import { KioskCode } from './KioskCode';
-import { kioskRows } from './kioskModel';
+import { KIOSK_SPOT_ROWS, kioskRows } from './kioskModel';
 
 /**
  * `registering` and `unreachable`: no kiosk exists yet. `open`: the stream is up.
@@ -20,8 +20,7 @@ export type KioskLink = 'registering' | 'unreachable' | 'open' | 'lost';
 const HEADINGS: Record<KioskEvent['state'], string> = {
   idle: 'Look at this code to pay',
   connected: 'Waiting for your nod',
-  // The event does not name the product of a spot check, so the kiosk shows the cart.
-  spotcheck: 'Waiting for your nod',
+  spotcheck: 'Quick check',
   paid: 'Paid',
   failed: 'Payment failed. Nothing was charged.',
 };
@@ -30,8 +29,8 @@ function Line(props: { children: string }) {
   return <Text as="p" className="kiosk-row">{props.children}</Text>;
 }
 
-function Rows(props: { items: CartItem[] }) {
-  const { rows, hiddenCount } = kioskRows({ items: props.items });
+function Rows(props: { items: CartItem[]; maxRows?: number }) {
+  const { rows, hiddenCount } = kioskRows({ items: props.items }, props.maxRows);
   if (rows.length === 0) return null;
   return (
     <>
@@ -63,8 +62,10 @@ function StateContent(props: { event: KioskEvent }) {
     case 'spotcheck':
       return (
         <>
+          {/* The event does not name the product of a spot check. The voice names it. */}
+          {event.state === 'spotcheck' ? <Line>Show the product that the voice names to your glasses.</Line> : null}
           <Total cents={event.totalCents} />
-          <Rows items={event.cart?.items ?? []} />
+          <Rows items={event.cart?.items ?? []} maxRows={event.state === 'spotcheck' ? KIOSK_SPOT_ROWS : undefined} />
         </>
       );
     case 'paid':

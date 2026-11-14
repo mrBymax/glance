@@ -305,7 +305,6 @@ stateDiagram-v2
 
 - The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
 - The Android app has no handler for `biometric.request` and sends no `biometric.result`. So a checkout above 50 EUR ends after 30 seconds with no payment.
-- The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
-- The phone UI has the session screen only. No screen shows the pay prompt or the receipt.
 - The Android app takes no still for the event `glance.ambiguous`. So `SECOND_LOOK_WAIT_MS` stays at 0 on the server, and the look-alike line plays at once.
 - No native speaker has read the Italian lines of the server. The products of `apps/server/catalog/catalog.dev.json` have no Italian texts, except the oat drink.
+- The phone UI has an Italian table, and no native speaker has read it. In Italian the page text is Italian. The words of Astryx itself and the debug panel stay English.

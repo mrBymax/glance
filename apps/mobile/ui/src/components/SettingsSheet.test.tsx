@@ -70,3 +70,59 @@ it('has no control below 48 px in the settings sheet', async () => {
   const { baseElement } = await open();
   expect(uncoveredTouchTargets(baseElement)).toEqual([]);
 });
+it('lists the 14 EU allergens and two diets, and sends each change', async () => {
+  const { bridge, user, sheet } = await open();
+  const allergens = within(sheet.getByRole('group', { name: 'Allergens' }));
+  expect(allergens.getAllByRole('checkbox')).toHaveLength(14);
+  await user.click(allergens.getByRole('checkbox', { name: 'Gluten' }));
+  await user.click(allergens.getByRole('checkbox', { name: 'Milk' }));
+  await user.click(sheet.getByRole('checkbox', { name: 'Vegan' }));
+  expect(patches(bridge)).toEqual([{ allergens: ['gluten'] }, { allergens: ['gluten', 'milk'] }, { vegan: true }]);
+});
+it('keeps the allergens in the order of the EU list, and removes one', async () => {
+  const { bridge, user, sheet } = await open();
+  await user.click(sheet.getByRole('checkbox', { name: 'Milk' }));
+  await user.click(sheet.getByRole('checkbox', { name: 'Gluten' }));
+  expect(sheet.getByRole('checkbox', { name: 'Milk' })).toBeChecked();
+  await user.click(sheet.getByRole('checkbox', { name: 'Milk' }));
+  await user.click(sheet.getByRole('checkbox', { name: 'Vegetarian' }));
+  await user.click(sheet.getByRole('checkbox', { name: 'Vegetarian' }));
+  expect(patches(bridge)).toEqual([
+    { allergens: ['milk'] }, { allergens: ['gluten', 'milk'] }, { allergens: ['gluten'] }, { vegetarian: true }, { vegetarian: false },
+  ]);
+});
+it('sends the budget in cents, and null when the shopper clears it', async () => {
+  const { bridge, user, sheet } = await open();
+  await user.type(sheet.getByRole('spinbutton', { name: 'Budget' }), '20');
+  await user.tab();
+  await user.click(sheet.getByRole('button', { name: 'Clear Budget' }));
+  expect(patches(bridge)).toEqual([{ budgetCents: 2000 }, { budgetCents: null }]);
+});
+it('shows the budget of the profile in euros', async () => {
+  const { sheet } = await open({ messages: [{ t: 'profile', profile: { ...DEFAULT_PROFILE, budgetCents: 3500 } }] });
+  expect(sheet.getByRole('spinbutton', { name: 'Budget' })).toHaveValue('35');
+});
+it('sends the language, and shows the page in Italian', async () => {
+  const { bridge, user, sheet } = await open({ messages: [eventMessage('glance.pending', { kind: 'new', warnings: [] })] });
+  await user.click(sheet.getByRole('radio', { name: 'Italiano' }));
+  expect(patches(bridge)).toEqual([{ lang: 'it' }]);
+  expect(document.documentElement).toHaveAttribute('lang', 'it');
+  expect(screen.getByRole('dialog', { name: 'Impostazioni' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Aggiungi' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Salta' })).toBeInTheDocument();
+});
+it('marks the language of the profile, and returns to English', async () => {
+  const { bridge, user } = renderWithUi(<SessionScreen />, { messages: [{ t: 'profile', profile: { ...DEFAULT_PROFILE, lang: 'it' } }] });
+  await user.click(screen.getByRole('button', { name: 'Impostazioni' }));
+  const italian = within(screen.getByRole('dialog', { name: 'Impostazioni' }));
+  expect(italian.getByRole('radio', { name: 'Italiano' })).toHaveAttribute('aria-checked', 'true');
+  await user.click(italian.getByRole('radio', { name: 'English' }));
+  expect(patches(bridge)).toEqual([{ lang: 'en' }]);
+  expect(document.documentElement).toHaveAttribute('lang', 'en');
+  expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+});
+it('has no control below 48 px in the Italian settings sheet', async () => {
+  const { baseElement, user } = renderWithUi(<SessionScreen />, { messages: [{ t: 'profile', profile: { ...DEFAULT_PROFILE, lang: 'it' } }] });
+  await user.click(screen.getByRole('button', { name: 'Impostazioni' }));
+  expect(uncoveredTouchTargets(baseElement)).toEqual([]);
+});

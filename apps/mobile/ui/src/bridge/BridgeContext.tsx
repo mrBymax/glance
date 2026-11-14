@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { snapshotCaptionsOf, useSpokenText, type SnapshotCaptions } from '../components/useSpokenText';
 import { hapticFor } from '../state/haptics';
 import { initialUiState, reduce, type UiAction, type UiState } from '../state/uiState';
-import { stringsFor, type Strings } from '../text/strings';
+import { EN, stringsFor, type Strings } from '../text/strings';
 
 export type Ui = {
   state: UiState;
@@ -33,6 +33,11 @@ export function BridgeProvider(props: { bridge: GlanceBridge; children: ReactNod
   const snapshotCaptions = useRef<SnapshotCaptions>(new Map());
   useSpokenText(state, strings, snapshotCaptions);
 
+  // A screen reader selects its voice from the language of the document.
+  useEffect(() => {
+    document.documentElement.lang = state.profile.lang;
+  }, [state.profile.lang]);
+
   useEffect(() => {
     // The host answers ui.ready at once, so the page must listen first.
     const unsubscribe = bridge.subscribe((message) => {
@@ -58,6 +63,11 @@ export function BridgeProvider(props: { bridge: GlanceBridge; children: ReactNod
 
   const ui = useMemo(() => ({ state, strings, bridge, send, dispatch, setProfile }), [state, strings, bridge, send, dispatch, setProfile]);
   return <UiContext.Provider value={ui}>{children}</UiContext.Provider>;
+}
+
+/** Returns the strings of the page. With no BridgeProvider above, it returns the English strings. */
+export function useStrings(): Strings {
+  return useContext(UiContext)?.strings ?? EN;
 }
 
 export function useUi(): Ui {

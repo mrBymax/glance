@@ -92,3 +92,25 @@ it('has no control below 48 px in the pay view and in the receipt', () => {
   deliver(eventMessage('checkout.paid'));
   expect(uncoveredTouchTargets(baseElement)).toEqual([]);
 });
+it('asks for the fingerprint when the server requires it', () => {
+  renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.offered', { needsBiometric: true })] });
+  expect(sheet('Checkout').getByText('Over fifty euros. Confirm with your fingerprint on the phone.')).toBeInTheDocument();
+  expect(sheet('Checkout').getByRole('button', { name: 'Pay with fingerprint' })).toBeInTheDocument();
+  expect(sheet('Checkout').queryByRole('button', { name: 'Pay' })).toBeNull();
+});
+it('shows no fingerprint line for a payment that needs none', () => {
+  renderWithUi(<SessionScreen />, { messages: [offer] });
+  expect(sheet('Checkout').queryByText(/fingerprint/)).toBeNull();
+});
+it('pays one time with the fingerprint button, and has no control below 48 px', async () => {
+  const { bridge, user, baseElement } = renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.offered', { needsBiometric: true })] });
+  expect(uncoveredTouchTargets(baseElement)).toEqual([]);
+  const pay = sheet('Checkout').getByRole('button', { name: 'Pay with fingerprint' });
+  await user.click(pay);
+  await user.click(pay);
+  expect(intents(bridge)).toEqual([{ t: 'intent', kind: 'yes', promptId: 'p-0001' }]);
+});
+it('shows the short word Pay on the fingerprint button, so that a large font does not cut it', () => {
+  renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.offered', { needsBiometric: true })] });
+  expect(sheet('Checkout').getByRole('button', { name: 'Pay with fingerprint' })).toHaveTextContent(/^Pay$/);
+});

@@ -1,3 +1,4 @@
+import { EMPTY_CART } from '@glance/shared';
 import { screen, waitFor } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { eventFixture, eventMessage, SNAPSHOT } from '../debug/fixtures';
@@ -118,4 +119,40 @@ it('sends ui.ready one time, after it listens to the bridge', () => {
 it('has no control below 48 px on the session screen', () => {
   const { container } = renderWithUi(<SessionScreen />, { messages: [pending(), eventMessage('cart.updated')] });
   expect(uncoveredTouchTargets(container)).toEqual([]);
+});
+it('shows each warning on the card, and never says that a product is safe', () => {
+  const { deliver } = renderWithUi(<SessionScreen />, { messages: [pending({ warnings: [{ kind: 'allergen', allergens: ['gluten'] }, { kind: 'diet', diet: 'vegan' }] })] });
+  expect(screen.getByText('Warning: contains gluten.')).toBeInTheDocument();
+  expect(screen.getByText('Warning: not vegan.')).toBeInTheDocument();
+  deliver(pending({ promptId: 'p-0002', warnings: [] }));
+  expect(screen.queryByText(/warning/i)).toBeNull();
+  expect(screen.queryByText(/safe/i)).toBeNull();
+});
+it('says when allergen data is missing', () => {
+  renderWithUi(<SessionScreen />, { messages: [pending({ warnings: [{ kind: 'allergenDataMissing' }] })] });
+  expect(screen.getByText('Allergen data is missing for this product.')).toBeInTheDocument();
+});
+it('warns in text while the total is over the budget', () => {
+  const { deliver } = renderWithUi(<SessionScreen />, { messages: [eventMessage('cart.updated'), eventMessage('budget.exceeded', { budgetCents: 400, totalCents: 449 })] });
+  expect(screen.getByText('Warning: over your budget.')).toBeInTheDocument();
+  expect(screen.getByText('Total 4.49 EUR. Budget 4.00 EUR.')).toBeInTheDocument();
+  deliver(eventMessage('cart.updated', { cart: EMPTY_CART, change: null }));
+  expect(screen.queryByText('Warning: over your budget.')).toBeNull();
+});
+it('asks the shopper to show the product of a spot check', () => {
+  const { deliver } = renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.spotcheck')] });
+  expect(screen.getByText('Quick check.')).toBeInTheDocument();
+  expect(screen.getByText(`Show me the ${eventFixture('checkout.spotcheck').product.name}.`)).toBeInTheDocument();
+  deliver(eventMessage('checkout.offered'));
+  expect(screen.queryByText('Quick check.')).toBeNull();
+});
+it('keeps the card of a product prompt during a spot check', () => {
+  renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.spotcheck'), pending()] });
+  expect(screen.getByText('Quick check.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
+});
+it('ends the spot check message when the checkout stops', () => {
+  const { deliver } = renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.spotcheck')] });
+  deliver(eventMessage('checkout.cancelled'));
+  expect(screen.queryByText('Quick check.')).toBeNull();
 });

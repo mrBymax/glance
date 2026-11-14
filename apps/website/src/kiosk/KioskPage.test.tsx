@@ -7,6 +7,7 @@ import { fakeFetch, fakeSources, type FakeFetch, type FakeSources } from '../tes
 import { renderWithTheme } from '../test/render';
 import { parseKioskEvent } from './kioskModel';
 import { KioskPage } from './KioskPage';
+import { SPOT_AFTER_MS, SPOT_MS } from './kioskRun';
 
 const base = parseKioskEvent(fixture);
 if (!base) throw new Error('fixture rest/KioskEvent.json is not a kiosk event');
@@ -105,6 +106,23 @@ it('plays the recorded run with no network call when the address has the flag re
   expect(screen.getByRole('heading', { level: 1, name: 'Waiting for your nod' })).toBeInTheDocument();
   act(() => { vi.advanceTimersByTime(5000); });
   expect(screen.getByRole('heading', { level: 1, name: 'Paid' })).toBeInTheDocument();
+  expect(http.calls).toEqual([]);
+  expect(sources.sources).toEqual([]);
+  unmount();
+  vi.useRealTimers();
+});
+it('plays the run with a spot check when the address has the flags replay and spot', () => {
+  vi.useFakeTimers();
+  const http = fakeFetch(() => ({ json: created }));
+  const sources = fakeSources();
+  const { unmount } = renderKiosk('/kiosk?replay=1&spot=1', http, sources);
+  expect(screen.getByRole('heading', { level: 1, name: 'Look at this code to pay' })).toBeInTheDocument();
+  act(() => { vi.advanceTimersByTime(3000); });
+  expect(screen.getByRole('heading', { level: 1, name: 'Waiting for your nod' })).toBeInTheDocument();
+  act(() => { vi.advanceTimersByTime(SPOT_AFTER_MS); });
+  expect(screen.getByRole('heading', { level: 1, name: 'Quick check' })).toBeInTheDocument();
+  act(() => { vi.advanceTimersByTime(SPOT_MS); });
+  expect(screen.getByRole('heading', { level: 1, name: 'Waiting for your nod' })).toBeInTheDocument();
   expect(http.calls).toEqual([]);
   expect(sources.sources).toEqual([]);
   unmount();

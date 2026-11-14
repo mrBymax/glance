@@ -84,7 +84,7 @@ Query flags of `/kiosk`:
 | `store` | `Demo Market` | The name of the store, cut at 40 characters. |
 | `spot` | off | The server asks for a spot check at this kiosk. `spot=0` and `spot=false` mean off. |
 | `fail` | off | Each payment at this kiosk fails. `fail=0` and `fail=false` mean off. |
-| `replay=1` | off | The page plays `KIOSK_RUN` of `src/kiosk/kioskRun.ts` in a loop of 24 seconds. It makes no network call. |
+| `replay=1` | off | The page plays `KIOSK_RUN` of `src/kiosk/kioskRun.ts` in a loop of 24 seconds. It makes no network call. With `spot` also, it plays `KIOSK_SPOT_RUN`: the same run with one spot check of 4 seconds after each `connected` event, in a loop of 36 seconds. |
 
 The page registers a kiosk, and then it follows the event stream of that kiosk:
 
@@ -120,6 +120,7 @@ stateDiagram-v2
 
 The server selects each state after `idle`. The page only shows it.
 
+- The state `spotcheck` shows the heading "Quick check" and the line "Show the product that the voice names to your glasses.". The event does not name the product, so the page does not name it. The code, the total, and the cart stay. That line takes two lines on a 1080p screen, so this state shows 5 cart lines (`KIOSK_SPOT_ROWS`) before `and <n> more items`.
 - The code keeps its place and its size in each state. It is black on white in each color mode, and the page uses the light mode.
 - The page shows the total of the event. It never adds prices. It shows 7 cart lines, and then the line `and <n> more items`.
 - The page drops a message that is not JSON and a message that `KioskEventSchema` of `@glance/shared` rejects.

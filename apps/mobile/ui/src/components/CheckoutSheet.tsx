@@ -29,15 +29,19 @@ function PayView(props: { prompt: PayPrompt; answer: Answer | null; onAnswer(kin
       <Heading level={2}>{strings.payee(prompt.kiosk.name, prompt.kiosk.store)}</Heading>
       <Text>{strings.items(prompt.itemCount)}</Text>
       <Text type="display-1">{eur(prompt.totalCents)}</Text>
+      {prompt.needsBiometric ? <Banner status="info" title={strings.fingerprint} /> : null}
       {state.error ? <Banner status="warning" title={state.error.message} /> : null}
       <Button
-        label={strings.pay}
+        label={prompt.needsBiometric ? strings.payFingerprint : strings.pay}
         variant="primary"
         size="lg"
         width="100%"
         isLoading={given === 'yes'}
         onClick={() => onAnswer('yes')}
-      />
+      >
+        {/* The full name is cut at a font scale of 200 percent. The banner above states the fingerprint. */}
+        {strings.pay}
+      </Button>
       <Button label={strings.cancel} size="lg" width="100%" isDisabled={given !== null} onClick={() => onAnswer('no')} />
     </VStack>
   );
