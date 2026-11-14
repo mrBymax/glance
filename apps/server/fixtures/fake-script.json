@@ -1,0 +1,12 @@
+{
+  "loop": true,
+  "lengthMs": 60000,
+  "steps": [
+    { "atMs": 3000, "forMs": 6000, "result": { "status": "identified", "productId": "oat-drink-1l" } },
+    { "atMs": 14000, "forMs": 6000, "result": { "status": "identified", "productId": "rye-bread" } },
+    { "atMs": 24000, "forMs": 3000, "result": { "status": "unsure", "aimHint": "left" } },
+    { "atMs": 28000, "forMs": 3000, "result": { "status": "unknown" } },
+    { "atMs": 33000, "forMs": 4000, "result": { "status": "ambiguous", "candidates": ["oat-drink-1l", "oat-drink-barista-1l"] } },
+    { "atMs": 40000, "forMs": 15000, "kiosk": "newest" }
+  ]
+}

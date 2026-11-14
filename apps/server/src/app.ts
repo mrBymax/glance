@@ -5,12 +5,15 @@ import type { Clock } from './clock';
 import type { Config } from './config';
 import type { Store } from './db/store';
 import { registerSessionRoutes } from './http/sessions';
+import { ScriptPlayer, readFakeScript } from './recognition/fake';
 import { SessionRegistry } from './sessions/registry';
 import { type FrameHandler, registerDeviceSocket } from './ws/device';
 
 export type AppDeps = {
-  config: Config; clock: Clock; store: Store; catalog: CatalogIndex; log?: boolean;
-  /** Gets each frame of each phone. Without it the server drops the frames. */
+  config: Config; clock: Clock; store: Store; catalog: CatalogIndex;
+  /** false gives no log. An object sends each log line to its stream. */
+  log?: boolean | { level: string; stream: { write(line: string): void } };
+  /** Gets each frame of each phone. Without it the server drops the frames. Fake recognition does not use it. */
   onFrame?: FrameHandler;
 };
 
@@ -32,6 +35,8 @@ const ERROR_NAMES: Record<number, string> = { 400: 'bad_request', 401: 'unauthor
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { config } = deps;
+  // A script that the server cannot use stops the start, before a timer or a socket exists.
+  const fakeScript = config.fakeRecognition === null ? null : readFakeScript(config.fakeRecognition, deps.catalog);
   const app = Fastify({ logger: deps.log ?? true });
 
   app.decorate('closers', new Set<Closer>());
@@ -100,9 +105,25 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     store: config.mongodbUri === null ? 'memory' : 'mongodb',
   }));
 
-  // The test helper sets the address after the server has its port, so the route reads it for each call.
-  registerSessionRoutes(app, { publicBaseUrl: () => config.publicBaseUrl });
-  registerDeviceSocket(app, { onFrame: deps.onFrame ?? (() => undefined) });
+  // With fake recognition, one script player stands for the frames and the recognition calls of each session.
+  const player = fakeScript === null ? null : new ScriptPlayer({ script: fakeScript, clock: deps.clock, onKiosk: () => undefined });
+  if (player) app.closers.add(() => player.stopAll());
+  const logFrame: FrameHandler = (_session, { header, jpeg }) => {
+    app.log.info(
+      `frame seq=${header.seq} w=${header.w} h=${header.h} blurred=${header.blurred} kind=${header.kind ?? 'frame'} bytes=${jpeg.length}`,
+    );
+  };
+
+  registerSessionRoutes(app, {
+    // The test helper sets the address after the server has its port, so the route reads it for each call.
+    publicBaseUrl: () => config.publicBaseUrl,
+    // A browser client with no phone gets a fake device, and then hears "Camera on".
+    onEventsOpen: (session) => player?.start(session, { fakeDevice: !session.connected }),
+  });
+  registerDeviceSocket(app, {
+    onFrame: player ? logFrame : deps.onFrame ?? (() => undefined),
+    onOpen: (session) => player?.start(session, { fakeDevice: false }),
+  });
 
   return app;
 }

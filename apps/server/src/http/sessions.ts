@@ -20,7 +20,11 @@ export function deviceSocketUrl(publicBaseUrl: string, sessionId: string, token:
  * An intent or a cart edit gets 204 when the server took the input. Its outcome arrives as events.
  * No path checks the token yet.
  */
-export function registerSessionRoutes(app: FastifyInstance, deps: { publicBaseUrl: () => string }): void {
+export function registerSessionRoutes(app: FastifyInstance, deps: {
+  publicBaseUrl: () => string;
+  /** Runs when a client opens the events stream of a live session, after the stream listens to the bus. */
+  onEventsOpen: (session: SessionRuntime) => void;
+}): void {
   const badRequest = (reply: FastifyReply) => reply.code(400).send({ error: 'bad_request' });
 
   /** Answers 404 and returns null for an unknown session. */
@@ -92,6 +96,8 @@ export function registerSessionRoutes(app: FastifyInstance, deps: { publicBaseUr
       // A session that is paid or ended has stopped, and it still has a receipt to show. Its stream stays open,
       // because a browser opens a stream again each time the stream ends.
       const removeStopListener = session.stopped ? () => undefined : session.onStop(end);
+      // The stream listens to the bus now, so the client gets the first events of a script player.
+      if (!session.stopped) deps.onEventsOpen(session);
       return () => {
         unsubscribe();
         removeStopListener();

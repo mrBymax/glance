@@ -5,6 +5,7 @@ import { type Config, ConfigError, loadConfig } from './config';
 import { MemoryStore } from './db/memory';
 import { MongoStore } from './db/mongo';
 import type { Store } from './db/store';
+import { FakeScriptError } from './recognition/fake';
 
 class StartError extends Error {}
 
@@ -48,7 +49,7 @@ async function main(): Promise<void> {
 main().catch((error) => {
   if (error instanceof ConfigError) {
     console.error(`config: ${error.message}`);
-  } else if (error instanceof StartError) {
+  } else if (error instanceof StartError || error instanceof FakeScriptError) {
     console.error(error.message);
   } else {
     console.error(error);

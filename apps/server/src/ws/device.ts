@@ -22,7 +22,11 @@ const CLOSE_NORMAL = 1000;
  * A new socket for a session takes over, and the older one closes.
  * The token is not checked yet.
  */
-export function registerDeviceSocket(app: FastifyInstance, deps: { onFrame: FrameHandler }): void {
+export function registerDeviceSocket(app: FastifyInstance, deps: {
+  onFrame: FrameHandler;
+  /** Runs when a phone has its snapshot and listens to the events of the session. */
+  onOpen: (session: SessionRuntime) => void;
+}): void {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
   /** Each open socket, with false when it sent no pong since the last ping. */
   const alive = new Map<WebSocket, boolean>();
@@ -72,6 +76,7 @@ export function registerDeviceSocket(app: FastifyInstance, deps: { onFrame: Fram
     session.attach(sink);
     send({ t: 'snapshot', session: session.snapshot() });
     unsubscribe = app.bus.subscribe(sessionTopic(session.id), (event) => send({ t: 'event', event } as ServerToDevice));
+    deps.onOpen(session);
 
     ws.on('pong', () => alive.set(ws, true));
     ws.on('error', (error) => {

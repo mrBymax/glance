@@ -14,7 +14,7 @@ export type RecognitionResult = {
   gesture: 'none' | 'thumbs_up' | 'thumbs_down';
 };
 
-export const RecognitionResultSchema: z.ZodType<RecognitionResult> = z.object({
+const ResultObjectSchema = z.object({
   status: z.enum(['identified', 'ambiguous', 'unsure', 'unknown', 'none']),
   productId: z.string().min(1).nullable(),
   candidates: z.array(z.string().min(1)),
@@ -22,6 +22,11 @@ export const RecognitionResultSchema: z.ZodType<RecognitionResult> = z.object({
   aimHint: AimHintSchema,
   gesture: z.enum(['none', 'thumbs_up', 'thumbs_down']),
 });
+
+export const RecognitionResultSchema: z.ZodType<RecognitionResult> = ResultObjectSchema;
+
+/** Some fields of a result. A fake script writes a result this way. An unknown key fails. */
+export const RecognitionResultPartSchema = ResultObjectSchema.partial().strict();
 
 /** The result for a frame with no product. Frozen, because each caller shares it. */
 export const NO_RESULT: RecognitionResult = Object.freeze({
