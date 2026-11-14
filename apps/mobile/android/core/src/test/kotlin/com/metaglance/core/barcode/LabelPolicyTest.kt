@@ -81,6 +81,7 @@ class LabelPolicyTest {
         val policy = LabelPolicy()
         assertEquals(listOf(2500), policy.stills(0..3000 step 100))
         policy.onStillCode()
+        assertEquals(emptyList<Int>(), policy.stills(3100..8400 step 100))
         assertTrue(policy.onFrame(8500, regionInView = true, codeAccepted = false, requested = true))
     }
 
@@ -99,5 +100,16 @@ class LabelPolicyTest {
         assertFalse(policy.onFrame(0, regionInView = false, codeAccepted = false, requested = true, canUpload = false))
         assertFalse(policy.onFrame(100, regionInView = false, codeAccepted = false))
         assertTrue(policy.onFrame(200, regionInView = false, codeAccepted = false, requested = true))
+    }
+
+    @Test fun `asks for the still in a frame that shows the region`() {
+        val policy = LabelPolicy()
+        policy.stills(0..2400 step 100)
+        assertFalse(policy.onFrame(2500, regionInView = false, codeAccepted = false))
+        assertTrue(policy.onFrame(2600, regionInView = true, codeAccepted = false))
+    }
+
+    @Test fun `the region needs its time again after a still`() {
+        assertEquals(listOf(2500, 5100), LabelPolicy(everyMs = 1000).stills(0..6000 step 100))
     }
 }

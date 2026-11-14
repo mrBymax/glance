@@ -106,6 +106,7 @@ class BarcodeVoteTest {
         vote.onFrame(400, digits)
         vote.onFrame(800, digits)
         assertEquals(digits, vote.onFrame(1800, decoded))
+        assertEquals(digits, vote.onFrame(2800, decoded))
     }
 
     @Test fun `a UPC-A code and its 13-digit form are equal reads`() {
