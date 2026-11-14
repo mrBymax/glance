@@ -303,7 +303,6 @@ stateDiagram-v2
 
 ## Parts that do not exist yet
 
-- No path of the server checks the token of a session or of a kiosk.
 - The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
 - The Android app has no handler for `biometric.request` and sends no `biometric.result`. So a checkout above 50 EUR ends after 30 seconds with no payment.
 - The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
