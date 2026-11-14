@@ -1,4 +1,5 @@
 import { type Product, type Profile, type Warning, localize } from '@glance/shared';
+import { gtinOfScannedId } from '../products/scanned';
 import type { Line } from '../sessions/types';
 import { numberToWords, spokenPrice } from './numbers';
 import { answersWithNod, yesPhrases } from './phrases';
@@ -33,7 +34,10 @@ export function nameAtStart(product: Product, profile: Profile): string {
   return localize(product.spokenName, profile.lang);
 }
 
-/** A brand keeps its capital letter. Each other name starts in lower case inside a sentence. */
+/**
+ * A brand keeps its capital letter. Each other name starts in lower case inside a sentence.
+ * The name of a scanned product stays as the product database writes it: most of these names are brand names.
+ */
 export function nameInside(product: Product, profile: Profile): string {
   return insideSentence(nameAtStart(product, profile), product);
 }
@@ -52,7 +56,8 @@ function commonEnd(names: readonly string[]): string {
 }
 
 function insideSentence(name: string, product: Product): string {
-  return startsWithBrand(name, product) ? name : name.charAt(0).toLowerCase() + name.slice(1);
+  if (startsWithBrand(name, product) || gtinOfScannedId(product.id) !== null) return name;
+  return name.charAt(0).toLowerCase() + name.slice(1);
 }
 
 function itemCount(count: number, profile: Profile): string {

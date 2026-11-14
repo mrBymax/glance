@@ -12,6 +12,13 @@ import { registerSessionRoutes } from './http/sessions';
 import { registerSpeechRoutes } from './http/speech';
 import { KioskService } from './kiosk/kiosks';
 import { createPayments } from './kiosk/payment';
+import { createLabelHandler } from './label/intake';
+import { type LabelReader, NO_LABEL } from './label/reader';
+import { createBarcodeReports } from './products/barcodes';
+import type { ProductInfo } from './products/productInfo';
+import { ProductResolver } from './products/resolver';
+import { ScannedProducts, gtinOfScannedId, withScanned } from './products/scanned';
+import type { StoreList } from './products/storeList';
 import { ScriptPlayer, readFakeScript } from './recognition/fake';
 import type { Recognizer } from './recognition/gemini';
 import { createFrameHandler, saveFrameWith } from './recognition/intake';
@@ -25,15 +32,21 @@ import { type FrameHandler, frameLogLine, registerDeviceSocket } from './ws/devi
 
 export type AppDeps = {
   config: Config; clock: Clock; store: Store; catalog: CatalogIndex;
+  /** What the store sells, by barcode. main.ts reads the file of STORE_LIST_PATH. */
+  storeList: StoreList;
+  /** The details of a scanned product. main.ts makes the reader of Open Food Facts, or the fixture reader of FAKE_PRODUCT_INFO. */
+  productInfo: ProductInfo;
   /** false gives no log. An object sends each log line to its stream. */
   log?: boolean | { level: string; stream: { write(line: string): void } };
   /** Names the product of each frame. Fake recognition does not use it. */
   recognizer?: Recognizer;
   /** Makes the speech clips. Without it, and with FAKE_SPEECH, each line goes out with no clip. */
   synthesize?: Synthesize;
+  /** Reads the still of a label. Fake recognition has a reader of its own. With neither, the server drops each label frame. */
+  labelReader?: LabelReader;
   /** Answers a spoken question about a product. Fake recognition does not use it. */
   ask?: RuntimeDeps['ask'];
-  /** Gets each frame of each phone, in place of the recognizer. With neither, the server drops the frames. */
+  /** Gets each frame of each phone that is no label frame, in place of the recognizer. With neither, the server drops the frames. */
   onFrame?: FrameHandler;
   /** Writes each frame to disk. Only main.ts makes one, and only with SAVE_FRAMES. Without it the server stores no frame. */
   saveFrame?: FrameSaver;
@@ -132,12 +145,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const clips = new ClipCache(config.speechCacheDir, deps.store);
   const kiosks = new KioskService({ store: deps.store, bus, clock: deps.clock });
   const payments = createPayments({ store: deps.store, clock: deps.clock, kiosks, delayMs: config.paymentDelayMs });
+  // The rules find a scanned product by its ID as they find a catalog product. Recognition keeps the catalog alone.
+  const scanned = new ScannedProducts();
+  const resolver = new ProductResolver({
+    catalog: deps.catalog, storeList: deps.storeList, info: deps.productInfo, scanned, log: (line) => app.log.warn(line),
+  });
+  const reportBarcode = createBarcodeReports({ resolver, log: app.log });
   let ask: RuntimeDeps['ask'];
   if (fakeScript !== null) ask = async (_question, _product, lang) => FAKE_ANSWER[lang];
   else ask = deps.ask ?? (async () => { throw new Error('The server has no answer service.'); });
   const sessions = new SessionRegistry({
     clock: deps.clock,
-    catalog: deps.catalog,
+    catalog: withScanned(deps.catalog, scanned),
     secondLookWaitMs: config.secondLookWaitMs,
     store: deps.store,
     bus,
@@ -152,6 +171,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }),
     startPayment: payments,
     ask,
+    restoreProducts: async (productIds) => {
+      for (const productId of productIds) {
+        const gtin = gtinOfScannedId(productId);
+        if (gtin === null) continue;
+        // A product that the store no longer sells stays a cart line, as a product that left the catalog does.
+        await resolver.resolve(gtin).catch((error: unknown) => {
+          app.log.warn(`product not restored. gtin=${gtin} ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }
+    },
     afterStep: (session, before) => kiosks.sync(session, before),
   });
   app.decorate('bus', bus);
@@ -169,6 +198,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ok: true,
     fakeRecognition: config.fakeRecognition !== null,
     fakeSpeech: config.fakeSpeech,
+    fakeProductInfo: config.fakeProductInfo,
     store: config.mongodbUri === null ? 'memory' : 'mongo',
     // The team checks this before the demo: the server must store no frame then.
     saveFrames: saveFrame !== null,
@@ -182,6 +212,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const kiosk = which === 'newest' ? kiosks.newest() : kiosks.byCode(which);
       if (kiosk) kiosks.sight(session, formatKioskCode(kiosk.code));
     },
+    onBarcode: (session, code) => void reportBarcode(session, code, 'barcode'),
+    onCode: (session, digits) => void reportBarcode(session, digits, 'model'),
   });
   if (player) app.closers.add(() => player.stopAll());
   // Fake recognition drops each frame after this line. With SAVE_FRAMES it saves the frame first,
@@ -198,6 +230,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     recognizer: deps.recognizer,
     clock: deps.clock,
     log: app.log,
+    onCode: (session, digits) => void reportBarcode(session, digits, 'model'),
     onSlow: (session) => {
       app.log.warn(`recognition is slow for the session ${session.id}: 3 calls failed in a row`);
       session.dispatch({ type: 'recognition.slow' });
@@ -206,6 +239,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     saveFrame,
   });
   if (recognize) app.closers.add(() => recognize.stopAll());
+
+  // With fake recognition the script holds the answer of the reader, and a script with none reads nothing.
+  const fakeLabel = fakeScript?.label ?? NO_LABEL;
+  const readLabel = createLabelHandler({
+    reader: fakeScript === null ? deps.labelReader ?? null : { read: async () => fakeLabel },
+    storeList: deps.storeList,
+    report: reportBarcode,
+    log: app.log,
+    minConfidence: config.minConfidence,
+    requireBlur: config.requireBlur,
+    saveFrame,
+  });
+  app.closers.add(() => readLabel.stopAll());
+  const onStreamFrame: FrameHandler = player ? logFrame : deps.onFrame ?? recognize ?? (() => undefined);
 
   registerSessionRoutes(app, {
     publicBaseUrl: () => config.publicBaseUrl,
@@ -217,9 +264,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerSpeechRoutes(app, { cache: clips, fake: config.fakeSpeech });
   registerDemoRoutes(app, { demoKey: config.demoKey });
   registerDeviceSocket(app, {
-    onFrame: player ? logFrame : deps.onFrame ?? recognize ?? (() => undefined),
+    onFrame: (session, frame) => (frame.header.kind === 'label' ? readLabel(session, frame) : onStreamFrame(session, frame)),
     onOpen: (session) => player?.start(session, { fakeDevice: false }),
     onKioskSeen: (session, text) => kiosks.sight(session, text),
+    onBarcodeSeen: (session, code, source) => void reportBarcode(session, code, source),
   });
 
   await kiosks.load();

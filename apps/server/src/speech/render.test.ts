@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { DEFAULT_PROFILE, EU_ALLERGENS, type ProfilePatch, type Warning } from '@glance/shared';
 import { indexCatalog, readCatalogFile } from '../catalog/catalog';
+import { scannedProduct } from '../products/scanned';
 import { LINE_DEFAULTS } from '../sessions/say';
 import type { Line } from '../sessions/types';
 import { LINES_EN } from './lines.en';
@@ -269,6 +270,13 @@ it('asks for the product of a spot check, and says thanks', () => {
   expect(text({ key: 'spotcheck.thanks' })).toBe('Thank you.');
   expect(it_({ key: 'spotcheck.ask', product: oat })).toBe('Controllo rapido. Mostrami questo prodotto: bevanda di avena.');
   expect(it_({ key: 'spotcheck.thanks' })).toBe('Grazie.');
+});
+it('keeps the name of a scanned product as the database writes it', () => {
+  const scanned = scannedProduct({ gtin: '5449000000996', priceCents: 99, name: 'Coca-Cola', brand: 'The Coca-Cola Company', packSize: '330 ml' }, null);
+  expect(text({ key: 'cart.added', product: scanned, totalCents: 99, budgetCents: null })).toBe('Added Coca-Cola. Total ninety-nine cents.');
+  expect(it_({ key: 'cart.removed', product: scanned, totalCents: 0 })).toBe('Tolto: Coca-Cola. Totale zero euro.');
+  expect(text({ key: 'glance.new', product: scanned, hint: false, warnings: [] }, { detail: 'detailed' }))
+    .toBe('The Coca-Cola Company Coca-Cola, three hundred thirty millilitres, ninety-nine cents.');
 });
 it('speaks the two barcode lines in Italian', () => {
   expect(it_({ key: 'barcode.notInStore' })).toBe('Questo prodotto non è in questo negozio.');

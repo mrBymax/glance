@@ -2,7 +2,9 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { FastifyInstance } from 'fastify';
 import { type RawData, type WebSocket, WebSocketServer } from 'ws';
-import { type DeviceToServer, type FrameHeader, type ServerToDevice, decodeFrame, parseDeviceToServer } from '@glance/shared';
+import {
+  type BarcodeSource, type DeviceToServer, type FrameHeader, type ServerToDevice, decodeFrame, parseDeviceToServer,
+} from '@glance/shared';
 import { sessionTopic } from '../bus';
 import { tokenMatches } from '../http/auth';
 import type { DeviceSink, SessionRuntime } from '../sessions/runtime';
@@ -36,6 +38,8 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
   onOpen: (session: SessionRuntime) => void;
   /** Gets the text of each QR code that the phone reports. */
   onKioskSeen: (session: SessionRuntime, text: string) => void;
+  /** Gets each product barcode that the phone reports, as the phone read it. */
+  onBarcodeSeen: (session: SessionRuntime, code: string, source: BarcodeSource) => void;
 }): void {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
   /** Each open socket, with false when it sent no pong since the last ping. */
@@ -184,6 +188,9 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
         return;
       case 'kiosk.seen':
         deps.onKioskSeen(session, message.text);
+        return;
+      case 'barcode.seen':
+        deps.onBarcodeSeen(session, message.code, message.source);
         return;
       case 'biometric.result':
         session.dispatch({ type: 'biometric.result', ok: message.ok });

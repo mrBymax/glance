@@ -3,6 +3,7 @@
   "lengthMs": 60000,
   "steps": [
     { "atMs": 3000, "forMs": 6000, "result": { "status": "identified", "productId": "oat-drink-1l" } },
+    { "atMs": 10000, "forMs": 3000, "barcode": "8076800195057" },
     { "atMs": 14000, "forMs": 6000, "result": { "status": "identified", "productId": "rye-bread" } },
     { "atMs": 24000, "forMs": 3000, "result": { "status": "unsure", "aimHint": "left" } },
     { "atMs": 28000, "forMs": 3000, "result": { "status": "unknown" } },
