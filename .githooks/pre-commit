@@ -1,0 +1,3 @@
+#!/bin/sh
+# Checks the staged files: secrets, ESLint, and ktlint. See scripts/hooks/pre-commit.mjs.
+exec node scripts/hooks/pre-commit.mjs
