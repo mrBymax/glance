@@ -4,9 +4,13 @@ import com.metaglance.core.image.RectPx
 
 /**
  * The crops of a frame around a barcode that the scanner found and did not decode. `box` is the box of the
- * scanner in frame pixels. Each crop stays inside the frame, and a box with no part in the frame gives null.
+ * scanner in frame pixels. Each crop stays inside the frame. A box with no part in the frame gives null, and so
+ * does a crop that is too small to read.
  */
 object BarcodeRegion {
+    /** ML Kit takes no image with a side below 32 pixels, and the smallest scale is 2. */
+    private const val MIN_SIDE = 16
+
     /** A scaled crop is at most this wide, so the second decode stays short. */
     private const val MAX_SCALED_WIDTH = 960
 
@@ -42,6 +46,6 @@ object BarcodeRegion {
         val top = maxOf(box.top - marginY, 0)
         val right = minOf(box.left + box.width + marginX, frameWidth)
         val bottom = minOf(box.top + box.height + marginY + below, frameHeight)
-        return if (left < right && top < bottom) RectPx(left, top, right - left, bottom - top) else null
+        return if (right - left >= MIN_SIDE && bottom - top >= MIN_SIDE) RectPx(left, top, right - left, bottom - top) else null
     }
 }

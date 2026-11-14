@@ -56,4 +56,10 @@ class BarcodeRegionTest {
         assertFalse(BarcodeRegion.holds(crop, 150, 210))
         assertFalse(BarcodeRegion.holds(crop, 120, 199))
     }
+
+    @Test fun `a crop with a side below 16 pixels is too small to read`() {
+        assertNull(BarcodeRegion.forDecode(RectPx(100, 100, 40, 9), 720, 1280))
+        assertNull(BarcodeRegion.forDigits(RectPx(100, 100, 11, 40), 720, 1280))
+        assertEquals(RectPx(94, 97, 52, 18), BarcodeRegion.forDecode(RectPx(100, 100, 40, 12), 720, 1280))
+    }
 }
