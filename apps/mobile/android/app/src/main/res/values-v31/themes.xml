@@ -1,0 +1,7 @@
+<resources>
+    <!-- The splash screen of Android 12 and later: the symbol of the logo on the canvas of the page. -->
+    <style name="Theme.Glance" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@color/glance_canvas</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+    </style>
+</resources>

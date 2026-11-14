@@ -7,7 +7,7 @@ The Android app of Meta Glance. This folder holds a Gradle project with two modu
 - `tools` holds a fake server and the script that makes the sounds. Both need Node 22 or later.
 - `app/src/androidTest` holds the tests that run on a phone with mock glasses. See "Instrumented tests".
 
-The app has three screens. Each one has its own icon on the phone.
+The app has three screens. Each one has its own launcher icon on the phone. See "The launcher icons and the splash screen".
 
 - "Glance" is `MainActivity`: a WebView with the phone UI. An APK that was built without the phone UI shows a placeholder page with one button for each message of the bridge.
 - "Glance Mock" is `MockMenuActivity`: the menu of mock mode, in each build. See "Mock mode for seats without glasses".
@@ -1286,6 +1286,23 @@ Checks with the screen off, in this order. Each one needs the real glasses and t
 ## The sounds
 
 `node tools/make-sounds.mjs` writes `found.wav`, `added.wav`, `removed.wav`, `warning.wav`, and `paid.wav` to `app/src/main/res/raw`. The files are in git. Run the script only to change a sound. `added.wav` and `removed.wav` are also the answer sounds of a head gesture.
+
+## The launcher icons and the splash screen
+
+The launcher icon is the symbol of the logo of the project (`assets/Glance.svg` at the root of the repository), on a white background. The phone UI shows the full logo: see "Logo" in `apps/mobile/ui/README.md`.
+
+| Entry | Icon | Background layer |
+|---|---|---|
+| Glance | `@mipmap/ic_launcher`, `@mipmap/ic_launcher_round` | white, `#FFFFFF` |
+| Glance Mock | `@mipmap/ic_launcher_mock` | ink, `#1C2B33` |
+| Glance Probe (debug build) | `@mipmap/ic_launcher_probe` | yellow, `#FAE19E` |
+
+- Each icon is an adaptive icon in `res/mipmap-anydpi-v26`, with three layers. The background is a color of `res/values/colors.xml`. The foreground is `ic_launcher_foreground.png` in the 5 densities of `res/mipmap-*dpi` (108 dp, from 108 to 432 px). The monochrome layer is the vector `res/drawable/ic_launcher_monochrome.xml`: the outline of the symbol in one color, for the themed icons of Android 13 and later.
+- On each layer the symbol is 52 dp wide and 34.6 dp high, in the middle of the 108 dp. Its diagonal is 62.5 dp, so it stays inside the safe circle of 66 dp, and no mask of a launcher cuts it.
+- `ic_launcher.png` and `ic_launcher_round.png` in `res/mipmap-*dpi` are the legacy icons of Glance, 48 dp. With `minSdk` 29 each supported phone takes the adaptive icon of `mipmap-anydpi-v26`, so no supported phone reads them. The mock and probe entries have no legacy icon.
+- The white background gives the blue of the symbol a contrast of 3.72:1 or more. The ink background gives 2.68:1, so only the mock entry uses it: there it tells the entries apart.
+- The splash screen of Android 12 and later shows the foreground layer on the canvas color of the page: `#F1F1F1` in light mode and `#1B1B1B` in dark mode (`glance_canvas` in `res/values` and `res/values-night`). The theme `Theme.Glance` in `res/values-v31/themes.xml` sets both. On Android 10 and 11 the theme has no splash attributes, and the window shows the background of `Theme.AppCompat.DayNight.NoActionBar`.
+- The PNG files come from the source file at 72 dpi (1 unit of its view box is 1 px), cut to the box of the symbol (568, 1000, 1505 x 1000), and scaled down with Lanczos. The path of the monochrome layer is the clip path of the symbol in the same file. On 2026-11-15 a preview put the vector layer over the PNG layer, and their edges matched. Nobody looked at the icons on a phone.
 
 ## Machine needs
 
