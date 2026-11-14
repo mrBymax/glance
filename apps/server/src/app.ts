@@ -138,6 +138,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const sessions = new SessionRegistry({
     clock: deps.clock,
     catalog: deps.catalog,
+    secondLookWaitMs: config.secondLookWaitMs,
     store: deps.store,
     bus,
     clipUrl: createClipUrl({

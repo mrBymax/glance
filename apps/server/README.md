@@ -82,6 +82,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `SPEECH_CACHE_DIR` | `.cache/speech` | The folder for speech clips. |
 | `SAVE_FRAMES` | not set | A directory for frames. When it is set, the server writes each frame there. See "Stored frames". Keep it not set for the demo and on the deployed server. |
 | `PAYMENT_DELAY_MS` | `1500` | The length of the mock payment. |
+| `SECOND_LOOK_WAIT_MS` | `0` | How long the look-alike line waits for the result of a still, in milliseconds, from 0 to 10000. `0` means off. See "Sharp second look". |
 | `DEMO_KEY` | not set | The key of `GET /api/demo/latest`. With no key, that path answers 404. |
 
 - An empty value counts as not set.
@@ -442,6 +443,43 @@ An `ambiguous` result names two or more candidates. The model cannot tell which 
 - The line names the words that end each spoken name: "I cannot tell which oat drink this is. Turn the front to me." Names with no common last word give "I cannot tell if this is oat drink or rye bread. Turn the front to me.", with the first two candidates.
 - The line and the event say no price.
 - The default script of fake mode has such a result at second 33.
+
+### Sharp second look
+
+A stream frame is small and compressed. For look-alike products the phone can take a still photo with more pixels, and the model reads that still at the default media resolution. The contract has no message that asks for a still, so the event `glance.ambiguous` is the signal for the phone. `SECOND_LOOK_WAIT_MS` tells the server to wait for the result of the still before it speaks the look-alike line.
+
+```mermaid
+sequenceDiagram
+  participant Phone
+  participant Server
+  participant Gemini
+  Phone->>Server: frame
+  Server->>Gemini: frame
+  Gemini-->>Server: ambiguous, two candidates
+  Server-->>Phone: event glance.ambiguous
+  Note over Server: the look-alike line waits, SECOND_LOOK_WAIT_MS
+  Note over Phone: takes a still
+  Phone->>Server: frame with kind still
+  Server->>Gemini: still, default media resolution
+  alt the still names one product
+    Gemini-->>Server: identified
+    Server-->>Phone: event glance.pending, speak the glance line
+  else each other result, or no result in time
+    Server-->>Phone: speak "I cannot tell which oat drink this is. Turn the front to me."
+  end
+```
+
+- With `SECOND_LOOK_WAIT_MS=0`, which is the default, the look-alike line plays at once, and the result of a still counts as the result of a stream frame.
+- With a wait, an `ambiguous` result of a stream frame gives the event `glance.ambiguous` at once. The line waits in `SessionState.heldAmbiguous`.
+- An `identified` result drops the line that waits, for a still and for a stream frame. The product gets its usual prompt (R1).
+- Each other result of a still speaks the line at once: `ambiguous`, `unknown`, `unsure`, `none`, and a product ID that the catalog does not hold. That result has no other effect, so no second line and no second event follows.
+- With no result of a still, the line plays when the wait is over. The server checks the time with each input and with each tick, so the line can be up to one tick late.
+- A sure still that comes after the line still gives the usual prompt. A still that is not sure, with no line that waits, has no effect.
+- Results with the same candidates inside the view time are one appearance: one event, and one line that waits. Other candidates give a new event, and their line waits from the time of their result.
+- A session that stops, rests, or waits for a payment drops the line.
+- The worker keeps a still in its own slot, so a stream frame does not replace a still that waits for its call.
+- Set `SECOND_LOOK_WAIT_MS=2500` only when the phone sends stills. With no still, each look-alike line is late by the wait. One test took about 1 second for the capture (spec section 11.1). The recognition call of the still follows, and a call can take 4 seconds at most.
+- In fake mode the server drops each frame, also a still. With a wait, the look-alike line of the script plays after the wait.
 
 ### Questions about a product
 

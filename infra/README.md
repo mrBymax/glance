@@ -43,6 +43,7 @@ flowchart LR
 | `FAKE_RECOGNITION`, `FAKE_SPEECH` | `1` for a server that needs no key. Clear both for the real services, and set the two keys and `ELEVENLABS_VOICE_EN`. |
 | `DEMO_KEY` | A random word of 12 characters or more. Without it the mirror page cannot find the session of the phone. |
 | `REQUIRE_BLUR` | `1` when the phone runs face detection. |
+| `SECOND_LOOK_WAIT_MS` | `2500` when the phone sends a still for look-alike products. Empty means off. |
 
 The image sets `PORT=8080`, `NODE_ENV=production`, and `SPEECH_CACHE_DIR=/data/speech`. Do not set them in `infra/.env`.
 

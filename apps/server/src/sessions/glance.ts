@@ -12,11 +12,22 @@ const YES_HINT_GLANCES = 3;
 type RecognitionInput = Extract<RuleInput, { type: 'recognition' }>;
 
 export function onRecognition(turn: Turn, input: RecognitionInput): void {
-  const { s, now } = turn;
+  const { s, now, ctx } = turn;
   if (s.phase !== 'shopping' && s.phase !== 'checkout') return;
   const { result } = input;
+  if (result.status !== 'none') s.lastTargetAt = now;
+
+  // The sharp second look. The phone took this still because of a glance.ambiguous event.
+  if (input.still && ctx.secondLookWaitMs > 0) {
+    const sure = result.status === 'identified' && result.productId !== null && ctx.catalog.get(result.productId) !== undefined;
+    if (!sure) {
+      // The still did not help, so the shopper hears the line now. Each other part of this result has no effect:
+      // a second line, or a second event that asks for one more still, would follow the first one.
+      speakHeldAmbiguous(turn);
+      return;
+    }
+  }
   if (result.status === 'none') return;
-  s.lastTargetAt = now;
   // A prompt would suspend the checkout, and the result of the fingerprint check would then have no checkout to pay.
   if (isConfirmed(s)) return;
 
@@ -40,6 +51,8 @@ function onIdentified(turn: Turn, productId: string): void {
   const { s, now, ctx } = turn;
   const product = ctx.catalog.get(productId);
   if (!product) return;
+  // The model named one product, in a still or in a stream frame, so the look-alike line is out of date.
+  s.heldAmbiguous = null;
 
   const wasInView = inView(s.seen[productId], now);
   s.seen[productId] = now;
@@ -114,8 +127,35 @@ function onAmbiguous(turn: Turn, candidates: readonly string[]): void {
   s.ambiguousAt = now;
   if (sameAppearance) return;
 
+  // The event goes out at once: it is the signal for the phone to take a still.
   emit(turn, { type: 'glance.ambiguous', candidates: products.map((product) => toProductRef(product, s.profile.lang)) });
+  if (ctx.secondLookWaitMs > 0) {
+    s.heldAmbiguous = { products: products.map((product) => product.id), since: now };
+    return;
+  }
   speak(turn, say({ key: 'glance.ambiguous', products }));
+}
+
+/** Speaks the look-alike line that waits for a still, if one waits. */
+function speakHeldAmbiguous(turn: Turn): void {
+  const { s, ctx } = turn;
+  const held = s.heldAmbiguous;
+  if (!held) return;
+  s.heldAmbiguous = null;
+  const products = held.products.flatMap((id) => ctx.catalog.get(id) ?? []);
+  if (products.length >= 2) speak(turn, say({ key: 'glance.ambiguous', products }));
+}
+
+/** The time rule of the second look. `expire` of step.ts runs it before each input. */
+export function expireSecondLook(turn: Turn): void {
+  const { s, now, ctx } = turn;
+  if (!s.heldAmbiguous) return;
+  // No line for a session that stopped, that rests, or that pays.
+  if ((s.phase !== 'shopping' && s.phase !== 'checkout') || isConfirmed(s)) {
+    s.heldAmbiguous = null;
+    return;
+  }
+  if (now - s.heldAmbiguous.since >= ctx.secondLookWaitMs) speakHeldAmbiguous(turn);
 }
 
 function onAimHint(turn: Turn, aimHint: RecognitionInput['result']['aimHint']): void {

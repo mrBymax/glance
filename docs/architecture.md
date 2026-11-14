@@ -169,6 +169,33 @@ Rules of this path:
 
 A result with the status `ambiguous` gives no prompt. The server sends the event `glance.ambiguous` with the candidates and speaks "I cannot tell which oat drink this is. Turn the front to me." If the pending product is one of the candidates, `glance.cleared` comes first, so a yes cannot add it.
 
+With `SECOND_LOOK_WAIT_MS` set on the server, the look-alike line waits for a still. The contract has no message that asks for a still, so the event is the signal for the phone.
+
+```mermaid
+sequenceDiagram
+  participant App as Android app
+  participant Socket as Device socket
+  participant Worker as RecognitionWorker
+  participant Gemini
+  participant Runtime as SessionRuntime
+
+  Worker->>Runtime: dispatch(recognition, status ambiguous)
+  Runtime->>Socket: event glance.ambiguous, through the EventBus
+  Note over Runtime: the look-alike line waits in heldAmbiguous
+  Socket->>App: event glance.ambiguous
+  Note over App: takes a still
+  App->>Socket: binary frame with kind still
+  Socket->>Worker: submit(frame), in the slot for a still
+  Worker->>Gemini: generateContent at the default media resolution
+  Gemini-->>Worker: JSON answer
+  Worker->>Runtime: dispatch(recognition, still true)
+  alt status identified
+    Runtime->>Socket: event glance.pending, speak the glance line
+  else each other status, or no result inside the wait
+    Runtime->>Socket: speak the look-alike line
+  end
+```
+
 The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. When an add takes the total over the budget of the profile, the event `budget.exceeded` follows `cart.updated`, and the added line has the sound `warning`. The server README lists each rule from R1 to R24.
 
 ## A question about a product
@@ -281,4 +308,5 @@ stateDiagram-v2
 - The Android app has no handler for `biometric.request` and sends no `biometric.result`. So a checkout above 50 EUR ends after 30 seconds with no payment.
 - The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
 - The phone UI has the session screen only. No screen shows the pay prompt or the receipt.
+- The Android app takes no still for the event `glance.ambiguous`. So `SECOND_LOOK_WAIT_MS` stays at 0 on the server, and the look-alike line plays at once.
 - No native speaker has read the Italian lines of the server. The products of `apps/server/catalog/catalog.dev.json` have no Italian texts, except the oat drink.

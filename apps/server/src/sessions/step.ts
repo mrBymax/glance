@@ -3,7 +3,7 @@ import { onAnswer, onCartEdit, onPromptDone, onUndo } from './answers';
 import { expireAskWindow, onAnswerText, onQuestion } from './ask';
 import { expireCheckout, onBiometricResult, onKioskSeen, onPaymentResult } from './checkout';
 import { onDeviceState, onGeneralIntent, onProfileSet, onRecognitionSlow, onSocketOpen, restWhenIdle } from './general';
-import { onRecognition } from './glance';
+import { expireSecondLook, onRecognition } from './glance';
 import { type Turn, emit } from './turn';
 import type { Effect, RuleContext, RuleInput, SessionState, SpeakEffect } from './types';
 import { inView } from './view';
@@ -27,6 +27,7 @@ export function createSessionState(profile: Profile, now: number): SessionState 
     aimHintAt: null,
     ambiguousKey: null,
     ambiguousAt: null,
+    heldAmbiguous: null,
     kioskSeen: null,
     mutedKioskId: null,
     checkout: null,
@@ -143,5 +144,6 @@ function expire(turn: Turn): void {
 
   expireCheckout(turn);
   expireAskWindow(turn);
+  expireSecondLook(turn);
   restWhenIdle(turn);
 }

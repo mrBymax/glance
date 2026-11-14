@@ -1,9 +1,10 @@
 import { expect, it } from 'vitest';
 import { EMPTY_CART, TIMING as T } from '@glance/shared';
-import { NO_RESULT, RecognitionResultSchema } from '../recognition/result';
-import { BARISTA, CRISPS, OAT, RYE, harness } from './harness';
+import { NO_RESULT, type RecognitionResult, RecognitionResultSchema } from '../recognition/result';
+import { BARISTA, CRISPS, type Harness, KIOSK, OAT, RYE, harness } from './harness';
 import { LINE_DEFAULTS, say } from './say';
 import { step } from './step';
+import type { SpeakEffect } from './types';
 import { excludeList, inView } from './view';
 
 it('R1: a recognized product becomes the pending product and gets a glance prompt', () => {
@@ -219,4 +220,126 @@ it('tells when a target is in view', () => {
 it('checks a recognition result with its schema', () => {
   expect(RecognitionResultSchema.parse(NO_RESULT)).toEqual(NO_RESULT);
   expect(RecognitionResultSchema.safeParse({ ...NO_RESULT, confidence: 2 }).success).toBe(false);
+});
+
+const still = (part: Partial<RecognitionResult>) => ({ type: 'recognition' as const, result: { ...NO_RESULT, ...part }, still: true });
+const spokenKeys = (h: Harness) => h.all.filter((e): e is SpeakEffect => e.type === 'speak').map((e) => e.line.key);
+const waiting = () => {
+  const h = harness({ secondLookWaitMs: 2500 });
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  return h;
+};
+
+it('holds the look-alike line for the still, and a sure still gives the normal prompt', () => {
+  const h = harness({ secondLookWaitMs: 2500 });
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.events()).toEqual(['glance.ambiguous']);
+  expect(h.lines()).toEqual([]);
+  expect(h.state.heldAmbiguous).toEqual({ products: [OAT, BARISTA], since: h.now });
+  h.advance(1500); h.send(still({ status: 'identified', productId: BARISTA }));
+  expect(h.state.prompt).toMatchObject({ productId: BARISTA });
+  expect(h.state.heldAmbiguous).toBeNull();
+  h.advance(2500);
+  expect(spokenKeys(h)).toEqual(['glance.new']);
+});
+it('speaks the line when no still comes in time', () => {
+  const h = harness({ secondLookWaitMs: 2500 });
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  h.advance(2499);
+  expect(spokenKeys(h)).toEqual([]);
+  h.advance(1);
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+  expect(h.speak()!.line).toMatchObject({ products: [{ id: OAT }, { id: BARISTA }] });
+  expect(h.state.heldAmbiguous).toBeNull();
+  h.advance(2500);
+  expect(spokenKeys(h)).toEqual(['glance.ambiguous']);
+});
+it('speaks the line at once when the still is not sure', () => {
+  const h = harness({ secondLookWaitMs: 2500 });
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  h.advance(1200); h.send(still({ status: 'ambiguous', candidates: [OAT, BARISTA] }));
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+  expect(h.events()).toEqual([]);
+  h.advance(2500);
+  expect(spokenKeys(h)).toEqual(['glance.ambiguous']);
+});
+it('speaks the held line, and no other line, for a still with each other result', () => {
+  for (const part of [{ status: 'unknown' }, { status: 'unsure', aimHint: 'left' }, { status: 'none' }, { status: 'identified', productId: 'no-such-product' }] as const) {
+    const h = waiting();
+    h.advance(1000); h.send(still(part));
+    expect(h.lines()).toEqual(['glance.ambiguous']);
+    expect(h.events()).toEqual([]);
+    expect(h.state.prompt).toBeNull();
+  }
+});
+it('holds one line while the stream repeats the look-alike result, and speaks it one time', () => {
+  const h = waiting();
+  for (let elapsed = 500; elapsed <= 2000; elapsed += 500) { h.advance(500); h.result({ status: 'ambiguous', candidates: [BARISTA, OAT] }); }
+  expect(spokenKeys(h)).toEqual([]);
+  expect(h.all.filter((e) => e.type === 'event')).toHaveLength(1);
+  h.advance(500);
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+  h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.effects).toEqual([]);
+});
+it('drops the held line when a stream frame names one product', () => {
+  const h = waiting();
+  h.advance(500); h.see(OAT);
+  expect(h.lines()).toEqual(['glance.new']);
+  expect(h.state.heldAmbiguous).toBeNull();
+  h.advance(2500);
+  expect(spokenKeys(h)).toEqual(['glance.new']);
+});
+it('a sure still that comes after the line gives the normal prompt', () => {
+  const h = waiting();
+  h.advance(2500);
+  h.advance(500); h.send(still({ status: 'identified', productId: OAT }));
+  expect(h.events()).toEqual(['glance.pending']);
+  expect(spokenKeys(h)).toEqual(['glance.ambiguous', 'glance.new']);
+});
+it('a still that is not sure says nothing when no line waits', () => {
+  const h = waiting();
+  h.advance(2500);
+  h.advance(500); h.send(still({ status: 'unknown' }));
+  expect(h.effects).toEqual([]);
+  h.advance(T.viewMs); h.send(still({ status: 'ambiguous', candidates: [OAT, BARISTA] }));
+  expect(h.effects).toEqual([]);
+});
+it('holds the line of other candidates from the time of their result', () => {
+  const h = waiting();
+  h.advance(1000); h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
+  expect(h.events()).toEqual(['glance.ambiguous']);
+  expect(h.state.heldAmbiguous).toEqual({ products: [OAT, RYE], since: h.now });
+  h.advance(2499);
+  expect(spokenKeys(h)).toEqual([]);
+  h.advance(1);
+  expect(h.speak()!.line).toMatchObject({ key: 'glance.ambiguous', products: [{ id: OAT }, { id: RYE }] });
+});
+it('drops the held line when the session stops, and when a payment is confirmed', () => {
+  const stopped = waiting();
+  stopped.advance(500); stopped.intent('stop');
+  stopped.advance(2500);
+  expect(spokenKeys(stopped)).toEqual(['device.cameraOff']);
+  expect(stopped.state.heldAmbiguous).toBeNull();
+
+  const paying = harness({ secondLookWaitMs: 2500, cart: [RYE] });
+  paying.kiosk(); paying.done();
+  paying.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  paying.advance(500); paying.kiosk(); paying.yes('phone');
+  expect(paying.state.checkout).toMatchObject({ step: 'paying' });
+  paying.advance(2500);
+  expect(spokenKeys(paying)).toEqual(['checkout.offer']);
+  expect(paying.state.heldAmbiguous).toBeNull();
+  expect(KIOSK.id).toBe(paying.state.checkout!.kiosk.id);
+});
+it('with no wait, a still counts as a stream frame', () => {
+  const h = harness();
+  expect(h.ctx.secondLookWaitMs).toBe(0);
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+  expect(h.state.heldAmbiguous).toBeNull();
+  h.advance(1000); h.send(still({ status: 'ambiguous', candidates: [OAT, BARISTA] }));
+  expect(h.effects).toEqual([]);
+  h.advance(500); h.send(still({ status: 'identified', productId: BARISTA }));
+  expect(h.lines()).toEqual(['glance.new']);
 });

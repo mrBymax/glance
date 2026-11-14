@@ -127,3 +127,14 @@ it('ends each call when the app closes', async () => {
   await t.close();
   expect(signal!.aborted).toBe(true);
 });
+it('with SECOND_LOOK_WAIT_MS the look-alike line waits, and a sure still gives the glance in its place', async () => {
+  const ambiguous: RecognitionResult = { ...NO_RESULT, status: 'ambiguous', candidates: ['oat-drink-1l', 'oat-drink-barista-1l'] };
+  recognize.mockImplementation(async (_jpeg, opts) => (opts.still ? ok : ambiguous));
+  const waiting = await appWithPhone({ SECOND_LOOK_WAIT_MS: '10000' });
+  waiting.phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  await waiting.phone.next((m) => m.t === 'event' && m.event.type === 'glance.ambiguous');
+  waiting.phone.sendFrame({ seq: 2, ts: 2, w: 1440, h: 1080, blurred: true, kind: 'still' }, JPEG);
+  await waiting.phone.next((m) => m.t === 'event' && m.event.type === 'glance.pending');
+  await waiting.phone.next((m) => m.t === 'speak');
+  expect(waiting.phone.messages.flatMap((m) => (m.t === 'speak' ? [m.text] : []))).toEqual(['Oat drink, one litre, one eighty-nine. Nod to add.']);
+});

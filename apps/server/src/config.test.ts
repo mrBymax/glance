@@ -8,7 +8,7 @@ it('uses the defaults', () => {
     port: 8080, publicBaseUrl: 'http://localhost:8080', mongodbUri: null, mongodbDb: 'glance',
     catalogPath: 'catalog/catalog.dev.json', geminiModel: 'gemini-3.5-flash-lite',
     geminiMediaResolution: 'default', minConfidence: 0.6, requireBlur: false, fakeRecognition: null, fakeSpeech: false,
-    speechCacheDir: '.cache/speech', saveFramesDir: null, paymentDelayMs: 1500,
+    speechCacheDir: '.cache/speech', saveFramesDir: null, paymentDelayMs: 1500, secondLookWaitMs: 0,
   });
 });
 it('reads the demo key, and an empty value counts as not set', () => {
@@ -52,4 +52,11 @@ it('rejects a value outside its range', () => {
   expect(() => loadConfig({ RECOGNITION_MIN_CONFIDENCE: '1.5' }, ['--fake'])).toThrow(/RECOGNITION_MIN_CONFIDENCE/);
   expect(() => loadConfig({ GEMINI_MEDIA_RESOLUTION: 'high' }, ['--fake'])).toThrow(/GEMINI_MEDIA_RESOLUTION/);
   expect(() => loadConfig({ PORT: '70000' }, ['--fake'])).toThrow(/PORT/);
+});
+it('reads the wait for the sharp second look, which is off at 0', () => {
+  expect(loadConfig({}, ['--fake']).secondLookWaitMs).toBe(0);
+  expect(loadConfig({ SECOND_LOOK_WAIT_MS: '2500' }, ['--fake']).secondLookWaitMs).toBe(2500);
+  expect(() => loadConfig({ SECOND_LOOK_WAIT_MS: '-1' }, ['--fake'])).toThrow(/SECOND_LOOK_WAIT_MS/);
+  expect(() => loadConfig({ SECOND_LOOK_WAIT_MS: '2.5' }, ['--fake'])).toThrow(/SECOND_LOOK_WAIT_MS/);
+  expect(() => loadConfig({ SECOND_LOOK_WAIT_MS: '10001' }, ['--fake'])).toThrow(/SECOND_LOOK_WAIT_MS/);
 });

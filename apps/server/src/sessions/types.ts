@@ -76,6 +76,11 @@ export type SessionState = {
   /** The sorted candidate IDs of the last ambiguous result, with one space between two IDs. */
   ambiguousKey: string | null;
   ambiguousAt: number | null;
+  /**
+   * The look-alike line that waits for the result of a still: the candidate IDs and the time of their result.
+   * null when no line waits. Only a session with a second look wait holds a line.
+   */
+  heldAmbiguous: { products: string[]; since: number } | null;
   /** said: the voice gave the "busy" or "empty" line for this appearance of the code. */
   kioskSeen: { kioskId: string; at: number; said: boolean } | null;
   /** R18. */
@@ -130,4 +135,5 @@ export type Effect =
   /** The runtime asks the model and answers with an `answer` input. */
   | { type: 'ask'; question: string; product: Product };
 
-export type RuleContext = { catalog: CatalogIndex };
+/** secondLookWaitMs: how long the look-alike line waits for the result of a still. 0 means that it does not wait. */
+export type RuleContext = { catalog: CatalogIndex; secondLookWaitMs: number };

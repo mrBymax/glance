@@ -6,7 +6,7 @@ import type { Clock } from '../clock';
 import type { SessionRecord, Store } from '../db/store';
 import { renderLine } from '../speech/render';
 import { step } from './step';
-import type { RuleInputBody, SessionState, SpeakEffect } from './types';
+import type { RuleContext, RuleInputBody, SessionState, SpeakEffect } from './types';
 import { toSnapshot } from './view';
 
 /** The phone of a session, as the runtime sees it. */
@@ -15,6 +15,8 @@ export type DeviceSink = { send(message: ServerToDevice): void; close(): void };
 export type RuntimeDeps = {
   clock: Clock;
   catalog: CatalogIndex;
+  /** The wait of the rules for the result of a still. Not set means 0, which is off. */
+  secondLookWaitMs?: number;
   store: Store;
   bus: EventBus;
   /** The address of the speech clip, or null when no clip exists. */
@@ -66,7 +68,7 @@ export class SessionRuntime {
   /** Runs the rules for one input with the clock time, and then the effects in their order. */
   dispatch(input: RuleInputBody): void {
     const before = this.state;
-    const next = step(before, { ...input, now: this.deps.clock.now() }, { catalog: this.deps.catalog });
+    const next = step(before, { ...input, now: this.deps.clock.now() }, this.ruleContext());
     this.state = next.state;
 
     let changed = input.type === 'profile.set';
@@ -106,7 +108,11 @@ export class SessionRuntime {
   }
 
   snapshot(): SessionSnapshot {
-    return toSnapshot(this.id, this.state, this.captions, { catalog: this.deps.catalog });
+    return toSnapshot(this.id, this.state, this.captions, this.ruleContext());
+  }
+
+  private ruleContext(): RuleContext {
+    return { catalog: this.deps.catalog, secondLookWaitMs: this.deps.secondLookWaitMs ?? 0 };
   }
 
   /** Makes `sink` the phone of the session. An older sink closes, so one phone gets each message. */
