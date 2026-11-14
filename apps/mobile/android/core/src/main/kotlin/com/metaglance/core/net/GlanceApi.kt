@@ -6,12 +6,13 @@ import com.metaglance.core.contract.GlanceJson
 import com.metaglance.core.contract.Profile
 import java.io.IOException
 import java.net.URI
+import java.net.URISyntaxException
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -46,10 +47,14 @@ class GlanceApi(private val client: OkHttpClient, baseUrl: String) {
      */
     fun socketUrl(wsUrl: String): String = "ws" + baseUrl.removePrefix("http") + pathAndQuery(wsUrl)
 
-    /** Returns the address of a speech clip on `baseUrl`. `url` is a full address, or a path that starts with `/`. */
+    /**
+     * Returns the address of a speech clip on `baseUrl`. `url` is a full address, or a path that starts with `/`.
+     * This function and [socketUrl] throw an [IllegalArgumentException] for a text that is not an address.
+     */
     fun clipUrl(url: String): String = baseUrl + pathAndQuery(url)
 
-    private fun sessions(): HttpUrl = "$baseUrl/api/sessions".toHttpUrl()
+    // The server address is a setting of the app. A wrong one fails like a server that does not answer.
+    private fun sessions(): HttpUrl = "$baseUrl/api/sessions".toHttpUrlOrNull() ?: throw IOException("The server address is not an HTTP address: $baseUrl")
 
     private fun session(sessionId: String, token: String): HttpUrl = sessions().newBuilder().addPathSegment(sessionId).addQueryParameter("token", token).build()
 
@@ -67,7 +72,11 @@ class GlanceApi(private val client: OkHttpClient, baseUrl: String) {
     }
 
     private fun pathAndQuery(url: String): String {
-        val uri = URI(url)
+        val uri = try {
+            URI(url)
+        } catch (e: URISyntaxException) {
+            throw IllegalArgumentException("The server sent an address that is not an address: $url", e)
+        }
         return uri.rawPath.orEmpty() + (uri.rawQuery?.let { "?$it" } ?: "")
     }
 

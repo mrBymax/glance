@@ -6,7 +6,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CodecTest {
@@ -57,5 +59,29 @@ class CodecTest {
         assertEquals(1.5, p.speechRate, 0.0)
         assertEquals(Profiles.DEFAULT.copy(headWindowMs = null, speechRate = 1.5), p)
         assertEquals(Profiles.DEFAULT, Profiles.applyPatch(Profiles.DEFAULT, buildJsonObject { put("speechRate", "fast") }))
+    }
+
+    // The server rejects such a profile, so the app must not keep it.
+    @Test fun `a patch with a value outside the limits of Plan 0 changes nothing`() {
+        val outside = listOf(
+            buildJsonObject { put("speechRate", 0.79) },
+            buildJsonObject { put("speechRate", 2.01) },
+            buildJsonObject { put("headWindowMs", 9000) },
+            buildJsonObject { put("budgetCents", 0) },
+            buildJsonObject { put("budgetCents", -100) }
+        )
+        for (patch in outside) assertEquals(patch.toString(), Profiles.DEFAULT, Profiles.applyPatch(Profiles.DEFAULT, patch))
+
+        val inside = buildJsonObject {
+            put("speechRate", 2)
+            put("headWindowMs", 15000)
+            put("budgetCents", 1)
+        }
+        assertEquals(
+            Profiles.DEFAULT.copy(speechRate = 2.0, headWindowMs = 15000, budgetCents = 1),
+            Profiles.applyPatch(Profiles.DEFAULT, inside)
+        )
+        assertTrue(Profiles.isValid(Profiles.DEFAULT))
+        assertFalse(Profiles.isValid(Profiles.DEFAULT.copy(speechRate = 3.0)))
     }
 }

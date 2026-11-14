@@ -131,16 +131,29 @@ object Profiles {
 
     /**
      * Returns the profile with the keys of a `ProfilePatch` of Plan 0 set. A key with the value null sets null.
-     * A patch that does not decode changes nothing.
+     * A patch that does not decode, or that gives a profile outside the limits of Plan 0, changes nothing.
      */
     fun applyPatch(profile: Profile, patch: JsonObject): Profile {
         val merged = JsonObject(GlanceJson.encodeToJsonElement(Profile.serializer(), profile).jsonObject + patch)
-        return try {
+        val patched = try {
             GlanceJson.decodeFromJsonElement(Profile.serializer(), merged)
         } catch (_: SerializationException) {
-            profile
+            return profile
         } catch (_: IllegalArgumentException) {
-            profile
+            return profile
         }
+        return if (isValid(patched)) patched else profile
     }
+
+    /**
+     * True for a profile that `ProfileSchema` of Plan 0 accepts. The Kotlin types do not hold these three limits,
+     * and the server rejects a session with a profile outside them.
+     */
+    fun isValid(profile: Profile): Boolean = profile.speechRate in MIN_SPEECH_RATE..MAX_SPEECH_RATE &&
+        (profile.headWindowMs == null || profile.headWindowMs in HEAD_WINDOWS_MS) &&
+        (profile.budgetCents == null || profile.budgetCents > 0)
+
+    private const val MIN_SPEECH_RATE = 0.8
+    private const val MAX_SPEECH_RATE = 2.0
+    private val HEAD_WINDOWS_MS = setOf(8000L, 15000L)
 }

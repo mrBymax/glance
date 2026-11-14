@@ -69,6 +69,20 @@ class GlanceApiTest {
         assertEquals("wss://glance.example/ws/device?session=s-1&token=t-1", live.socketUrl("wss://glance.example/ws/device?session=s-1&token=t-1"))
     }
 
+    // The callers catch IllegalArgumentException. The URI class of Java throws a checked exception of its own.
+    @Test fun `rejects an address of the server that is not an address`() {
+        val lan = GlanceApi(client, "http://192.168.1.20:8080")
+        assertThrows(IllegalArgumentException::class.java) { lan.clipUrl("http://x.test/a clip.mp3") }
+        assertThrows(IllegalArgumentException::class.java) { lan.socketUrl("ws://x.test/ws/device?token=a b") }
+    }
+
+    @Test fun `fails like a server that does not answer when its own address is wrong`() {
+        val noScheme = GlanceApi(client, "192.168.1.20:8080")
+        assertThrows(IOException::class.java) { noScheme.createSession(Profiles.DEFAULT) }
+        assertThrows(IOException::class.java) { noScheme.snapshot("s-1", "t-1") }
+        assertThrows(IOException::class.java) { noScheme.deleteSession("s-1", "t-1") }
+    }
+
     @Test fun `ignores a slash at the end of the server address`() {
         val lan = GlanceApi(client, "http://192.168.1.20:8080/")
         assertEquals("http://192.168.1.20:8080/clip.wav", lan.clipUrl("/clip.wav"))
