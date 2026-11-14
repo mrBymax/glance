@@ -501,6 +501,8 @@ class SessionController(
             is ServerToDevice.SessionRest -> stopDat()
             is ServerToDevice.SessionEnd -> onServerSessionEnd()
             is ServerToDevice.BiometricRequest -> onBiometricRequest()
+            // The label still is not built yet. The server gets no answer, as when the limit for stills drops a request.
+            is ServerToDevice.StillRequest -> log("still.request ${message.purpose}: no handler")
         }
     }
 

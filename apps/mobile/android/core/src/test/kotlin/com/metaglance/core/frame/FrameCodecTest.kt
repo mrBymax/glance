@@ -32,6 +32,14 @@ class FrameCodecTest {
         assertTrue(String(still, Charsets.ISO_8859_1).contains("\"kind\":\"still\""))
     }
 
+    @Test fun `round-trips a label frame, and rejects a kind that it does not know`() {
+        val label = FrameCodec.encode(header.copy(kind = FrameKind.LABEL), jpeg)
+        assertTrue(String(label, Charsets.ISO_8859_1).contains("\"kind\":\"label\""))
+        assertEquals(FrameKind.LABEL, FrameCodec.decode(label).first.kind)
+        val other = String(label, Charsets.ISO_8859_1).replace("label", "video").toByteArray(Charsets.ISO_8859_1)
+        assertThrows(FrameFormatError::class.java) { FrameCodec.decode(other) }
+    }
+
     @Test fun `rejects a message shorter than 4 bytes`() {
         assertThrows(FrameFormatError::class.java) { FrameCodec.decode(byteArrayOf(0, 0)) }
     }

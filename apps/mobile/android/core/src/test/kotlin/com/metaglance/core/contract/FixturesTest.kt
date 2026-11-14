@@ -75,8 +75,8 @@ class FixturesTest {
             mapOf(
                 "catalog" to 1,
                 "events" to 16,
-                "device-to-server" to 8,
-                "server-to-device" to 6,
+                "device-to-server" to 9,
+                "server-to-device" to 7,
                 "bridge-page-to-native" to 12,
                 "bridge-native-to-page" to 4,
                 "rest" to 8

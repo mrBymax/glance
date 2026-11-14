@@ -99,6 +99,23 @@ data class DeviceState(
     val stream: StreamStatus
 )
 
+/** `BARCODE` is a code from the barcode decoder. `OCR` is a code from the digits under the bars. */
+@Serializable
+enum class BarcodeSource {
+    @SerialName("barcode")
+    BARCODE,
+
+    @SerialName("ocr")
+    OCR
+}
+
+/** The reason of a `still.request`. `LABEL` is a barcode that the server sees and cannot read. */
+@Serializable
+enum class StillPurpose {
+    @SerialName("label")
+    LABEL
+}
+
 @Serializable
 @JsonClassDiscriminator("t")
 sealed interface DeviceToServer {
@@ -113,6 +130,11 @@ sealed interface DeviceToServer {
     @Serializable
     @SerialName("kiosk.seen")
     data class KioskSeen(val text: String) : DeviceToServer
+
+    /** `code` has 8 to 14 digits, as the phone read it. The server checks it and makes 13 digits of it. */
+    @Serializable
+    @SerialName("barcode.seen")
+    data class BarcodeSeen(val code: String, val source: BarcodeSource) : DeviceToServer
 
     /** `confidence` is from 0 to 1. The phone sends 0.5 when the glasses give no value. */
     @Serializable
@@ -179,4 +201,9 @@ sealed interface ServerToDevice {
     @Serializable
     @SerialName("biometric.request")
     data object BiometricRequest : ServerToDevice
+
+    /** The server asks for one still. The phone answers with `barcode.seen` or with a frame of the kind `label`. */
+    @Serializable
+    @SerialName("still.request")
+    data class StillRequest(val purpose: StillPurpose) : ServerToDevice
 }

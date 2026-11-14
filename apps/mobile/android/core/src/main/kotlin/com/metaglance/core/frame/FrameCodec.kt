@@ -6,13 +6,17 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 
+/** No kind means `FRAME`. A `LABEL` is a still of a barcode that the phone did not read. */
 @Serializable
 enum class FrameKind {
     @SerialName("frame")
     FRAME,
 
     @SerialName("still")
-    STILL
+    STILL,
+
+    @SerialName("label")
+    LABEL
 }
 
 /**

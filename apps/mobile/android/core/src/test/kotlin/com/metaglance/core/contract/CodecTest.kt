@@ -38,6 +38,26 @@ class CodecTest {
         assertEquals(ServerToDevice.Speak("s-1", Priority.NORMAL, "Skipped.", Lang.EN, null, null, false, null), speak)
     }
 
+    @Test fun `writes a barcode report with the wire values of its source`() {
+        assertEquals(
+            """{"t":"barcode.seen","code":"8076809513753","source":"barcode"}""",
+            Codec.encode(DeviceToServer.BarcodeSeen("8076809513753", BarcodeSource.BARCODE))
+        )
+        assertEquals(
+            """{"t":"barcode.seen","code":"73513537","source":"ocr"}""",
+            Codec.encode(DeviceToServer.BarcodeSeen("73513537", BarcodeSource.OCR))
+        )
+    }
+
+    @Test fun `decodes a request for a still of a label, and no request with another purpose`() {
+        assertEquals(
+            ServerToDevice.StillRequest(StillPurpose.LABEL),
+            Codec.decodeServerToDevice("""{"t":"still.request","purpose":"label"}""")
+        )
+        assertNull(Codec.decodeServerToDevice("""{"t":"still.request","purpose":"face"}"""))
+        assertNull(Codec.decodeServerToDevice("""{"t":"still.request"}"""))
+    }
+
     @Test fun `has the default profile of Plan 0`() {
         assertEquals(
             Profile(
