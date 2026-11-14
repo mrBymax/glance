@@ -49,6 +49,20 @@ class BarcodeRegionTest {
         assertFalse(BarcodeRegion.isLinear(RectPx(0, 0, 0, 100)))
     }
 
+    // Measured with the glasses on 2026-11-14, in a stream of 504 x 896. The first box is the text of a laptop screen.
+    @Test fun `a region that is too large for a barcode that did not decode is no barcode`() {
+        assertFalse(BarcodeRegion.fits(RectPx(left = 70, top = 211, width = 361, height = 242), 504, 896))
+        assertTrue(BarcodeRegion.fits(RectPx(left = 241, top = 742, width = 199, height = 146), 504, 896))
+    }
+
+    @Test fun `a region fits up to half of the frame width and 30 percent of the frame height`() {
+        assertTrue(BarcodeRegion.fits(RectPx(0, 0, 252, 268), 504, 896))
+        assertFalse(BarcodeRegion.fits(RectPx(0, 0, 253, 100), 504, 896))
+        assertFalse(BarcodeRegion.fits(RectPx(0, 0, 100, 269), 504, 896))
+        assertTrue(BarcodeRegion.fits(RectPx(0, 0, 360, 384), 720, 1280))
+        assertFalse(BarcodeRegion.fits(RectPx(0, 0, 361, 384), 720, 1280))
+    }
+
     @Test fun `a crop holds the points inside it`() {
         val crop = RectPx(100, 200, 50, 20)
         assertTrue(BarcodeRegion.holds(crop, 100, 200))

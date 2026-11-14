@@ -27,9 +27,21 @@ class CodeChoiceTest {
     @Test fun `the region of a frame is its largest box with the form of a barcode`() {
         val square = RectPx(0, 0, 480, 480)
         val small = RectPx(0, 600, 100, 50)
-        assertEquals(bars, CodeChoice.region(listOf(ProductHit(null, square), ProductHit(null, small), ProductHit(null, bars), ProductHit(null, null))))
-        assertNull(CodeChoice.region(listOf(ProductHit(null, square))))
-        assertNull(CodeChoice.region(emptyList()))
+        assertEquals(bars, CodeChoice.region(listOf(ProductHit(null, square), ProductHit(null, small), ProductHit(null, bars), ProductHit(null, null)), 4000, 3000))
+        assertNull(CodeChoice.region(listOf(ProductHit(null, square)), 4000, 3000))
+        assertNull(CodeChoice.region(emptyList(), 4000, 3000))
+    }
+
+    @Test fun `a box that is too large for the frame is no region, and a smaller box beside it is`() {
+        val screenText = RectPx(left = 70, top = 211, width = 361, height = 242)
+        val code = RectPx(left = 241, top = 742, width = 199, height = 146)
+        assertNull(CodeChoice.region(listOf(ProductHit(null, screenText)), 504, 896))
+        assertEquals(code, CodeChoice.region(listOf(ProductHit(null, screenText), ProductHit(null, code)), 504, 896))
+    }
+
+    @Test fun `the digits of a still do not count under a box that is too large for a barcode`() {
+        val wide = RectPx(100, 1000, 2400, 300)
+        assertNull(CodeChoice.ofStill(listOf(ProductHit(null, wide)), listOf(word("73513537", 1100, 1320)), 4000, 3000))
     }
 
     @Test fun `the words of a region give a code when they hold exactly one`() {

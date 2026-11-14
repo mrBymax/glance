@@ -35,6 +35,13 @@ object BarcodeRegion {
         return short > 0 && maxOf(box.width, box.height) * 4 >= short * 5
     }
 
+    /**
+     * True for a box that can be a barcode which the scanner did not decode: at most half of the frame width and
+     * 30 percent of the frame height. A real code that is larger decodes. The scanner also reports the text of a
+     * screen or of a poster as a region, and such a box was 361 x 242 in a frame of 504 x 896.
+     */
+    fun fits(box: RectPx, frameWidth: Int, frameHeight: Int): Boolean = box.width * 2 <= frameWidth && box.height * 10 <= frameHeight * 3
+
     /** True when the point is inside the crop. */
     fun holds(crop: RectPx, x: Int, y: Int): Boolean = x >= crop.left && x < crop.left + crop.width && y >= crop.top && y < crop.top + crop.height
 

@@ -109,7 +109,7 @@ class FramePipeline(
     private fun readProduct(nowMs: Long, frame: RawFrame, hits: List<CodeHit>) {
         val productHits = hits.map { it.toProductHit() }
         val decoded = CodeChoice.decoded(productHits)
-        val region = if (decoded != null) null else CodeChoice.region(productHits)
+        val region = if (decoded != null) null else CodeChoice.region(productHits, frame.width, frame.height)
         val read = when {
             decoded != null -> CodeRead(decoded, BarcodeSource.BARCODE)
             region != null -> readRegion(nowMs, frame, region)

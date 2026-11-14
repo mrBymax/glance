@@ -20,8 +20,8 @@ object CodeChoice {
     /** The decoded code with the largest box. The shopper holds one product up, so the largest code is the one to read. */
     fun decoded(hits: List<ProductHit>): String? = decodedHit(hits)?.code
 
-    /** The largest box with the form of a product barcode, or null. */
-    fun region(hits: List<ProductHit>): RectPx? = BarcodeRegion.largest(hits.mapNotNull { it.box }.filter(BarcodeRegion::isLinear))
+    /** The largest box with the form of a product barcode, and with a size that a code which did not decode can have, or null. */
+    fun region(hits: List<ProductHit>, width: Int, height: Int): RectPx? = BarcodeRegion.largest(hits.mapNotNull { it.box }.filter { BarcodeRegion.isLinear(it) && BarcodeRegion.fits(it, width, height) })
 
     /** The code in the words that OCR read in the crop of one region. Two codes are a text that the rules cannot read. */
     fun ofWords(words: List<TextElement>): CodeRead? = TextRows.codes(words).singleOrNull()?.let { CodeRead(it, BarcodeSource.OCR) }
@@ -40,7 +40,7 @@ object CodeChoice {
             val agree = printed.isEmpty() || printed.any { Gtin.normalize(it) == Gtin.normalize(decoded.code) }
             return if (agree) CodeRead(decoded.code, BarcodeSource.BARCODE) else null
         }
-        val digitsArea = region(hits)?.let { BarcodeRegion.forDigits(it, width, height) }
+        val digitsArea = region(hits, width, height)?.let { BarcodeRegion.forDigits(it, width, height) }
         val codes = if (digitsArea != null) codesIn(digitsArea, words) else TextRows.codes(words).filter { it.length >= MIN_DIGITS_WITH_NO_REGION }
         return codes.singleOrNull()?.let { CodeRead(it, BarcodeSource.OCR) }
     }
