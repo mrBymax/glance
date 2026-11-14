@@ -97,12 +97,83 @@ it('R16: a nod does not pay with no report of the code for 3 seconds', () => {
   expect(payments(h)).toEqual([]);
   expect(h.verdict).toMatchObject({ accepted: false, reason: 'code-not-in-view' });
 });
-it('R16: a nod does not pay while the line of the pay prompt plays', () => {
-  const h = full();
+// The shopper never waits for the end of a line to nod or to shake. The phone stops the line at the head answer.
+it('R16: a nod while the line of the pay prompt plays, with the code in view, starts the payment', () => {
+  const h = full(); h.advance(400);
   h.yes('head', h.state.prompt!.id);
+  expect(h.verdict).toMatchObject({ accepted: true, reason: null });
+  expect(h.effects).toEqual([{ type: 'payment.start', kiosk: KIOSK, totalCents: 639 }]);
+  expect(h.state.checkout!.step).toBe('paying');
+  expect(h.state.prompt).toBeNull();
+});
+it('R16: a nod while the line of the pay prompt plays does not pay with the code out of view, and gets the hint one time', () => {
+  const h = full(); const id = h.state.prompt!.id; h.advance(T.viewMs);
+  h.yes('head', id);
   expect(payments(h)).toEqual([]);
-  expect(h.verdict).toMatchObject({ accepted: false, reason: 'line-plays' });
-  expect(h.state.prompt).toMatchObject({ kind: 'pay', doneAt: null });
+  expect(h.verdict).toMatchObject({ accepted: false, reason: 'code-not-in-view' });
+  expect(h.lines()).toEqual(['hint.lookAtCode']);
+  h.yes('head', id);
+  expect(h.effects).toEqual([]);
+});
+it('R16: a head answer before prompt.done ends the line for the server, so a later answer needs no prompt.done', () => {
+  const h = full(); const id = h.state.prompt!.id; h.advance(T.viewMs);
+  h.yes('head', id);
+  expect(h.state.prompt).toMatchObject({ id, kind: 'pay', doneAt: h.now });
+  expect(h.state.lastDone).toMatchObject({ promptId: id, kind: 'pay', at: h.now });
+  h.advance(1000); h.kiosk();
+  h.yes('head', id);
+  expect(payments(h)).toHaveLength(1);
+  const voice = full(); voice.advance(T.viewMs);
+  voice.yes('head', voice.state.prompt!.id);
+  voice.yes('voice', voice.state.lastDone!.promptId);
+  expect(payments(voice)).toHaveLength(1);
+});
+it('R20: a prompt.done after the hint of a pay prompt gives that prompt no second hint', () => {
+  const h = full(); const id = h.state.prompt!.id; h.advance(T.viewMs);
+  h.yes('head', id);
+  expect(h.lines()).toEqual(['hint.lookAtCode']);
+  h.advance(2000);
+  h.send({ type: 'prompt.done', promptId: id });
+  h.yes('head', id);
+  expect(h.effects).toEqual([]);
+});
+it('R16: a nod before prompt.done pays up to 29 seconds after the start of the pay prompt, and not later', () => {
+  const late = full(); const lateId = late.state.prompt!.id; holdKiosk(late, HEAD_BOUND_MS);
+  late.yes('head', lateId);
+  expect(payments(late)).toEqual([]);
+  expect(late.verdict).toMatchObject({ accepted: false, reason: 'late' });
+  const inTime = full(); const id = inTime.state.prompt!.id; holdKiosk(inTime, HEAD_BOUND_MS - 1000);
+  inTime.yes('head', id);
+  expect(payments(inTime)).toHaveLength(1);
+});
+it('R16: a nod before prompt.done does not pay for an older pay prompt, and not with head gestures off', () => {
+  const h = full(); const old = h.state.prompt!.id;
+  h.send({ type: 'cart.edit', productId: CRISPS, qty: 0 });
+  expect(h.state.prompt!.id).not.toBe(old);
+  h.yes('head', old);
+  expect(payments(h)).toEqual([]);
+  expect(h.verdict).toMatchObject({ accepted: false, reason: 'other-prompt' });
+  const off = harness({ profile: { headGestures: false }, cart: [RYE] }); off.kiosk();
+  off.yes('head', off.state.prompt!.id);
+  expect(payments(off)).toEqual([]);
+  expect(off.verdict).toMatchObject({ accepted: false, reason: 'head-off' });
+  expect(off.state.prompt).toMatchObject({ doneAt: null });
+});
+it('R18: a shake while the line of the pay prompt plays cancels the checkout, as a shake after the line does', () => {
+  const h = full(); h.advance(400);
+  h.no('head', h.state.prompt!.id);
+  expect(h.events()).toEqual(['checkout.cancelled', 'session.state']);
+  expect(h.lines()).toEqual(['checkout.cancelled']);
+  expect(h.state).toMatchObject({ phase: 'shopping', checkout: null, prompt: null, mutedKioskId: KIOSK.id });
+  expect(h.state.cart.totalCents).toBe(639);
+});
+it('R5: an answer by voice, touch, key, or camera still needs the end of the line of the pay prompt', () => {
+  for (const source of ['voice', 'touch', 'key', 'camera'] as const) {
+    const h = full();
+    h.yes(source, h.state.prompt!.id);
+    expect(payments(h)).toEqual([]);
+    expect(h.verdict).toMatchObject({ accepted: false, reason: 'line-plays' });
+  }
 });
 it('R16: a late nod does not pay for a pay prompt that a cart change replaced', () => {
   const h = full(); h.done(); const old = h.state.prompt!.id;
@@ -264,6 +335,14 @@ it('a cart change during a pay prompt gives a new pay prompt, and the old one ca
   h.yes('phone', old);
   expect(payments(h)).toEqual([]);
 });
+// The line of this pay prompt waits behind the line "Removed" on the phone. The phone takes a nod in that time.
+it('a nod for the pay prompt after a cart change pays the new total with no prompt.done', () => {
+  const h = full(); h.done();
+  h.send({ type: 'cart.edit', productId: CRISPS, qty: 0 });
+  h.advance(400);
+  h.yes('head', h.state.prompt!.id);
+  expect(h.effects).toEqual([{ type: 'payment.start', kiosk: KIOSK, totalCents: 449 }]);
+});
 it('an undo during a pay prompt gives a new pay prompt with the new total', () => {
   const h = harness({ cart: [RYE] });
   h.show(OAT); h.done(); h.yes('head');
@@ -323,6 +402,15 @@ it('with a limit of 50 EUR, asks for a fingerprint above it, and pays only after
   const h = costly();
   expect(h.event('checkout.offered')!.needsBiometric).toBe(true);
   h.done(); h.yes('head');
+  expect(h.lines()).toEqual(['checkout.biometric']);
+  expect(h.effects.at(-1)).toEqual({ type: 'biometric.request' });
+  expect(payments(h)).toEqual([]);
+  h.send({ type: 'biometric.result', ok: true });
+  expect(h.effects).toEqual([{ type: 'payment.start', kiosk: KIOSK, totalCents: 5001 }]);
+});
+it('with a limit of 50 EUR, a nod while the line of the pay prompt plays asks for the fingerprint and pays only after it', () => {
+  const h = costly();
+  h.yes('head', h.state.prompt!.id);
   expect(h.lines()).toEqual(['checkout.biometric']);
   expect(h.effects.at(-1)).toEqual({ type: 'biometric.request' });
   expect(payments(h)).toEqual([]);
@@ -497,6 +585,9 @@ it('an empty cart ends a checkout in the spot check', () => {
 it('a yes or a no during the spot check pays nothing and cancels nothing', () => {
   const h = spot();
   h.yes('phone', 'p-0001'); h.no('phone', 'p-0001');
+  // The line of the spot check is no prompt, so no nod and no shake answers it.
+  h.yes('head', 'p-0001'); h.no('head', 'p-0001');
+  expect(h.verdict).toMatchObject({ accepted: false, reason: 'no-prompt' });
   expect(payments(h)).toEqual([]);
   expect(h.state.checkout).toMatchObject({ step: 'spotcheck' });
 });

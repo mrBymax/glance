@@ -83,6 +83,35 @@ it('R4: a nod counts while the line of a product prompt plays', () => {
   expect(h.state.cart.totalCents).toBe(189);
   expect(h.state.prompt).toBeNull();
 });
+it('R4: a nod and a shake count while the line of an in-cart prompt plays', () => {
+  const add = harness({ cart: [OAT] });
+  add.show(OAT); add.advance(400);
+  expect(add.state.prompt).toMatchObject({ kind: 'product', mode: 'inCart', doneAt: null });
+  add.yes('head', add.state.prompt!.id);
+  expect(add.state.cart.items[0]!.qty).toBe(2);
+  const remove = harness({ cart: [OAT] });
+  remove.show(OAT); remove.advance(400);
+  remove.no('head', remove.state.prompt!.id);
+  expect(remove.state.cart).toEqual(EMPTY_CART);
+  expect(remove.lines()).toEqual(['cart.removed']);
+});
+it('R4: a shake while the line of a product prompt plays skips the product', () => {
+  const h = harness();
+  h.show(OAT); h.advance(400);
+  h.no('head', h.state.prompt!.id);
+  expect(h.lines()).toEqual(['glance.skipped']);
+  expect(h.state.prompt).toBeNull();
+});
+it('R4: a late nod before prompt.done does not start the time of the prompt again', () => {
+  const h = harness();
+  h.show(OAT); const id = h.state.prompt!.id; h.hold(OAT, HEAD_BOUND_MS);
+  h.yes('head', id);
+  expect(h.verdict).toMatchObject({ accepted: false, reason: 'late' });
+  expect(h.state.prompt).toMatchObject({ id, doneAt: null });
+  h.advance(500);
+  h.yes('head', id);
+  expect(h.state.cart).toEqual(EMPTY_CART);
+});
 it('R4: a nod before prompt.done counts up to 29 seconds after the start of the prompt', () => {
   const late = harness();
   late.show(OAT); const id = late.state.prompt!.id; late.hold(OAT, HEAD_BOUND_MS);

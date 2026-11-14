@@ -1339,7 +1339,7 @@ sequenceDiagram
   Phone->>Server: kiosk.seen "GL1 K3X7"
   Server-->>Phone: checkout.offered, speak "Checkout 3 at Demo Market. ... Nod to pay."
   Server-->>Kiosk: kiosk.state connected, cart, total
-  Phone->>Server: prompt.done, intent yes
+  Phone->>Server: intent yes, with no prompt.done for a nod during the line
   Note over Server: mock payment, PAYMENT_DELAY_MS
   Server-->>Phone: checkout.paid, speak "Paid. ...", session.end
   Server-->>Kiosk: kiosk.state paid, receipt
@@ -1477,15 +1477,15 @@ The rules that exist:
 - An `ambiguous` result gets the look-alike answer, and never a prompt. The event goes out with the first result. The line plays with the second `ambiguous` result in a row with the same candidates, at most 1.5 seconds after the one before (`ALIKE_WITHIN_MS` in `src/sessions/glance.ts`). While the prompt of one of the candidates is open, the result has no effect. See "Look-alike products".
 - A yes or a no counts only with the ID of the current prompt (R3). From voice, touchpad, key, or camera it also needs a finished prompt (R5). From the phone or the HUD it needs the ID alone (R6).
 - A yes or a no from the head (R4) for a product prompt needs the ID of the current prompt, and no more. The ID is the guard: the shopper heard the name and the price of that prompt. The product can be out of view, because recognition names a held product in few frames, and the shopper lowers it while the line plays. In the test of 2026-11-14 one frame named the product 8 seconds before the nod, and the old rule "product in view" dropped that nod.
-- A head answer for a product prompt also counts before `prompt.done`. The phone opens its head window 1200 ms after the line starts to play, and stops the line at a head answer. It then sends no `prompt.done`. Each other source keeps its rule: voice, touchpad, key, and camera need a finished prompt (R5).
+- A head answer for each prompt also counts before `prompt.done`: the shopper never waits for the end of a line to nod or to shake. The phone opens the head window of a prompt 300 ms after its line arrived, and stops the line at a head answer. It then sends no `prompt.done`. So an accepted head answer, and a head answer on the pay prompt with the kiosk code out of view, end the line of the prompt for the server: each later rule reads the time of the answer as the end of the line. Each other source keeps its rule: voice, touchpad, key, and camera need a finished prompt (R5).
 - The phone is the judge of the head window. It reads the window in the time of the motion samples of the glasses. After a stall of the link it sends the answer seconds late. So the server has no head window of its own. It keeps one last time: the answer must arrive less than the head window of the profile plus 21 seconds after `prompt.done`. With no `prompt.done`, the time counts from the start of the prompt. `answers.ts` has the 21 seconds as two values. `HEAD_MAX_EXTRA_MS` is 15 seconds: the longest time that a stall or a still adds to a window. `HEAD_LATE_MS` is 6 seconds: the longest wait for a late sample. They repeat `MAX_EXTRA_MS` and `LATE_MS` of `HeadInput` in the Android app. A profile with no head window has no last time.
-- A head answer to the pay prompt keeps each condition: a finished prompt, the longer time, and a report of the kiosk code in the last 3 seconds. A movement during the line never pays. Each other rule of the checkout stays (R16 to R19, the spot check, the fingerprint).
+- A head answer to the pay prompt needs no `prompt.done`. It keeps each other condition: the ID of the current pay prompt, a report of the kiosk code in the last 3 seconds, and the last time, which counts from the start of the prompt when no `prompt.done` came. A nod during the line pays, and a shake during the line cancels the checkout as a shake after it does (R18). Each other rule of the checkout stays (R16 to R19, the spot check, the fingerprint). The line of the spot check and the line of the fingerprint check are no prompts, so no head answer counts for them.
 - An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
 - After an add, a no removes that unit for 8 seconds (R10). A second yes does nothing: the shopper holds the product up again for another unit. On the prompt for "add another", a no removes one unit (R11).
 - An undo removes the last added unit that the cart still holds (R12). A cart edit sets the quantity of a cart line from 0 to 99.
 - An add that crosses the budget of the profile warns one time. See "Budget guard".
 - A yes or a no with no prompt to answer says nothing. The lines "Hold it up again." and "Hold it up again to add another." do not exist any more: in the test of 2026-11-14 the shopper heard one for a nod that must add. The log line `intent` names the reason. See "Session runtime".
-- One hint stays (R20): a yes or a no less than 15 seconds after a pay prompt finished, with the kiosk code out of view, gets "Look at the checkout code, then nod." one time. Silence adds nothing (R21).
+- One hint stays (R20): a yes or a no less than 15 seconds after a pay prompt finished, with the kiosk code out of view, gets "Look at the checkout code, then nod." one time for each pay prompt. A nod or a shake during the line of the pay prompt with the code out of view finishes the prompt, so it gets the hint too. Silence adds nothing (R21).
 - A double tap with no current prompt opens the question window. See "Questions about a product".
 - A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code, and at most one each 20 seconds. With its line, a busy kiosk also gives the event `error` with the code `kiosk.busy`.
 - A yes pays only as an answer to the pay prompt (R16). The effect `payment.start` asks the runtime for the payment, and the input `payment.result` brings its result.
@@ -1874,7 +1874,7 @@ The reasons of an intent with `accepted=false`:
 | `no-prompt-id` | The yes or the no names no prompt |
 | `no-prompt` | No prompt waits for an answer |
 | `other-prompt` | The answer names a prompt that ended, or that another prompt replaced |
-| `line-plays` | No `prompt.done` arrived yet. Voice, touchpad, key, and camera need it, and a nod on the pay prompt |
+| `line-plays` | No `prompt.done` arrived yet. Voice, touchpad, key, and camera need it. A head answer never gets this reason |
 | `head-off` | The profile has the head gestures off |
 | `code-not-in-view` | A nod on the pay prompt, with no report of the kiosk code in the last 3 seconds |
 | `late` | A head answer after its last time (R4) |

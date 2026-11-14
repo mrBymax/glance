@@ -124,6 +124,31 @@ it('runs the checkout from the code to the receipt', async () => {
     text: 'Paid. One euro eighty-nine. Your receipt is on your phone. Camera off.', sound: 'paid',
   });
 });
+it('a nod while the line of the pay prompt plays, with no prompt.done, gives the kiosk its paid event and the receipt', async () => {
+  const { phone, session, kiosk, kioskEvents } = await checkoutReady();
+  expect(await kioskEvents.next()).toMatchObject({ type: 'kiosk.state', state: 'idle' });
+  const promptId = await seeCode(phone, kiosk.code);
+  expect(await kioskEvents.next()).toMatchObject({ state: 'connected', totalCents: 189 });
+  phone.send({ t: 'intent', kind: 'yes', source: 'head', promptId });
+  const paid = await phone.next(isEvent('checkout.paid'));
+  expect(paid).toMatchObject({ event: { totalCents: 189, kiosk: { name: 'Checkout 3', store: 'Demo Market' } } });
+  expect(await kioskEvents.next()).toMatchObject({ state: 'paid', receipt: { totalCents: 189 } });
+  expect(await t.store.listOrders(session.id)).toMatchObject([{ method: 'demo', totalCents: 189, kioskId: kiosk.kioskId }]);
+  await phone.next((m) => m.t === 'session.end');
+  expect(session.snapshot()).toMatchObject({ phase: 'paid', lastReceipt: { totalCents: 189 } });
+  expect(phone.messages.some((m) => m.t === 'speak' && m.sound === 'paid')).toBe(true);
+});
+it('a shake while the line of the pay prompt plays, with no prompt.done, cancels the checkout and frees the kiosk', async () => {
+  const { phone, session, kiosk, kioskEvents } = await checkoutReady();
+  await kioskEvents.next();
+  const promptId = await seeCode(phone, kiosk.code);
+  expect(await kioskEvents.next()).toMatchObject({ state: 'connected' });
+  phone.send({ t: 'intent', kind: 'no', source: 'head', promptId });
+  await phone.next(isEvent('checkout.cancelled'));
+  expect(await kioskEvents.next()).toMatchObject({ state: 'idle' });
+  expect(await t.store.listOrders(session.id)).toEqual([]);
+  expect(session.state.cart.totalCents).toBe(189);
+});
 it('writes an order with the items, the time of the clock, and an ID that the receipt repeats', async () => {
   const { phone, session, kiosk } = await checkoutReady();
   const promptId = await seeCode(phone, kiosk.code);

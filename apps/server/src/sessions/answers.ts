@@ -15,10 +15,13 @@ const MAX_LINE_QTY = 99;
  * the server. The phone takes a sample of the head window that arrives this long after the window, at most.
  * The value is `LATE_MS` of `HeadInput` in the Android app.
  *
+ * The phone opens the head window of each prompt while its line still plays, so a head answer can arrive before
+ * `prompt.done`: the shopper never waits for the end of a line to nod or to shake. The phone stops the line at the
+ * answer and sends no `prompt.done` for it, so the answer also ends the line for the server (`onAnswer`).
+ *
  * For a product prompt the ID of the prompt is the guard: the shopper heard the name and the price of that prompt.
  * The product can be out of view, because recognition names a held product in few frames and the shopper lowers it
- * while the line plays. The phone opens the head window of a product prompt while the line still plays, so the answer
- * can arrive before `prompt.done`. A pay prompt keeps each condition: its line ended, and the kiosk code is in view.
+ * while the line plays. A pay prompt keeps one more condition: the kiosk code is in view.
  */
 export const HEAD_LATE_MS = 6000;
 /** The longest time that a stall or a still adds to one head window on the phone: `MAX_EXTRA_MS` of `HeadInput`. */
@@ -44,10 +47,7 @@ export function answerFault(state: SessionState, intent: { source: IntentSource;
     // R4. The phone is the judge of the head window. The server keeps the last time at which the phone can send the answer.
     case 'head': {
       if (!state.profile.headGestures) return 'head-off';
-      if (prompt.kind === 'pay') {
-        if (prompt.doneAt === null) return 'line-plays';
-        if (!kioskInView(state, prompt.kioskId, now)) return 'code-not-in-view';
-      }
+      if (prompt.kind === 'pay' && !kioskInView(state, prompt.kioskId, now)) return 'code-not-in-view';
       const windowMs = state.profile.headWindowMs;
       // A prompt that an older server stored has no start time. Its time starts now.
       const from = prompt.doneAt ?? (prompt as { startedAt?: number }).startedAt ?? now;
@@ -70,8 +70,14 @@ function kioskInView(state: SessionState, kioskId: string, now: number): boolean
 export function onPromptDone(turn: Turn, input: Extract<RuleInput, { type: 'prompt.done' }>): void {
   const { s, now } = turn;
   if (!s.prompt || s.prompt.id !== input.promptId) return;
-  s.prompt.doneAt = now;
-  s.lastDone = { promptId: s.prompt.id, kind: s.prompt.kind, at: now, hinted: false };
+  finishPrompt(s, s.prompt, now);
+}
+
+/** The line of the prompt ended. A prompt that got its hint (R20) keeps that fact when its line ends again. */
+function finishPrompt(s: SessionState, prompt: NonNullable<SessionState['prompt']>, now: number): void {
+  prompt.doneAt = now;
+  const hinted = s.lastDone?.promptId === prompt.id && s.lastDone.hinted;
+  s.lastDone = { promptId: prompt.id, kind: prompt.kind, at: now, hinted };
 }
 
 /**
@@ -83,6 +89,12 @@ export function onAnswer(turn: Turn, kind: 'yes' | 'no', source: IntentSource, p
   if (isConfirmed(s)) return 'payment-confirmed';
 
   const fault = answerFault(s, { source, promptId }, now);
+  // The phone stopped the line of the prompt at this head answer, and it sends no `prompt.done` for a stopped line.
+  // So the line ends here for each later rule, also when the kiosk code is out of view and the answer does not count.
+  // A late answer ends no line: the time of the prompt must not start again.
+  if (source === 'head' && (fault === null || fault === 'code-not-in-view') && s.prompt && s.prompt.doneAt === null) {
+    finishPrompt(s, s.prompt, now);
+  }
   if (fault === null) {
     if (s.prompt?.kind === 'product') answerProductPrompt(turn, kind, s.prompt);
     else if (kind === 'yes') startPayment(turn);
@@ -112,7 +124,7 @@ export function onAnswer(turn: Turn, kind: 'yes' | 'no', source: IntentSource, p
 function answerProductPrompt(turn: Turn, kind: 'yes' | 'no', prompt: Extract<SessionState['prompt'], { kind: 'product' }>): void {
   const { s, now } = turn;
   const { productId } = prompt;
-  // An answer before the end of the line finishes the prompt, so a later "remove" by voice names it (R10).
+  // An answer on the phone or the HUD before the end of the line finishes the prompt, so a later "remove" by voice names it (R10).
   if (prompt.doneAt === null) s.lastDone = { promptId: prompt.id, kind: 'product', at: now, hinted: false };
   s.prompt = null;
   noteAnswer(s, now);

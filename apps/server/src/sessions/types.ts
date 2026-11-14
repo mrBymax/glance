@@ -34,6 +34,7 @@ export type Line =
 /**
  * startedAt is the time when the rules made the prompt. A prompt that an older server stored has none.
  * doneAt is the time when the phone reported the end of the clip, or null while the clip plays.
+ * A head answer before that report also sets it: the phone stopped the clip at the answer.
  */
 export type PromptState =
   | { id: string; kind: 'product'; mode: 'new' | 'inCart'; productId: string; startedAt: number; doneAt: number | null }
@@ -211,7 +212,7 @@ export type Effect =
 /**
  * Why a yes or a no does not count for the current prompt, or why the rules took no intent.
  * no-prompt-id: the answer names no prompt. no-prompt: no prompt waits. other-prompt: the answer names a prompt that
- * ended or that another prompt replaced. line-plays: the source needs a finished prompt. head-off: the profile has
+ * ended or that another prompt replaced. line-plays: the source needs a finished prompt (R5: never a head answer). head-off: the profile has
  * the head gestures off. code-not-in-view: a nod on the pay prompt with no report of the kiosk code in the view time.
  * late: a head answer after its last time. payment-confirmed: the payment runs. session-closed: the session is paid or ended.
  */
