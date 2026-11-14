@@ -224,6 +224,22 @@ The request:
 - The text part is `Exclude: none.` or `Exclude: <id>, <id>.`, with the products that the shopper skipped in the last 10 seconds (R9).
 - The call makes one attempt, with a time limit of 4 seconds. The SDK default is 5 attempts.
 - `GEMINI_MEDIA_RESOLUTION=low` asks for the low resolution for a stream frame. A still keeps the default.
+- The request sets no thinking level. See "Measured: thinking and media resolution".
+
+Measured: thinking and media resolution. The Gemini documentation (read on 2026-11-14) says that `gemini-3.5-flash-lite` thinks by default at the level `minimal`, which is its lowest level. It lists no setting that turns thinking off for a Gemini 3 model. It gives an image 1120 tokens at the default media resolution and 280 tokens at `low`.
+
+18 calls on 2026-11-14 checked this: 3 stream frames of the test of that day (402 x 626 to 494 x 768, a pack of paper cups in a hand), 2 calls for each frame and each setting, one call at a time, with the demo catalog and the demo store list.
+
+| Setting | Median | Fastest and slowest | Prompt tokens | Thought tokens | Answers |
+|---|---|---|---|---|---|
+| The request as it is | 1116 ms | 1030 to 1350 ms | 2683 | 0 | 6 of 6 `identified` with the right item. Digits of the code read in 1 of 4 calls with a code in view |
+| `thinkingConfig.thinkingLevel: MINIMAL` | 1052 ms | 990 to 1141 ms | 2683 | 0 | The same: 6 of 6, and digits in 1 of 4 |
+| `MINIMAL` and `mediaResolution: MEDIA_RESOLUTION_LOW` | 1313 ms | 1046 to 1620 ms | 1877 | 0 | 6 of 6 `identified` with the right item. Digits in 0 of 4 |
+
+- The model wrote no thought token with the request as it is. The level `MINIMAL` changed nothing that 6 calls can show: the difference of 64 ms is smaller than the spread of one setting.
+- The low media resolution saved 806 prompt tokens and no time, and no call read the digits of the code with it.
+- So the request stays as it is, and `GEMINI_MEDIA_RESOLUTION` keeps the default `default`. No setting for thinking exists.
+- Each answer has about 90 output tokens. The measurement did not test a shorter answer.
 
 `normalizeResult` never turns another status into `identified`:
 
