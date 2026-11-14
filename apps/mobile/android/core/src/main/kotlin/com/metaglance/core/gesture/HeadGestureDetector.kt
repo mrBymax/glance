@@ -107,6 +107,7 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
         }
     }
 
+    private val axes = HeadAxes(config)
     private var pitch = AxisTracker()
     private var yaw = AxisTracker()
     private val angles = ArrayDeque<AnglePoint>()
@@ -116,9 +117,12 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
     private var armed = true
     private var quietUntilMs = 0.0
 
+    /** For a sample with no accelerometer reading. */
+    fun onSample(sample: GyroSample): HeadGesture? = onSample(HeadSample(sample, null))
+
     /** Returns the gesture that this sample completes, or null. */
-    fun onSample(sample: GyroSample): HeadGesture? {
-        val tMs = sample.tNs / NS_PER_MS
+    fun onSample(sample: HeadSample): HeadGesture? {
+        val tMs = sample.gyro.tNs / NS_PER_MS
         val last = lastSampleMs
         var dtS = if (last == null) 0.0 else (tMs - last) / MS_PER_S
         if (last == null || dtS <= 0.0 || dtS * MS_PER_S > config.gapResetMs) {
@@ -129,8 +133,9 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
 
         val pitchBefore = pitch.last
         val yawBefore = yaw.last
-        val pitchClosed = pitch.step(tMs, (sample.on(config.pitchAxis) * config.pitchDownSign).toDouble(), dtS)
-        val yawClosed = yaw.step(tMs, sample.on(config.yawAxis).toDouble(), dtS)
+        val rates = axes.rates(sample, dtS)
+        val pitchClosed = pitch.step(tMs, rates.pitch, dtS)
+        val yawClosed = yaw.step(tMs, rates.yaw, dtS)
         angles.addLast(AnglePoint(tMs, pitch.angle, yaw.angle))
         while (angles.first().tMs < tMs - ANGLE_HISTORY_MS) angles.removeFirst()
 
@@ -151,6 +156,7 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
 
     /** Forgets each stroke and each angle. The next sample starts from rest. */
     fun reset() {
+        axes.reset()
         pitch = AxisTracker()
         yaw = AxisTracker()
         angles.clear()
