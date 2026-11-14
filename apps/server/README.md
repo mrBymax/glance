@@ -81,6 +81,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `GEMINI_API_KEY` | not set | Needed when `FAKE_RECOGNITION` is off. |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | The recognition model. |
 | `GEMINI_MEDIA_RESOLUTION` | `default` | `default` or `low`. |
+| `RECOGNITION_CONCURRENCY` | `3` | An integer from 1 to 6. The number of recognition calls that one session runs at the same time. See "Recognition". |
 | `RECOGNITION_MIN_CONFIDENCE` | `0.6` | A number from 0 to 1. An `identified` answer below it counts as `unsure`. |
 | `LABEL_MIN_CONFIDENCE` | `0.7` | A number from 0 to 1. The label call chooses one item of the store list, and the server takes it from this confidence on. See "Label frames". |
 | `REQUIRE_BLUR` | off | `1` means on. The server then drops each frame that the phone sent with `blurred: false`. |
@@ -190,12 +191,17 @@ sequenceDiagram
   Socket->>Intake: decoded frame
   Intake->>Worker: submit(copy of the frame)
   Worker->>Gemini: generateContent(JPEG, "Exclude: ...")
-  Phone->>Socket: newer frames
+  Phone->>Socket: 2 newer frames
   Socket->>Intake: decoded frames
+  Intake->>Worker: submit
+  Worker->>Gemini: one generateContent for each frame, while a call is free
+  Phone->>Socket: newer frames
   Intake->>Worker: submit, the newest frame waits
   Gemini-->>Worker: JSON answer
   Worker->>Runtime: dispatch(recognition result)
   Worker->>Gemini: generateContent(the waiting frame)
+  Gemini-->>Worker: JSON answer of an older frame
+  Note over Worker: dropped: a newer frame has its result
 ```
 
 | File in `src/recognition` | Content |
@@ -228,12 +234,17 @@ The request:
 
 The worker:
 
-- One call runs at a time for each session. While it runs, one frame waits, and a newer frame takes its place. A stream frame does not replace a waiting still.
-- A call that takes 4 seconds is dropped: the worker aborts it and ignores a late answer.
+- Up to `RECOGNITION_CONCURRENCY` calls run at the same time for each session. The default is 3. A frame starts its call at once while a call is free.
+- With no free call, one frame waits, and a newer frame takes its place. A stream frame does not replace a waiting still.
+- The answers can arrive in another order than the frames. The rules get the results in the order of the frames. The worker drops the result of a stream frame when a newer frame has its result, with the `debug` line `recognition result dropped: a newer frame has its result. seq=<n> session=<id>`.
+- The result of a still is never dropped for its order. A still answers a request, and the rules read it apart from the stream.
+- Each call has its own time limit. A call that takes 4 seconds is dropped: the worker aborts it and ignores a late answer.
+- With one call at a time and a call of 1.2 to 1.8 seconds, the log of the test of 2026-11-14 showed a result for each second or third frame only. With 3 calls of 1.5 seconds each, a session starts a call each 500 ms.
+- Each session costs up to `RECOGNITION_CONCURRENCY` calls at the same time. The rate limit of the Gemini key must allow that for each shopper.
 - A call that fails gets one log line with the name of the error and at most 200 characters of its message.
-- After 3 failed calls in a row the server logs `recognition is slow for the session <id>` and gives the rules the input `recognition.slow`. The voice says "Recognition is slow right now.", and the clients get the event `error` with the code `recognition.slow`. A good call starts the count again. The rules pass at most one such report each 60 seconds.
+- The count of failed calls follows the order in which the calls end. After 3 failed calls in a row the server logs `recognition is slow for the session <id>` and gives the rules the input `recognition.slow`. The voice says "Recognition is slow right now.", and the clients get the event `error` with the code `recognition.slow`. A good call starts the count again. The rules pass at most one such report each 60 seconds.
 - The worker holds a frame only for the time of its call.
-- The worker stops when its session stops and when the app closes.
+- The worker stops when its session stops and when the app closes. It then aborts each call.
 - Each result gets the log line `recognition session=<id> seq=<n> status=<status> code=<digits|visible|no> ms=<n>`. `code` is what the model said about a barcode in the frame. Each request for a still gets the line `still.request session=<id>`. It gives the server share of the time from glance to voice.
 - The digits of the code of a result go to the lookup of a barcode. A frame with the kind `label` never reaches the worker.
 - A result that names a store item waits for `ProductResolver.resolve` before it reaches the rules. See "Recognition knows the store list".

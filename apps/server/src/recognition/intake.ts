@@ -28,6 +28,8 @@ export function saveFrameWith(saveFrame: FrameSaver | null, log: Pick<FastifyBas
  */
 export function createFrameHandler(deps: {
   recognizer: Recognizer; clock: Clock; log: FastifyBaseLogger;
+  /** The number of recognition calls that one session runs at the same time. */
+  concurrency: number;
   /** Gets the digits of the code of a result, as the model read them. */
   onCode: (session: SessionRuntime, digits: string) => void;
   /**
@@ -61,6 +63,7 @@ export function createFrameHandler(deps: {
 
   const makeWorker = (session: SessionRuntime): RecognitionWorker => new RecognitionWorker({
     recognizer: deps.recognizer,
+    concurrency: deps.concurrency,
     exclude: () => excludeList(session.state, deps.clock.now()),
     onResult: (result, info) => {
       // These lines give the server share of the time from glance to voice.
@@ -92,6 +95,7 @@ export function createFrameHandler(deps: {
     },
     onSlow: () => deps.onSlow(session),
     log: (line) => deps.log.warn(`${line} session=${session.id}`),
+    debug: (line) => deps.log.debug(`${line} session=${session.id}`),
   });
 
   const onFrame: FrameHandler = (session, frame) => {

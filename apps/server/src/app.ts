@@ -239,6 +239,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   const recognize = player || deps.onFrame || !deps.recognizer ? null : createFrameHandler({
     recognizer: deps.recognizer,
+    concurrency: config.recognitionConcurrency,
     clock: deps.clock,
     log: app.log,
     onCode: (session, digits) => void reportBarcode(session, digits, 'model'),

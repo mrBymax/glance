@@ -106,6 +106,21 @@ it('reports a recognizer that fails 3 times in a row, and keeps the socket open'
   phone.send({ t: 'intent', kind: 'help', source: 'phone' });
   expect(await phone.next((m) => m.t === 'speak' && m.priority === 'low')).toBeDefined();
 });
+it('runs 3 calls of one session at the same time, and the next frame waits', async () => {
+  recognize.mockImplementation(() => new Promise(() => undefined));
+  for (const seq of [1, 2, 3, 4]) phone.sendFrame({ seq, ts: seq, w: 576, h: 768, blurred: true }, JPEG);
+  phone.send({ t: 'intent', kind: 'help', source: 'phone' });
+  await phone.next((m) => m.t === 'speak');
+  expect(recognize).toHaveBeenCalledTimes(3);
+});
+it('with RECOGNITION_CONCURRENCY=1 one call runs at a time', async () => {
+  recognize.mockImplementation(() => new Promise(() => undefined));
+  const single = await appWithPhone({ RECOGNITION_CONCURRENCY: '1' });
+  for (const seq of [1, 2, 3]) single.phone.sendFrame({ seq, ts: seq, w: 576, h: 768, blurred: true }, JPEG);
+  single.phone.send({ t: 'intent', kind: 'help', source: 'phone' });
+  await single.phone.next((m) => m.t === 'speak');
+  expect(recognize).toHaveBeenCalledTimes(1);
+});
 it('ends the call of a session that a client deletes', async () => {
   let signal: AbortSignal | null = null;
   recognize.mockImplementationOnce((_jpeg, opts) => {

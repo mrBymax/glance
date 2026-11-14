@@ -182,7 +182,7 @@ Rules of this path:
 
 - The phone uploads one frame each 500 ms at most. The JPEG has the quality 80 and a long side of 768 pixels at most. It is the center of the camera frame (80 percent of the width, 70 percent of the height), and the phone pixelates each face in it before the upload.
 - The upload stops while the socket is down, while an earlier frame is not sent yet, and while the glasses are off the face.
-- The recognition worker runs one call at a time for each session. While a call runs, the newest frame waits, and a call that takes 4 seconds is dropped.
+- The recognition worker runs up to 3 calls at the same time for each session (`RECOGNITION_CONCURRENCY`). With no free call, the newest frame waits. A call that takes 4 seconds is dropped. The rules get the results in the order of the frames: the worker drops the result of an older frame that arrives after the result of a newer frame.
 - Results for one product inside 3 seconds belong to one appearance, and one appearance gets one prompt.
 - `glance.pending` and the glance line carry the allergen and diet warnings of the product for the profile of the session. A line with a warning has the sound `warning`. No message says that a product is safe.
 - A yes from the head counts only with the ID of the current prompt, after `prompt.done`, with the product in view, and inside the head window of the profile. The default is 8 seconds.

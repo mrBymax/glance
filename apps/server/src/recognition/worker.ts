@@ -7,61 +7,79 @@ export type Frame = { header: FrameHeader; jpeg: Uint8Array };
 const SLOW_AFTER_FAILED_CALLS = 3;
 const LOGGED_MESSAGE_CHARS = 200;
 
-type Call = { frame: Frame; abort: AbortController; timer: NodeJS.Timeout };
+/** `order` counts the frames of the session as they arrive. */
+type Waiting = { frame: Frame; order: number; since: number };
+type Call = { frame: Frame; order: number; abort: AbortController; timer: NodeJS.Timeout };
 
 const isStill = (frame: Frame): boolean => frame.header.kind === 'still';
 
 /**
- * The recognition calls of one session: one call at a time, and the newest frame next (spec section 11.1).
- * The worker holds a frame only while its call runs or while it waits for the call before it.
+ * The recognition calls of one session: up to `concurrency` calls at a time, and the newest frame next (spec section 11.1).
+ * The answers can arrive in another order than the frames. The rules must never go back in time, so the worker drops
+ * the result of a stream frame when a newer frame has its result.
+ * The worker holds a frame only while its call runs or while it waits for a free call.
  */
 export class RecognitionWorker {
-  private call: Call | null = null;
-  private waiting: Frame | null = null;
+  private readonly calls = new Set<Call>();
+  private waiting: Waiting | null = null;
+  private frames = 0;
+  /** The `order` of the newest frame whose result reached `onResult`. */
+  private applied = 0;
   private failedInRow = 0;
   private stopped = false;
 
   constructor(private readonly deps: {
     recognizer: Recognizer;
+    /** The number of calls that can run at the same time. */
+    concurrency: number;
     /** Read at the start of each call. */
     exclude: () => string[];
-    onResult: (result: RecognitionResult, info: { seq: number; still: boolean; ms: number }) => void;
+    /** `ms` is the time of the call, and `waitMs` is the time that the frame waited for a free call. */
+    onResult: (result: RecognitionResult, info: { seq: number; still: boolean; ms: number; waitMs: number }) => void;
     /** Runs one time when 3 calls in a row failed. A good call starts the count again. */
     onSlow: () => void;
     /** Gets one line for each failed call. */
     log?: (line: string) => void;
+    /** Gets one line for each result that the worker dropped because a newer frame has its result. */
+    debug?: (line: string) => void;
   }) {}
 
   submit(frame: Frame): void {
     if (this.stopped) return;
-    if (!this.call) {
-      this.start(frame);
+    this.frames += 1;
+    const entry: Waiting = { frame, order: this.frames, since: performance.now() };
+    if (this.calls.size < this.deps.concurrency) {
+      this.start(entry);
       return;
     }
     // A still is the sharp second look that the phone took on request. A stream frame must not push it out.
-    if (this.waiting && isStill(this.waiting) && !isStill(frame)) return;
-    this.waiting = frame;
+    if (this.waiting && isStill(this.waiting.frame) && !isStill(frame)) return;
+    this.waiting = entry;
   }
 
-  /** The bytes of the frame in the call plus the waiting frame. */
+  /** The bytes of the frames in the calls plus the waiting frame. */
   heldBytes(): number {
-    return (this.call?.frame.jpeg.length ?? 0) + (this.waiting?.jpeg.length ?? 0);
+    let bytes = this.waiting?.frame.jpeg.length ?? 0;
+    for (const call of this.calls) bytes += call.frame.jpeg.length;
+    return bytes;
   }
 
-  /** Aborts the call and drops the waiting frame. No callback runs after it. */
+  /** Aborts each call and drops the waiting frame. No callback runs after it. */
   stop(): void {
     this.stopped = true;
     this.waiting = null;
-    const call = this.call;
-    if (!call) return;
-    this.call = null;
-    clearTimeout(call.timer);
-    call.abort.abort();
+    const calls = [...this.calls];
+    this.calls.clear();
+    for (const call of calls) {
+      clearTimeout(call.timer);
+      call.abort.abort();
+    }
   }
 
-  private start(frame: Frame): void {
+  private start({ frame, order, since }: Waiting): void {
     const abort = new AbortController();
     const startedAt = performance.now();
+    const waitMs = Math.round(startedAt - since);
     const { seq } = frame.header;
     const still = isStill(frame);
 
@@ -71,8 +89,8 @@ export class RecognitionWorker {
       this.failed(`recognition call dropped after ${TIMING.recognitionTimeoutMs} ms. seq=${seq}`);
       this.next();
     }, TIMING.recognitionTimeoutMs);
-    const call: Call = { frame, abort, timer };
-    this.call = call;
+    const call: Call = { frame, order, abort, timer };
+    this.calls.add(call);
 
     const onError = (error: unknown): void => {
       if (!this.finish(call)) return;
@@ -83,11 +101,17 @@ export class RecognitionWorker {
     const onAnswer = (result: RecognitionResult): void => {
       if (!this.finish(call)) return;
       this.failedInRow = 0;
-      try {
-        this.deps.onResult(result, { seq, still, ms: Math.round(performance.now() - startedAt) });
-      } catch (error) {
-        // A failure of the rules is no failure of the recognition service, so it does not count toward "slow".
-        this.deps.log?.(`recognition result of seq=${seq} failed in the session. ${(error as Error).message}`);
+      // A still answers a request of the rules, and they read it apart from the stream. So it counts at each time.
+      if (order < this.applied && !still) {
+        this.deps.debug?.(`recognition result dropped: a newer frame has its result. seq=${seq}`);
+      } else {
+        this.applied = Math.max(this.applied, order);
+        try {
+          this.deps.onResult(result, { seq, still, ms: Math.round(performance.now() - startedAt), waitMs });
+        } catch (error) {
+          // A failure of the rules is no failure of the recognition service, so it does not count toward "slow".
+          this.deps.log?.(`recognition result of seq=${seq} failed in the session. ${(error as Error).message}`);
+        }
       }
       this.next();
     };
@@ -105,8 +129,7 @@ export class RecognitionWorker {
 
   /** Ends the call and drops its frame. Returns false for a call that was dropped or stopped before. */
   private finish(call: Call): boolean {
-    if (this.call !== call) return false;
-    this.call = null;
+    if (!this.calls.delete(call)) return false;
     clearTimeout(call.timer);
     return true;
   }
@@ -119,9 +142,9 @@ export class RecognitionWorker {
 
   private next(): void {
     // A callback can stop the worker or submit a frame, so the state is read again here.
-    if (this.stopped || this.call || !this.waiting) return;
-    const frame = this.waiting;
+    if (this.stopped || this.calls.size >= this.deps.concurrency || !this.waiting) return;
+    const entry = this.waiting;
     this.waiting = null;
-    this.start(frame);
+    this.start(entry);
   }
 }

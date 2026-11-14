@@ -11,7 +11,7 @@ it('uses the defaults', () => {
     speechCacheDir: '.cache/speech', saveFramesDir: null, paymentDelayMs: 1500, secondLookWaitMs: 0,
     storeListPath: 'catalog/store-list.dev.json', fakeProductInfo: false, offBaseUrl: 'https://world.openfoodfacts.org',
     productInfoUserAgent: 'MetaGlance/0.1 (https://github.com/mrBymax/glance)', productCacheDir: '.cache/products',
-    referenceDir: 'catalog/reference',
+    referenceDir: 'catalog/reference', recognitionConcurrency: 3,
   });
   expect(loadConfig({ ...KEYS, REFERENCE_DIR: '/data/reference' }, []).referenceDir).toBe('/data/reference');
 });
@@ -68,6 +68,13 @@ it('reads the wait for the sharp second look, which is off at 0', () => {
   expect(() => loadConfig({ SECOND_LOOK_WAIT_MS: '-1' }, ['--fake'])).toThrow(/SECOND_LOOK_WAIT_MS/);
   expect(() => loadConfig({ SECOND_LOOK_WAIT_MS: '2.5' }, ['--fake'])).toThrow(/SECOND_LOOK_WAIT_MS/);
   expect(() => loadConfig({ SECOND_LOOK_WAIT_MS: '10001' }, ['--fake'])).toThrow(/SECOND_LOOK_WAIT_MS/);
+});
+it('reads the number of recognition calls that run at the same time, from 1 to 6', () => {
+  expect(loadConfig({ RECOGNITION_CONCURRENCY: '1' }, ['--fake']).recognitionConcurrency).toBe(1);
+  expect(loadConfig({ RECOGNITION_CONCURRENCY: '6' }, ['--fake']).recognitionConcurrency).toBe(6);
+  expect(() => loadConfig({ RECOGNITION_CONCURRENCY: '0' }, ['--fake'])).toThrow(/RECOGNITION_CONCURRENCY/);
+  expect(() => loadConfig({ RECOGNITION_CONCURRENCY: '7' }, ['--fake'])).toThrow(/RECOGNITION_CONCURRENCY/);
+  expect(() => loadConfig({ RECOGNITION_CONCURRENCY: '1.5' }, ['--fake'])).toThrow(/RECOGNITION_CONCURRENCY/);
 });
 it('reads the settings of the barcode lookup', () => {
   const config = loadConfig({

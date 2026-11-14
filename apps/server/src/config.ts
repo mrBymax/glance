@@ -12,6 +12,8 @@ export type Config = {
   geminiApiKey: string | null;
   geminiModel: string;
   geminiMediaResolution: 'default' | 'low';
+  /** The number of recognition calls that one session runs at the same time. */
+  recognitionConcurrency: number;
   minConfidence: number;
   /** The confidence that the label reader needs for the store item that it chose. */
   labelMinConfidence: number;
@@ -101,6 +103,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     geminiApiKey: read('GEMINI_API_KEY'),
     geminiModel: read('GEMINI_MODEL') ?? 'gemini-3.5-flash-lite',
     geminiMediaResolution: mediaResolution,
+    recognitionConcurrency: readNumber('RECOGNITION_CONCURRENCY', 3, 1, 6, true),
     minConfidence: readNumber('RECOGNITION_MIN_CONFIDENCE', 0.6, 0, 1, false),
     labelMinConfidence: readNumber('LABEL_MIN_CONFIDENCE', 0.7, 0, 1, false),
     requireBlur: read('REQUIRE_BLUR') === '1',
