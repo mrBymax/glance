@@ -29,11 +29,46 @@ it('R1: results inside the view time give one prompt', () => {
   h.hold(OAT, 2500);
   expect(h.all.filter((e) => e.type === 'speak')).toHaveLength(1);
 });
-it('R1: a product that comes back after it left the view gets a new prompt', () => {
+it('R1: a product that comes back after it left the view gets a new prompt when the head window of its prompt is over', () => {
   const h = harness();
-  h.show(OAT); h.advance(T.viewMs); h.see(OAT);
+  h.show(OAT); h.done();
+  h.advance(T.headWindowMs - 1); h.see(OAT);
+  expect(h.effects).toEqual([]);
+  h.advance(T.viewMs); h.see(OAT);
   expect(h.events()).toEqual(['glance.cleared', 'glance.pending']);
   expect(h.state.prompt!.id).toBe('p-0002');
+});
+it('R1: with no prompt.done, the head window counts from the start of the prompt', () => {
+  const h = harness();
+  h.show(OAT);
+  h.advance(T.headWindowMs - 1); h.see(OAT);
+  expect(h.effects).toEqual([]);
+  h.advance(T.viewMs); h.see(OAT);
+  expect(h.state.prompt!.id).toBe('p-0002');
+});
+it('R1: the session of 2026-11-14: a still stopped the frames for 4.7 seconds, and the prompt of the held product stays for the nod', () => {
+  const h = harness();
+  // Server times 475.957 to 482.407 of the log: results 492 and 493, the prompt p-0003, result 497, the head answer.
+  h.show(OAT);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+  h.advance(4679); h.see(OAT);
+  expect(h.effects).toEqual([]);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+  h.advance(1771); h.yes('head', 'p-0001');
+  expect(h.verdict).toMatchObject({ accepted: true });
+  expect(h.state.cart.items.map((item) => item.productId)).toEqual([OAT]);
+});
+it('R1: a profile with the head gestures off gets the new prompt when the product comes back', () => {
+  const h = harness({ profile: { headGestures: false } });
+  h.show(OAT); h.advance(T.viewMs); h.see(OAT);
+  expect(h.events()).toEqual(['glance.cleared', 'glance.pending']);
+});
+it('R1: a profile with no end of the head window keeps the prompt until R5', () => {
+  const h = harness({ profile: { headWindowMs: null } });
+  h.show(OAT); h.done();
+  h.advance(T.viewMs + T.promptTtlAfterLeftMs - 1); h.see(OAT);
+  expect(h.effects).toEqual([]);
+  expect(h.state.prompt!.id).toBe('p-0001');
 });
 it('R1: one result by sight opens no prompt, and the second result in a row for the product opens it', () => {
   const h = harness();
@@ -309,7 +344,7 @@ it('keeps a prompt that a barcode or a label match opened when sight is not sure
   h.done(); h.yes();
   expect(h.state.cart.items.map((item) => item.productId)).toEqual([OAT]);
 });
-it('a barcode makes the prompt of sight for its product a sure prompt', () => {
+it('a barcode for the product of the prompt of sight opens no second prompt', () => {
   const h = harness();
   h.show(OAT); h.advance(150);
   h.barcode({ kind: 'product', productId: OAT });
@@ -328,20 +363,41 @@ it('keeps a prompt that the still of the second look opened when a stream frame 
   expect(h.effects).toEqual([]);
   expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
 });
-it('a prompt of sight that follows a sure prompt is not sure', () => {
-  const h = harness();
-  h.barcode({ kind: 'product', productId: RYE });
-  h.advance(150); h.see(OAT); h.advance(150); h.see(OAT);
-  h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
-  expect(h.events()).toEqual(['glance.cleared', 'glance.ambiguous']);
-});
-it('ends a prompt for a product that the model is no longer sure of', () => {
+it('keeps a prompt that stream frames opened when look-alike results have its product among their candidates', () => {
   const h = harness();
   h.show(OAT); h.done();
-  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  for (let count = 0; count < 4; count += 1) {
+    h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+    expect(h.effects).toEqual([]);
+  }
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+  h.yes('voice');
+  expect(h.state.cart.items.map((item) => item.productId)).toEqual([OAT]);
+});
+it('look-alike results without the product of the prompt end the prompt as the second result in a row, when its product left the view', () => {
+  const h = harness();
+  h.show(RYE); h.done();
+  h.advance(T.viewMs); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.effects).toEqual([]);
+  expect(h.state.prompt).toMatchObject({ productId: RYE });
+  h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   expect(h.events()).toEqual(['glance.cleared', 'glance.ambiguous']);
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+  expect(h.state.prompt).toBeNull();
   h.yes('voice');
   expect(h.state.cart).toEqual(EMPTY_CART);
+});
+it('one look-alike result without the product of the prompt, among other results, never ends the prompt', () => {
+  const h = harness();
+  h.show(RYE);
+  h.advance(T.viewMs);
+  for (let count = 0; count < 3; count += 1) {
+    h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+    h.advance(150); h.result({ status: 'none' });
+    h.advance(150);
+  }
+  expect(h.all.filter((e) => e.type === 'event').map((e) => e.event.type)).toEqual(['glance.pending']);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: RYE });
 });
 it('gives the look-alike answer with the product references of the contract, and with the defaults of its line', () => {
   const h = harness();
@@ -364,9 +420,8 @@ it('says nothing for look-alike products while the product of another prompt is 
   h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
   expect(h.effects).toEqual([]);
   expect(h.state.prompt).toMatchObject({ productId: RYE });
-  h.advance(T.viewMs);
-  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
-  expect(h.events()).toEqual(['glance.ambiguous']);
+  h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.effects).toEqual([]);
   expect(h.state.prompt).toMatchObject({ productId: RYE });
 });
 it('gives one look-alike answer while the products stay in view, and a new one for a new appearance', () => {
@@ -405,15 +460,14 @@ it('gives the look-alike answer again when the model named one candidate in betw
   lookAlike(h, [OAT, BARISTA]);
   h.advance(500); h.show(OAT);
   expect(h.state.prompt).toMatchObject({ productId: OAT });
-  h.advance(SAME_TEXT_MS); h.show(OAT);
-  h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
-  expect(h.events()).toEqual(['glance.cleared', 'glance.ambiguous']);
-  expect(h.state.prompt).toBeNull();
-  // 500 ms after the prompt line, the guard drops the look-alike line. The prompt still ends.
+  // No look-alike line while the prompt of one of its candidates is open.
+  h.advance(500); lookAlike(h, [OAT, BARISTA]);
+  expect(h.effects).toEqual([]);
+  expect(h.state.prompt).toMatchObject({ productId: OAT });
+  h.done(); h.no();
+  h.advance(SAME_TEXT_MS); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.events()).toEqual(['glance.ambiguous']);
   h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
-  expect(h.effects).toMatchObject([{ type: 'speak.dropped', reason: 'gap' }]);
-  h.advance(500); h.show(OAT);
-  h.advance(UNSOLICITED_GAP_MS); lookAlike(h, [OAT, BARISTA]);
   expect(h.lines()).toEqual(['glance.ambiguous']);
 });
 it('starts with no look-alike appearance', () => {

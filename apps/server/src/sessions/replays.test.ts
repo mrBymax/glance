@@ -16,10 +16,18 @@ it('gaps shorter than the view time keep one prompt', () => {
   h.at(3900); h.show(OAT);
   expect(pendings(h)).toHaveLength(1);
 });
-it('a gap of the view time gives a new prompt, and the old prompt ID adds nothing', () => {
+it('a gap of the view time keeps the prompt while its head window is open', () => {
   const h = harness();
   h.show(OAT); h.done(); const first = h.state.prompt!.id;
   h.at(T.viewMs); h.show(OAT);
+  expect(pendings(h)).toHaveLength(1);
+  h.yes('head', first);
+  expect(h.state.cart.items.map((i) => i.productId)).toEqual([OAT]);
+});
+it('a gap of the view time after the head window gives a new prompt, and the old prompt ID adds nothing', () => {
+  const h = harness();
+  h.show(OAT); h.done(); const first = h.state.prompt!.id;
+  h.at(T.headWindowMs); h.show(OAT);
   expect(pendings(h)).toHaveLength(2);
   h.yes('head', first);
   expect(h.state.cart).toEqual(EMPTY_CART);

@@ -241,7 +241,9 @@ sequenceDiagram
 - The product prompt ends on the server 18 seconds after the last result with its product. A stall does not stop that time, so a nod after it adds nothing.
 - Each number of this path comes from tests with synthetic samples and from one log. See "Parts that do not exist yet".
 
-A result with the status `ambiguous` gives no prompt. The server sends the event `glance.ambiguous` with the candidates. With the second such result in a row for the same candidates, it speaks "I cannot tell which oat drink this is. Turn the front to me." If the pending product is one of the candidates, `glance.cleared` comes first, so a yes cannot add it.
+A result with the status `ambiguous` gives no prompt. The server sends the event `glance.ambiguous` with the candidates. With the second such result in a row for the same candidates, it speaks "I cannot tell which oat drink this is. Turn the front to me." If the pending product is one of the candidates, the result has no effect: the prompt stays for the nod, and no event and no line follow.
+
+A product that comes back after 3 seconds with no result keeps its prompt while the head window of that prompt can be open: `headWindowMs` of the profile after `prompt.done`, or after the start of the prompt. In the session of 2026-11-14 a still stopped the frames for 4.7 seconds. The next result opened a second prompt for the held product, and the nod for the first one was lost.
 
 The Android app takes a still photo after each `glance.ambiguous`. The message `still.request` of the contract asks only for the still of a barcode, so for look-alike products the event is the signal for the phone. With `SECOND_LOOK_WAIT_MS` above 0 on the server, the look-alike line waits for the result of that still. The default is 0: the line plays at once, and the result of a still counts as the result of a stream frame. The diagram shows a server with a wait.
 
