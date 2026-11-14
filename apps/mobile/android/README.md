@@ -307,7 +307,7 @@ What nobody measured:
 
 The shopper answers a prompt with the head: a nod is a yes, and a shake is a no. `yesGesture` of the profile can swap the two. The app reads the gestures from the motion samples of the glasses, at 30 Hz.
 
-No recording of a real nod with these glasses exists yet. Each number below comes from head studies and from tests with synthetic samples. The next session with the glasses gives the data to check them: see "Log lines" and "Record and replay real motion".
+No recording of a real nod with these glasses exists yet. The numbers below come from head studies, from tests with synthetic samples, and from the log lines of one session with the glasses: see "The nods of the test of 2026-11-14". The next session with the glasses gives more data: see "Log lines" and "Record and replay real motion".
 
 ```mermaid
 flowchart TD
@@ -377,8 +377,9 @@ A nod:
 - Each stroke is at least the smallest stroke of the level, and its top rate is at least the smallest top rate of the level.
 - No stroke is larger than 0.6 rad (34 degrees).
 - The detector reports the nod when the second stroke has brought the head back to 40 percent of the largest stroke, or less, from the start of the first stroke. That moment is before the head is back. So a look down at a product, which does not return, is not a nod.
+- The first pair that passes is the nod. The detector waits for no rest and for no third stroke: it tests the open second stroke at each sample, which is each 33 ms.
 - The report comes 1500 ms after the start of the first stroke at the latest.
-- The yaw angle moves less than half of the largest stroke in that time.
+- In the time of the two strokes, the top pitch rate is at least 1.5 times the top yaw rate. The yaw angle does not count, so a nod during a slow turn of the head is a nod.
 - A slow first stroke does not hide the nod: the detector tests each pair of strokes that follow each other.
 
 A shake:
@@ -386,7 +387,7 @@ A shake:
 - Two opposite yaw strokes and the start of a third one. One yaw pair is never a shake, at each speed, because a shopper looks to the side and back many times.
 - The top rate of each of the two strokes is at least the smallest top rate of the level.
 - The third stroke starts 2500 ms after the start of the first stroke at the latest.
-- The pitch angle moves less than half of the largest stroke in that time. A shake of 26 degrees with 8 degrees of pitch passes.
+- In that time, the top yaw rate is at least 1.5 times the top pitch rate. A shake of 26 degrees with 8 degrees of pitch passes.
 
 After a gesture, the detector reports no other gesture for 600 ms and until both angles were at rest. So a nod with many cycles is one nod.
 
@@ -405,7 +406,7 @@ The other limits are the same for each level. They are the defaults of `HeadGest
 | `maxShakeMs` | 2500 ms | From the start of a shake to the start of its third stroke |
 | `settleRadS`, `holdMs` | 0.3 rad/s, 250 ms | A stroke ends after this time below this rate. A slower turn splits a pair of strokes. |
 | `restRadS` | 0.15 rad/s | Below this rate the head is at rest, and a stroke can start |
-| `dominance` | 2 | The gesture axis moves this many times more than the other axis, as an angle |
+| `dominance` | 1.5 | In the time of the two strokes, the top rate of the gesture axis is this many times the top rate of the other axis |
 | `refractoryMs` | 600 ms | The time after a gesture with no new gesture |
 | `gapResetMs` | 200 ms | A larger step between two sample times starts the detector from rest |
 
@@ -427,9 +428,28 @@ What the synthetic tests show for the level `normal`:
 | A turn of 45 degrees to a shelf and back, slow or fast | Nothing |
 | A scan of a shelf with strokes of 1200 ms | Nothing |
 | The walk of the head studies, for 5 minutes at each level | Nothing |
-| The same movement on both axes | Nothing |
+| The same movement on both axes, with two strokes or with three | Nothing |
+| A nod with strokes of 0.22 rad at 2.5 rad/s during a turn of the head of 0.3 rad at 1.0 rad/s | One nod |
+| That turn of the head alone | Nothing |
+| A nod that starts with the first sample of a head window | One nod |
 
 The old rule took a nod only as a stroke down and an equal stroke up, closed by a rest. It also ended a stroke after 150 ms below 0.5 rad/s, which split a shake with strokes of 700 ms at its turns.
+
+### The nods of the test of 2026-11-14
+
+One person answered three prompts with the glasses, at the level `normal`. No motion file exists, so these numbers come from the log lines of the detector.
+
+| Value | Measured | Limit of `normal` |
+|---|---|---|
+| Stroke of a nod | 0.14 to 0.39 rad | 0.10 rad at least, 0.6 rad at most |
+| Top rate of a stroke | 1.3 to 3.0 rad/s | 0.8 rad/s at least |
+| Time of a pair | 300 to 830 ms | 1500 ms at most |
+| Angle between the start and the head at the report | 0.00 to 0.16 rad | 40 percent of the largest stroke at most |
+
+- Each nod of this person passes the limits of `normal`, and most of them pass `firm` (0.16 rad, 1.2 rad/s). So the levels stay as they are.
+- One answer needed 7 nods in 2.4 seconds. The head also turned by 0.2 to 0.4 rad at about 1 rad/s, and the old rule rejected each pair: it compared the yaw angle with the pitch stroke. The rule now compares the top rates of the two strokes: 2.5 to 3.0 rad/s of pitch against 1 rad/s of yaw is a nod.
+- The first pair after one head window opened had a time of 265988227 ms and was rejected. The head moved at the first sample of the window, and the stroke took the time 0 as its start, not a time on the clock of the glasses. The stroke now starts at the first sample.
+- An accepted nod was reported 300 to 430 ms after the start of its first stroke.
 
 ### The watchdog of the motion samples
 
@@ -492,7 +512,7 @@ Each line has the tag `Glance`. Read them with `adb logcat -s Glance`.
 | `motion restart <n> of 3: no sample for <ms> ms` | The watchdog starts Motion again | |
 | `head window open: prompt <id>` | The line of a prompt ended | |
 | `head window closed: prompt <id>, <n> samples` | The prompt ended, or 6 seconds after the end of the window | `<n>`: the samples that the detector got |
-| `nod accepted: strokes <a> and <b> rad, peaks <p> and <q> rad/s, <ms> ms, net <n> rad, other axis <o> rad` | The detector reports a gesture in a head window | The two strokes, their top rates, the time from the start, the angle between the start and the head now, and the range of the other axis |
+| `nod accepted: strokes <a> and <b> rad, peaks <p> and <q> rad/s, <ms> ms, net <n> rad, other axis <o> rad and <r> rad/s` | The detector reports a gesture in a head window | The two strokes, their top rates, the time from the start, the angle between the start and the head now, and the range and the top rate of the other axis |
 | `nod rejected (<reason>): ...`, `shake rejected (<reason>): ...` | A pair of opposite strokes ended and was no gesture | The same numbers, and the first rule that failed |
 | `head answer yes: prompt <id>`, `head answer no: prompt <id>` | The app sends the intent | |
 | `<label, second look, reference> still waits: a prompt waits for its answer` | A still must wait | |
@@ -506,7 +526,7 @@ The reasons of a rejected pair:
 | `amplitude` | A stroke of a nod is larger than `maxNodRad` |
 | `peak` | The top rate of a stroke is below the level |
 | `time` | The pair took longer than `maxNodMs` or `maxShakeMs` |
-| `dominance` | The other axis moved too much |
+| `dominance` | The top rate of the gesture axis is below 1.5 times the top rate of the other axis |
 | `net angle` | The second stroke of a nod did not bring the head back |
 | `two strokes only` | A yaw pair with no third stroke: a look to the side and back |
 
@@ -530,7 +550,7 @@ A stroke with no opposite stroke after it gives no line. So a nod that is too sm
 
 ### What nobody measured
 
-- Each limit of the detector. They come from head studies and from synthetic samples, not from a nod with these glasses.
+- Each limit of the detector, with a recording. They come from head studies, from synthetic samples, and from the log lines of the nods of one person.
 - The axes of the gyroscope and of the accelerometer of these glasses, and whether each sample has an accelerometer reading.
 - Whether the samples of a stall always arrive late, or the glasses lose some of them. `timeGapMs` shows it.
 - How the glasses group the samples of a flow with no stall. If more than 500 ms pass between two groups, the watchdog says `STALLED` in a normal flow. `arrivalGapMs` and `burst` show it.

@@ -28,6 +28,25 @@ class HeadGestureDetectorTest {
 
     private fun outcomes(s: GyroScript) = reports(s).map { it.gesture to it.rejected }
 
+    /** The two movements at the same time: the sum of the rates of two scripts that have the same length. */
+    private fun together(a: GyroScript, b: GyroScript): List<GyroSample> {
+        val first = a.samples()
+        val second = b.samples()
+        require(first.size == second.size) { "The scripts have ${first.size} and ${second.size} samples." }
+        return first.zip(second) { p, q -> p.copy(x = p.x + q.x, y = p.y + q.y, z = p.z + q.z) }
+    }
+
+    private fun gestures(samples: List<GyroSample>): List<HeadGesture> {
+        val d = HeadGestureDetector(normal)
+        return samples.mapNotNull { d.onSample(it) }
+    }
+
+    // The nod of the test of 2026-11-14: strokes of 0.22 rad with a top rate near 2.5 rad/s.
+    private fun realNod() = script().rest(500).pitch(0.22, 133).pitch(-0.22, 133).rest(1100)
+
+    // The turn of the head in that test: 0.3 rad at 1.0 rad/s. It starts before the nod and ends after it.
+    private fun slowTurn() = script().rest(400).yaw(0.3, 467).rest(1000)
+
     private fun nod(a: Double, ms: Int, config: HeadGestureConfig = normal) = script(config).rest(500).pitch(a, ms).pitch(-a, ms).rest(1000)
 
     private fun shake() = script().rest(500).yaw(0.175, 200).yaw(-0.35, 200).yaw(0.35, 200).yaw(-0.175, 200).rest(1000)
@@ -168,6 +187,37 @@ class HeadGestureDetectorTest {
         )
     }
 
+    @Test fun `a diagonal movement with three strokes is no gesture`() {
+        assertEquals(
+            emptyList<HeadGesture>(),
+            gestures(script().rest(500).diagonal(0.26, 250).diagonal(-0.26, 250).diagonal(0.26, 250).rest(1000))
+        )
+    }
+
+    // The detector of 2026-11-14 compared the angles, and rejected six such nods of one answer.
+    @Test fun `a small fast nod during a slow turn of the head is one NOD`() {
+        assertEquals(listOf(HeadGesture.NOD), gestures(together(realNod(), slowTurn())))
+    }
+
+    @Test fun `a slow turn of the head alone is no gesture`() {
+        assertEquals(emptyList<HeadGesture>(), gestures(slowTurn()))
+    }
+
+    @Test fun `a nod is reported before its second stroke ends`() {
+        val s = nod(0.22, 150)
+        assertTrue(detect(s).single().second < s.lastMoveMs)
+    }
+
+    // A head window can open while the head moves, and the clock of the glasses does not start at 0.
+    @Test fun `a nod that starts with the first sample counts, with the time of the glasses`() {
+        val out = ArrayList<GestureReport>()
+        val d = HeadGestureDetector(normal, out::add)
+        val startNs = 265_988_000_000_000L
+        val samples = script().pitch(0.26, 250).pitch(-0.26, 250).rest(600).samples().map { it.copy(tNs = it.tNs + startNs) }
+        assertEquals(listOf(HeadGesture.NOD), samples.mapNotNull { d.onSample(it) })
+        assertTrue("${out.single().ms} ms", out.single().ms in 250..500)
+    }
+
     @Test fun `the head of a person who walks gives no gesture at each level`() {
         for (level in Sensitivity.entries) {
             val config = HeadGestureConfig.of(level, Axis.X, 1, Axis.Y)
@@ -236,7 +286,7 @@ class HeadGestureDetectorTest {
         val sideAndBack = script().rest(500).yaw(0.35, 250).yaw(-0.35, 250).rest(1000)
         assertEquals(listOf(HeadGesture.SHAKE to Rejected.TWO_STROKES), outcomes(sideAndBack))
         assertEquals(
-            "shake rejected (two strokes only): strokes 0.35 and 0.35 rad, peaks 2.19 and 2.19 rad/s, 500 ms, net 0.00 rad, other axis 0.00 rad",
+            "shake rejected (two strokes only): strokes 0.35 and 0.35 rad, peaks 2.19 and 2.19 rad/s, 500 ms, net 0.00 rad, other axis 0.00 rad and 0.00 rad/s",
             reports(sideAndBack).single().line()
         )
         // Three strokes of 69 degrees: the turns are fast, and the first two strokes take longer than the limit.

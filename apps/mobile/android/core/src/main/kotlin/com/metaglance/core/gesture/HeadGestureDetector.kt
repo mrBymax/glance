@@ -19,6 +19,10 @@ import kotlin.math.sign
  *
  * A shake is two opposite yaw strokes and the start of a third one. One yaw pair is a look to the side and back.
  *
+ * The other axis can move in the time of a pair, when it moves slowly: the top rate of the gesture axis must be
+ * `dominance` times the top rate of the other axis. So a nod during a slow turn of the head is a nod, and a
+ * diagonal movement is no gesture.
+ *
  * After a gesture, the detector reports no other gesture before the head was quiet, so a nod with many cycles
  * is one nod. `onReport` gets each stroke pair that the detector accepted or rejected.
  */
@@ -36,7 +40,8 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
         val amp: Double get() = abs(endAngle - startAngle)
     }
 
-    private class AnglePoint(val tMs: Double, val pitch: Double, val yaw: Double)
+    /** The angles after one sample, and the rates of that sample without their signs. */
+    private class Point(val tMs: Double, val pitch: Double, val yaw: Double, val pitchRate: Double, val yawRate: Double)
 
     private inner class AxisTracker {
         var angle = 0.0
@@ -47,7 +52,9 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
         /** 0 while no stroke is open. */
         var dir = 0
         private var anchor = 0.0
-        private var anchorMs = 0.0
+
+        /** Not a number before the first sample. */
+        private var anchorMs = Double.NaN
         private var extreme = 0.0
         private var extremeMs = 0.0
         private var peak = 0.0
@@ -60,6 +67,8 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
         /** Adds one sample with the rate `w` in rad/s. Returns the strokes that this sample closed, oldest first. */
         fun step(tMs: Double, w: Double, dtS: Double): List<Stroke> {
             val closed = ArrayList<Stroke>(2)
+            // A head that moves at the first sample starts its stroke there, in the time of the samples.
+            if (anchorMs.isNaN()) anchorMs = tMs - dtS * MS_PER_S
             angle += w * dtS
             if (dir == 0) {
                 if (abs(w) < config.restRadS) {
@@ -111,7 +120,7 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
     private val axes = HeadAxes(config)
     private var pitch = AxisTracker()
     private var yaw = AxisTracker()
-    private val angles = ArrayDeque<AnglePoint>()
+    private val points = ArrayDeque<Point>()
     private var lastSampleMs: Double? = null
 
     /** False from a gesture until the head was quiet again. */
@@ -137,8 +146,8 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
         val rates = axes.rates(sample, dtS)
         val pitchClosed = pitch.step(tMs, rates.pitch, dtS)
         val yawClosed = yaw.step(tMs, rates.yaw, dtS)
-        angles.addLast(AnglePoint(tMs, pitch.angle, yaw.angle))
-        while (angles.first().tMs < tMs - ANGLE_HISTORY_MS) angles.removeFirst()
+        points.addLast(Point(tMs, pitch.angle, yaw.angle, abs(rates.pitch), abs(rates.yaw)))
+        while (points.first().tMs < tMs - HISTORY_MS) points.removeFirst()
 
         if (!armed) {
             if (tMs >= quietUntilMs && pitch.dir == 0 && yaw.dir == 0) {
@@ -160,7 +169,7 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
         axes.reset()
         pitch = AxisTracker()
         yaw = AxisTracker()
-        angles.clear()
+        points.clear()
         lastSampleMs = null
         armed = true
         quietUntilMs = 0.0
@@ -198,7 +207,7 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
             largest > config.maxNodRad -> Rejected.AMPLITUDE
             first.peak < config.minPeakRadS || second.peak < config.minPeakRadS -> Rejected.PEAK
             nowMs - first.startMs > config.maxNodMs -> Rejected.TIME
-            span(first.startMs) { it.yaw } > largest / config.dominance -> Rejected.DOMINANCE
+            max(first.peak, second.peak) < config.dominance * top(first.startMs, nowMs) { it.yawRate } -> Rejected.DOMINANCE
             abs(angle - first.startAngle) > RETURN_RATIO * largest -> Rejected.NET_ANGLE
             else -> null
         }
@@ -221,23 +230,36 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
         second.closedBy != ClosedBy.REVERSAL -> Rejected.TWO_STROKES
         first.peak < config.minPeakRadS || second.peak < config.minPeakRadS -> Rejected.PEAK
         nowMs - first.startMs > config.maxShakeMs -> Rejected.TIME
-        span(first.startMs) { it.pitch } > max(first.amp, second.amp) / config.dominance -> Rejected.DOMINANCE
+        max(first.peak, second.peak) < config.dominance * top(first.startMs, nowMs) { it.pitchRate } -> Rejected.DOMINANCE
         else -> null
     }
 
     private fun report(gesture: HeadGesture, first: Stroke, second: Stroke, nowMs: Double, angle: Double, fault: Rejected?) {
-        val otherAxis = span(first.startMs) { if (gesture == HeadGesture.NOD) it.yaw else it.pitch }
+        val nod = gesture == HeadGesture.NOD
         onReport(
-            GestureReport(gesture, fault, first.amp, second.amp, first.peak, second.peak, (nowMs - first.startMs).roundToLong(), abs(angle - first.startAngle), otherAxis)
+            GestureReport(
+                gesture, fault, first.amp, second.amp, first.peak, second.peak, (nowMs - first.startMs).roundToLong(), abs(angle - first.startAngle),
+                span(first.startMs, nowMs) { if (nod) it.yaw else it.pitch },
+                top(first.startMs, nowMs) { if (nod) it.yawRate else it.pitchRate }
+            )
         )
     }
 
-    /** The range of one angle from `fromMs` to now. */
-    private fun span(fromMs: Double, angle: (AnglePoint) -> Double): Double {
+    /** The largest value of one rate after `fromMs`, up to `toMs`. The sample at `fromMs` is the rest before the pair. */
+    private fun top(fromMs: Double, toMs: Double, rate: (Point) -> Double): Double {
+        var top = 0.0
+        for (point in points) {
+            if (point.tMs > fromMs && point.tMs <= toMs) top = max(top, rate(point))
+        }
+        return top
+    }
+
+    /** The range of one angle from `fromMs` to `toMs`. */
+    private fun span(fromMs: Double, toMs: Double, angle: (Point) -> Double): Double {
         var low = Double.MAX_VALUE
         var high = -Double.MAX_VALUE
-        for (point in angles) {
-            if (point.tMs < fromMs) continue
+        for (point in points) {
+            if (point.tMs < fromMs || point.tMs > toMs) continue
             val value = angle(point)
             if (value < low) low = value
             if (value > high) high = value
@@ -249,7 +271,7 @@ class HeadGestureDetector(private val config: HeadGestureConfig, private val onR
         const val NS_PER_MS = 1_000_000.0
         const val MS_PER_S = 1000.0
         const val DEFAULT_STEP_S = 1.0 / 30
-        const val ANGLE_HISTORY_MS = 4000.0
+        const val HISTORY_MS = 4000.0
 
         /** The second stroke of a nod must bring the head back to this part of the largest stroke, or less. */
         const val RETURN_RATIO = 0.4

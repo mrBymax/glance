@@ -18,13 +18,18 @@ enum class Sensitivity { GENTLE, NORMAL, FIRM }
  * - `holdMs`, `settleRadS`: a stroke ends when the rate stays below `settleRadS` for `holdMs`. A turn between two
  *   strokes that takes longer splits the pair, so these two values set the slowest gesture.
  * - `restRadS`: below this rate the head is at rest, and the start of the next stroke follows it.
- * - `dominance`: the gesture axis must move this many times more than the other axis.
+ * - `dominance`: in the time of the two strokes, the top rate of the gesture axis must be this many times the top
+ *   rate of the other axis. The angle of the other axis does not count: a head that turns slowly can nod.
  * - `refractoryMs`: the time after a gesture with no new gesture. The head must also be quiet before the next one.
  * - `gapResetMs`: a longer step between the times of two samples resets the detector.
  *
  * The head studies give these values for a person who answers: a nod of 17 degrees (0.30 rad) at 59 degrees each
  * second, and a shake of 26 degrees (0.45 rad) at 84 degrees each second. A person who walks moves the head at
- * 17 degrees each second (0.30 rad/s) at most, in a bob of 2 Hz. Nobody measured them with these glasses.
+ * 17 degrees each second (0.30 rad/s) at most, in a bob of 2 Hz.
+ *
+ * The test of 2026-11-14 with the glasses gave the nods of one person: strokes of 0.14 to 0.39 rad, top rates of
+ * 1.3 to 3.0 rad/s, and 300 to 830 ms for a pair. In one answer the head also turned by 0.2 to 0.4 rad at
+ * 1 rad/s, which is the reason for the form of `dominance`. No recording of the samples exists.
  */
 data class HeadGestureConfig(
     val pitchAxis: Axis,
@@ -38,7 +43,7 @@ data class HeadGestureConfig(
     val holdMs: Long = 250,
     val settleRadS: Float = 0.3f,
     val restRadS: Float = 0.15f,
-    val dominance: Float = 2.0f,
+    val dominance: Float = 1.5f,
     val refractoryMs: Long = 600,
     val gapResetMs: Long = 200
 ) {
