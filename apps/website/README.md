@@ -2,7 +2,7 @@
 
 The website of Meta Glance: a Vite app with React 19, Astryx, and `react-router`. It holds the landing page, the privacy page, the kiosk page, and the mirror page.
 
-The kiosk page works. The other three pages are placeholders with one heading. Plan 3 fills the mirror page. Plan 4 fills the landing page and the privacy page.
+The kiosk page and the mirror page work. The landing page and the privacy page are placeholders with one heading. Plan 4 fills them.
 
 ## Routes
 
@@ -99,11 +99,58 @@ const box = (selector) => document.querySelector(selector).getBoundingClientRect
 [parseFloat(getComputedStyle(document.querySelector('.kiosk-total')).fontSize) >= 160, box('.kiosk-row').height >= 48, box('.kiosk-code').width >= 567]
 ```
 
+## Mirror page
+
+`/mirror` shows what the glasses say, for the people next to the demo: each spoken line as large text, the speech clip of each new line, and the cart of one session. It is a demo tool. Open it on a second screen.
+
+Query flags of `/mirror`:
+
+| Flag | Effect |
+|---|---|
+| `s=<sessionId>&t=<token>` | The page shows this session. The debug panel of the phone UI prints the two flags as `Session query`. |
+| `latest=<DEMO_KEY>` | The page follows the newest live session of the server. `s` with `t` wins over `latest`. |
+| `replay=1` | The page plays `MIRROR_RUN` of `src/mirror/mirrorRun.ts`: one shop of 13 seconds with no clip. It makes no network call. |
+
+With no flag, the page shows "Add ?latest=, or ?s= and ?t=, to the address." and no button.
+
+The page starts on the button "Start mirror", because a browser blocks sound before a tap. It makes no network call before that tap.
+
+```mermaid
+sequenceDiagram
+  participant M as MirrorPage
+  participant S as Server
+  Note over M: the viewer presses Start mirror
+  opt with the flag latest, each 2 seconds
+    M->>S: GET /api/demo/latest?key=...
+    S-->>M: sessionId, token, or 404 while no session is live
+  end
+  M->>S: GET /api/sessions/:id/events?token=... (event stream)
+  S-->>M: open
+  M->>S: GET /api/sessions/:id?token=...
+  S-->>M: snapshot: the last captions, the cart, the phase
+  S-->>M: data: caption
+  Note over M: shows the line, and puts its clip into the queue
+  S-->>M: data: cart.updated
+  Note over M: shows the cart and the total of the server
+```
+
+- `mirrorReduce` in `src/mirror/mirrorModel.ts` keeps the last 5 captions, the cart, and the phase. It ignores each other event. The page shows the newest line first and largest, so that it stays on the screen.
+- The page drops a message that is not JSON and a message that `parseServerEvent` of `@glance/shared` rejects.
+- A caption of the snapshot plays no clip. A new caption with a `url` plays its clip one time. A path such as `/api/speech/abc.mp3` resolves against the origin of the page.
+- `ClipQueue` in `src/mirror/clipQueue.ts` plays one clip at a time, in arrival order. A clip that fails does not stop the queue. With more than 2 clips waiting, it drops the oldest waiting clip, so that the mirror stays near the voice.
+- Mute stops the current clip, drops the waiting clips, and ignores new ones. Unmute plays the clip of the next new caption.
+- When the stream drops, the browser opens it again. The page keeps the captions and the cart, shows "Connection lost. Reconnecting.", and loads the snapshot again at the next `open`.
+- When the server refuses the stream, the browser does not open it again. With `s` and `t` the page then opens a new stream each 3 seconds. With `latest` the next answer of the demo path opens one.
+- A snapshot call that fails with no answer or with a status of 500 or more runs again after 3 seconds. The `/api` proxy of the dev server answers 502 for some calls. A status of 4xx stops the calls for that stream.
+- With `latest`, the page shows "Waiting for a session on the phone." while the server names no session. When the answer names another session, the page closes the stream, clears the captions and the cart, and opens the new session. A session that is on the screen stays there while the server names none.
+- The server answers `GET /api/demo/latest` only with `DEMO_KEY` set (Plan 1 Task 17). A server with no such path answers 404, and the page then waits.
+- The website has no 48 px rule for controls. The Mute button is 36 px high, because the mirror runs on a laptop with a pointer.
+
 Code for the pages that read a stream:
 
-- `src/lib/api.ts`: `createKiosk` and `kioskEventsUrl`. `createKiosk` throws `ApiError` for a status of 400 or more, and for an answer that is not a kiosk.
+- `src/lib/api.ts`: `createKiosk`, `kioskEventsUrl`, `getSession`, `sessionEventsUrl`, and `getLatestSession`. Each call throws `ApiError` for a status of 400 or more, and for an answer with the wrong shape. `getLatestSession` returns `null` for the status 404. No error message holds a token.
 - `src/lib/events.ts`: `subscribeSse` follows a stream and reports `open`, `lost`, or `closed`. `replay` plays a recorded list of events.
-- `src/test/fakes.ts`: `fakeFetch` and `fakeSources` (a fake `EventSource`) for the tests.
+- `src/test/fakes.ts`: `fakeFetch` and `fakeSources` (a fake `EventSource`) for the tests. `src/test/events.ts` has three event fixtures and the snapshot fixture of `@glance/shared` as typed values.
 
 ## Checks
 
@@ -124,4 +171,5 @@ npx eslint apps/website
 - `src/test/render.tsx` exports `renderWithTheme`. Use it in each test that renders an Astryx component.
 - The font of the theme loads from Google Fonts. With no internet, the system font shows.
 - `main.tsx` uses no `StrictMode`. The kiosk page registers in an effect, and `StrictMode` would register two kiosks in development.
-- The Astryx `Text` and `Heading` components take `className`. The kiosk sizes are plain CSS classes on them, because app CSS outside a cascade layer wins over the Astryx layers.
+- The Astryx `Text` and `Heading` components take `className`. The kiosk sizes and the mirror sizes are plain CSS classes on them, because app CSS outside a cascade layer wins over the Astryx layers.
+- The Astryx `Text` component has no `lang` prop. A mirror caption is a `span` with `lang` inside a `Text`, and the size class sits on that `span`.
