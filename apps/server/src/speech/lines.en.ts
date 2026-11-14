@@ -193,4 +193,6 @@ export const LINES_EN: LineTemplates = {
   'ask.noProduct': () => 'Hold a product up, then ask.',
   'ask.failed': () => 'I could not answer that.',
   'ask.answer': (line) => line.text,
+  'barcode.notInStore': () => 'This product is not in this store.',
+  'barcode.unreadable': () => 'I cannot read this code. Hold it closer.',
 };

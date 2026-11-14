@@ -100,6 +100,10 @@ export class SessionRuntime {
         case 'ask':
           this.ask(effect.question, effect.product);
           break;
+        case 'still.request':
+          // Not through the outbox: the code is in view now, and a line that waits for its clip must not hold the request.
+          this.sink?.send({ t: 'still.request', purpose: 'label' });
+          break;
       }
     }
 
