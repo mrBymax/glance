@@ -9,6 +9,7 @@ import { useUi } from '../bridge/BridgeContext';
 import { CaptionList } from '../components/CaptionList';
 import { CartList } from '../components/CartList';
 import { CheckoutSheet } from '../components/CheckoutSheet';
+import { PocketMode } from '../components/PocketMode';
 import { PromptCard } from '../components/PromptCard';
 import { SettingsSheet } from '../components/SettingsSheet';
 import { StateBanner } from '../components/StateBanner';
@@ -18,10 +19,16 @@ export function SessionScreen() {
   const { state, strings, send } = useUi();
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isEndOpen, setEndOpen] = useState(false);
+  const [isPocket, setPocket] = useState(false);
+  const enterPocket = () => {
+    send({ t: 'pocket.set', on: true });
+    setPocket(true);
+  };
   const endShop = () => {
     send({ t: 'session.end' });
     setEndOpen(false);
   };
+  if (isPocket) return <PocketMode onLeave={() => setPocket(false)} />;
   return (
     <VStack as="main" padding={4} gap={4}>
       <StateBanner />
@@ -32,6 +39,7 @@ export function SessionScreen() {
       <CartList />
       <HStack gap={2} wrap="wrap">
         {state.cart.items.length > 0 ? <Button label={strings.undo} onClick={() => send({ t: 'intent', kind: 'undo' })} /> : null}
+        <Button label={strings.pocketMode} onClick={enterPocket} />
         <Button label={strings.settings} onClick={() => setSettingsOpen(true)} />
         <Button label={strings.end} onClick={() => setEndOpen(true)} />
       </HStack>

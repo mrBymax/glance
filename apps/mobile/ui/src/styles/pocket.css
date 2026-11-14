@@ -1,0 +1,6 @@
+/* The design asks for a black screen. No Astryx token is pure black. */
+.pocket-screen {
+  position: fixed;
+  inset: 0;
+  background: #000;
+}

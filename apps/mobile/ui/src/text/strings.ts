@@ -92,6 +92,13 @@ export const EN = {
   endConfirm: 'End',
   endCancel: 'Keep shopping',
 
+  pocketMode: 'Pocket mode',
+  unlock: 'Unlock',
+  leavePocketTitle: 'Leave pocket mode?',
+  leavePocketText: 'The screen shows your cart again.',
+  leave: 'Leave',
+  stay: 'Stay',
+
   // The title and the description of a banner together hold the spoken line of the design, section 6.6.
   banner: {
     paymentFailed: { title: 'Payment failed.', description: 'Nothing was charged. Look at the code to try again.' },
