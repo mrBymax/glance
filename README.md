@@ -1,6 +1,10 @@
 # Meta Glance
 
-![Logo](assets/Glance.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/Glance%20Dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/Glance.png">
+  <img alt="Glance logo" src="assets/Glance.png">
+</picture>
 
 > Monorepo for team **Meta Glance** at **HackJunction 2026**.
 
