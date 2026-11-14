@@ -3,9 +3,16 @@ package com.metaglance.android.dat
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.os.SystemClock
+import androidx.exifinterface.media.ExifInterface
 import com.meta.wearable.dat.camera.Camera
 import com.meta.wearable.dat.camera.addCamera
+import com.meta.wearable.dat.camera.types.PhotoData
 import com.meta.wearable.dat.camera.types.StreamConfiguration
+import com.meta.wearable.dat.camera.types.StreamState
 import com.meta.wearable.dat.camera.types.VideoFrame
 import com.meta.wearable.dat.camera.types.VideoQuality
 import com.meta.wearable.dat.core.Wearables
@@ -25,9 +32,30 @@ import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationError
 import com.meta.wearable.dat.core.types.RegistrationState
 import com.meta.wearable.dat.core.types.WearablesError
+import com.meta.wearable.dat.inputs.Inputs
+import com.meta.wearable.dat.inputs.addInputs
+import com.meta.wearable.dat.inputs.removeInputs
+import com.meta.wearable.dat.inputs.types.InputEvent
+import com.meta.wearable.dat.inputs.types.InputSource
+import com.meta.wearable.dat.inputs.types.InputsConfiguration
+import com.meta.wearable.dat.inputs.types.InputsState
 import com.meta.wearable.dat.mockdevice.MockDeviceKit
+import com.meta.wearable.dat.motion.Motion
+import com.meta.wearable.dat.motion.addMotion
+import com.meta.wearable.dat.motion.types.MotionConfiguration
+import com.meta.wearable.dat.motion.types.MotionSample
+import com.meta.wearable.dat.motion.types.MotionSamplingRate
+import com.meta.wearable.dat.motion.types.MotionState
+import com.meta.wearable.dat.speech.Speech
+import com.meta.wearable.dat.speech.addSpeech
+import com.meta.wearable.dat.speech.types.SpeechState
+import com.meta.wearable.dat.speech.types.TranscriptionResult
+import com.metaglance.core.gesture.GyroSample
+import com.metaglance.core.gesture.MotionRow
 import com.metaglance.core.image.I420
 import com.metaglance.core.image.RawFrame
+import com.metaglance.core.input.TouchEvent
+import com.metaglance.core.input.Transcript
 import com.metaglance.core.state.DatDevice
 import com.metaglance.core.state.DatFault
 import com.metaglance.core.state.DatLinkState
@@ -36,14 +64,19 @@ import com.metaglance.core.state.DatRegistration
 import com.metaglance.core.state.DatSession
 import com.metaglance.core.state.DatSnapshot
 import com.metaglance.core.state.DatStream
+import com.metaglance.core.state.Revival
+import java.io.ByteArrayInputStream
+import java.nio.ByteBuffer
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -54,6 +87,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The one connection of the app to the DAT SDK: registration, permissions, the device, the session, and the stream.
@@ -101,6 +135,26 @@ class DatLink(
     /** Width and height of the newest frame, for example `720x1280`. Empty before the first frame. */
     @Volatile
     var frameSize: String = ""
+        private set
+
+    private val _gyro = MutableSharedFlow<GyroSample>(extraBufferCapacity = MOTION_BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** The motion samples that carry a gyroscope reading, in rad/s. */
+    val gyro: SharedFlow<GyroSample> = _gyro.asSharedFlow()
+
+    private val _motionRows = MutableSharedFlow<MotionRow>(extraBufferCapacity = MOTION_BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** Each motion sample, for a recorder. A missing reading is 0. A missing orientation is 1, 0, 0, 0. */
+    val motionRows: SharedFlow<MotionRow> = _motionRows.asSharedFlow()
+
+    private val _touches = MutableSharedFlow<TouchEvent>(extraBufferCapacity = EVENT_BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val touches: SharedFlow<TouchEvent> = _touches.asSharedFlow()
+
+    private val _transcripts = MutableSharedFlow<Transcript>(extraBufferCapacity = EVENT_BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val transcripts: SharedFlow<Transcript> = _transcripts.asSharedFlow()
+
+    /** The number of motion samples since Motion was attached to the current session. */
+    var motionSampleCount: Long = 0
         private set
 
     private var initialized = false
@@ -226,6 +280,51 @@ class DatLink(
         current?.stop()
     }
 
+    /** Adds Motion at 30 Hz to the session and starts it. The session must be `STARTED`. */
+    fun attachMotion() {
+        current?.attachMotion() ?: log("motion: no session")
+    }
+
+    /** Adds Inputs to the session. Inputs starts by itself. The session must be `STARTED`. */
+    fun attachInputs(sources: Set<InputSource>) {
+        current?.attachInputs(sources) ?: log("inputs: no session")
+    }
+
+    /** Adds Speech to the session and starts it. It does nothing without the microphone permission of the SDK. */
+    fun attachSpeech() {
+        current?.attachSpeech() ?: log("speech: no session")
+    }
+
+    /**
+     * Takes a still photo while the stream runs. Returns null on a failure, and `faults` gets the error.
+     * The BirdSpotter sample of Meta starts Motion, Inputs, and Speech again after a still.
+     */
+    suspend fun captureStill(): Bitmap? {
+        val stream = current?.camera?.stream
+        if (stream == null) {
+            log("still: no stream")
+            return null
+        }
+        val startMs = SystemClock.elapsedRealtime()
+        val result = stream.capturePhoto()
+        val photo = result.getOrNull()
+        if (photo == null) {
+            result.onFailure { error, _ -> fault(DatFault.Area.CAPTURE, error) }
+            return null
+        }
+        val bitmap = when (photo) {
+            is PhotoData.Bitmap -> photo.bitmap
+            is PhotoData.HEIC -> withContext(Dispatchers.Default) { decodeHeic(photo.data) }
+        }
+        val variant = if (photo is PhotoData.Bitmap) "Bitmap" else "HEIC"
+        if (bitmap == null) {
+            log("still: the $variant data does not decode")
+            return null
+        }
+        log("still ${bitmap.width}x${bitmap.height} $variant ${SystemClock.elapsedRealtime() - startMs} ms")
+        return bitmap
+    }
+
     /** Opens the update screen of Meta AI: for the app on the glasses if the session asked for it, else for the firmware. */
     fun openUpdate(activity: Activity) {
         if (!requireInitialized("update")) return
@@ -310,7 +409,40 @@ class DatLink(
         _faults.tryEmit(DatFault(area, name))
     }
 
-    /** One DAT session with its camera. The SDK cannot start a stopped session again, so each start makes a new run. */
+    private fun MotionSample.toRow(): MotionRow {
+        val a = accelerometer
+        val g = gyroscope
+        val m = magnetometer
+        val o = orientation
+        return MotionRow(
+            timestampNs,
+            a?.x ?: 0f, a?.y ?: 0f, a?.z ?: 0f,
+            g?.x ?: 0f, g?.y ?: 0f, g?.z ?: 0f,
+            m?.x ?: 0f, m?.y ?: 0f, m?.z ?: 0f,
+            o?.w ?: 1f, o?.x ?: 0f, o?.y ?: 0f, o?.z ?: 0f
+        )
+    }
+
+    private fun decodeHeic(data: ByteBuffer): Bitmap? {
+        val bytes = ByteArray(data.remaining())
+        data.duplicate().get(bytes)
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+        val orientation = ExifInterface(ByteArrayInputStream(bytes))
+            .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        val degrees = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> return bitmap
+        }
+        val matrix = Matrix().apply { postRotate(degrees) }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    /**
+     * One DAT session with its camera and its capabilities. The SDK cannot start a stopped session again, so each
+     * start makes a new run.
+     */
     private inner class SessionRun(
         val session: DeviceSession,
         val withCamera: Boolean,
@@ -318,16 +450,41 @@ class DatLink(
     ) {
         private val job = SupervisorJob(scope.coroutineContext.job)
         private val runScope = CoroutineScope(scope.coroutineContext + job)
-        private var camera: Camera? = null
-        private var cameraJob: Job? = null
+
+        var camera: Camera? = null
+            private set
+        private var cameraScope: CoroutineScope? = null
         private var cameraRequested = false
+        private var autoAttached = false
+
+        private var motion: Motion? = null
+        private val motionRevival = Revival()
+
+        private var inputs: Inputs? = null
+        private var inputsScope: CoroutineScope? = null
+        private var inputSources: Set<InputSource> = emptySet()
+        private val inputsRevival = Revival()
+
+        private var speech: Speech? = null
+        private val speechRevival = Revival()
+
         var stopRequested = false
             private set
 
+        private val isCurrent: Boolean get() = current === this
+
+        private val canRevive: Boolean
+            get() = !stopRequested && session.state.value == DeviceSessionState.STARTED
+
+        // A collector that starts with UNDISPATCHED is subscribed when launch returns. So a call to start() of the
+        // SDK that follows it loses no state, no error, and no sample.
+        private fun CoroutineScope.subscribe(block: suspend CoroutineScope.() -> Unit): Job = launch(start = CoroutineStart.UNDISPATCHED, block = block)
+
+        private fun childScope(): CoroutineScope = CoroutineScope(runScope.coroutineContext + SupervisorJob(job))
+
         fun start() {
-            // The collectors start before session.start(), so that no state and no error is lost.
-            runScope.launch(start = CoroutineStart.UNDISPATCHED) { session.state.collect { onState(it) } }
-            runScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            runScope.subscribe { session.state.collect { onState(it) } }
+            runScope.subscribe {
                 session.errors.collect { error ->
                     if (error == DeviceSessionError.DAT_APP_ON_THE_GLASSES_UPDATE_REQUIRED) {
                         _snapshot.update { it.copy(glassesAppUpdateRequired = true) }
@@ -335,9 +492,7 @@ class DatLink(
                     fault(DatFault.Area.SESSION, error)
                 }
             }
-            runScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                session.deviceInfo.collect { if (current === this@SessionRun) setDevice(it) }
-            }
+            runScope.subscribe { session.deviceInfo.collect { if (isCurrent) setDevice(it) } }
             session.start()
         }
 
@@ -347,22 +502,25 @@ class DatLink(
             val lastStream = camera?.stream?.state?.value?.toCore() ?: DatStream.NONE
             camera?.stop()
             session.stop()
-            cameraJob?.cancel()
+            cameraScope?.cancel()
             camera = null
-            if (current === this) {
+            if (isCurrent) {
                 _snapshot.update { it.copy(session = session.state.value.toCore(), stream = lastStream) }
             }
-            // The state collector stays until STOPPED arrives, then onState releases this run.
+            // The state collector stays until STOPPED arrives. Then onState releases this run.
         }
 
         fun release() {
             job.cancel()
-            if (current === this) current = null
+            if (isCurrent) {
+                current = null
+                _snapshot.update { it.copy(motionStarted = false, inputsActive = false, speechStarted = false) }
+            }
         }
 
         private fun onState(state: DeviceSessionState) {
             log("session $state")
-            if (current === this) _snapshot.update { it.copy(session = state.toCore()) }
+            if (isCurrent) _snapshot.update { it.copy(session = state.toCore()) }
             when (state) {
                 DeviceSessionState.STARTED -> if (withCamera && !cameraRequested && !stopRequested) attachCamera()
                 DeviceSessionState.STOPPED -> release()
@@ -376,25 +534,177 @@ class DatLink(
                 onSuccess = { added ->
                     camera = added
                     val stream = added.stream
-                    cameraJob = runScope.launch {
-                        launch(start = CoroutineStart.UNDISPATCHED) {
-                            stream.state.collect { state ->
-                                log("stream $state")
-                                if (current === this@SessionRun) _snapshot.update { it.copy(stream = state.toCore()) }
-                            }
-                        }
-                        launch(start = CoroutineStart.UNDISPATCHED) {
-                            stream.errorStream.collect { fault(DatFault.Area.STREAM, it) }
-                        }
-                        launch(Dispatchers.Default) {
-                            val meter = FrameMeter()
-                            stream.videoStream.collect { frame -> onFrame(frame, meter) }
-                        }
+                    val collectors = childScope().also { cameraScope = it }
+                    collectors.subscribe { stream.state.collect { onStreamState(it) } }
+                    collectors.subscribe { stream.errorStream.collect { fault(DatFault.Area.STREAM, it) } }
+                    collectors.launch(Dispatchers.Default) {
+                        val meter = FrameMeter()
+                        stream.videoStream.collect { frame -> onFrame(frame, meter) }
                     }
                     stream.start().onFailure { error, _ -> fault(DatFault.Area.STREAM, error) }
                 },
                 onFailure = { error, _ -> fault(DatFault.Area.SESSION, error) }
             )
+        }
+
+        private fun onStreamState(state: StreamState) {
+            log("stream $state")
+            if (isCurrent) _snapshot.update { it.copy(stream = state.toCore()) }
+            // The BirdSpotter sample of Meta attaches its sensors at the same point.
+            if (state == StreamState.STREAMING && autoAttach && !autoAttached && !stopRequested) {
+                autoAttached = true
+                if (ProbeDecisions.MOTION) attachMotion()
+                if (ProbeDecisions.INPUTS) attachInputs(ProbeDecisions.INPUT_SOURCES)
+                if (ProbeDecisions.SPEECH) attachSpeech()
+            }
+        }
+
+        fun attachMotion() {
+            if (motion != null) {
+                log("motion: it is attached")
+                return
+            }
+            session.addMotion(MotionConfiguration(samplingRate = MotionSamplingRate.HZ_30)).fold(
+                onSuccess = { added ->
+                    motion = added
+                    motionSampleCount = 0
+                    // The samples flow has no replay, so its collector comes first.
+                    runScope.subscribe { added.samples.collect { onMotionSample(it) } }
+                    runScope.subscribe { added.state.collect { onMotionState(added, it) } }
+                    runScope.subscribe { added.errors.collect { error -> error?.let { fault(DatFault.Area.MOTION, it) } } }
+                    runScope.launch {
+                        while (true) {
+                            delay(MOTION_COUNT_LOG_MS)
+                            if (_snapshot.value.motionStarted) log("motion samples=$motionSampleCount")
+                        }
+                    }
+                    added.start()
+                },
+                onFailure = { error, _ -> fault(DatFault.Area.MOTION, error) }
+            )
+        }
+
+        private fun onMotionSample(sample: MotionSample) {
+            motionSampleCount += 1
+            _motionRows.tryEmit(sample.toRow())
+            val g = sample.gyroscope ?: return
+            _gyro.tryEmit(GyroSample(sample.timestampNs, g.x, g.y, g.z))
+        }
+
+        private fun onMotionState(motion: Motion, state: MotionState) {
+            log("motion $state")
+            if (isCurrent) _snapshot.update { it.copy(motionStarted = state == MotionState.STARTED) }
+            when (state) {
+                MotionState.STARTED -> motionRevival.onStarted()
+                MotionState.STOPPED -> if (motionRevival.onStopped(byApp = !canRevive)) {
+                    val attempt = motionRevival.attempts
+                    runScope.launch {
+                        delay(REVIVE_DELAY_MS)
+                        if (!canRevive) return@launch
+                        log("revive motion $attempt")
+                        motion.start()
+                    }
+                }
+                else -> Unit
+            }
+        }
+
+        fun attachInputs(sources: Set<InputSource>) {
+            if (inputs != null) {
+                log("inputs: it is attached")
+                return
+            }
+            inputSources = sources
+            session.addInputs(InputsConfiguration(sources = sources, consumeBack = true)).fold(
+                onSuccess = { added ->
+                    inputs = added
+                    val collectors = childScope().also { inputsScope = it }
+                    collectors.subscribe { added.events.collect { onInputEvent(it) } }
+                    collectors.subscribe { added.errors.collect { error -> error?.let { fault(DatFault.Area.INPUTS, it) } } }
+                    // Inputs starts by itself. A new instance reports INACTIVE first, and that is not a stop.
+                    var leftInactive = false
+                    collectors.subscribe {
+                        added.state.collect { state ->
+                            val stopped = state == InputsState.INACTIVE && leftInactive
+                            if (state != InputsState.INACTIVE) leftInactive = true
+                            onInputsState(state, stopped)
+                        }
+                    }
+                },
+                onFailure = { error, _ -> fault(DatFault.Area.INPUTS, error) }
+            )
+        }
+
+        private fun onInputEvent(event: InputEvent) {
+            val touch = when (event) {
+                is InputEvent.Select -> TouchEvent.DOUBLE_TAP
+                is InputEvent.Nav -> TouchEvent.SWIPE
+                is InputEvent.Back, is InputEvent.Button, is InputEvent.Capture, is InputEvent.Drag -> return
+            }
+            log("touch $touch")
+            _touches.tryEmit(touch)
+        }
+
+        private fun onInputsState(state: InputsState, stopped: Boolean) {
+            log("inputs $state")
+            if (isCurrent) _snapshot.update { it.copy(inputsActive = state == InputsState.ACTIVE) }
+            if (state == InputsState.ACTIVE) inputsRevival.onStarted()
+            if (stopped && inputsRevival.onStopped(byApp = !canRevive)) {
+                log("revive inputs ${inputsRevival.attempts}")
+                val old = inputsScope
+                inputs = null
+                session.removeInputs().onFailure { error, _ -> fault(DatFault.Area.INPUTS, error) }
+                attachInputs(inputSources)
+                // This function runs in a collector of the old scope, so the cancel comes last.
+                old?.cancel()
+            }
+        }
+
+        fun attachSpeech() {
+            if (speech != null) {
+                log("speech: it is attached")
+                return
+            }
+            if (_snapshot.value.microphonePermission != DatPermission.GRANTED) {
+                log("speech: the microphone permission is not granted")
+                return
+            }
+            session.addSpeech().fold(
+                onSuccess = { added ->
+                    speech = added
+                    runScope.subscribe { added.transcriptions.collect { result -> result?.let { onTranscription(added, it) } } }
+                    runScope.subscribe { added.state.collect { onSpeechState(added, it) } }
+                    runScope.subscribe { added.locale.collect { locale -> locale?.let { log("speech locale=$it") } } }
+                    runScope.subscribe { added.errors.collect { error -> error?.let { fault(DatFault.Area.SPEECH, it) } } }
+                    added.start().onFailure { error, _ -> fault(DatFault.Area.SPEECH, error) }
+                },
+                onFailure = { error, _ -> fault(DatFault.Area.SPEECH, error) }
+            )
+        }
+
+        private fun onTranscription(speech: Speech, result: TranscriptionResult) {
+            val confidence = result.confidence.takeIf { it >= 0f }
+            val kind = if (result.isFinal) "final" else "partial"
+            log("transcript \"${result.text}\" $kind" + (confidence?.let { " $it" } ?: ""))
+            _transcripts.tryEmit(Transcript(result.text, result.isFinal, confidence, speech.locale.value))
+        }
+
+        private fun onSpeechState(speech: Speech, state: SpeechState) {
+            log("speech $state" + (speech.locale.value?.let { " locale=$it" } ?: ""))
+            if (isCurrent) _snapshot.update { it.copy(speechStarted = state == SpeechState.STARTED) }
+            when (state) {
+                SpeechState.STARTED -> speechRevival.onStarted()
+                SpeechState.STOPPED -> if (speechRevival.onStopped(byApp = !canRevive)) {
+                    val attempt = speechRevival.attempts
+                    runScope.launch {
+                        delay(REVIVE_DELAY_MS)
+                        if (!canRevive) return@launch
+                        log("revive speech $attempt")
+                        speech.start().onFailure { error, _ -> fault(DatFault.Area.SPEECH, error) }
+                    }
+                }
+                else -> Unit
+            }
         }
     }
 
@@ -448,5 +758,9 @@ class DatLink(
     private companion object {
         const val STREAM_FPS = 7
         const val NS_PER_SECOND = 1_000_000_000L
+        const val REVIVE_DELAY_MS = 750L
+        const val MOTION_COUNT_LOG_MS = 3000L
+        const val EVENT_BUFFER = 16
+        const val MOTION_BUFFER = 64
     }
 }

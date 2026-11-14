@@ -14,22 +14,28 @@ flowchart LR
     Probe[ProbeActivity, debug build] --> Link[DatLink]
     Probe --> Mock[MockGlassesController]
     Probe --> Qr[QrScanner, ML Kit]
+    Probe --> Voice[PhoneVoice]
     Link --> Sdk[DAT SDK]
     Mock --> Kit[MockDeviceKit]
     Kit --> Sdk
     Sdk --> Glasses[Glasses through Meta AI]
-    Link --> Core[core: DatSnapshot, DatFault, RawFrame]
+    Link --> Core[core: DatSnapshot, DatFault, RawFrame, Revival]
 ```
 
 - `GlanceApp` owns one `DatLink` and one `MockGlassesController`.
 - `DatLink` is the one connection to the DAT SDK. It gives a `snapshot` of the state, the `faults` of the SDK, and the `frames` of the stream. Call its functions on the main thread.
 - A frame is a `RawFrame` in I420 layout. `frames` holds the newest frame only.
+- `attachMotion`, `attachInputs`, and `attachSpeech` add a capability to a started session. `gyro`, `motionRows`, `touches`, and `transcripts` give their data.
+- A capability that stops with no request from the app starts again, at most 3 times in a row. `Revival` in `core` holds this rule.
+- `captureStill` takes a photo while the stream runs.
+- `PhoneVoice` speaks a line with the speech engine of the phone, as media sound.
+- `ProbeDecisions` holds the values that the probe run on the glasses decides: the capabilities that start, the input sources, and the gyroscope axes. Its values are defaults until that run.
 - A stopped DAT session is final. `startSession` creates a new session each time.
 - `MockGlassesController` pairs mock glasses of MockDeviceKit. Call `DatLink.initialize` after `enable` and after `disable`.
 
 ## The probe
 
-Open "Glance Probe" on the phone. The text field above the buttons gives the label of a saved frame.
+Open "Glance Probe" on the phone. The text field above the buttons gives the label of a saved frame and of a motion recording.
 
 | Button | Action |
 |---|---|
@@ -39,11 +45,23 @@ Open "Glance Probe" on the phone. The text field above the buttons gives the lab
 | `Start session`, `Start session (no camera)`, `Stop session` | Starts a session with or without the stream at 720 x 1280 and 7 frames per second, or stops it |
 | `Save frame` | Saves the next frame as `probe/frames/<label>-<nn>.jpg` |
 | `QR log` | Logs each QR code in the stream, at most 2 lines each second |
+| `Motion`, `Inputs`, `Speech` | Adds the capability to the session. `Speech` needs the microphone permission. |
+| `Speak line` | Speaks one product line with `PhoneVoice`. Logs the audio outputs, and the frame size before and after the line. |
+| `Axis test` | Reads the gyroscope for 4 seconds. Logs the RMS rate of each axis, the strongest axis, and the sign of its first movement. |
+| `Still` | Takes a photo. Logs its size, its variant, and the time. |
+| `Record motion` | Appends each motion sample to `probe/motion/<label>.csv`, in the CSV format of MockDeviceKit |
+| `Endurance 10 min` | Speaks the line each 30 seconds. Logs battery, thermal level, frame count, frame size, and motion sample count each minute. |
 | `Mock: enable and pair` | Enables MockDeviceKit and pairs mock glasses that are on, open, and on the face |
 | `Mock: phone camera` | Uses the back camera of the phone as the stream of the mock glasses |
+| `Mock: motion` | Feeds 60 samples with a gyroscope rate of 1 rad/s on the x axis, in a loop |
+| `Mock: double tap`, `Mock: swipe` | Sends a select event and a navigation event from the touchpad |
+| `Mock: say add` | Sends the final transcript "add" |
+| `Mock: still image` | Uses the newest saved frame as the next photo |
 | `Mock: disable` | Stops the session and disables MockDeviceKit |
 
 The probe folder on the phone is `/sdcard/Android/data/com.metaglance.android/files/probe`. Get it with `adb pull` in PowerShell.
+
+The second tap on `QR log`, `Record motion`, or `Endurance 10 min` stops it.
 
 ## Machine needs
 

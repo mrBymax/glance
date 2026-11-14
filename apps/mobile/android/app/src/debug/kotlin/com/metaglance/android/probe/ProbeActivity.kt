@@ -7,6 +7,9 @@ import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.YuvImage
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -23,15 +26,26 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
+import com.meta.wearable.dat.inputs.types.InputSource
+import com.meta.wearable.dat.mockdevice.api.MockGlasses
+import com.meta.wearable.dat.motion.types.MotionSample
+import com.meta.wearable.dat.motion.types.MotionSource
+import com.meta.wearable.dat.motion.types.Vector3
 import com.metaglance.android.GlanceApp
+import com.metaglance.android.audio.PhoneVoice
 import com.metaglance.android.dat.DatLink
 import com.metaglance.android.mock.MockGlassesController
 import com.metaglance.android.pipeline.QrScanner
+import com.metaglance.core.gesture.GyroSample
+import com.metaglance.core.gesture.GyroStats
+import com.metaglance.core.gesture.MotionCsv
 import com.metaglance.core.image.I420
 import com.metaglance.core.image.RawFrame
 import java.io.File
+import java.io.FileWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,6 +67,9 @@ class ProbeActivity : AppCompatActivity() {
     private var datPermission: Permission = Permission.CAMERA
     private var afterPhoneCamera: () -> Unit = {}
     private var qrJob: Job? = null
+    private var recordJob: Job? = null
+    private var enduranceJob: Job? = null
+    private val voice: PhoneVoice by lazy { PhoneVoice(this) }
 
     private val bluetoothRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         onBluetooth(granted)
@@ -72,8 +89,11 @@ class ProbeActivity : AppCompatActivity() {
         log = ProbeLog(probeDir)
         log.onLine = { text -> runOnUiThread { showLine(text) } }
         glance.datLog = log::line
+        // The speech engine of the phone needs time to start, so the probe creates it here.
+        voice
         log.line("probe ready sdk=${Build.VERSION.SDK_INT} appId=${manifestAppId()}")
         addLinkButtons()
+        addCapabilityButtons()
         // After a registration, Meta AI opens this activity again. The SDK must run before it gets the intent.
         if (mock.enabled || bluetoothGranted()) datLink.initialize(bluetoothGranted())
         datLink.handleIntent(this, intent)
@@ -87,6 +107,10 @@ class ProbeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         qrJob?.cancel()
+        recordJob?.cancel()
+        enduranceJob?.cancel()
+        voice.shutdown()
+        log.onLine = {}
         super.onDestroy()
     }
 
@@ -136,6 +160,145 @@ class ProbeActivity : AppCompatActivity() {
             log.line("mock disabled")
             datLink.initialize(bluetoothGranted())
         }
+    }
+
+    private fun addCapabilityButtons() {
+        addButton("Motion") { datLink.attachMotion() }
+        addButton("Inputs") { datLink.attachInputs(setOf(InputSource.CAPTOUCH)) }
+        addButton("Speech") { datLink.attachSpeech() }
+        addButton("Speak line") { speakLine() }
+        addButton("Axis test") { axisTest() }
+        addButton("Still") { lifecycleScope.launch { datLink.captureStill() } }
+        lateinit var recordButton: Button
+        recordButton = addButton("Record motion: off") {
+            val on = toggleMotionRecording()
+            recordButton.text = if (on) "Record motion: on" else "Record motion: off"
+        }
+        lateinit var enduranceButton: Button
+        enduranceButton = addButton("Endurance 10 min: off") {
+            val on = toggleEndurance { enduranceButton.text = "Endurance 10 min: off" }
+            enduranceButton.text = if (on) "Endurance 10 min: on" else "Endurance 10 min: off"
+        }
+        addButton("Mock: motion") {
+            withMockGlasses { glasses ->
+                val samples = List(MOCK_MOTION_SAMPLES) { i ->
+                    MotionSample(i * MOCK_MOTION_STEP_NS, null, Vector3(1f, 0f, 0f), null, null, MotionSource.GLASSES)
+                }
+                glasses.services.motion.setMotionFeed(samples, true)
+                log.line("mock motion feed: ${samples.size} samples with gyroscope x=1.0, in a loop")
+            }
+        }
+        addButton("Mock: double tap") { withMockGlasses { it.services.input.select(InputSource.CAPTOUCH) } }
+        addButton("Mock: swipe") { withMockGlasses { it.services.input.navDown(InputSource.CAPTOUCH) } }
+        addButton("Mock: say add") {
+            withMockGlasses { it.services.speech.simulateTranscription("add", true, MOCK_CONFIDENCE) }
+        }
+        addButton("Mock: still image") {
+            withMockGlasses { glasses ->
+                val frame = File(probeDir, "frames").listFiles()?.maxByOrNull { it.lastModified() }
+                if (frame == null) {
+                    log.line("mock still image: save a frame first")
+                } else {
+                    glasses.services.camera.setCapturedImage(Uri.fromFile(frame))
+                    log.line("mock still image: ${frame.name}")
+                }
+            }
+        }
+    }
+
+    private fun withMockGlasses(action: (MockGlasses) -> Unit) {
+        val glasses = mock.glasses
+        if (glasses == null) log.line("mock: no mock glasses are paired") else action(glasses)
+    }
+
+    private fun speakLine() {
+        val before = datLink.frameSize
+        val outputs = getSystemService(AudioManager::class.java).getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        log.line("speak line start frame=$before outputs=${outputs.joinToString(",") { outputName(it.type) }}")
+        if (!voice.ready) log.line("speak line: the phone voice is not ready")
+        voice.speak(PROBE_LINE) { log.line("speak line end frame before=$before after=${datLink.frameSize}") }
+    }
+
+    private fun outputName(type: Int): String = when (type) {
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "BUILTIN_EARPIECE"
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "BUILTIN_SPEAKER"
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE -> "BUILTIN_SPEAKER_SAFE"
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "WIRED_HEADSET"
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "WIRED_HEADPHONES"
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "BLUETOOTH_SCO"
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "BLUETOOTH_A2DP"
+        AudioDeviceInfo.TYPE_BLE_HEADSET -> "BLE_HEADSET"
+        AudioDeviceInfo.TYPE_BLE_SPEAKER -> "BLE_SPEAKER"
+        AudioDeviceInfo.TYPE_HEARING_AID -> "HEARING_AID"
+        AudioDeviceInfo.TYPE_USB_DEVICE -> "USB_DEVICE"
+        AudioDeviceInfo.TYPE_USB_HEADSET -> "USB_HEADSET"
+        AudioDeviceInfo.TYPE_TELEPHONY -> "TELEPHONY"
+        else -> "TYPE_$type"
+    }
+
+    private fun axisTest() {
+        log.line("axis test: move the head for ${AXIS_TEST_MS / 1000} seconds")
+        lifecycleScope.launch {
+            val samples = ArrayList<GyroSample>()
+            withTimeoutOrNull(AXIS_TEST_MS) { datLink.gyro.collect { samples.add(it) } }
+            val report = GyroStats.report(samples)
+            log.line(
+                "axis rms x=${report.rmsX} y=${report.rmsY} z=${report.rmsZ} " +
+                    "strongest=${report.strongest} firstSign=${report.firstSign} samples=${samples.size}"
+            )
+        }
+    }
+
+    private fun toggleMotionRecording(): Boolean {
+        recordJob?.let {
+            it.cancel()
+            recordJob = null
+            return false
+        }
+        val file = File(File(probeDir, "motion").apply { mkdirs() }, "${label("motion")}.csv")
+        recordJob = lifecycleScope.launch(Dispatchers.IO) {
+            var rows = 0
+            log.line("record motion start motion/${file.name}")
+            try {
+                FileWriter(file, true).buffered().use { out ->
+                    datLink.motionRows.collect { row ->
+                        out.write(MotionCsv.format(row))
+                        out.newLine()
+                        rows += 1
+                    }
+                }
+            } finally {
+                log.line("record motion end motion/${file.name} rows=$rows")
+            }
+        }
+        return true
+    }
+
+    private fun toggleEndurance(onEnd: () -> Unit): Boolean {
+        enduranceJob?.let {
+            it.cancel()
+            enduranceJob = null
+            log.line("endurance stopped")
+            return false
+        }
+        enduranceJob = lifecycleScope.launch {
+            log.line("endurance start")
+            for (halfMinute in 1..ENDURANCE_HALF_MINUTES) {
+                voice.speak(PROBE_LINE) {}
+                delay(HALF_MINUTE_MS)
+                if (halfMinute % 2 == 0) {
+                    val device = datLink.snapshot.value.device
+                    log.line(
+                        "endurance min=${halfMinute / 2} battery=${device?.battery} thermal=${device?.thermal} " +
+                            "frames=${datLink.frameCount} frame=${datLink.frameSize} motion=${datLink.motionSampleCount}"
+                    )
+                }
+            }
+            log.line("endurance end")
+            enduranceJob = null
+            onEnd()
+        }
+        return true
     }
 
     private fun onBluetooth(granted: Boolean) {
@@ -264,5 +427,12 @@ class ProbeActivity : AppCompatActivity() {
         const val FRAME_WAIT_MS = 3000L
         const val JPEG_QUALITY = 95
         const val QR_LINES_PER_SECOND = 2
+        const val PROBE_LINE = "Oat drink, one litre, one eighty-nine. Nod to add."
+        const val AXIS_TEST_MS = 4000L
+        const val HALF_MINUTE_MS = 30_000L
+        const val ENDURANCE_HALF_MINUTES = 20
+        const val MOCK_MOTION_SAMPLES = 60
+        const val MOCK_MOTION_STEP_NS = 33_333_333L
+        const val MOCK_CONFIDENCE = 0.9f
     }
 }
