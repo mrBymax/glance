@@ -22,6 +22,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `fixtures/fake-script.json` | The default script of fake recognition. |
 | `scripts/check-model.ts` | `npm run model:check`: a check of the model ID with the real service. |
 | `scripts/replay.ts` | `npm run replay`: the accuracy of the real service on a folder of frames. See "Replay a test set". |
+| `scripts/smoke.ts` | `npm run smoke`: a check of a running server through its REST paths, its device socket, and its events stream. See "Checks". |
 | `src/sessions/` | The cart rules as the pure function `step`, the session runtime, and the registry. See "Rules" and "Session runtime". |
 | `src/speech/` | The text of each spoken line, and the speech clips. See "Spoken text" and "Speech clips". |
 | `src/kiosk/` | The kiosks and the mock payment. See "Kiosk and payment". |
@@ -603,5 +604,28 @@ npm run model:check --workspace @glance/server -- <frame.jpg>
 ```
 
 `model:check` reads `apps/server/.env`. To read another file, run `npx tsx --env-file=<file> scripts/check-model.ts <frame.jpg>` in `apps/server`. The fake switches have no effect on this command.
+
+### Smoke check of a running server
+
+```bash
+npm run smoke --workspace @glance/server -- http://127.0.0.1:8080
+```
+
+`runSmoke` in `scripts/smoke.ts` plays a phone and a web client against the address. It does seven steps and stops at the first one that fails:
+
+1. `health`: `GET /healthz` answers 200.
+2. `session`: `POST /api/sessions` answers 201.
+3. `socket`: the `wsUrl` of the answer opens, and a `snapshot` arrives.
+4. `events`: the events stream of the session answers 200.
+5. `line`: after a `device.state` with a running stream, the `speak` message of the "Camera on" line arrives.
+6. `caption`: the events stream gets the caption of that line.
+7. `delete`: `DELETE` of the session answers 204.
+
+- The command prints `ok <name>` or `FAIL <name>: <detail>` for each step, then `smoke: OK` or `smoke: FAIL`. Its exit code is 1 on a failure.
+- Each step has 5 seconds.
+- The socket step uses the address that the server gives. So a wrong `PUBLIC_BASE_URL` fails at `socket`.
+- After a failure the command still deletes its session. A session that stays would be the newest live session of `GET /api/demo/latest`.
+- The server needs no fake switch for it. With real speech, the "Camera on" line is one ElevenLabs call if its clip does not exist yet. The command sends no frame, so it makes no Gemini call.
+- `infra/README.md` shows the command against the Docker image and through the proxy.
 
 Each rule R1 to R24 has a test with its number in the name, in `src/sessions/*.test.ts`. `replays.test.ts` replays result sequences with gaps and changes, because live results flicker.
