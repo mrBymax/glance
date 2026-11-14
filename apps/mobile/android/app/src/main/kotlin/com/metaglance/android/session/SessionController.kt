@@ -38,6 +38,7 @@ import com.metaglance.core.input.HeadInput
 import com.metaglance.core.input.KeyInput
 import com.metaglance.core.input.MainYesResolver
 import com.metaglance.core.input.PromptTracker
+import com.metaglance.core.input.TouchInput
 import com.metaglance.core.net.DeviceSocket
 import com.metaglance.core.net.GlanceApi
 import com.metaglance.core.net.Scheduler
@@ -183,6 +184,8 @@ class SessionController(
                 headInput.onSample(sample, SystemClock.elapsedRealtime(), profile)?.let { send(it) }
             }
         }
+        // The answer of the touchpad carries the last finished prompt, and the server decides if it counts.
+        scope.launch { dat.touches.collect { send(TouchInput.intentFor(it, prompts.lastFinishedPromptId())) } }
         scope.launch {
             while (true) {
                 delay(TICK_MS)
