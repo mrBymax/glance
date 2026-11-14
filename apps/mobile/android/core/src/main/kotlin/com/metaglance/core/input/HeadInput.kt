@@ -51,6 +51,7 @@ class HeadInput(
     /** The head window that the detector follows. */
     private var window: Window? = null
     private var blockedSinceMs: Long? = null
+    private var closed = false
     private val clock = GlassesClock()
 
     /** For a sample with no accelerometer reading. */
@@ -110,15 +111,20 @@ class HeadInput(
         if (!w.closed && nowMs >= end + LATE_MS) close(w)
     }
 
-    /** Ends the head window for the listener. Call it before the session drops this object. */
+    /**
+     * Ends the head window for the listener. Call it before the session drops this object. After the call, this
+     * object takes no sample: the motion thread can still hold it for one sample.
+     */
     @Synchronized
     fun close() {
         window?.let { if (!it.closed) close(it) }
         window = null
+        closed = true
     }
 
     /** Returns the head window of the current prompt. A new window starts the detector from rest. */
     private fun follow(profile: Profile): Window? {
+        if (closed) return null
         val prompt = if (profile.headGestures) prompts.headPrompt() else null
         val w = window
         val same = if (prompt == null) w == null else w != null && w.promptId == prompt.promptId && w.doneMs == prompt.doneMs && w.lengthMs == profile.headWindowMs

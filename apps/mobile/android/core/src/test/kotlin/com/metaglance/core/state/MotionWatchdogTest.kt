@@ -147,6 +147,17 @@ class MotionWatchdogTest {
         assertEquals(5, restarts.size)
     }
 
+    // A restart that leaves Motion stopped ends in a new start. That start must not open 3 more restarts.
+    @Test fun `a new start of Motion allows no new restart before samples flowed`() {
+        dog.onStarted(0)
+        ticks(100, 35_000)
+        assertEquals(3, restarts.size)
+        dog.onNotStarted()
+        dog.onStarted(36_000)
+        ticks(36_100, 90_000)
+        assertEquals(3, restarts.size)
+    }
+
     @Test fun `is idle when Motion does not run, for example in a paused session`() {
         dog.onStarted(0)
         ticks(100, 1000)

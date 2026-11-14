@@ -244,6 +244,15 @@ class HeadInputTest {
         assertEquals(listOf("close p-0001"), seen)
     }
 
+    @Test fun `after its close, the head input takes no sample and opens no window`() {
+        finishedPrompt(0)
+        input.onTick(100, Profiles.DEFAULT)
+        input.close()
+        assertEquals(nothing, feed(nod(), startMs = 500))
+        assertFalse(input.holdsStills(600, Profiles.DEFAULT))
+        assertEquals(listOf("open p-0001 0", "close p-0001"), seen)
+    }
+
     @Test fun `a new prompt ends the head window of the old one for the listener`() {
         finishedPrompt(1000)
         input.onTick(1100, Profiles.DEFAULT)

@@ -51,13 +51,15 @@ class MotionWatchdog(
     /** No restart comes before `restartAfterMs` after this time: the last restart, or the last tick with a still. */
     private var restartBaseMs = 0L
 
-    /** Motion reported `STARTED`. After a restart of this watchdog, the flow stays `STALLED` until samples arrive. */
+    /**
+     * Motion reported `STARTED`. After a restart of this watchdog, the flow stays `STALLED` until samples arrive.
+     * The count of the restarts in a row goes on: only samples that flow set it back.
+     */
     fun onStarted(nowMs: Long) {
         if (flow != MotionFlow.IDLE) return
         flow = MotionFlow.FLOWING
         lastArrivalMs = nowMs
         restartBaseMs = nowMs
-        restarts = 0
         run = 0
         stallLengthMs = null
     }

@@ -341,13 +341,14 @@ class ProbeActivity : AppCompatActivity() {
             ProbeDecisions.YAW_AXIS
         )
         gestureJob = lifecycleScope.launch {
-            val detector = HeadGestureDetector(config)
+            // The detector logs each stroke pair that it accepts or rejects, with the reason and the numbers.
+            val detector = HeadGestureDetector(config) { log.line(it.line()) }
             var nods = 0
             var shakes = 0
             log.line("gesture test start pitch=${config.pitchAxis} down=${config.pitchDownSign} yaw=${config.yawAxis}")
             try {
-                datLink.gyro.collect { sample ->
-                    val gesture = detector.onSample(sample) ?: return@collect
+                datLink.motionRows.collect { row ->
+                    val gesture = detector.onSample(MotionCsv.head(listOf(row)).single()) ?: return@collect
                     if (gesture == HeadGesture.NOD) nods += 1 else shakes += 1
                     log.line("gesture $gesture nods=$nods shakes=$shakes")
                 }
