@@ -82,6 +82,14 @@ class SetupFlowTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
     }
 
     @Test
+    fun glassesThatConnectAfterTheStartGiveTheCameraPermission() {
+        // The activity resumed with no glasses, and the SDK answers a permission check only with connected glasses.
+        assertTrue("The state has a camera permission with no glasses: $native", native.cameraPermission != CameraPermission.GRANTED)
+        pairGlasses()
+        waitUntil("the camera permission is granted", STEP_MS, ::state) { native.cameraPermission == CameraPermission.GRANTED }
+    }
+
+    @Test
     fun aResumeReadsTheCameraPermissionAgain() {
         pairGlasses()
         onMain { glance.mockGlasses.setCameraPermission(granted = false) }

@@ -464,6 +464,11 @@ class DatLink(
         if (value == before) return
         _snapshot.update { it.copy(device = value) }
         log(if (value == null) "device none" else deviceLine(value))
+        // The SDK answers a permission check only with connected glasses (PermissionError.NO_DEVICE and
+        // NO_DEVICE_WITH_CONNECTION). A check at the start of the app can come before the link, so it runs again here.
+        if (value?.link == DatLinkState.CONNECTED && before?.link != DatLinkState.CONNECTED) {
+            scope.launch { refreshPermissions() }
+        }
     }
 
     private fun deviceLine(d: DatDevice): String = "device ${d.name} link=${d.link} battery=${d.battery} don=${d.don} hinge=${d.hinge} thermal=${d.thermal}"
