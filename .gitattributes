@@ -1,0 +1,5 @@
+# Shell scripts keep LF line endings on each system. A CRLF ending breaks a hook and the Gradle wrapper.
+.githooks/* text eol=lf
+*.sh text eol=lf
+gradlew text eol=lf
+*.bat text eol=crlf
