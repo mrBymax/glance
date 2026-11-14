@@ -63,13 +63,32 @@ it('points each in-page link at an element of the page', () => {
   }
 });
 
-it('shows the four team members with their photos', () => {
+it('shows the four team members in alphabetical order, with their photos and titles', () => {
   renderPage();
   const team = screen.getByRole('region', { name: 'The team' });
-  const names = within(team).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent);
-  expect(names).toEqual(TEAM.map((member) => member.name));
-  expect(names).toHaveLength(4);
-  for (const member of TEAM) expect(team.querySelector(`img[src*="team-${member.id}-"]`)).not.toBeNull();
+  const names = within(team).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent ?? '');
+  expect(names).toEqual(['Alessandro De Biasi', 'Federico Bertossi', 'Marco Ceccon', 'Michele Lizzit']);
+  for (const member of TEAM) {
+    expect(team.querySelector(`img[src*="team-${member.id}-"]`)).not.toBeNull();
+    expect(within(team).getByText(member.role)).toBeInTheDocument();
+  }
+});
+
+it('opens and closes a question with its button', async () => {
+  renderPage();
+  const question = screen.getByRole('button', { name: 'Can I use it in a store today?' });
+  expect(question).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(question);
+  expect(question).toHaveAttribute('aria-expanded', 'true');
+  expect(document.getElementById(question.getAttribute('aria-controls')!)).toHaveTextContent('The payment is a demo');
+  fireEvent.click(question);
+  expect(question).toHaveAttribute('aria-expanded', 'false');
+});
+
+it('gives the diagram of the parts a title and a text alternative', () => {
+  renderPage();
+  expect(screen.getAllByRole('img', { name: /The parts of Meta Glance/ })).toHaveLength(2);
+  expect(screen.getByText(/The kiosk page shows a QR code. The camera of the glasses sees it/)).toBeInTheDocument();
 });
 
 it('says in the footer that Meta Glance is not a product of Meta, and credits Open Food Facts', () => {
