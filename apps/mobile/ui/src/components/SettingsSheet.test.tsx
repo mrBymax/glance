@@ -91,3 +91,14 @@ it('keeps the allergens in the order of the EU list, and removes one', async () 
     { allergens: ['milk'] }, { allergens: ['gluten', 'milk'] }, { allergens: ['gluten'] }, { vegetarian: true }, { vegetarian: false },
   ]);
 });
+it('sends the budget in cents, and null when the shopper clears it', async () => {
+  const { bridge, user, sheet } = await open();
+  await user.type(sheet.getByRole('spinbutton', { name: 'Budget' }), '20');
+  await user.tab();
+  await user.click(sheet.getByRole('button', { name: 'Clear Budget' }));
+  expect(patches(bridge)).toEqual([{ budgetCents: 2000 }, { budgetCents: null }]);
+});
+it('shows the budget of the profile in euros', async () => {
+  const { sheet } = await open({ messages: [{ t: 'profile', profile: { ...DEFAULT_PROFILE, budgetCents: 3500 } }] });
+  expect(sheet.getByRole('spinbutton', { name: 'Budget' })).toHaveValue('35');
+});

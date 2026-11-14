@@ -107,3 +107,21 @@ it('accepts each of the 16 event fixtures', () => {
   expect(EVENT_TYPES).toHaveLength(16);
   for (const type of EVENT_TYPES) expect(() => run(eventMessage(type))).not.toThrow();
 });
+it('drops the budget warning when the shopper raises or removes the budget', () => {
+  const over = run(eventMessage('cart.updated'), eventMessage('budget.exceeded', { budgetCents: 400, totalCents: 449 }));
+  expect(reduce(over, { t: 'local.profile', patch: { budgetCents: 500 } }).budget).toBeNull();
+  expect(reduce(over, { t: 'local.profile', patch: { budgetCents: null } }).budget).toBeNull();
+  expect(reduce(over, { t: 'local.profile', patch: { budgetCents: 300 } }).budget).not.toBeNull();
+});
+it('keeps the budget warning only while the new budget is under the total', () => {
+  const over = run(eventMessage('cart.updated'), eventMessage('budget.exceeded', { budgetCents: 400, totalCents: 449 }));
+  expect(reduce(over, { t: 'local.profile', patch: { budgetCents: 449 } }).budget).toBeNull();
+  expect(reduce(over, { t: 'local.profile', patch: { budgetCents: 448 } }).budget).toEqual({ budgetCents: 448, totalCents: 449 });
+  expect(reduce(over, { t: 'local.profile', patch: { detail: 'brief' } }).budget).toEqual({ budgetCents: 400, totalCents: 449 });
+});
+it('treats the profile of the host as a budget change', () => {
+  const over = run(eventMessage('cart.updated'), eventMessage('budget.exceeded', { budgetCents: 400, totalCents: 449 }));
+  expect(reduce(over, { t: 'profile', profile: { ...DEFAULT_PROFILE, budgetCents: null } }).budget).toBeNull();
+  expect(reduce(over, { t: 'profile', profile: { ...DEFAULT_PROFILE, budgetCents: 2000 } }).budget).toBeNull();
+  expect(reduce(over, { t: 'profile', profile: { ...DEFAULT_PROFILE, budgetCents: 400 } }).budget).not.toBeNull();
+});

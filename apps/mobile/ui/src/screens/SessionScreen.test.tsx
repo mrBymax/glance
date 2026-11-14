@@ -1,3 +1,4 @@
+import { EMPTY_CART } from '@glance/shared';
 import { screen, waitFor } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { eventFixture, eventMessage, SNAPSHOT } from '../debug/fixtures';
@@ -130,4 +131,11 @@ it('shows each warning on the card, and never says that a product is safe', () =
 it('says when allergen data is missing', () => {
   renderWithUi(<SessionScreen />, { messages: [pending({ warnings: [{ kind: 'allergenDataMissing' }] })] });
   expect(screen.getByText('Allergen data is missing for this product.')).toBeInTheDocument();
+});
+it('warns in text while the total is over the budget', () => {
+  const { deliver } = renderWithUi(<SessionScreen />, { messages: [eventMessage('cart.updated'), eventMessage('budget.exceeded', { budgetCents: 400, totalCents: 449 })] });
+  expect(screen.getByText('Warning: over your budget.')).toBeInTheDocument();
+  expect(screen.getByText('Total 4.49 EUR. Budget 4.00 EUR.')).toBeInTheDocument();
+  deliver(eventMessage('cart.updated', { cart: EMPTY_CART, change: null }));
+  expect(screen.queryByText('Warning: over your budget.')).toBeNull();
 });

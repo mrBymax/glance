@@ -3,6 +3,7 @@ import { BottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Button } from '@astryxdesign/core/Button';
 import { CheckboxList, CheckboxListItem } from '@astryxdesign/core/CheckboxList';
 import { Heading } from '@astryxdesign/core/Heading';
+import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
@@ -135,6 +136,18 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
             <CheckboxListItem value="vegan" label={strings.vegan} />
             <CheckboxListItem value="vegetarian" label={strings.vegetarian} />
           </CheckboxList>
+          <NumberInput
+            label={strings.budget}
+            units="EUR"
+            min={1}
+            isIntegerOnly
+            hasClear
+            size="lg"
+            width="100%"
+            value={profile.budgetCents === null ? null : profile.budgetCents / 100}
+            // With hasClear the input reports null for the clear button.
+            onChange={(value: number | null) => setProfile({ budgetCents: value === null ? null : Math.round(value * 100) })}
+          />
           <VStack gap={3}>
             <Heading level={2}>{strings.privacyTitle}</Heading>
             <Text>{strings.privacyText}</Text>

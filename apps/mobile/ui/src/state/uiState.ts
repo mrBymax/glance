@@ -87,6 +87,15 @@ function fromSnapshot(state: UiState, snapshot: SessionSnapshot): UiState {
   };
 }
 
+/**
+ * The server sends budget.exceeded one time, when an add crosses the budget. So the page keeps the warning.
+ * A new budget ends the warning when it is null or not under the total of the cart.
+ */
+function budgetAfter(state: UiState, budgetCents: number | null): UiState['budget'] {
+  if (state.budget === null || budgetCents === null || budgetCents >= state.cart.totalCents) return null;
+  return { ...state.budget, budgetCents };
+}
+
 function reduceEvent(state: UiState, event: ServerEvent): UiState {
   switch (event.type) {
     case 'session.state':
@@ -161,15 +170,19 @@ export function reduce(state: UiState, action: UiAction): UiState {
       return { ...state, native: action.state, error: recovered ? null : state.error };
     }
     case 'profile':
-      return { ...state, profile: action.profile };
+      return { ...state, profile: action.profile, budget: budgetAfter(state, action.profile.budgetCents) };
     case 'snapshot':
       return fromSnapshot(state, action.session);
     case 'event':
       return reduceEvent(state, action.event);
     case 'local.reset':
       return { ...initialUiState, native: state.native, profile: state.profile };
-    case 'local.profile':
-      return { ...state, profile: { ...state.profile, ...action.patch } };
+    case 'local.profile': {
+      const profile = { ...state.profile, ...action.patch };
+      // A patch with no budget does not change the warning.
+      const budget = action.patch.budgetCents === undefined ? state.budget : budgetAfter(state, action.patch.budgetCents);
+      return { ...state, profile, budget };
+    }
     case 'local.attempt':
       return { ...state, error: null };
     default: {

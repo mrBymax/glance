@@ -93,6 +93,9 @@ export const EN = {
   warningAllergen: (list: string) => `Warning: contains ${list}.`,
   warningDiet: (diet: string) => `Warning: not ${diet}.`,
   allergenDataMissing: 'Allergen data is missing for this product.',
+  budget: 'Budget',
+  budgetOver: 'Warning: over your budget.',
+  budgetDetail: (total: string, budget: string) => `Total ${total}. Budget ${budget}.`,
 
   undo: 'Undo',
   end: 'End',
