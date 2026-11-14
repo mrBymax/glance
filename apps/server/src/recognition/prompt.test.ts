@@ -68,3 +68,8 @@ it('the instruction file tells the model not to guess a digit, and to answer non
   expect(text).toContain('Never guess a digit');
   expect(text).toMatch(/barcode side[^.]*`none`/);
 });
+it('the instruction file keeps the code to a product that a hand holds, so a shelf label asks for no still', () => {
+  const text = readFileSync('../../agents/recognition.md', 'utf8');
+  expect(text).toMatch(/`visible`: true when a hand holds a product up/);
+  expect(text).toMatch(/shelf label[^.]*false/);
+});
