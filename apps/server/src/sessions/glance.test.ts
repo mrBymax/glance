@@ -85,10 +85,13 @@ it('gives an aim hint at most one time each 5 seconds', () => {
   h.advance(1); h.result({ status: 'unsure', aimHint: 'up' });
   expect(h.lines()).toEqual(['glance.partial']);
 });
-it('adds the yes hint to the first three glance prompts only', () => {
-  const h = harness();
-  const hints = [OAT, RYE, BARISTA, CRISPS].map((id) => { h.see(id); return (h.speak()!.line as { hint: boolean }).hint; });
-  expect(hints).toEqual([true, true, true, false]);
+const hintsOf = (h: ReturnType<typeof harness>) =>
+  [OAT, RYE, BARISTA, CRISPS].map((id) => { h.see(id); return (h.speak()!.line as { hint: boolean }).hint; });
+it('adds the yes hint to the first two glance prompts only', () => {
+  expect(hintsOf(harness())).toEqual([true, true, false, false]);
+});
+it('adds the yes hint to each glance prompt at the detailed level', () => {
+  expect(hintsOf(harness({ profile: { detail: 'detailed' } }))).toEqual([true, true, true, true]);
 });
 it('ignores a result while the camera rests', () => {
   const h = harness();

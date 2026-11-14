@@ -1,6 +1,8 @@
 import { type Allergen, type Product, type Profile, type Warning, localize } from '@glance/shared';
 import type { Line } from '../sessions/types';
-import { type LineTemplates, capitalize, hasAllergenWarning, nameAtStart, nameInside, sentences, startsWithBrand } from './lines.en';
+import {
+  LONG_NAME_WORDS, type LineTemplates, capitalize, hasAllergenWarning, nameAtStart, nameInside, sentences, startsWithBrand, wordCount,
+} from './lines.en';
 import { numberToWords, spokenPrice } from './numbers';
 import { answersWithNod, yesPhrases } from './phrases';
 
@@ -95,8 +97,9 @@ function glanceNew(line: Extract<Line, { key: 'glance.new' }>, profile: Profile)
     const contains = own.length > 0 ? `Contiene ${allergenList(own)}.` : '';
     return sentences(`${fullName}, ${pack}, ${spokenPrice(product.priceCents, lang, 'full')}.`, contains, warning, hint);
   }
-  const pack = localize(product.spokenPack, lang);
-  return sentences(`${name}, ${pack}, ${spokenPrice(product.priceCents, lang, 'short')}.`, warning, hint);
+  // The name and the price come first. A long name already takes the time of a short name with its pack size.
+  const pack = wordCount(name) > LONG_NAME_WORDS ? '' : `${localize(product.spokenPack, lang)}, `;
+  return sentences(`${name}, ${pack}${spokenPrice(product.priceCents, lang, 'short')}.`, warning, hint);
 }
 
 /** The Italian text of each line of the table "Spoken lines" of Plan 1. */

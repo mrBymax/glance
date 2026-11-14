@@ -7,8 +7,11 @@ import type { RuleInput } from './types';
 import { inView } from './view';
 import { warningsFor } from './warnings';
 
-/** Spec section 6.1: the first three glance prompts of a session name the yes input. */
-const YES_HINT_GLANCES = 3;
+/**
+ * The first two glance prompts of a session name the yes input. After them the shopper knows it, and the phrase
+ * only makes the prompt longer. The detailed level names it in each prompt.
+ */
+const YES_HINT_GLANCES = 2;
 
 type RecognitionInput = Extract<RuleInput, { type: 'recognition' }>;
 
@@ -96,7 +99,7 @@ function openProductPrompt(turn: Turn, product: Product): void {
     speak(turn, say({ key: 'glance.inCart', product, qty, warnings }, over));
     return;
   }
-  const hint = s.glanceCount < YES_HINT_GLANCES;
+  const hint = s.profile.detail === 'detailed' || s.glanceCount < YES_HINT_GLANCES;
   s.glanceCount += 1;
   speak(turn, say({ key: 'glance.new', product, hint, warnings }, over));
 }

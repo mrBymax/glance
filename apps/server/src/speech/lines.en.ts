@@ -16,6 +16,13 @@ const AIM: Record<Extract<Line, { key: 'glance.partial' }>['aimHint'], string> =
   turn: 'Turn the front to me.',
 };
 
+/** At the standard level, the prompt of a product whose spoken name has more words than this leaves the pack size out. */
+export const LONG_NAME_WORDS = 3;
+
+export function wordCount(text: string): number {
+  return text.trim().split(/\s+/).length;
+}
+
 export function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
@@ -121,8 +128,9 @@ function glanceNew(line: Extract<Line, { key: 'glance.new' }>, profile: Profile)
     const contains = own.length > 0 ? `Contains ${wordList(own)}.` : '';
     return sentences(`${fullName}, ${pack}, ${spokenPrice(product.priceCents, lang, 'full')}.`, contains, warning, hint);
   }
-  const pack = localize(product.spokenPack, lang);
-  return sentences(`${name}, ${pack}, ${spokenPrice(product.priceCents, lang, 'short')}.`, warning, hint);
+  // The name and the price come first. A long name already takes the time of a short name with its pack size.
+  const pack = wordCount(name) > LONG_NAME_WORDS ? '' : `${localize(product.spokenPack, lang)}, `;
+  return sentences(`${name}, ${pack}${spokenPrice(product.priceCents, lang, 'short')}.`, warning, hint);
 }
 
 /** The English text of each line of the table "Spoken lines" of Plan 1, with its text rules. */

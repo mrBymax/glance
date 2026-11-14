@@ -939,7 +939,7 @@ flowchart TD
 The log shows what the shopper heard, at `info` level:
 
 ```text
-speak session=<id> key=glance.new text=Nutella, four hundred grams, three ninety-nine. Nod to add. prompt=p-0003
+speak session=<id> key=glance.new text=Nutella, four hundred grams, three ninety-nine. Nod to add. prompt=p-0002
 speak dropped session=<id> key=barcode.unreadable reason=appearance
 ```
 
@@ -1312,6 +1312,9 @@ The rules select a line by its key, and `renderLine(line, profile)` in `src/spee
 
 - `spokenPrice` in `numbers.ts` writes a price as words. The short form is "one eighty-nine". The full form is "one euro eighty-nine". The pay prompt and the paid line use the full form.
 - `yesPhrases` in `phrases.ts` names the input of the shopper: "Nod to add.", "Double tap to add.", "Say add.", "Press Add on your phone.", or "Press volume up to add.". A shopper with `headGestures: false` gets the phone phrases.
+- The glance line is short, because the shopper waits for it: "Oat drink, one litre, one eighty-nine." In the test of 2026-11-14 the line "Hell Classic Zero Sugarfree, two hundred fifty millilitres, one forty-nine. Nod to add." took about 6 seconds.
+- At the level `standard`, a product whose spoken name has more than 3 words gets no pack size: "Hell Classic Zero Sugarfree, one forty-nine." (`LONG_NAME_WORDS` in `lines.en.ts`). English and Italian have the same rule.
+- The yes phrase is in the first 2 glance prompts of a session only (`YES_HINT_GLANCES` in `glance.ts`). After them the shopper knows the input. The level `detailed` has the yes phrase and the pack size in each glance prompt.
 - The detail level `brief` shortens the glance line, the added line, and the removed line. The level `detailed` adds the brand, the long pack text, and "Contains gluten." for a product that lists allergens.
 - The add that crosses the budget says "Added oat drink. Total twenty-one ten. That is over your budget of twenty euros." The budget has the full price form. The level `brief` also names the total in this line.
 - No level shortens the pay prompt.

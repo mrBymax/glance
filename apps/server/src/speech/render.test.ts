@@ -79,6 +79,17 @@ it('speaks the brief and the detailed level', () => {
   expect(text(glance(true), { detail: 'detailed' }))
     .toBe('Oatly oat drink, one litre carton, one euro eighty-nine. Contains gluten. Nod to add.');
 });
+// The prompt of the test of 2026-11-14 took about 6 seconds with the pack size and the yes phrase.
+it('leaves the pack size out at the standard level when the name has more than 3 words', () => {
+  const hell = scannedProduct({ gtin: '5999571058020', priceCents: 149, name: 'Hell Classic Zero Sugarfree', brand: 'Hell', packSize: '250 ml' }, null);
+  const line: Line = { key: 'glance.new', product: hell, hint: false, warnings: [] };
+  expect(text(line)).toBe('Hell Classic Zero Sugarfree, one forty-nine.');
+  expect(it_(line)).toBe('Hell Classic Zero Sugarfree, uno e quarantanove.');
+  expect(text({ ...line, hint: true })).toBe('Hell Classic Zero Sugarfree, one forty-nine. Nod to add.');
+  expect(text(line, { detail: 'detailed' })).toBe('Hell Classic Zero Sugarfree, two hundred fifty millilitres, one euro forty-nine.');
+  // A name of 3 words keeps its pack size.
+  expect(it_(glance(false))).toBe('Bevanda di avena, un litro, uno e ottantanove.');
+});
 it('names no allergen at the detailed level when the product has no allergen data', () => {
   expect(text({ key: 'glance.new', product: crisps, hint: false, warnings: [] }, { detail: 'detailed' }))
     .toBe('Demo Snacks potato crisps, one hundred fifty gram bag, one euro ninety.');
