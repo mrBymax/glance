@@ -48,7 +48,7 @@ export function SessionScreen() {
       <CaptionList />
       <CartList />
       <HStack gap={2} wrap="wrap">
-        {canAsk ? <Button label={strings.ask} icon={<Icon icon="microphone" />} onClick={() => send(ASK_MESSAGE)} /> : null}
+        {canAsk ? <Button label={strings.ask} icon={<Icon icon="microphone" />} onClick={() => send(ASK_MESSAGE)}>{strings.askShort}</Button> : null}
         {state.cart.items.length > 0 ? <Button label={strings.undo} onClick={() => send({ t: 'intent', kind: 'undo' })} /> : null}
         <Button label={strings.pocketMode} onClick={enterPocket} />
         <Button label={strings.settings} onClick={() => setSettingsOpen(true)} />

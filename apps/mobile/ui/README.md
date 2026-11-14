@@ -228,7 +228,7 @@ Each action that the shopper can do with the head or the voice also has a button
 
 | Button | Where | Sends |
 |---|---|---|
-| "Ask a question", with a microphone icon | Action row. Shown in the phases `shopping` and `checkout`. | `ASK_MESSAGE` of `src/bridge/askMessage.ts`: `{ t: 'intent', kind: 'ask' }` |
+| Ask, with a microphone icon and the name "Ask a question" | Action row. Shown in the phases `shopping` and `checkout`. | `ASK_MESSAGE` of `src/bridge/askMessage.ts`: `{ t: 'intent', kind: 'ask' }` |
 | Undo | Action row. Hidden while the cart is empty. | `{ t: 'intent', kind: 'undo' }` |
 | Repeat, with the name "Repeat the last line" | Under the captions. Hidden with no caption. | `{ t: 'intent', kind: 'repeat' }` |
 | Remove, with the name "Remove <product>" | Each cart line | `{ t: 'cart.edit', productId, qty }` with one unit less. The quantity 0 removes the line. |

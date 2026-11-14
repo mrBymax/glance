@@ -22,3 +22,7 @@ it('hides the button before the first session', () => {
   renderWithUi(<SessionScreen />);
   expect(screen.queryByRole('button', { name: 'Ask a question' })).toBeNull();
 });
+it('shows a short word on the button, so that a large font does not cut it', () => {
+  renderWithUi(<SessionScreen />, { messages: [{ t: 'snapshot', session: { ...SNAPSHOT, phase: 'shopping' } }] });
+  expect(screen.getByRole('button', { name: 'Ask a question' })).toHaveTextContent(/^Ask$/);
+});

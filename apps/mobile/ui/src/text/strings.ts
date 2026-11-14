@@ -108,6 +108,7 @@ export const EN = {
   budgetDetail: (total: string, budget: string) => `Total ${total}. Budget ${budget}.`,
 
   ask: 'Ask a question',
+  askShort: 'Ask',
   undo: 'Undo',
   end: 'End',
   repeat: 'Repeat',
@@ -273,6 +274,7 @@ export const IT: Strings = {
   budgetDetail: (total, budget) => `Totale ${total}. Budget ${budget}.`,
 
   ask: 'Fai una domanda',
+  askShort: 'Domanda',
   // Italian software uses the same word for Undo and for Cancel.
   undo: 'Annulla',
   end: 'Termina',
