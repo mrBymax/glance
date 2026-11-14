@@ -362,7 +362,7 @@ Open Food Facts gives the name in English and Italian, the allergens, and the di
 Contains data from Open Food Facts, available under the Open Database License. See https://world.openfoodfacts.org and https://opendatacommons.org/licenses/odbl/1-0/.
 
 - The call is `GET <OFF_BASE_URL>/api/v2/product/<code>?fields=code,product_name,product_name_en,product_name_it,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags`, with the header `User-Agent` from `PRODUCT_INFO_USER_AGENT` and a time limit of 2000 ms. It needs no key.
-- The status 404, and a body with `"status": 0`, mean "not found". Each other status than 200, a body that is no JSON, and a network error are a failed read.
+- The status 404, and a body with `"status": 0`, mean "not found". Each other status than 200, a body that is no JSON, a body with the status 200 and no product, and a network error are a failed read.
 - The name of a product is `product_name_<lang>` for the language of the profile, then `product_name`, then the name of the store list.
 - `allergens_tags` and `traces_tags` map to the 14 allergens of `@glance/shared`, as one list. With no allergen in `allergens_tags` the product has no allergen data (`null`), also when traces exist. A wheat pasta with traces of mustard and no entry for gluten would else read as "no gluten".
 - `vegan` is true for the tag `en:vegan`, false for `en:non-vegan`, and `null` for each other case. `vegetarian` works the same way.
@@ -372,14 +372,16 @@ Contains data from Open Food Facts, available under the Open Database License. S
 
 The cache:
 
-- A hit stays for 30 days and a miss for 1 day, in memory and as the file `<PRODUCT_CACHE_DIR>/<13 digits>.json`. A failed read is not kept.
+- A hit stays for 30 days and a miss for 1 day, in memory and as the file `<PRODUCT_CACHE_DIR>/<13 digits>.json`. A failed read is not kept as an answer.
+- After a failed read, the next request for that code waits 30 seconds. The phone repeats a code each second, and each report in that time gets the name of the store with no new call.
+- After the status 429, the server makes no request for each code for 60 seconds.
 - The calls for one code that run at the same time share one request.
 - A new process reads the files, so a restart makes no new call for a known code. To read a product again, delete its file and restart the server.
 - A cache file that the server cannot write gets the log line `product info: cache file not written`, and the lookup goes on.
 
 Limits of Open Food Facts:
 
-- It allows 15 product reads each minute for one address, and it can block an address that reads more. Each shopper shares the address of the server. The cache is the only guard: the server has no rate limit of its own.
+- It allows 15 product reads each minute for one address, and it can block an address that reads more. Each shopper shares the address of the server. The guards are the cache, the wait of 30 seconds after a failed read, and the pause of 60 seconds after the status 429. The server does not count its calls, so many new codes in one minute can pass the limit one time.
 - Its users write the data. The terms say that it is "for indicative information" and not for medical use. No line says that a product is safe.
 - A name can be in another language than its field says, and an allergen list can be empty for a product with allergens. A person must check each product of the store list before a real shop.
 - It has no price, and the server makes no search by brand and name.
@@ -396,10 +398,10 @@ Limits of Open Food Facts:
 - A scanned product has the ID `gtin-<13 digits>`. The cart, the warnings, the snapshot, a question, the cart by voice, the spot check, and a new profile language find it by that ID as they find a catalog product.
 - The recognition prompt lists only the catalog products, and the clip seed makes no clip for a scanned product. With real speech, each new line of a scanned product is one ElevenLabs call.
 - One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight gives no unknown line and no aim hint. So a shopper who shows a barcode does not hear "Turn the front to me."
-- A result that arrives after the session stopped is dropped.
+- A result that arrives after the session stopped is dropped. A result that arrives after the result of a later report of another code is dropped too: the shopper shows the other code now.
 - The scanned products live in the memory of the process. When a stored session loads after a restart, the server resolves the scanned products of its cart again. A product that the store list no longer holds stays a cart line with its old price: the shopper can remove it, and the voice does not name it.
 
-Each lookup gets the log line `barcode session=<id> source=<barcode|ocr|model|label> gtin=<digits> outcome=<product|notInStore|invalid> ms=<n>`.
+Each lookup gets the log line `barcode session=<id> source=<barcode|ocr|model|label> gtin=<digits> outcome=<product|notInStore|invalid|dropped> ms=<n>`. `dropped` is the late result of the rule above.
 
 ### The model also reads the code
 
@@ -430,10 +432,11 @@ sequenceDiagram
   end
 ```
 
-- `visible` is true when the frame shows a barcode, or the package side with its barcode. `digits` holds the printed digits when the model can read each one. `agents/recognition.md` says: never guess a digit.
+- `visible` is true when a hand holds a product up and the frame shows its barcode, or the package side with its barcode. The instruction gives false to a barcode on a shelf label, on a price tag, and on a product that stays on the shelf. `digits` holds the printed digits when the model can read each one. `agents/recognition.md` says: never guess a digit.
 - A model reads print and can write digits that are not there. So digits of the model count only with a right check digit and a product of the catalog or the store list. Then one frame is enough. Each other code of the model has no effect: the voice never says "not in this store" for digits that only the model read.
 - A package shown with its barcode side gets the status `none`, so the voice does not ask for the front.
 - The server sends `still.request` when the model saw a code in 2 frames less than 2 seconds apart, no code was read in the last 3 seconds, and the session got no request in the last 6 seconds. The rule is `onFrameCode` in `src/sessions/code.ts`.
+- After 2 requests with no code read, the next request waits 30 seconds. A still can stop Motion on the glasses for a moment, and a code that no reader can read must not cause one each 6 seconds. A code that was read brings the 6 seconds back.
 - The lookup of the digits can take up to 2500 ms for a product that the cache does not hold. A second frame in that time can still ask for a still. The still then gives the same product, and one appearance gets one prompt.
 
 ### Label frames
@@ -444,14 +447,15 @@ A frame with the kind `label` is the still of a barcode that the phone could not
 - The answer is `digits` (a list of digit runs), `brand`, `name`, `packSize`, and `confidence`. An answer that fails the schema counts as an empty one.
 - `matchLabel` in `src/label/match.ts` selects the store item. Free text of the model never becomes a product by itself:
   1. Digits count with a right check digit and an item of the store list. Two codes of two items give no product.
-  2. Else the brand and the name must select exactly one item. The answer must hold each word of the brand of the item and at least half of the words of its name, with no regard to case and accents. This way also needs a confidence of `RECOGNITION_MIN_CONFIDENCE` or more.
+  2. Else the brand and the name must select exactly one item. The answer must hold each word of the brand of the item, at least half of the words of its name, and each number of its name, with no regard to case and accents. So "Spaghetti n.3" never selects "Spaghetti n.5". This way also needs a confidence of `RECOGNITION_MIN_CONFIDENCE` or more.
   3. Between items with one brand and one name, the pack size selects. Two matches or none give no product.
 - A match goes through the lookup of `barcode.seen`, with the source `label`.
 - With no match, and when the call fails or is late, the voice says "I cannot read this code. Hold it closer.", at most one time each 10 seconds.
-- One label call runs at a time for each session. A label frame that arrives during a call is dropped.
+- One label call runs at a time for each session, and a session starts at most one call each 5 seconds. A label frame that arrives during a call, or too early, is dropped with a `label frame dropped` warning.
+- A label frame of a session that rests, is paid, or ended is dropped with no call.
 - With `REQUIRE_BLUR=1` the server drops a label frame with `blurred: false`. With `SAVE_FRAMES` it saves each label frame that it accepts.
 - Each label frame gets the frame log line at `info` level, and each call gets `label session=<id> seq=<n> match=<13 digits|none> ms=<n>`.
-- With real recognition, each label frame is one paid Gemini call. The phone sends at most one still each 6 seconds.
+- With real recognition, each label call is one paid Gemini call. The phone sends at most one still each 6 seconds, and the limit of 5 seconds on the server holds for a phone that sends more.
 
 ### Try it in fake mode
 
