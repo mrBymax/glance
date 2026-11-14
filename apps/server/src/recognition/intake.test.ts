@@ -276,3 +276,25 @@ it('a store item whose read fails still gets its prompt, with the details of the
   expect(await storePhone.next((m) => m.t === 'speak')).toMatchObject({ text: 'Nutella, four hundred grams, three ninety-nine. Nod to add.' });
   expect(logged('product not read again. id=gtin-3017624010701 The ERP is down.')).toBe(1);
 });
+it('gives each session a recognizer of its own when the app has a recognizer for each session', async () => {
+  const made: string[] = [];
+  const app = await testApp({}, {
+    recognizerFor: (id) => {
+      made.push(id);
+      return { recognize: async () => ({ ...ok, productId: made.indexOf(id) === 0 ? 'oat-drink-1l' : 'rye-bread' }) };
+    },
+  });
+  apps.push(app);
+  const texts: string[] = [];
+  for (const _ of [1, 2]) {
+    const created = CreateSessionResponseSchema.parse(await (await fetch(`${app.base}/api/sessions`, { method: 'POST' })).json());
+    const next = await connectPhone(app, created.sessionId, created.token);
+    await next.next((m) => m.t === 'snapshot');
+    for (const seq of [1, 2]) next.sendFrame({ seq, ts: seq, w: 576, h: 768, blurred: true }, JPEG);
+    texts.push((await next.next((m) => m.t === 'speak') as { text: string }).text);
+  }
+  expect(made).toHaveLength(2);
+  expect(new Set(made).size).toBe(2);
+  expect(texts[0]).toMatch(/^Oat drink/);
+  expect(texts[1]).toMatch(/^Rye bread/);
+});

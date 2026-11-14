@@ -45,6 +45,10 @@ export type AppDeps = {
   log?: boolean | { level: string; stream: { write(line: string): void } };
   /** Names the product of each frame. Fake recognition does not use it. */
   recognizer?: Recognizer;
+  /** Runs after each read of the warm-up, with the code of the store item. The search index of main.ts takes the new details. */
+  onProductRead?: (gtin13: string) => void | Promise<void>;
+  /** Gives each session a recognizer of its own, in place of `recognizer`. The observe pipeline needs it. */
+  recognizerFor?: (sessionId: string) => Recognizer;
   /** Makes the speech clips. Without it, and with FAKE_SPEECH, each line goes out with no clip. */
   synthesize?: Synthesize;
   /** Reads the still of a label. Fake recognition has a reader of its own. With neither, the server drops each label frame. */
@@ -166,7 +170,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Not awaited: the start of the server does not wait for Open Food Facts. The fixtures of FAKE_PRODUCT_INFO need no read.
   if (!config.fakeProductInfo) {
     const warmUp = startWarmUp({
-      entries: notInCatalog(storeEntries, deps.catalog.products), info: deps.productInfo, resolver, log: (line) => app.log.info(line),
+      entries: notInCatalog(storeEntries, deps.catalog.products), info: deps.productInfo, log: (line) => app.log.info(line),
+      resolver: {
+        resolve: async (gtin) => {
+          const product = await resolver.resolve(gtin);
+          await deps.onProductRead?.(gtin);
+          return product;
+        },
+      },
     });
     app.closers.add(() => warmUp.stop());
   }
@@ -222,6 +233,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     store: config.mongodbUri === null ? 'memory' : 'mongo',
     // The team checks this before the demo: the server must store no frame then.
     saveFrames: saveFrame !== null,
+    recognitionPipeline: config.recognitionPipeline,
   }));
 
   // With fake recognition, one script player stands for the frames and the recognition calls of each session.
@@ -246,8 +258,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (saveFrame) saveFrameWith(saveFrame, app.log, session.id, { header, jpeg: new Uint8Array(jpeg) });
   };
 
-  const recognize = player || deps.onFrame || !deps.recognizer ? null : createFrameHandler({
-    recognizer: deps.recognizer,
+  const { recognizer, recognizerFor } = deps;
+  const recognize = player || deps.onFrame || (!recognizer && !recognizerFor) ? null : createFrameHandler({
+    recognizerFor: (session) => recognizerFor?.(session.id) ?? recognizer!,
     concurrency: config.recognitionConcurrency,
     clock: deps.clock,
     log: app.log,

@@ -26,7 +26,14 @@ it('answers the health check', async () => {
   const res = await app.inject({ method: 'GET', url: '/healthz' });
   expect(res.json()).toEqual({
     ok: true, fakeRecognition: true, fakeSpeech: true, fakeProductInfo: true, store: 'memory', saveFrames: false,
+    recognitionPipeline: 'frame',
   });
+  const observe = await buildApp({ ...deps(), config: loadConfig({ RECOGNITION_PIPELINE: 'observe' }, ['--fake']) });
+  try {
+    expect((await observe.inject({ method: 'GET', url: '/healthz' })).json()).toMatchObject({ recognitionPipeline: 'observe' });
+  } finally {
+    await observe.close();
+  }
 });
 it('names the MongoDB store in the health check as the start log does', async () => {
   // buildApp opens no connection: the store of the test stays the memory store.
@@ -125,6 +132,23 @@ it('reports a real product reader in the health check', async () => {
   const real = await buildApp({ ...deps(), config: loadConfig({ FAKE_PRODUCT_INFO: '0' }, ['--fake']) });
   try {
     expect((await real.inject({ method: 'GET', url: '/healthz' })).json()).toMatchObject({ fakeProductInfo: false });
+  } finally {
+    await real.close();
+  }
+});
+it('tells the caller each store item that the warm-up read, so a search index can take its new texts', async () => {
+  const base = deps();
+  const item = { gtin: '8076800195057', priceCents: 109, name: 'Spaghetti n.5' };
+  let held = false;
+  const read: string[] = [];
+  const real = await buildApp({
+    ...base, config: loadConfig({ FAKE_PRODUCT_INFO: '0' }, ['--fake']),
+    storeList: { byGtin: async (gtin) => (gtin === item.gtin ? item : undefined), all: async () => [item] },
+    productInfo: { ...base.productInfo, holds: async () => held, byGtin: async (gtin) => { held = true; return base.productInfo.byGtin(gtin); } },
+    onProductRead: (gtin) => { read.push(gtin); },
+  });
+  try {
+    await vi.waitFor(() => expect(read).toEqual([item.gtin]));
   } finally {
     await real.close();
   }

@@ -12,6 +12,7 @@ it('uses the defaults', () => {
     storeListPath: 'catalog/store-list.dev.json', fakeProductInfo: false, offBaseUrl: 'https://world.openfoodfacts.org',
     productInfoUserAgent: 'MetaGlance/0.1 (https://github.com/mrBymax/glance)', productCacheDir: '.cache/products',
     referenceDir: 'catalog/reference', recognitionConcurrency: 8, recognitionReferences: 3,
+    recognitionPipeline: 'frame', verifyMinConfidence: 0.9,
   });
   expect(loadConfig({ ...KEYS, REFERENCE_DIR: '/data/reference' }, []).referenceDir).toBe('/data/reference');
 });
@@ -106,4 +107,14 @@ it('reads the settings of the barcode lookup', () => {
 it('needs no key for the product details, and rejects a base address that is no web address', () => {
   expect(loadConfig(KEYS, []).fakeProductInfo).toBe(false);
   expect(() => loadConfig({ OFF_BASE_URL: 'world.openfoodfacts.org' }, ['--fake'])).toThrow(/OFF_BASE_URL/);
+});
+it('reads the recognition pipeline, and stops for a name that it does not know', () => {
+  expect(loadConfig({ RECOGNITION_PIPELINE: 'observe' }, ['--fake']).recognitionPipeline).toBe('observe');
+  expect(loadConfig({ RECOGNITION_PIPELINE: 'frame' }, ['--fake']).recognitionPipeline).toBe('frame');
+  expect(loadConfig({ RECOGNITION_PIPELINE: '' }, ['--fake']).recognitionPipeline).toBe('frame');
+  expect(() => loadConfig({ RECOGNITION_PIPELINE: 'live' }, ['--fake'])).toThrow('RECOGNITION_PIPELINE must be "frame" or "observe". Got "live".');
+});
+it('reads the confidence of the verify call', () => {
+  expect(loadConfig({ VERIFY_MIN_CONFIDENCE: '0.95' }, ['--fake']).verifyMinConfidence).toBe(0.95);
+  expect(() => loadConfig({ VERIFY_MIN_CONFIDENCE: '2' }, ['--fake'])).toThrow(/VERIFY_MIN_CONFIDENCE/);
 });

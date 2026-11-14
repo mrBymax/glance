@@ -27,7 +27,12 @@ export function saveFrameWith(saveFrame: FrameSaver | null, log: Pick<FastifyBas
  * `stopAll` ends each call, for the close of the app.
  */
 export function createFrameHandler(deps: {
-  recognizer: Recognizer; clock: Clock; log: FastifyBaseLogger;
+  /**
+   * The recognizer of a session. The frame pipeline has one recognizer for each session. The observe pipeline
+   * makes one for each session, because it tracks the held product over the frames.
+   */
+  recognizerFor: (session: SessionRuntime) => Recognizer;
+  clock: Clock; log: FastifyBaseLogger;
   /** The number of recognition calls that one session runs at the same time. */
   concurrency: number;
   /** Gets the digits of the code of a result, as the model read them. */
@@ -62,7 +67,7 @@ export function createFrameHandler(deps: {
   };
 
   const makeWorker = (session: SessionRuntime): RecognitionWorker => new RecognitionWorker({
-    recognizer: deps.recognizer,
+    recognizer: deps.recognizerFor(session),
     concurrency: deps.concurrency,
     exclude: () => excludeList(session.state, deps.clock.now()),
     onResult: (result, info) => {
