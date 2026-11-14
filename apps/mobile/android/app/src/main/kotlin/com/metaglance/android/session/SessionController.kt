@@ -9,7 +9,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import android.view.WindowManager
 import com.metaglance.android.MainActivity
 import com.metaglance.android.audio.AnswerSound
 import com.metaglance.android.audio.ExoLinePlayer
@@ -180,7 +179,22 @@ class SessionController(
 
     /** True between `dat.startSession` and the state `STOPPED` of that DAT session. */
     private var datRunning = false
+        set(value) {
+            field = value
+            refreshSessionActive()
+        }
     private var starting = false
+        set(value) {
+            field = value
+            refreshSessionActive()
+        }
+
+    /** True between a stop that the app did not ask for and the decision about a new start. */
+    private var stopSettles = false
+        set(value) {
+            field = value
+            refreshSessionActive()
+        }
     private var stopByApp = false
     private var stopCalled = false
     private var sawStreaming = false
@@ -194,6 +208,10 @@ class SessionController(
     private var mainYesJob: Job? = null
     private var mainYesResolved = false
     private var waitingForGlasses = false
+        set(value) {
+            field = value
+            refreshSessionActive()
+        }
     private var restartsInARow = 0
     private var restartNotBeforeMs = 0L
 
@@ -225,6 +243,14 @@ class SessionController(
 
     private val _nativeState = MutableStateFlow(mapNativeState(dat.snapshot.value))
     val nativeState: StateFlow<NativeState> = _nativeState.asStateFlow()
+
+    private val _sessionActive = MutableStateFlow(false)
+
+    /**
+     * True while the camera runs, starts, or waits for the glasses to start again. `SessionService` runs for
+     * this time, so the session continues with the screen off.
+     */
+    val sessionActive: StateFlow<Boolean> = _sessionActive.asStateFlow()
 
     init {
         watchPhoneNetwork()
@@ -266,7 +292,6 @@ class SessionController(
         this.activity = activity
         // A new activity has a new page, and that page is not in pocket mode.
         pocketOn = false
-        refreshScreen()
     }
 
     /** A new activity can attach before the old one is destroyed. So only the attached activity detaches. */
@@ -299,7 +324,6 @@ class SessionController(
             is PageToNative.PocketSet -> {
                 pocketOn = message.on
                 activity?.setPocket(message.on)
-                refreshScreen()
             }
             // Kotlin never vibrates by itself: the page selects each pattern.
             is PageToNative.Haptic -> if (profile.haptics) vibrate(HapticPatterns.timings(message.pattern))
@@ -416,6 +440,8 @@ class SessionController(
         waitingForGlasses = false
         restartsInARow = 0
         starting = true
+        // The tap on the page is the one moment when Android lets the app start the service.
+        SessionService.start(app)
         scope.launch {
             try {
                 if (ensureServerSession()) startDat()
@@ -700,7 +726,6 @@ class SessionController(
             return
         }
         datRunning = true
-        refreshScreen()
         startPipeline(labelTiming, stream)
     }
 
@@ -1017,7 +1042,6 @@ class SessionController(
     private fun onDatStopped(snapshot: DatSnapshot) {
         datRunning = false
         headInput.close()
-        refreshScreen()
         pipelineJob?.cancel()
         pipelineJob = null
         mainYesJob?.cancel()
@@ -1029,10 +1053,14 @@ class SessionController(
         // The session can stop before the device reports why. Mock glasses that fold report SESSION_ENDED_BY_DEVICE
         // and STOPPED first, and the closed hinge after them. So the cause is read a short time after the stop.
         val ticket = stopTicket
+        stopSettles = true
         scope.launch {
             delay(STOP_SETTLE_MS)
             // A new start, or a stop that the app asked for, came first. The old stop has no use then.
-            if (ticket != stopTicket || datRunning) return@launch
+            if (ticket != stopTicket || datRunning) {
+                stopSettles = false
+                return@launch
+            }
             val device = dat.snapshot.value.device
             onStopCause(StopFacts(false, sessionErrors.toSet(), streamErrors.toSet(), device?.link, device?.hinge))
         }
@@ -1052,6 +1080,7 @@ class SessionController(
                 if (waitingForGlasses && !datRunning) restartWhenReady(dat.snapshot.value)
             }
         }
+        stopSettles = false
     }
 
     private fun restartWhenReady(snapshot: DatSnapshot) {
@@ -1060,11 +1089,12 @@ class SessionController(
             waitingForGlasses = false
             return
         }
-        waitingForGlasses = false
         restartsInARow += 1
         log("the glasses are ready again: new dat session, attempt $restartsInARow")
         openSocket()
         startDat()
+        // The service stays through the new start, because `sessionActive` did not change in between.
+        waitingForGlasses = false
     }
 
     /** Returns false when the socket is down, so the message went nowhere. */
@@ -1099,14 +1129,8 @@ class SessionController(
         store.serverSession = session
     }
 
-    /** The screen stays on while a DAT session runs, and in pocket mode. */
-    private fun refreshScreen() {
-        val window = activity?.window ?: return
-        if (datRunning || pocketOn) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        } else {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
+    private fun refreshSessionActive() {
+        _sessionActive.value = starting || datRunning || stopSettles || waitingForGlasses
     }
 
     private fun watchPhoneNetwork() {

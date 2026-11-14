@@ -84,17 +84,14 @@ class HapticsPocketTest {
     }
 
     @Test
-    fun pocketModeDimsTheScreenHidesTheBarsAndKeepsTheScreenOn() {
+    fun pocketModeDimsTheScreenAndHidesTheBars() {
         assertEquals(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE, brightness(), 0f)
         page.clickButton("pocket.set on")
         waitUntil("the screen is dim", STEP_MS) { brightness() == POCKET_BRIGHTNESS }
-        waitUntil("the screen stays on", STEP_MS) { keepsScreenOn() }
         waitUntil("the system bars are hidden", STEP_MS) { !barsVisible() }
 
         page.clickButton("pocket.set off")
         waitUntil("the brightness follows the phone again", STEP_MS) { brightness() == WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
-        // No session runs, so the screen can turn off again.
-        waitUntil("the screen can turn off", STEP_MS) { !keepsScreenOn() }
         waitUntil("the system bars show", STEP_MS) { barsVisible() }
     }
 
@@ -117,8 +114,6 @@ class HapticsPocketTest {
     }
 
     private fun brightness(): Float = onWindow { it.window.attributes.screenBrightness }
-
-    private fun keepsScreenOn(): Boolean = onWindow { it.window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0 }
 
     private fun barsVisible(): Boolean = onWindow { activity ->
         ViewCompat.getRootWindowInsets(activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.statusBars()) ?: true

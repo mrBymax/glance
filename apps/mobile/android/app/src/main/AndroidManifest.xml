@@ -4,6 +4,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- SessionService keeps a session alive with the screen off. Its two types match the two reasons:
+         the link to the glasses, and the voice of the app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Only the MockDeviceKit feed from the phone camera uses this permission. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -34,6 +41,9 @@
                 <data android:scheme="glance" />
             </intent-filter>
         </activity>
+
+        <service android:name=".session.SessionService" android:exported="false"
+            android:foregroundServiceType="connectedDevice|mediaPlayback" />
 
         <!-- The mock menu is a second launcher icon in each build type: mock mode is the fallback of the live demo.
              It has a task of its own, so a change from the menu to "Glance" and back keeps both screens. -->
