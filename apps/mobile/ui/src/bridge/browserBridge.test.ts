@@ -1,9 +1,9 @@
 import { DEFAULT_PROFILE, EMPTY_CART, type NativeState, type NativeToPage } from '@glance/shared';
 import created from '@glance/shared/fixtures/rest/CreateSessionResponse.json';
-import { expect, it, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { eventFixture, SNAPSHOT } from '../debug/fixtures';
 import { fakeFetch, fakeSources } from '../test/fakes';
-import { BrowserBridge } from './browserBridge';
+import { BrowserBridge, LAST_LINE_GRACE_MS } from './browserBridge';
 import { NATIVE_NEW, NATIVE_READY } from './fakeNative';
 
 const path = `/api/sessions/${encodeURIComponent(created.sessionId)}`;
@@ -123,12 +123,68 @@ it('deletes the session and forgets it', async () => {
   expect(sources.sources[0]?.closed).toBe(true);
   expect(bridge.sessionQuery()).toBeNull();
 });
-it('follows the camera state of the server and forgets a session that ended', async () => {
-  const { bridge, seen, sources } = await started();
-  sources.sources[0]?.emit('message', JSON.stringify({ type: 'session.state', phase: 'ended', cameraOn: false }));
-  expect(lastNative(seen)).toMatchObject({ stream: 'stopped' });
-  expect(sources.sources[0]?.closed).toBe(true);
+const lastLine = (id: string) => JSON.stringify({ ...eventFixture('caption'), id });
+const captionIds = (seen: NativeToPage[]) =>
+  seen.flatMap((message) => (message.t === 'event' && message.event.type === 'caption' ? [message.event.id] : []));
+
+/** Starts a session with fake timers and delivers session.state with a phase that ends the session. */
+const finished = async (phase: 'paid' | 'ended') => {
+  vi.useFakeTimers();
+  onTestFinished(() => { vi.useRealTimers(); });
+  const context = await started();
+  context.sources.sources[0]?.emit('message', JSON.stringify({ type: 'session.state', phase, cameraOn: false }));
+  return context;
+};
+
+it.each(['paid', 'ended'] as const)('forgets a session with the phase %s at once, and closes its stream after the grace time', async (phase) => {
+  const { bridge, seen, sources } = await finished(phase);
+  expect(lastNative(seen)).toMatchObject({ session: 'stopped', stream: 'stopped' });
   expect(bridge.sessionQuery()).toBeNull();
+  expect(sources.sources[0]?.closed).toBe(false);
+  vi.advanceTimersByTime(LAST_LINE_GRACE_MS - 1);
+  expect(sources.sources[0]?.closed).toBe(false);
+  vi.advanceTimersByTime(1);
+  expect(sources.sources[0]?.closed).toBe(true);
+});
+it('relays the line that the server speaks after the last session.state, and no other event', async () => {
+  const { seen, sources } = await finished('paid');
+  sources.sources[0]?.emit('message', lastLine('s-9'));
+  sources.sources[0]?.emit('message', JSON.stringify(eventFixture('glance.pending')));
+  sources.sources[0]?.emit('message', JSON.stringify({ type: 'session.state', phase: 'shopping', cameraOn: true }));
+  expect(captionIds(seen)).toEqual(['s-9']);
+  expect(seen.filter((message) => message.t === 'event')).toHaveLength(2);
+  expect(lastNative(seen)).toMatchObject({ session: 'stopped', stream: 'stopped' });
+  vi.advanceTimersByTime(LAST_LINE_GRACE_MS);
+  sources.sources[0]?.emit('message', lastLine('s-10'));
+  expect(captionIds(seen)).toEqual(['s-9']);
+});
+it('closes the old stream at once when the next session starts in the grace time', async () => {
+  const { bridge, seen, sources } = await finished('paid');
+  bridge.send({ t: 'session.start' });
+  expect(sources.sources[0]?.closed).toBe(true);
+  await vi.waitFor(() => expect(sources.sources).toHaveLength(2));
+  sources.sources[0]?.emit('message', lastLine('s-9'));
+  expect(captionIds(seen)).toEqual([]);
+  vi.advanceTimersByTime(LAST_LINE_GRACE_MS);
+  expect(sources.sources[1]?.closed).toBe(false);
+});
+it('closes the old stream at once when the shopper deletes the data in the grace time', async () => {
+  const { bridge, sources } = await finished('ended');
+  bridge.send({ t: 'data.delete' });
+  expect(sources.sources[0]?.closed).toBe(true);
+});
+it('does not say offline when the stream of a finished session fails', async () => {
+  const { seen, sources } = await finished('paid');
+  sources.sources[0]?.emit('error');
+  expect(sources.sources[0]?.closed).toBe(true);
+  expect(lastNative(seen)?.network).toBe('online');
+});
+it('follows the camera state of the server while the session is live', async () => {
+  const { bridge, seen, sources } = await started();
+  sources.sources[0]?.emit('message', JSON.stringify({ type: 'session.state', phase: 'resting', cameraOn: false }));
+  expect(lastNative(seen)).toMatchObject({ session: 'started', stream: 'stopped' });
+  expect(sources.sources[0]?.closed).toBe(false);
+  expect(bridge.sessionQuery()).not.toBeNull();
 });
 it('says offline while the stream is lost, then loads the snapshot again', async () => {
   const { seen, http, sources } = await started();

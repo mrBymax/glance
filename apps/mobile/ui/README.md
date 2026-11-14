@@ -85,7 +85,10 @@ sequenceDiagram
   B->>S: POST .../intents { kind: stop }
   S-->>B: session.state with the phase ended
   B-->>P: event
-  Note over B: closes the stream and forgets the session
+  Note over B: forgets the session, keeps the stream for 5 seconds
+  S-->>B: caption "Camera off."
+  B-->>P: event
+  Note over B: closes the stream
 ```
 
 Rules of `BrowserBridge` that a reader does not see at once:
@@ -93,6 +96,7 @@ Rules of `BrowserBridge` that a reader does not see at once:
 - The stream opens before the snapshot loads, so that no event is lost between the two. Each new `open` of the stream loads the snapshot again.
 - A stream error, or a call with no answer, sets `network` to `offline` in the fake native state. The next `open` of the stream sets `online`.
 - An answer with a status of 400 or more logs `bridge: <method> <path> failed with <status>`. The line holds no token.
+- `session.state` with the phase `paid` or `ended` ends the session for the page at once: `sessionQuery()` gives null, and the fake native state says `stopped`. The server sends its last spoken line after that event, when the clip is ready. So the stream stays open for `LAST_LINE_GRACE_MS` (5000 ms) and delivers `caption` events only. The next `session.start`, `data.delete`, or a stream error closes it at once.
 - Two fast `session.start` messages make one session. The fake native state says `starting` until the server answers.
 - A `session.end` or a `data.delete` while `POST /api/sessions` is open makes that call stale. When the server answers with a session, the bridge sends `DELETE /api/sessions/:id` for it, and the page does not get it.
 - `data.delete` sends `DELETE /api/sessions/:id`, forgets the session, and sets the profile to the default.

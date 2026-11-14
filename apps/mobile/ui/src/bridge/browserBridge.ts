@@ -20,6 +20,13 @@ export type BrowserBridgeOptions = {
 
 type ServerSession = { id: string; token: string; source: EventSourceLike | null };
 
+/**
+ * The time that the stream of a paid or ended session stays open.
+ * The server sends the last spoken line after that session.state, when its clip is ready.
+ * The server waits 3000 ms for a clip at most.
+ */
+export const LAST_LINE_GRACE_MS = 5000;
+
 const enc = encodeURIComponent;
 
 async function jsonOf(response: Response): Promise<unknown> {
@@ -66,6 +73,8 @@ export class BrowserBridge implements GlanceBridge {
   private native: NativeState;
   private profile: Profile = DEFAULT_PROFILE;
   private session: ServerSession | null = null;
+  // The stream of a session that is paid or ended, for the grace time. It delivers captions only.
+  private lastLines: { source: EventSourceLike; timer: ReturnType<typeof setTimeout> } | null = null;
   // True from a stream error to the next open of the stream. An answer to a REST call does not end it.
   private streamLost = false;
   // Grows with each start, each end, and each delete. A POST /api/sessions that answers for an older number is stale.
@@ -186,6 +195,8 @@ export class BrowserBridge implements GlanceBridge {
     }
     // A second start message while the first POST is open must not make a second session.
     if (this.native.session === 'starting') return;
+    // A line of the old session must not show in the new one.
+    this.closeLastLines();
     this.setNative({ session: 'starting' });
     this.startAttempt += 1;
     void this.createSession(this.startAttempt);
@@ -223,9 +234,13 @@ export class BrowserBridge implements GlanceBridge {
       void this.loadSnapshot(session);
     });
     source.addEventListener('message', (event) => {
-      if (isCurrent() && typeof event.data === 'string') this.receive(event.data);
+      if (typeof event.data !== 'string') return;
+      if (isCurrent()) this.receive(event.data);
+      else if (this.lastLines?.source === source) this.receiveLastLine(event.data);
     });
     source.addEventListener('error', () => {
+      // An EventSource connects again after an error. A finished session needs no new connection.
+      if (this.lastLines?.source === source) this.closeLastLines();
       if (!isCurrent()) return;
       this.streamLost = true;
       this.setNative({ network: 'offline' });
@@ -245,14 +260,37 @@ export class BrowserBridge implements GlanceBridge {
     this.inject({ t: 'event', event });
     if (event.type !== 'session.state') return;
     if (event.phase === 'paid' || event.phase === 'ended') {
-      this.forgetSession();
+      this.keepForLastLines();
       this.setNative({ session: 'stopped', stream: 'stopped' });
     } else {
       this.setNative({ stream: event.cameraOn ? 'streaming' : 'stopped' });
     }
   }
 
+  private receiveLastLine(text: string): void {
+    const event = parseServerEvent(parseJson(text));
+    if (event?.type === 'caption') this.inject({ t: 'event', event });
+  }
+
+  /** Forgets the session, and keeps its stream open for the grace time. */
+  private keepForLastLines(): void {
+    const source = this.session?.source;
+    this.session = null;
+    this.streamLost = false;
+    if (!source) return;
+    this.closeLastLines();
+    this.lastLines = { source, timer: setTimeout(() => { this.closeLastLines(); }, LAST_LINE_GRACE_MS) };
+  }
+
+  private closeLastLines(): void {
+    if (!this.lastLines) return;
+    clearTimeout(this.lastLines.timer);
+    this.lastLines.source.close();
+    this.lastLines = null;
+  }
+
   private forgetSession(): void {
+    this.closeLastLines();
     this.session?.source?.close();
     this.session = null;
     this.streamLost = false;
