@@ -14,6 +14,8 @@ if ((process.env.SITE_BASE ?? './') === './') html = html.replace(/(["\s,])\/ass
 const page = await readFile(dist('index.html'), 'utf8');
 const marker = '<div id="root"></div>';
 if (!page.includes(marker)) throw new Error(`dist/index.html has no ${marker}`);
-await writeFile(dist('index.html'), page.replace(marker, `<div id="root">${html}</div>`));
+// A social preview needs an absolute image URL. SITE_URL is the address of the deployed site, with a trailing slash.
+const siteUrl = process.env.SITE_URL ?? './';
+await writeFile(dist('index.html'), page.replace(marker, `<div id="root">${html}</div>`).replaceAll('__SITE_URL__', siteUrl));
 await rm(serverDir, { recursive: true, force: true });
 console.log(`prerendered ${Math.round(html.length / 1024)} KB of HTML into dist/index.html`);

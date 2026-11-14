@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 
 // Each optimized image of scripts/build-assets.mjs, by its file name.
-const FILES = import.meta.glob<string>('../assets/generated/*.{avif,webp,png}', { eager: true, query: '?url', import: 'default' });
+const FILES = import.meta.glob<string>('../assets/generated/*.{avif,webp,png,svg}', { eager: true, query: '?url', import: 'default' });
 const urls = new Map(Object.entries(FILES).map(([path, url]) => [path.slice(path.lastIndexOf('/') + 1), url]));
 
 export function assetUrl(file: string): string {
