@@ -156,6 +156,7 @@ Documents to keep current. Describe only what exists and works at that time.
 - One `README.md` in each app and each package: how to run it, its settings, and its checks. Plans 0 and 2 already ask for two of them.
 - `docs/architecture.md`: the parts and the messages between them, the path of one glance from the frame to the cart, the phases of a session, and the steps of a checkout.
 - Each diagram is a Mermaid code block: `flowchart` for the parts, `sequenceDiagram` for a message path, `stateDiagram-v2` for phases and steps. No ASCII drawing and no image file of a diagram.
+- The skill `diagram-design` makes standalone diagrams as HTML and SVG, for the website, the deck, and the video. It does not replace Mermaid in the documentation. No task of the night needs it. If you use it, keep its default style, because its first step asks a person, and write that in `QUESTIONS.md`. Its check scripts need Python 3, and this machine has none.
 - The files in `docs/overnight/` are the log of the night. They do not count as documentation for the hook.
 
 ## Integration tests

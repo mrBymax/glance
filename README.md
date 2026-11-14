@@ -78,6 +78,9 @@ The repository has two hooks.
 | `refero-design`      | Phone and web UI design (`apps/website`, `apps/mobile`)                              |
 | `mrbd-ui-toolkit`    | UI that renders on the Ray-Ban Display glasses (React, `@wearables-ui-toolkit/mrbd`) |
 | `meta-wearables-dat` | Native iOS and Android code that connects to the glasses (DAT SDK)                   |
+| `diagram-design`     | Standalone diagrams as HTML and SVG, for the website, the deck, and the video        |
+
+`diagram-design` came from `npx skills add cathrynlavery/diagram-design`. `skills-lock.json` records the source of each skill that this command added. The documentation in Markdown keeps Mermaid diagrams, because GitHub renders them. Use `diagram-design` for a diagram that stands alone. Its checks need Python 3.
 
 `.mcp.json` adds the hosted Meta Wearables docs server (`wearables-dat`, no auth). Approve it when Claude Code asks.
 
