@@ -17,7 +17,7 @@ const KEPT_LOG_LINES = 5000;
 const SERVER_VARIABLES = [
   'PORT', 'PUBLIC_BASE_URL', 'MONGODB_URI', 'MONGODB_DB', 'CATALOG_PATH', 'GEMINI_API_KEY', 'GEMINI_MODEL',
   'GEMINI_MEDIA_RESOLUTION', 'RECOGNITION_MIN_CONFIDENCE', 'REQUIRE_BLUR', 'FAKE_RECOGNITION', 'FAKE_SPEECH',
-  'ELEVENLABS_API_KEY', 'ELEVENLABS_VOICE_EN', 'ELEVENLABS_VOICE_IT', 'SPEECH_CACHE_DIR', 'SAVE_FRAMES', 'PAYMENT_DELAY_MS',
+  'ELEVENLABS_API_KEY', 'ELEVENLABS_VOICE_EN', 'ELEVENLABS_VOICE_IT', 'SPEECH_CACHE_DIR', 'SAVE_FRAMES', 'PAYMENT_DELAY_MS', 'DEMO_KEY',
 ];
 
 /** Asks the system for a port that is free now. */
@@ -37,10 +37,11 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 /**
  * Starts the server with --fake on a free port and waits until GET /healthz answers.
  * `fakeScript` is the path of a FAKE_RECOGNITION script file. Without it the server plays its default script.
- * Returns the address, the log lines so far, and `stop`.
+ * `demoKey` is the key of GET /api/demo/latest. Without it that path answers 404.
+ * Returns the address, the demo key, the log lines so far, and `stop`.
  * Throws when the server does not start, or when one of its two fake switches is off.
  */
-export async function startFakeServer({ fakeScript, paymentDelayMs = 300 } = {}) {
+export async function startFakeServer({ fakeScript, paymentDelayMs = 300, demoKey = null } = {}) {
   const port = await freePort();
   const env = { ...process.env };
   for (const name of SERVER_VARIABLES) delete env[name];
@@ -48,6 +49,7 @@ export async function startFakeServer({ fakeScript, paymentDelayMs = 300 } = {})
   env.FAKE_SPEECH = '1';
   env.FAKE_RECOGNITION = fakeScript ?? '1';
   env.PAYMENT_DELAY_MS = String(paymentDelayMs);
+  if (demoKey !== null) env.DEMO_KEY = demoKey;
 
   // node runs the server with no npm and no shell between, so `stop` ends the server process itself.
   const child = spawn(process.execPath, ['--import', 'tsx', 'src/main.ts', '--fake'], {
@@ -86,7 +88,7 @@ export async function startFakeServer({ fakeScript, paymentDelayMs = 300 } = {})
         await stop();
         throw new Error(`The server is not in fake mode: ${JSON.stringify(health)}. A test must make no vendor call.`);
       }
-      return { url, port, log, stop };
+      return { url, port, demoKey, log, stop };
     }
     if (Date.now() > deadline) {
       await stop();

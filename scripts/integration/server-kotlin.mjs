@@ -43,31 +43,34 @@ function checkFrames(log) {
 async function main() {
   if (!process.env.JAVA_HOME) {
     console.error('JAVA_HOME is not set. Gradle needs a JDK from 17 to 24.');
+    console.error('result: fail');
     return 1;
   }
   const server = await startFakeServer({ fakeScript: resolve(here, 'server-kotlin.fake-script.json') });
   console.log(`server: fake mode on ${server.url}`);
+  let problems;
   try {
     const code = await runGradle(server.url);
     // The server writes the log line of a frame after the socket message arrived, so the last line can be late.
     await new Promise((done) => setTimeout(done, LOG_SETTLE_MS));
-    const problems = code === 0 ? checkFrames(server.log) : [`Gradle ended with the exit code ${code}.`];
-    if (problems.length === 0) {
-      console.log('result: pass');
-      return 0;
-    }
-    for (const problem of problems) console.error(problem);
-    console.error(`The last ${LOG_TAIL_LINES} log lines of the server:`);
-    console.error(server.log.slice(-LOG_TAIL_LINES).join('\n'));
-    console.error('result: fail');
-    return 1;
+    problems = code === 0 ? checkFrames(server.log) : [`Gradle ended with the exit code ${code}.`];
   } finally {
     await server.stop();
     console.log('server: stopped');
   }
+  if (problems.length === 0) {
+    console.log('result: pass');
+    return 0;
+  }
+  for (const problem of problems) console.error(problem);
+  console.error(`The last ${LOG_TAIL_LINES} log lines of the server:`);
+  console.error(server.log.slice(-LOG_TAIL_LINES).join('\n'));
+  console.error('result: fail');
+  return 1;
 }
 
 main().then((code) => process.exit(code), (error) => {
   console.error(error);
+  console.error('result: fail');
   process.exit(1);
 });
