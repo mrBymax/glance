@@ -370,7 +370,7 @@ class ProbeActivity : AppCompatActivity() {
             val pipeline = FramePipeline(
                 gate = { null },
                 onKioskText = { text -> log.line("kiosk $text") },
-                onUpload = { header, jpeg -> log.line("upload seq=${header.seq} ${header.w}x${header.h} ${jpeg.size} bytes") },
+                onUpload = { header, jpeg, _ -> log.line("upload seq=${header.seq} ${header.w}x${header.h} ${jpeg.size} bytes") },
                 onBarcode = { read -> log.line("barcode ${read.code} ${read.source.name.lowercase()}") },
                 onLabelStill = { log.line("label still wanted") },
                 log = log::line

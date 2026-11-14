@@ -851,8 +851,8 @@ class SessionController(
                     tap?.onToServer(message, sent)
                 },
                 onLabelStill = { main.post(::takeLabelStill) },
-                onUpload = { header, jpeg ->
-                    val sent = socket?.sendFrame(header, jpeg) == true
+                onUpload = { header, jpeg, context ->
+                    val sent = socket?.sendFrame(header, jpeg, context) == true
                     tap?.onFrame(header, jpeg.size, sent)
                 },
                 findFaces = { faces.find(it) },

@@ -19,6 +19,7 @@ import com.metaglance.core.image.HeldRegion
 import com.metaglance.core.image.HeldUploads
 import com.metaglance.core.image.I420
 import com.metaglance.core.image.Pace
+import com.metaglance.core.image.PreparedFrame
 import com.metaglance.core.image.RawFrame
 import com.metaglance.core.image.RectPx
 import com.metaglance.core.image.SharpestFramePicker
@@ -48,20 +49,22 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * `gate` returns the reason to skip an upload, or null. `onKioskText` gets the full code text, for example
  * `GL1 K3X7`, when the dwell rule reports it. `onBarcode` gets a product code when the vote reports it.
- * `onLabelStill` says that the caller must take one still now. `onUpload` gets a JPEG with its header.
+ * `onLabelStill` says that the caller must take one still now. `onUpload` gets a JPEG with its header, and the
+ * context image of a crop or null.
  * `holdStills` returns true while a prompt waits for a head answer: no label still starts then, and `LabelPolicy`
  * drops a `still.request` that waited behind the prompt. Each callback runs on the frame thread.
  *
  * With `findHeld`, the held crop is on. Each frame that is not damaged goes through that detector, after the code
- * scan. A frame with a region goes out as a crop around the region, cut from the frame with no scale. With no
- * region, the full frame goes out one time each second (`HeldUploads`). The code scan, the kiosk code, and the
+ * scan. A frame with a region goes out as a crop around the region, cut from the frame with no scale. The crop
+ * carries its context image: the full frame in a small size, in which the server model sees if a hand holds the
+ * object. With no region, the full frame goes out one time each second (`HeldUploads`). The code scan, the kiosk code, and the
  * label policy read the full frame in each case, and none of them needs an upload. Without `findHeld`, each
  * window uploads its full frame, as before the held crop.
  */
 class FramePipeline(
     private val gate: () -> UploadSkip?,
     private val onKioskText: (String) -> Unit,
-    private val onUpload: (FrameHeader, ByteArray) -> Unit,
+    private val onUpload: (FrameHeader, ByteArray, ByteArray?) -> Unit,
     private val onBarcode: (CodeRead) -> Unit = {},
     private val onLabelStill: () -> Unit = {},
     private val findFaces: ((RawFrame) -> FaceResult)? = null,
@@ -135,24 +138,27 @@ class FramePipeline(
             log("frame dropped: face detection failed")
             return
         }
-        val jpeg = times.of("jpeg") {
-            val bitmap = Bitmap.createBitmap(prepared.argb, prepared.width, prepared.height, Bitmap.Config.ARGB_8888)
-            val quality = if (crop != null) CROP_JPEG_QUALITY else JPEG_QUALITY
-            ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray().also { bitmap.recycle() }
-        }
+        val jpeg = times.of("jpeg") { jpegOf(prepared, if (crop != null) CROP_JPEG_QUALITY else JPEG_QUALITY) }
+        // Face detection gave a result for `prepared`, so the context image of the same frame is never null here.
+        val context = if (crop != null) times.of("context") { FramePrep.context(picked, faces)?.let { jpegOf(it, CONTEXT_JPEG_QUALITY) } } else null
 
         seq = nextSeq?.invoke() ?: (seq + 1)
         val header = FrameHeader(seq, System.currentTimeMillis(), prepared.width, prepared.height, prepared.blurred)
         if (view == null) {
-            onUpload(header, jpeg)
+            onUpload(header, jpeg, null)
             return
         }
         heldCounts.onUpload(view, prepared.width, prepared.height)
         if (crop != null && !sentCrop) {
             sentCrop = true
-            log("first crop: seq=$seq ${crop.width}x${crop.height} at ${crop.left},${crop.top} of ${picked.width}x${picked.height}, ${jpeg.size} bytes")
+            log("first crop: seq=$seq ${crop.width}x${crop.height} at ${crop.left},${crop.top} of ${picked.width}x${picked.height}, ${jpeg.size} bytes, context ${context?.size ?: 0} bytes")
         }
-        onUpload(header.withView(crop, picked.width, picked.height), jpeg)
+        onUpload(header.withView(crop, picked.width, picked.height).copy(contextBytes = context?.size), jpeg, context)
+    }
+
+    private fun jpegOf(prepared: PreparedFrame, quality: Int): ByteArray {
+        val bitmap = Bitmap.createBitmap(prepared.argb, prepared.width, prepared.height, Bitmap.Config.ARGB_8888)
+        return ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray().also { bitmap.recycle() }
     }
 
     /**
@@ -245,6 +251,9 @@ class FramePipeline(
          * a crop of a 720 x 1280 frame, and 15 kB for a crop of a 504 x 896 frame.
          */
         const val CROP_JPEG_QUALITY = 92
+
+        /** The context image shows where the hand is, and no print. */
+        const val CONTEXT_JPEG_QUALITY = 70
 
         /** `SystemClock.elapsedRealtime` never gives it. */
         const val NO_REQUEST = -1L

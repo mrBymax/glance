@@ -21,10 +21,19 @@ object FramePrep {
      * Each face of `Found` is pixelated in the output.
      * Returns null when face detection failed: a frame that can show a face does not leave the phone.
      */
-    fun prepare(frame: RawFrame, faces: FaceResult): PreparedFrame? {
+    fun prepare(frame: RawFrame, faces: FaceResult): PreparedFrame? = full(frame, faces, FULL_MAX_LONG_SIDE)
+
+    /**
+     * The context image of a crop: the full frame with a long side of 384 pixels at most, with each face of
+     * `Found` pixelated. The server model finds the hand in it and reads nothing, so it is small.
+     * Returns null when face detection failed.
+     */
+    fun context(frame: RawFrame, faces: FaceResult): PreparedFrame? = full(frame, faces, CONTEXT_MAX_LONG_SIDE)
+
+    private fun full(frame: RawFrame, faces: FaceResult, maxLongSide: Int): PreparedFrame? {
         if (faces is FaceResult.Failed) return null
         val rect = FrameGeometry.full(frame.width, frame.height)
-        val (outWidth, outHeight) = FrameGeometry.outputSize(rect)
+        val (outWidth, outHeight) = FrameGeometry.outputSize(rect, maxLongSide)
         val argb = I420.cropScaleToArgb(frame.i420, frame.width, frame.height, rect, outWidth, outHeight)
         if (faces is FaceResult.Found) {
             Pixelate.apply(argb, outWidth, outHeight, faces.boxes.mapNotNull { FrameGeometry.mapBox(it, rect, outWidth, outHeight) })
@@ -53,4 +62,9 @@ object FramePrep {
 
     /** The limit of a label still. A crop of a stream frame of 720 x 1280 is below it. */
     const val CROP_MAX_LONG_SIDE = 1600
+
+    private const val FULL_MAX_LONG_SIDE = 768
+
+    /** Measured on 2026-11-14: a JPEG of quality 70 at this size has about 13 kB. */
+    const val CONTEXT_MAX_LONG_SIDE = 384
 }

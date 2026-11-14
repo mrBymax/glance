@@ -148,6 +148,19 @@ class FramePrepTest {
         assertNotEquals(plain.argb[60 * 358 + 2], plain.argb[60 * 358 + 3])
     }
 
+    @Test fun `the context image of a crop is the full frame with a long side of 384 pixels, with each face pixelated`() {
+        val f = noiseFrame(720, 1280)
+        val out = FramePrep.context(f, FaceResult.Found(listOf(RectPx(300, 600, 120, 120))))!!
+        assertEquals(216 to 384, out.width to out.height)
+        assertTrue(out.blurred)
+        // The face is 36 pixels wide at (90, 180) in the context image.
+        assertEquals(out.argb[190 * 216 + 100], out.argb[190 * 216 + 101])
+        val plain = FramePrep.context(f, FaceResult.Found(emptyList()))!!
+        assertNotEquals(plain.argb[190 * 216 + 100], plain.argb[190 * 216 + 101])
+        assertEquals(216 to 384, FramePrep.context(frame(504, 896, 128), FaceResult.NotRun)!!.let { it.width to it.height })
+        assertNull(FramePrep.context(f, FaceResult.Failed))
+    }
+
     @Test fun `a face outside the crop changes nothing, and a failed face detection drops the crop`() {
         val f = noiseFrame(720, 1280)
         val crop = RectPx(304, 366, 358, 716)

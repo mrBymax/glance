@@ -39,6 +39,7 @@ class HeldCropTest : FakeServerTestCase() {
         assertTrue("An upload has no source size: ${views(frames)}", frames.all { it.header.source == SOURCE })
         // A full frame has the size of an upload of before the crop, and it went through face detection.
         for (frame in full) assertEquals(UPLOAD_SIZE, frame.header.w to frame.header.h)
+        assertTrue("A full frame has a context image.", full.all { it.header.contextBytes == null })
         assertTrue("An upload went out with no face detection.", frames.all { it.header.blurred })
         // One full frame each second with no region. A region in the plain scene gives crops, which is no failure.
         assertTrue("${full.size} full frames in $WATCH_MS ms", full.size <= WATCH_MS / FULL_EVERY_MS + 2)
@@ -49,6 +50,7 @@ class HeldCropTest : FakeServerTestCase() {
             val place = checkNotNull(crop.header.crop) { "The crop ${crop.header.seq} has no place." }
             assertEquals("A crop of the stream has the pixels of the frame.", place.w to place.h, crop.header.w to crop.header.h)
             assertTrue("The crop $place is outside the frame.", place.x + place.w <= SOURCE.w && place.y + place.h <= SOURCE.h)
+            assertTrue("The crop ${crop.header.seq} has no context image.", (crop.header.contextBytes ?: 0) > 0)
         }
         assertEquals(StreamStatus.STREAMING, native.stream)
         assertEquals("Error events of the app: ${traffic.nativeErrors}", emptyList<String>(), traffic.nativeErrors.toList())
