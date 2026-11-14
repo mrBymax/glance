@@ -1,5 +1,4 @@
 import type { FastifyBaseLogger } from 'fastify';
-import { TIMING } from '@glance/shared';
 import type { Clock } from '../clock';
 import type { BarcodeReport } from '../products/barcodes';
 import type { StoreList } from '../products/storeList';
@@ -11,8 +10,11 @@ import { type FrameHandler, frameLogLine } from '../ws/device';
 import { matchLabel } from './match';
 import type { LabelAnswer, LabelReader, LabelReference } from './reader';
 
-/** One label call has the time of one recognition call. */
-export const LABEL_TIMEOUT_MS = TIMING.recognitionTimeoutMs;
+/**
+ * A label call carries the still and the reference pictures, so it gets more time than a frame call.
+ * Measured on 2026-11-14: 1.2 to 3.8 s, and 3 of 4 calls ran into the old limit of 4 s while frame calls ran.
+ */
+export const LABEL_TIMEOUT_MS = 8000;
 
 /**
  * A session starts at most one label call in this time. The phone takes at most one still each 6 seconds,

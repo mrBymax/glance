@@ -745,7 +745,7 @@ A store item has a name and a price, and no description of its package. With a c
 
 A frame with the kind `label` is the still of a package that the phone could not read. It goes to one model call, and never to recognition.
 
-- The call uses `GEMINI_API_KEY` and `GEMINI_MODEL`, the instruction `agents/label.md`, a response schema of its own, the default media resolution for the still, one attempt, and a time limit of 4 seconds.
+- The call uses `GEMINI_API_KEY` and `GEMINI_MODEL`, the instruction `agents/label.md`, a response schema of its own, the default media resolution for the still, one attempt, and a time limit of 8 seconds.
 - The call also gets the reference pictures of the store items, when the folder of `REFERENCE_DIR` holds some. See "Reference pictures".
 - The instruction holds the store list in place of `{{storeList}}`: one line for each item, with its `gtin`, its name, and its brand and pack size when the store list or the product cache has them. It holds no price. The server builds the instruction and the schema one time, at its start.
 - The answer is `digits` (a list of digit runs), `brand`, `name`, `packSize`, `confidence`, `item`, and `itemConfidence`. `item` is the `gtin` of the one store item that the package is, or `null`. The schema lets it take only a code of the store list. An answer that fails the schema counts as an empty one.
@@ -841,7 +841,7 @@ The label call with pictures:
 - `agents/label.md` says: a reference picture can show the item from another side or in other light, the background of a reference picture means nothing, and `item` is the product of a reference picture or the match of the store list text. The model reads `digits`, `brand`, and `name` only from the photo to read.
 - `matchLabel` does not change: digits with a right check digit first, then `item` from `LABEL_MIN_CONFIDENCE` on, then the words.
 - Recognition by sight also gets reference pictures, with limits of its own. See "Reference pictures in a frame call".
-- The upload of the pictures is part of the 4 seconds of a label call. With many large pictures on a slow line, a call can fail with `no answer in 4000 ms`. Then remove pictures.
+- The upload of the pictures is part of the 8 seconds of a label call. With many large pictures on a slow line, a call can fail with `no answer in 8000 ms`. Then remove pictures.
 
 Measured in the tests of 2026-11-14: the label call with 3 reference pictures ran with the real model. The calls took 1.4 to 1.9 seconds. `gemini-3.5-flash-lite` takes the media resolution of a part.
 

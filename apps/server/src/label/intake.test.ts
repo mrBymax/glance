@@ -158,8 +158,8 @@ it('drops a label frame of a session that does not shop, with no call', () => {
   handler({ read })(session, { header, jpeg: JPEG });
   expect(read).toHaveBeenCalledTimes(1);
 });
-it('ends a call after 4 seconds, and the read counts as failed', async () => {
-  expect(LABEL_TIMEOUT_MS).toBe(4000);
+it('ends a call after 8 seconds, and the read counts as failed', async () => {
+  expect(LABEL_TIMEOUT_MS).toBe(8000);
   vi.useFakeTimers();
   const call = pending();
   handler(call.reader)(session, { header, jpeg: JPEG });
@@ -168,7 +168,7 @@ it('ends a call after 4 seconds, and the read counts as failed', async () => {
   await vi.advanceTimersByTimeAsync(1);
   expect(call.signals[0]!.aborted).toBe(true);
   expect(inputs).toEqual([{ type: 'label', read: 'started' }, { type: 'label', read: 'failed' }]);
-  expect(lines.join('\n')).toMatch(/label call failed. seq=4 Error: no answer in 4000 ms/);
+  expect(lines.join('\n')).toMatch(/label call failed. seq=4 Error: no answer in 8000 ms/);
 });
 it('aborts the call when the session stops, and gives the rules nothing more', async () => {
   const call = pending();
