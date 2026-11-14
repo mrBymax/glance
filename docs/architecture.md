@@ -30,6 +30,8 @@ flowchart LR
 
   browser["Phone UI in a browser: BrowserBridge"]
   kioskPage["Kiosk page: apps/website, /kiosk"]
+  mirror["Mirror page: apps/website, /mirror"]
+  static["Landing page and privacy page: apps/website"]
   hud["Display HUD mockup: apps/display-pow"]
 
   glasses -- "frames, gyroscope samples, device state" --> app
@@ -42,6 +44,8 @@ flowchart LR
   rest -- "ServerEvent stream" --> browser
   kioskPage -- "POST /api/kiosks" --> rest
   rest -- "KioskEvent stream" --> kioskPage
+  mirror -- "newest session call, snapshot call, speech clips" --> rest
+  rest -- "ServerEvent stream" --> mirror
   hud -- "snapshot call, intent with the source hud" --> rest
   rest -- "ServerEvent stream" --> hud
 
@@ -70,9 +74,9 @@ flowchart LR
 |---|---|---|
 | Contract | `packages/shared` | Each message type as a zod schema, one JSON fixture for each message variant, `TIMING`, the frame codec, and the kiosk code helpers. |
 | Android app | `apps/mobile/android` | Connects to the glasses through the DAT SDK, sends frames and answers to the server, plays the lines, and hosts the phone UI. |
-| Phone UI | `apps/mobile/ui` | Shows the current prompt, the last lines as text, and the cart. It has no network code: each message goes through a `GlanceBridge`. |
-| Server | `apps/server` | Recognizes the product in a frame, runs the cart rules, writes the spoken lines, and runs the checkout with a mock payment. |
-| Website | `apps/website` | The kiosk page shows the code that starts a checkout, and then the cart and the result. |
+| Phone UI | `apps/mobile/ui` | The setup screen links the glasses. The session screen shows the current prompt, the last lines as text, the cart, the pay prompt, the receipt, and the settings. It has no network code: each message goes through a `GlanceBridge`. |
+| Server | `apps/server` | Recognizes the product in a frame, runs the cart rules, writes the spoken lines, answers a question about a product, and runs the checkout with a mock payment. |
+| Website | `apps/website` | The kiosk page shows the code that starts a checkout, and then the cart and the result. The mirror page shows the spoken lines and the cart of one session, and plays the speech clips. The landing page and the privacy page show fixed text and make no call to the server. |
 | Display HUD | `apps/display-pow` | A mockup of the screen for glasses with a display. It shows the pending product, the total, and the last line of one session, and it sends a yes or a no. Without a session it plays a recording. |
 
 Facts that the diagram does not show:
@@ -84,6 +88,8 @@ Facts that the diagram does not show:
 - With `FAKE_SPEECH`, the server makes no ElevenLabs call. Each line has `url: null`, and the phone reads the text with its own voice.
 - Mock glasses are MockDeviceKit of the DAT SDK. The app uses them through `MockGlassesController`.
 - The `EventBus` has one topic for each session and one topic for each kiosk. It delivers inside the server process only.
+- The server checks a token on the device socket and on each path with a session ID. The events stream of a kiosk needs the token of the kiosk. A missing or wrong token gets 401.
+- The server sends two `error` events: `kiosk.busy` for a kiosk that another session holds, and `recognition.slow` after 3 failed recognition calls in a row, which never comes in fake mode. Each other `error` event comes from the Android app, with a code that starts with `native.`.
 
 ### Messages
 
@@ -95,15 +101,16 @@ Facts that the diagram does not show:
 | Android app | Server | Binary message on the device socket | A frame: 4 bytes with the header length, a `FrameHeader` as JSON, and a JPEG |
 | Server | Android app | Text message on the device socket | `ServerToDevice` |
 | Android app, browser | Server | `POST /api/sessions` | `CreateSessionRequest`, answer `CreateSessionResponse` |
-| Android app, browser | Server | `GET /api/sessions/:id` | Answer `SessionSnapshot` |
-| Browser | Server | `POST /api/sessions/:id/intents` | `WebIntentRequest` |
+| Android app, browser, mirror page, Display HUD | Server | `GET /api/sessions/:id` | Answer `SessionSnapshot` |
+| Browser, Display HUD | Server | `POST /api/sessions/:id/intents` | `WebIntentRequest` |
 | Browser | Server | `POST /api/sessions/:id/cart` | `CartEditRequest` |
 | Browser | Server | `PATCH /api/sessions/:id/profile` | `ProfilePatch`, answer `Profile` |
 | Android app, browser | Server | `DELETE /api/sessions/:id` | No body |
-| Server | Browser | `GET /api/sessions/:id/events` | A stream of `ServerEvent` |
+| Server | Browser, mirror page, Display HUD | `GET /api/sessions/:id/events` | A stream of `ServerEvent` |
+| Mirror page | Server | `GET /api/demo/latest` | Answer `LatestSessionResponse`: the ID and the token of the newest live session |
 | Kiosk page | Server | `POST /api/kiosks` | `CreateKioskRequest`, answer `CreateKioskResponse` |
 | Server | Kiosk page | `GET /api/kiosks/:id/events` | A stream of `KioskEvent` |
-| Android app | Server | `GET /api/speech/<hash>.mp3` | Answer: the MP3 of a line |
+| Android app, mirror page | Server | `GET /api/speech/<hash>.mp3` | Answer: the MP3 of a line |
 
 The device socket carries each `ServerEvent` of its session inside the `ServerToDevice` message `event`. The Android app passes it to the page inside the `NativeToPage` message `event`.
 
@@ -173,7 +180,7 @@ Rules of this path:
 
 A result with the status `ambiguous` gives no prompt. The server sends the event `glance.ambiguous` with the candidates and speaks "I cannot tell which oat drink this is. Turn the front to me." If the pending product is one of the candidates, `glance.cleared` comes first, so a yes cannot add it.
 
-With `SECOND_LOOK_WAIT_MS` set on the server, the look-alike line waits for a still. The contract has no message that asks for a still, so the event is the signal for the phone.
+The Android app takes a still photo after each `glance.ambiguous`. The contract has no message that asks for a still, so the event is the signal for the phone. With `SECOND_LOOK_WAIT_MS` above 0 on the server, the look-alike line waits for the result of that still. The default is 0: the line plays at once, and the result of a still counts as the result of a stream frame. The diagram shows a server with a wait.
 
 ```mermaid
 sequenceDiagram
@@ -230,7 +237,7 @@ sequenceDiagram
 - A `speech.final` outside the window that is no command has no effect.
 - In fake mode no call goes to Gemini, and each question gets the answer "I do not have that information."
 
-### Answers from the other inputs
+## Answers from the other inputs
 
 The head is one of four inputs of the Android app. Each other input sends its answer on the same socket.
 
@@ -265,7 +272,7 @@ sequenceDiagram
 - Volume up is a yes and volume down is a no, only when `mainYes` of the profile is `key` and a prompt is current. In each other case the key changes the volume of the phone.
 - Speech needs the microphone permission of the glasses. The app asks for it when the page sets `mainYes` to `voice`, and when the page sends the intent `ask`.
 
-### The fingerprint and the still photo in the Android app
+## The fingerprint and the still photo in the Android app
 
 Two extras have their Android side: the fingerprint above 50 EUR, and the sharp second look. Each one starts with a message of the server.
 
@@ -293,9 +300,7 @@ sequenceDiagram
 
 - A phone with no screen lock and no biometric shows no prompt. The app sends `ok: false`, and the page gets the `error` event `native.biometric_unavailable`.
 - The app closes an open prompt when the checkout ends: at `checkout.cancelled` and at `session.end`.
-- The contract has no request for a still, so the event `glance.ambiguous` is the signal. If face detection fails on the phone, the still does not leave the phone.
-
-The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. The server README lists each rule from R1 to R24.
+- If face detection fails on the phone, the still does not leave the phone.
 
 ## Phases of a session
 
@@ -319,7 +324,7 @@ stateDiagram-v2
 - A new session starts in `shopping` with `cameraOn: false`. The first `device.state` with the stream `streaming` sets `cameraOn`, and the voice says the start line.
 - `resting`: the server sends `session.rest`, and the Android app stops its DAT session. The cart stays. The next `session.start` of the page starts a new DAT session for the same server session.
 - `paid` and `ended`: the server sends `session.end`, and the session runtime stops. The session then takes only `device.state` and `profile.set`. It still answers a snapshot, for the receipt.
-- A `device.state` with the stream `stopped` sets `cameraOn` to false and ends an open checkout. The phase does not become `resting` or `ended`.
+- A `device.state` with the stream `stopped` sets `cameraOn` to false and ends an open checkout, but not in the steps `biometric` and `paying`. The phase does not become `resting` or `ended`.
 - The rules that depend on time alone run before each input. A timer of the `SessionRegistry` sends a `tick` input each second to each session in `shopping` or `checkout`.
 
 The Android app has two sessions. The server session holds the cart and has the phases above. The DAT session holds the camera stream, and a stopped DAT session is final. So one server session can use many DAT sessions: after a rest, a closed hinge, or a lost link.
@@ -374,20 +379,21 @@ stateDiagram-v2
 
 ## Parts that do not exist yet
 
-- The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
-- The Android app has no handler for `biometric.request` and sends no `biometric.result`. So a checkout above 50 EUR ends after 30 seconds with no payment.
-- The Android app takes no still for the event `glance.ambiguous`. So `SECOND_LOOK_WAIT_MS` stays at 0 on the server, and the look-alike line plays at once.
-- No native speaker has read the Italian lines of the server. The products of `apps/server/catalog/catalog.dev.json` have no Italian texts, except the oat drink.
-- The phone UI has an Italian table, and no native speaker has read it. In Italian the page text is Italian. The words of Astryx itself and the debug panel stay English.
-- The Display HUD in `apps/display-pow` is a mockup for a browser and the Display simulator. Nobody checked it in the simulator or on glasses with a display.
+Missing parts:
 
-- No path of the server checks the token of a session or of a kiosk.
-- The server never sends the events `glance.ambiguous`, `budget.exceeded`, and `checkout.spotcheck`. It sends two `error` events: `kiosk.busy` for a kiosk that another session holds, and `recognition.slow` after 3 failed recognition calls in a row, which never comes in fake mode. Each other `error` event comes from the Android app, with a code that starts with `native.`.
-- Nobody has run the touchpad, the voice, and the volume keys with the real glasses. The app has each path, and the tests use mock glasses. With the real glasses a session attaches Speech only after the probe sets `ProbeDecisions.SPEECH` to true.
-- The intent `ask` has no effect on the server.
-- The server never sends `biometric.request`, and it drops `biometric.result`. The Android app has its side of both messages, and its tests use the fake server of the app.
-- The server does not wait for a frame with `kind: still`. The Android app sends a still after each `glance.ambiguous`, and its tests use the fake server of the app.
-- Nobody has put a finger on the payment prompt, and nobody has taken a still with the real glasses.
-- The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
-- The phone UI has the session screen only. No screen shows the pay prompt or the receipt.
-- The server has English lines only.
+- `ProbeDecisions.SPEECH` of the Android app is false until the probe run on the glasses. So a session with the real glasses attaches no Speech and sends no `speech.final`. The voice commands and the spoken question work with mock glasses only.
+- `SECOND_LOOK_WAIT_MS` has the default 0, so the server does not wait for a still. The Android app sends the still in both cases.
+- A browser client has no fingerprint check and no microphone. Its checkout above 50 EUR ends after 30 seconds with no payment, and its question window closes with no question.
+- The Display HUD shows the product prompt, the total, and the last line. It has no view for the pay prompt, the receipt, the look-alike candidates, or the spot check.
+- A snapshot has no field for the spot check, and a `KioskEvent` does not name the product of the spot check.
+- `apps/server/catalog/catalog.json` holds 12 product slots with `FILL_` texts and the price 0. A person must fill them. The default catalog is `catalog.dev.json` with four products.
+- The products of both catalog files have no Italian texts, except the oat drink of `catalog.dev.json`. A product with no Italian text keeps its English text.
+- In the Italian phone UI, the words of Astryx itself and the debug panel stay English. The voice commands stay English in each language.
+
+Checks that nobody did:
+
+- Nobody has run the app with the real glasses. The tests of the head, the touchpad, the voice, the volume keys, and the still photo use mock glasses.
+- Nobody has put a finger on the payment prompt. The tests close the prompt of Android with no finger, or replace it.
+- No native speaker has read the Italian lines of the server or the Italian table of the phone UI.
+- Nobody has checked the Display HUD in the Display simulator or on glasses with a display. The checks ran in a browser.
+- No replay of a frame set has run with the real recognition service, and no test has run the store tests against a MongoDB server.
