@@ -257,7 +257,7 @@ A store item has no description of its package, and a stream frame is small. Wit
 - The pictures are those of `REFERENCE_DIR`. See "Reference pictures" for how to take them.
 - Each picture is one image part at the media resolution `MEDIA_RESOLUTION_LOW` (280 tokens), after the text part `Reference picture of <product ID>: <name>`. Then come the text `The frame`, the frame, and the exclude line. A store item that the catalog holds has the ID and the name of its catalog product.
 - A call with pictures gets the section "Reference pictures" at the end of its instruction. The text is `REFERENCE_RULES` in `src/recognition/prompt.ts`. It says: the last image is the frame, a picture can show another side or other light, a match of shape, colors, and print gives `identified` also when the text is too small to read, a package that is only similar gives `unsure`, and no answer is about a picture alone.
-- For store items that look alike, `agents/recognition.md` and `REFERENCE_RULES` say: name such an item only when the flavor text on the product in the hand is readable, never by a color alone, and answer `ambiguous` with the items that it can be in each other case. The rules then speak the look-alike line, and the phone takes a still. See "Look-alike products".
+- For store items that look alike, `agents/recognition.md` and `REFERENCE_RULES` say: name such an item only when the flavor text on the product in the hand is readable, never by a color alone, and answer `ambiguous` with the items that it can be in each other case. The rules then speak the look-alike line, and a phone with the second look still on takes a still. See "Look-alike products".
 - With no picture, the request and the instruction are those of a server with no reference picture.
 - A frame call gets at most 12 pictures and at most 2 MB of JPEG bytes (`MAX_FRAME_REFERENCES`, `MAX_FRAME_REFERENCE_BYTES`). Each item gets its newest picture before an item gets a second one, in the order of the store list. So 4 items get 3 pictures each, 6 items get 2 each, and 12 items get 1 each. With more than 12 items, only the first 12 items of the store list get a picture, and the log line of the pictures ends with `<n> items with pictures get none in a frame call`.
 - The server sends each picture to the Files API of Gemini one time (`createPictureUploader`), and a frame call holds the address of the file. So a frame call uploads no picture. 3 pictures of 130 kB in each of 7 calls a second would be 27 Mbit/s.
@@ -1153,7 +1153,7 @@ The rules of the guard:
 - A line about a read that failed in the background (`glance.unknown`, `barcode.unreadable`) plays one time for each appearance of a product or a code. The appearance ends when the view was empty for the view time of the rules, 3 seconds: no recognition result with a product or a visible code, no barcode report, and no label frame. A product prompt also ends it. So a product that stays in view gets one such line, and not one line for each still.
 - The sound of a line is a field of its `speak` message. A dropped line sends no message, so its sound does not play.
 - A dropped line is not the last line for `repeat`.
-- An event still goes out when its line is dropped. For example, `glance.ambiguous` still asks the phone for a still.
+- An event still goes out when its line is dropped. For example, `glance.ambiguous` still asks a phone with the second look still on for a still.
 - A rule that speaks one time for each appearance gets a new chance after a drop for the 3 seconds: the lines `checkout.busy`, `checkout.empty`, and `barcode.notInStore`. The phone reports a code that stays in view one time each second, and a later report speaks the line. The `error` event `kiosk.busy` goes out with the line that plays.
 
 ```mermaid
@@ -1279,7 +1279,7 @@ An `ambiguous` result names two or more candidates. The model cannot tell which 
 - If the current prompt is for another product, and that product is in view, the result has no effect.
 - If the current prompt is for another product that left the view, the candidates count as another product. One result has no effect. The second result in a row with the same candidates ends the prompt with `glance.cleared`, and the event and the line follow.
 - With no product prompt, the event `glance.ambiguous` carries the candidates as product references, and the voice speaks the line `glance.ambiguous`. The line has the priority `normal`, no sound, and no interrupt. It is no prompt, so a yes adds nothing.
-- The event goes out with the first result of an appearance. It is the signal for the phone to take a still, and the still is what names the product, so it does not wait.
+- The event goes out with the first result of an appearance. It is the signal for the phone to take a still, and the still is what names the product, so it does not wait. The Android app takes that still only with its setting `Second look still`, which is off by default.
 - The line needs 2 `ambiguous` results in a row with the same candidates, at most 1.5 seconds apart (`ALIKE_WITHIN_MS`). Each other result between them starts the count again, also an `ambiguous` result with other candidates. One blurred frame gets candidates as it gets a wrong name. See R1 in "Rules". An appearance whose first results stood alone gets its line with the first 2 results in a row.
 - One appearance gets one event and one line. Results with the same candidates, each less than 3 seconds after the one before, are one appearance. The order of the candidates does not count. The guard for the voice can drop the line of a new appearance, and the event still goes out.
 - A new product prompt ends the appearance. If the model gives the same `ambiguous` result again after the end of that prompt, a new appearance starts. Its line plays when 20 seconds passed since its last time, and 3 seconds since the last unsolicited line.
@@ -1301,7 +1301,7 @@ sequenceDiagram
   Gemini-->>Server: ambiguous, two candidates
   Server-->>Phone: event glance.ambiguous
   Note over Server: after the second such result in a row, the look-alike line waits, SECOND_LOOK_WAIT_MS
-  Note over Phone: takes a still
+  Note over Phone: takes a still, with the second look still on
   Phone->>Server: frame with kind still
   Server->>Gemini: still, default media resolution
   alt the still names one product
@@ -1321,7 +1321,7 @@ sequenceDiagram
 - Results with the same candidates inside the view time are one appearance: one event, and one line that waits. Other candidates give a new event, and their line waits from the time of that event, after their second result in a row.
 - A session that stops, rests, or waits for a payment drops the line.
 - The worker keeps a still in its own slot, so a stream frame does not replace a still that waits for its call.
-- Set `SECOND_LOOK_WAIT_MS=2500` only when the phone sends stills. With no still, each look-alike line is late by the wait. One test took about 1 second for the capture (spec section 11.1). The recognition call of the still follows, and a call can take 4 seconds at most.
+- Set `SECOND_LOOK_WAIT_MS=2500` only when the phone sends stills. The Android app sends them only with `Second look still` set to `on` in "Glance Mock", or with `glance.secondLookStill=true` in its build. Set both sides together: the phone cannot read the setting of the server. With no still, each look-alike line is late by the wait. One test took about 1 second for the capture (spec section 11.1). The recognition call of the still follows, and a call can take 4 seconds at most.
 - In fake mode the server drops each frame, also a still. With a wait, the look-alike line of the script plays after the wait.
 
 ### Questions about a product

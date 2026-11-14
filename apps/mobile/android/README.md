@@ -186,7 +186,7 @@ Rules of `SessionController`:
 - On a phone with no screen lock and no biometric, the app shows no prompt. It sends `ok: false` and the `error` event `native.biometric_unavailable`.
 - The app closes an open payment prompt when the server sends `checkout.cancelled` or `session.end`, and at `data.delete`. The closed prompt sends `ok: false`. A second `biometric.request` while the prompt is open shows no second prompt. A request while the activity is in the background sends `ok: false`, because the biometric library shows no prompt then. That is also the answer with the screen off or the phone locked: the app shows no notification for it and does not wait.
 - A nod or a shake in the head window of a prompt sends `intent yes` or `intent no` with the source `head` and the ID of the prompt. For a product prompt the window opens while the line still plays, and the answer stops the line. See "Head gestures".
-- The event `glance.ambiguous` of the server makes the app take one still photo with `DatLink.captureStill`: the sharp second look. While a prompt waits for a head answer, this still waits, for 5 seconds at most. See "No still while a prompt waits". `StillPolicy` in `core` allows one capture at a time and one start each 5 seconds in a DAT session. `StillPhoto` crops the photo to its center (80 percent of the width, 70 percent of the height), scales its long side to 1440 pixels at most, pixelates each face, and makes a JPEG of quality 85. The header has `kind: still` and `blurred: true`. If face detection fails, the still is dropped. A still does not pass the upload gate, but it needs an open socket. The log line `still seq=...` has the milliseconds from the event to the upload.
+- With the setting `Second look still` on, the event `glance.ambiguous` of the server makes the app take one still photo with `DatLink.captureStill`: the sharp second look. The setting is off by default, and then the event starts no still. See "The second look still". While a prompt waits for a head answer, this still waits, for 5 seconds at most. See "No still while a prompt waits". `StillPolicy` in `core` allows one capture at a time and one start each 5 seconds in a DAT session. `StillPhoto` crops the photo to its center (80 percent of the width, 70 percent of the height), scales its long side to 1440 pixels at most, pixelates each face, and makes a JPEG of quality 85. The header has `kind: still` and `blurred: true`. If face detection fails, the still is dropped. A still does not pass the upload gate, but it needs an open socket. The log line `still seq=...` has the milliseconds from the event to the upload.
 - The frames of the stream and the stills share one upload number, `seq`, which counts up for the life of the app process.
 - With the socket down for 3 seconds, the phone voice says "Connection lost. Your cart is safe. Glances are paused."
 - With the media volume at 0, no line plays, and each prompt is reported at once.
@@ -291,7 +291,8 @@ The still photo:
 - A region that stays in view asks for 3 stills at most. The scanner can report a region where no barcode is, and each still stalls the motion samples for seconds and can cost one model call of the server. The region asks again after it left the view for more than 600 ms. A `still.request` does not count for this limit.
 - After a still gave a code, its region asks for no other still while it stays in view: the frames cannot read that code, so each still would give the same report again.
 - `LabelPolicy` asks for no still while the upload gate is closed, for example with the socket down or with the glasses off the face. A `still.request` in that time is dropped.
-- `LabelPolicy` asks for no still while a prompt waits for a head answer. That time uses no still gap and none of the 3 stills of a region, and a `still.request` waits for the first frame after it. See "No still while a prompt waits".
+- `LabelPolicy` asks for no still while a prompt waits for a head answer. That time uses no still gap and none of the 3 stills of a region. A `still.request` that meets the prompt, and a region that asks behind it, give no still after the answer: the request is dropped, and the region starts its barcode wait again. See "No still while a prompt waits".
+- A `still.request` that is 3 seconds old when its first frame arrives is dropped (`LabelPolicy.STALE_MS`). A still can stop the frames for that time.
 - The still also needs `StillPolicy`, which it shares with the sharp second look: one capture at a time, and one start each 5 seconds. With a still gap below 5000 ms, the limit of `StillPolicy` is the still gap.
 - `LabelStill` reads the still on the phone first, with the scanner and with OCR. A code of the decoder counts with its check digit, because one still has no second image that can agree. It does not count when the digits under its bars give another code: ML Kit read blurred bars as a wrong code with a right check digit in one test image. Such a still goes to the server. With no decoded code, the digits count when the still holds exactly one code. With no region in the still, only 12 or 13 digits count, because 8 digits in a photo can be a date.
 - A still with a code gives `barcode.seen`, and the still stays on the phone.
@@ -374,11 +375,12 @@ The app asks the glasses for a frame size and a frame rate. A person can change 
 |---|---|---|---|---|
 | The frame size | `Stream quality: <name> <width> x <height>` | `glance.streamQuality` | `HIGH` | `HIGH` 720 x 1280, `MEDIUM` 504 x 896, `LOW` 360 x 640 |
 | The frames each second | `Stream frame rate: <n>` | `glance.streamFps` | `7` | 2, 7, 15, 24, 30 |
+| The still of the sharp second look | `Second look still: <off or on>` | `glance.secondLookStill` | `false` | `false`, `true` |
 
 1. Open "Glance Mock" and go to the group `Stream`, at the end of the list.
 2. Tap an item. Each tap goes to the next value, and from the last value to the first.
 3. Start the camera again: end the session in "Glance" and start a new one.
-4. Read the log: `adb logcat -s Glance`. Each camera start has the line `stream config: quality=<name> fps=<n>`.
+4. Read the log: `adb logcat -s Glance`. Each camera start has the lines `stream config: quality=<name> fps=<n>` and `second look still: <off or on>`.
 
 - The values are the ones that the DAT SDK 1.0.1 accepts: the three constants of `VideoQuality`, and the five values of `StreamConfiguration.frameRate`. `StreamSetup` in `core` has them.
 - The app keeps both values over a restart. They also count for real glasses and for the probe.
@@ -409,6 +411,16 @@ What nobody measured:
 - The frame size of the mock glasses for `MEDIUM` and `LOW`. The mock stream had 720 x 1280 and 30 frames each second for a request of `HIGH` at 7.
 - The distance at which a barcode decodes at 504 x 896 and at 360 x 640.
 - Whether ML Kit finds each face in a frame of 360 x 640. A face that it does not find is not pixelated.
+
+### The second look still
+
+The server sends the event `glance.ambiguous` for products that look alike. A still of that moment has more pixels than a frame, and the server can name the product in it. The server waits for that still only with its setting `SECOND_LOOK_WAIT_MS`, which is 0 by default. The phone cannot read that setting, so the still is a setting of the app.
+
+- The default is off: `glance.ambiguous` starts no still. Set `Second look still` to `on` only for a server with `SECOND_LOOK_WAIT_MS` above 0.
+- Each still stalls the motion samples for seconds, so a nod in that time arrives late or not at all. In the session of 2026-11-14 the phone took 2 such stills, of 2.3 and 4.8 seconds. The second one ran when the prompt of the held product arrived, and the motion samples came back 6.7 seconds after they stopped, 2.7 seconds after the end of the capture.
+- The app reads the setting at each camera start and logs `second look still: off` or `second look still: on`. A running camera keeps its value.
+- The app keeps the value over a restart. The key of `local.properties` sets the value of the build, and from the first tap the value of the menu wins.
+- `SecondLook` in `core` holds the default and the texts. `StillPhotoTest` and one test of `BarcodeScanTest` set the setting to on with `SecondLookRule`.
 
 ## Damaged frames
 
@@ -515,6 +527,7 @@ A head gesture counts only in the head window of a prompt. The window ends `head
 - A sample of the window that arrives late still counts, up to 6 seconds after the end of the window (`HeadInput.LATE_MS`). The stalls of 2026-11-14 took 3 to 12 seconds, so a nod in a long stall can still arrive too late.
 - The time of the window does not run while it is blocked: while the watchdog says `STALLED`, and while the glasses take a still. A block adds 15 seconds to one window at most (`HeadInput.MAX_EXTRA_MS`). Blocked time before the end of the line adds nothing, because the length of the window counts from that end. A block that starts after the end of a window does not open it again.
 - So a prompt whose line ends during a still gets its full head window after the still.
+- A prompt that arrives during a still, or in the stall after it, keeps its head window open through the stall, and the samples of the stall count when they arrive. In the session of 2026-11-14 the line of `p-0003` started 2.8 seconds into a still, and no motion sample arrived for 6.7 seconds. The head window of `p-0003` did not run out: it closed with 0 samples because the server replaced the prompt with `p-0004` for the same product, 33 ms before the samples of the stall arrived. The server keeps such a prompt now (rule R1 in `apps/server/README.md`). Two tests of `HeadInputTest` replay the times of that log with the prompt kept: the nod in the stall is a yes, and the window has its full length after the stall.
 - A new window starts the detector from rest. A movement that started in the window of another prompt is no answer.
 - The window stays open after an answer, until the server ends the prompt or a new prompt replaces it. The server decides if an answer counts.
 - The server has no head window of its own (rule R4 in `apps/server`). It takes a head answer while the prompt is current, up to the head window plus `MAX_EXTRA_MS` plus `LATE_MS` after `prompt.done` on its clock: the last time at which this class can send the answer. For a product prompt with no `prompt.done` yet, it counts that time from the start of the prompt. `HEAD_MAX_EXTRA_MS` and `HEAD_LATE_MS` in `apps/server/src/sessions/answers.ts` repeat the two values, so change them together.
@@ -648,13 +661,21 @@ In that time no still starts:
 
 | Still | What happens |
 |---|---|
-| Label still | `LabelPolicy` asks for none. The time uses no still gap and none of the 3 stills of a region. A `still.request` waits for the first frame after it. |
-| Sharp second look | It waits in `WaitingStills`, for 5 seconds at most. After that the shopper holds something else, and the still is dropped. |
+| Label still | `LabelPolicy` asks for none. The time uses no still gap and none of the 3 stills of a region. A `still.request`, and a region that asks for its still, wait and then give no still. See below. |
+| Sharp second look, with its setting on | It waits in `WaitingStills`, for 5 seconds at most. After that the shopper holds something else, and the still is dropped. |
 | Reference picture | It waits in `WaitingStills`, for 30 seconds at most. |
+
+A label still that waits behind a prompt dies with its reason:
+
+- A `still.request` that meets a prompt is dropped when the prompt gets a head answer, when the prompt ends, and 3 seconds after the request arrived (`LabelPolicy.STALE_MS`). It never becomes a still. The log has `label still dropped: the request is stale`.
+- A region that asks for its still behind a prompt starts its barcode wait again at the same moments. So the first still of a region comes one barcode wait after the answer, and only when the region is still in view. The log has `label still dropped: the region waited behind a prompt`.
+- The reason: the answer gives the product its name, or the shopper put the product down. In the session of 2026-11-14 a `still.request` waited 7 seconds behind two prompts. The phone took its still 47 ms after the nod that added the product, and the label call of that still ended with a line about a code that nobody showed.
+- The server waits 5 seconds for the label frame of its request, and a still takes 2.3 to 4.8 seconds. So a request that is 3 seconds old gives a frame that the server does not wait for.
+- The server also drops a label frame for a product that has its name. See "Label frames" in `apps/server/README.md`.
 
 - A still that waits uses no time of `StillPolicy`.
 - When the wait ends, the session starts one still that waited: the reference picture before the second look.
-- If a prompt starts in the moment between the request of the frame path and the start of the label still, the request goes back to the frame path. That one request can then wait for the still gap of `LabelPolicy`.
+- If a prompt starts in the moment between the request of the frame path and the start of the label still, the still is dropped, with the log line `label still dropped: a prompt waits for its answer`. `LabelPolicy` counted that still, so the next one waits for the still gap.
 - The other direction: a prompt whose line ends while a still runs gets its head window after the still. See "The head window".
 
 ### The answer sound
@@ -683,8 +704,12 @@ Each line has the tag `Glance`. Read them with `adb logcat -s Glance`.
 | `nod rejected (<reason>): ...`, `shake rejected (<reason>): ...` | A pair of opposite strokes ended and was no gesture | The same numbers, and the first rule that failed |
 | `head answer yes: prompt <id>, <ms> ms after the start of its line, <ms> ms after the first candidate`, `head answer no: ...` | The app sends the intent | The first candidate is the first stroke pair of the head window, accepted or rejected. A long time after it is an answer that needed many nods. `no time`: the line did not play, or the head window has no pair. |
 | `prompt line stopped: prompt <id>` | A head gesture answered a prompt whose line still played | |
-| `<label, second look, reference> still waits: a prompt waits for its answer` | A still must wait | |
+| `<second look, reference> still waits: a prompt waits for its answer` | A still must wait | |
 | `<second look, reference> still dropped: it waited too long for a prompt` | The wait took longer than its limit | |
+| `label still dropped: the request is stale` | A `still.request` waited behind a prompt to its answer or its end, or it was 3 seconds old | See "No still while a prompt waits". |
+| `label still dropped: the region waited behind a prompt` | A region asked for its still behind a prompt, and the prompt ended or 3 seconds passed | The region starts its barcode wait again. |
+| `label still dropped: a prompt waits for its answer` | A prompt started between the request of the frame path and the start of the still | |
+| `second look still: <off or on>` | Each camera start | See "The second look still". |
 | `motion recorded: motion/<file> rows=<n>` | A head window ended with "Record motion in sessions" on | |
 | `stream config: quality=<name> fps=<n>` | Each camera start | What the app asks of the stream. See "The stream settings". |
 | `frames damaged=<n> of <m>` | Each 3 seconds with a damaged frame | See "Damaged frames". |
@@ -760,7 +785,7 @@ Do them in this order. Each step needs the log of the phone: `adb logcat -s Glan
 5. Start a session in "Glance" against a server. Answer 5 prompts with one nod each after the line ended, and 5 with one nod at the name of the product. Each one must give the sound `added` at once and one time, `head answer yes` in the log, and the "Added" line of the server with no second sound. A nod during the line must stop the line: the log has `prompt line stopped`. Write down the two times of each `head answer` line.
 6. Answer 10 prompts with a shake. Each one must give the sound `removed` and `head answer no`.
 7. Let 5 prompts pass with no answer while the head looks around and at the product. The log must have no `head answer` line.
-8. Hold a barcode in view while a prompt waits. The log must have `label still waits`, and no `still` line between `head window open` and the answer.
+8. Hold a barcode in view while a prompt waits. The log must have no `still` line between `head window open` and the answer, and no `label still asked` line in the first second after the answer. After the answer it has `label still dropped: the region waited behind a prompt`.
 9. Read the `motion stall` lines of the session. For a nod with no effect, read the lines of its head window: no line of the detector means a movement below the level, and a `rejected` line names the rule.
 10. Read the `intent` lines in the log of the server. A line with `accepted=false` names the reason.
 11. Pull the recordings and replay them. See "Record and replay real motion".
@@ -876,7 +901,7 @@ The top line of the menu shows `NativeState` and `DeviceState` as JSON, live. Th
 | Force | `Meta AI missing`, `Update required`, `Stream error BATTERY_LOW`, `Stream error THERMAL_HOT`. MockDeviceKit has no call for these states, so the debug hooks of `DatLink` make them. |
 | App | `Server URL`. `Drop server link 10 s`: the socket closes and connects again after 10 seconds. `Sensitivity: gentle, normal, firm` for the head gestures. `Use placeholder page`. |
 | Barcode | `Barcode wait (ms)`, `Still gap (ms)`, and `Save barcode waits`: the two times of the label still, from the next camera start. They also count for real glasses. See "The two times of the label still". |
-| Stream | `Stream quality` and `Stream frame rate`: what the app asks of the camera stream, from the next camera start. Each tap goes to the next value. They also count for real glasses. See "The stream settings". |
+| Stream | `Stream quality` and `Stream frame rate`: what the app asks of the camera stream, from the next camera start. `Second look still`: the still for a `glance.ambiguous` event, off by default. Each tap goes to the next value. They also count for real glasses. See "The stream settings". |
 
 The states of the app, and the items that make each one:
 
@@ -953,11 +978,11 @@ flowchart LR
 | `DeviceStatesTest` | The states of the table in "Mock mode for seats without glasses": `NativeState`, the `error` events, and the `device.state` messages for each one. One test pays at a kiosk that declines each payment: `checkout.failed` and its line arrive, the cart stays, and the camera stays on. |
 | `RecognitionSlowTest` | The state "Recognition slow", with the command `slow` of the fake server of the app: the `error` event `recognition.slow` and its line arrive, the placeholder page gets the event, the app sends no error of its own, and the frames go on. |
 | `PaymentPromptTest` | The fingerprint before a payment, which only a server with `BIOMETRIC_ABOVE_CENTS` asks for, with the command `bio` of the fake server of the app. Two tests show the real prompt of Android and close it with no finger: the back key sends `ok: false`, and `checkout.cancelled` closes the prompt. Three tests replace the prompt: a finger that does not match sends nothing and a match sends `ok: true` one time, a phone with no screen lock sends `ok: false` and `native.biometric_unavailable`, and the end of the checkout closes the prompt. |
-| `StillPhotoTest` | The sharp second look, with the command `amb` of the fake server of the app: one still of 576 x 896 pixels goes out with `kind: still` and `blurred: true`, two events within one second give one still, each upload has a number of its own, and a mock nod answers a prompt after a still. |
-| `BarcodeScanTest` | The barcode of a product, with the clips of `make-clips.mjs` and the fake server of the app. The sharp code gives `barcode.seen` with the source `barcode`, then 3 to 5 reports in 3.3 seconds. The digits with no bars, and the sharp digits under blurred bars, never give another code than their own. The kiosk clip gives `kiosk.seen`, no `barcode.seen`, and no still. The blurred bars give one frame with `kind: label`, and no code. With blurred bars in the stream and the sharp code as the still, the phone sends one `barcode.seen` and takes no other still. The command `label` gives a label frame, or `barcode.seen` when the still holds a code that the phone reads. Two commands within one second give one still, and a `label` right after `amb` gives none. |
+| `StillPhotoTest` | The sharp second look, with the command `amb` of the fake server of the app. With the setting off, the event gives no still. With the setting on (`SecondLookRule`): one still of 576 x 896 pixels goes out with `kind: still` and `blurred: true`, two events within one second give one still, each upload has a number of its own, and a mock nod answers a prompt after a still. |
+| `BarcodeScanTest` | The barcode of a product, with the clips of `make-clips.mjs` and the fake server of the app. The sharp code gives `barcode.seen` with the source `barcode`, then 3 to 5 reports in 3.3 seconds. The digits with no bars, and the sharp digits under blurred bars, never give another code than their own. The kiosk clip gives `kiosk.seen`, no `barcode.seen`, and no still. The blurred bars give one frame with `kind: label`, and no code. With blurred bars in the stream and the sharp code as the still, the phone sends one `barcode.seen` and takes no other still. The command `label` gives a label frame, or `barcode.seen` when the still holds a code that the phone reads. Two commands within one second give one still, and a `label` right after `amb` gives none, with the second look still on. |
 | `LabelStillTest` | `LabelStill.read` with no glasses and no server. ML Kit reads the code of `barcode.png`, the blurred bars of `barcode-blurred.png` are one region with no text and the still goes to the server, and `scene.png` becomes a frame of 720 x 1280 pixels. With hits and words that the test gives: a photo of 3000 x 4000 pixels becomes 1200 x 1600 with no crop, a failed face detection drops the still, the digits under a region count and the digits of another product do not, and with no region only 12 or 13 digits count. |
 | `StillPhotoPrepareTest` | `StillPhoto.prepare` with no glasses and no server: a photo of 3000 x 4000 pixels becomes a JPEG of 1234 x 1440 pixels, the face box that the test gives is pixelated, and the stripes outside it stay. A photo with no result of face detection is dropped. |
-| `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items, the Barcode fields, and the Stream items change the stored settings. |
+| `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items, the Barcode fields, the Stream items, and the item of the second look still change the stored settings. |
 | `HapticsTest` | The vibrations of a session, with the fake server of the app and no message of the page: a product prompt gives `prompt`, the add gives `added`, the command `slow` gives `error`, and the command `rest` gives `cameraOff`. With `haptics: false` no vibration plays. |
 | `VolumeKeysTest` | The volume keys with `mainYes: key`: volume up on a product prompt sends `intent yes` with the source `key` and adds the product, volume down sends `intent no`, and the media volume stays at 0. A key that stays down sends one yes. Before the first prompt, after the prompt ended, and with the head as the main yes, the app does not take the key. |
 | `TouchpadInputTest` | The touchpad of the mock glasses: a double tap after a product prompt sends `intent yes` with the source `touch` and the prompt ID, and the server adds the product. A double tap before the first prompt carries no ID and adds nothing. A swipe sends `intent repeat`, and the server sends the line of the prompt again. |
@@ -1142,6 +1167,7 @@ Git ignores `local.properties`. Each key is optional, and each one is also a Gra
 | `glance.labelGapMs` | `6000` | The shortest time in milliseconds between two label stills, as `BuildConfig.LABEL_GAP_MS`. The app keeps it from 2000 to 60000. |
 | `glance.streamQuality` | `HIGH` | The frame size that the app asks of the glasses, as `BuildConfig.STREAM_QUALITY`: `HIGH` (720 x 1280), `MEDIUM` (504 x 896), or `LOW` (360 x 640). Another value stops the build. See "The stream settings". |
 | `glance.streamFps` | `7` | The frames each second that the app asks for, as `BuildConfig.STREAM_FPS`: 2, 7, 15, 24, or 30. The app takes the nearest of these for another number. A value that is no whole number stops the build. |
+| `glance.secondLookStill` | `false` | `true` makes the app take a still for each `glance.ambiguous` event, as `BuildConfig.SECOND_LOOK_STILL`. Another value than `true` or `false` stops the build. See "The second look still". |
 | `glance.demoStoreFile` | `glance-demo.jks` | The keystore of the demo build, as a path from the folder `app` |
 | `glance.demoStorePassword` | empty | The password of the keystore |
 | `glance.demoKeyAlias` | `glance-demo` | The name of the key in the keystore |

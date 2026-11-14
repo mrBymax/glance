@@ -245,7 +245,7 @@ A result with the status `ambiguous` gives no prompt. The server sends the event
 
 A product that comes back after 3 seconds with no result keeps its prompt while the head window of that prompt can be open: `headWindowMs` of the profile after `prompt.done`, or after the start of the prompt. In the session of 2026-11-14 a still stopped the frames for 4.7 seconds. The next result opened a second prompt for the held product, and the nod for the first one was lost.
 
-The Android app takes a still photo after each `glance.ambiguous`. The message `still.request` of the contract asks only for the still of a barcode, so for look-alike products the event is the signal for the phone. With `SECOND_LOOK_WAIT_MS` above 0 on the server, the look-alike line waits for the result of that still. The default is 0: the line plays at once, and the result of a still counts as the result of a stream frame. The diagram shows a server with a wait.
+With its setting `Second look still` on, the Android app takes a still photo after each `glance.ambiguous`. The setting is off by default, because each still stalls the motion samples for seconds and the server waits for this still only with `SECOND_LOOK_WAIT_MS`. The message `still.request` of the contract asks only for the still of a barcode, so for look-alike products the event is the signal for the phone. With `SECOND_LOOK_WAIT_MS` above 0 on the server, the look-alike line waits for the result of that still. The default is 0: the line plays at once, and the result of a still counts as the result of a stream frame. The diagram shows a server with a wait.
 
 ```mermaid
 sequenceDiagram
@@ -259,7 +259,7 @@ sequenceDiagram
   Runtime->>Socket: event glance.ambiguous, through the EventBus
   Note over Runtime: after the second such result in a row, the look-alike line waits in heldAmbiguous
   Socket->>App: event glance.ambiguous
-  Note over App: takes a still
+  Note over App: takes a still, with the second look still on
   App->>Socket: binary frame with kind still
   Socket->>Worker: submit(frame), in the slot for a still
   Worker->>Gemini: generateContent at the default media resolution
@@ -424,7 +424,7 @@ Rules of this path:
 - Each line of the rules goes through one guard, `src/sessions/guard.ts`. A line that answers an action of the shopper always plays, and so do a product prompt, a checkout line, and a state line. Each other line is dropped when a line of the last 20 seconds had its text, or when it comes less than 3 seconds after another unsolicited line. A line about a failed read plays one time for each appearance of a product or a code. The server logs each spoken line and each dropped line. `apps/server/README.md` has the definition and the audit of each line, in "A guard for the voice".
 - One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight speaks no unknown line and no aim hint. The same holds while the server waits for a still that it asked for, and for its label call. The recognition instruction also gives the status `none` to a package shown with its barcode side.
 - A still is the exception, because it stops the head-motion stream of the glasses for seconds (measured: 5.9 seconds, and 10 seconds for a failed capture). The server asks for none while a product prompt is open, none while sight named a product in the last 3 seconds, and none in the 8 seconds after a yes or a no.
-- The phone starts no still while a prompt waits for a head answer: from the start of the line of the prompt to its answer, to its end, or to the end of its head window. The label still waits in `LabelPolicy`, and that time uses no still gap. The sharp second look waits 5 seconds at most, and then the phone drops it. The still of a reference picture waits 30 seconds at most. `HeadInput.holdsStills` is the gate.
+- The phone starts no still while a prompt waits for a head answer: from the start of the line of the prompt to its answer, to its end, or to the end of its head window. That time uses no still gap of `LabelPolicy`. A `still.request` that meets the prompt gives no still: the phone drops it when the prompt gets its answer or ends, and 3 seconds after it arrived. A barcode region that asked behind the prompt starts its barcode wait again. The sharp second look waits 5 seconds at most, and then the phone drops it. The still of a reference picture waits 30 seconds at most. `HeadInput.holdsStills` is the gate.
 - 2 frames with a product that sight cannot name ask for a still, with the limits of a still for a code. The unknown line waits for the still and its label call, and plays only when they gave no product.
 - The phone takes a label still by itself when a barcode region was in view for the barcode wait with no accepted code, and after each `still.request`. It takes at most one each still gap.
 - The label call also gets the reference pictures of the store items: photos that a person took through the glasses before the demo, in the folder of `REFERENCE_DIR`. Each picture is one image part at the low media resolution, after a text part with the code and the name of its item. A call gets the newest 3 pictures of an item, and 24 pictures and 9 MB at most. The server sends each picture to the Files API of Gemini one time, and the label calls and the frame calls of recognition by sight hold the address of the file. `apps/server/README.md` has the capture and the limits, in "Reference pictures".
@@ -540,7 +540,7 @@ sequenceDiagram
 
 ## The fingerprint and the still photo in the Android app
 
-Two extras have their Android side: the fingerprint before a payment, and the sharp second look. Each one starts with a message of the server. The server sends `biometric.request` only with its setting `BIOMETRIC_ABOVE_CENTS`. With no such setting, which is the default, a yes pays each total. The still of a barcode is in "A barcode scan and a label frame". No still starts while a prompt waits for a head answer, because a still stalls the motion samples for seconds.
+Two extras have their Android side: the fingerprint before a payment, and the sharp second look. Each one starts with a message of the server. The second look also needs the setting `Second look still` of the app, which is off by default. The server sends `biometric.request` only with its setting `BIOMETRIC_ABOVE_CENTS`. With no such setting, which is the default, a yes pays each total. The still of a barcode is in "A barcode scan and a label frame". No still starts while a prompt waits for a head answer, because a still stalls the motion samples for seconds.
 
 ```mermaid
 sequenceDiagram
@@ -554,7 +554,7 @@ sequenceDiagram
     Shopper-->>App: fingerprint, face, or screen lock
     App->>Socket: biometric.result with ok true
     Note over App: a cancel and each error of the prompt send ok false
-  else sharp second look
+  else sharp second look, with the second look still on
     Socket->>App: event glance.ambiguous
     Note over App: while a prompt waits for a head answer, the still waits, 5 seconds at most
     Note over App: StillPolicy allows one capture at a time, and one each 5 seconds. The label still shares it
@@ -569,7 +569,7 @@ sequenceDiagram
 - The app closes an open prompt when the checkout ends: at `checkout.cancelled` and at `session.end`.
 - The prompt needs a screen that the shopper sees. With the screen off or the phone locked, the app sends `ok: false` at once.
 - If face detection fails on the phone, the still does not leave the phone.
-- A second look that waited 5 seconds for a prompt is dropped: the shopper holds something else then. The still of a reference picture waits 30 seconds at most, and the label still waits in `LabelPolicy`. `apps/mobile/android/README.md` has the rules, in "No still while a prompt waits".
+- A second look that waited 5 seconds for a prompt is dropped: the shopper holds something else then. The still of a reference picture waits 30 seconds at most. A label still that waited behind a prompt is not taken after the answer. `apps/mobile/android/README.md` has the rules, in "No still while a prompt waits".
 
 ## Phases of a session
 
