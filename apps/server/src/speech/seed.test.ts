@@ -6,14 +6,14 @@ const dev = readCatalogFile('catalog/catalog.dev.json');
 
 it('lists the lines to make in advance, with no duplicate', () => {
   const lines = seedLines(dev);
-  expect(lines).toHaveLength(27 + 3 * dev.length);
+  expect(lines).toHaveLength(30 + 3 * dev.length);
   expect(new Set(lines).size).toBe(lines.length);
   for (const line of ['Oat drink, one litre, one eighty-nine. Nod to add.', 'Oat drink, one litre, one eighty-nine.',
     'Oat drink. One is in your cart. Nod to add another. Shake to remove.', 'Skipped.',
-    'Glasses battery at ten percent.', 'I can see part of it. Turn the front to me.']) expect(lines).toContain(line);
+    'Glasses battery at ten percent.', 'I can see part of it. Turn the front to me.', 'Listening.']) expect(lines).toContain(line);
 });
-it('lists 27 lines for a catalog with no product', () => {
-  expect(seedLines([])).toHaveLength(27);
+it('lists 30 lines for a catalog with no product', () => {
+  expect(seedLines([])).toHaveLength(30);
 });
 it('makes one clip at a time and counts each clip that failed', async () => {
   let running = 0;

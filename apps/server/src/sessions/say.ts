@@ -35,6 +35,10 @@ export const LINE_DEFAULTS: Record<Line['key'], LineDefault> = {
   'device.battery': line('low', false),
   'net.backOnline': line('high', false),
   'recognition.slow': line('high', false),
+  'ask.listening': line('normal', true),
+  'ask.noProduct': line('normal', false),
+  'ask.failed': line('low', false),
+  'ask.answer': line('low', false),
 };
 
 /** Makes the speak effect of a line with the defaults of its key. */

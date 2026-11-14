@@ -151,12 +151,10 @@ it('speaks the total, and says so for an empty cart', () => {
   empty.intent('total', 'voice');
   expect(empty.lines()).toEqual(['checkout.empty']);
 });
-it('speaks the help line, and does nothing for an ask intent', () => {
+it('speaks the help line', () => {
   const h = harness();
   h.intent('help', 'voice');
   expect(h.lines()).toEqual(['info.help']);
-  h.intent('ask', 'touch');
-  expect(h.effects).toEqual([]);
 });
 it('merges a profile patch', () => {
   const h = harness();

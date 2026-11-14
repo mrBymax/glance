@@ -21,6 +21,9 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `agents/recognition.md` (repository root) | The instruction for the recognition model, with the placeholder `{{catalog}}`. |
 | `fixtures/fake-script.json` | The default script of fake recognition. |
 | `scripts/check-model.ts` | `npm run model:check`: a check of the model ID with the real service. |
+| `src/ask/` | The answer to a spoken question about one product. See "Questions about a product". |
+| `agents/answers.md` (repository root) | The instruction for the model that answers a question. |
+| `scripts/check-ask.ts` | `npm run ask:check`: one question to the real service. See "Checks". |
 | `scripts/replay.ts` | `npm run replay`: the accuracy of the real service on a folder of frames. See "Replay a test set". |
 | `scripts/smoke.ts` | `npm run smoke`: a check of a running server through its REST paths, its device socket, and its events stream. See "Checks". |
 | `src/sessions/` | The cart rules as the pure function `step`, the session runtime, and the registry. See "Rules" and "Session runtime". |
@@ -85,7 +88,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 
 - An empty value counts as not set.
 - The flag `--fake` turns both fake switches on. A variable that is set wins over the flag.
-- Each path is relative to the working directory, which is `apps/server`. The server also reads `../../agents/recognition.md` from there when recognition is real.
+- Each path is relative to the working directory, which is `apps/server`. The server also reads `../../agents/recognition.md` and `../../agents/answers.md` from there when recognition is real.
 - With a missing key the server prints `config: <message>` and exits with code 1. The message names the variable and the switch that removes the need.
 - With `MONGODB_URI` the products come from the database, and `CATALOG_PATH` has no effect. If the database holds no product, the server prints `products is empty. Run npm run catalog:seed.` and exits with code 1. See "Catalog" for the seed.
 
@@ -96,6 +99,7 @@ Two switches let the other apps work with no key. `npm run dev:fake` turns both 
 `FAKE_RECOGNITION`:
 
 - The server makes no Gemini call and does not read `GEMINI_API_KEY`.
+- A question about a product gets the answer "I do not have that information.", or "Non ho questa informazione." for the profile language `it`.
 - One script player runs for each session. It starts when the phone opens the device socket, or when the first client opens the events stream of the session, whichever comes first.
 - Each 500 ms the player gives the rules the result that the script holds for the time since its start. Outside each step the result is `none`.
 - A session that starts from the events stream, with no phone, first gets the state of glasses that stream. A browser client then gets the "Camera on" caption. A phone that opens its socket to this session later hears "Back online.", because the session already has a device state.
@@ -361,7 +365,7 @@ flowchart LR
   input["RuleInput with now"] --> step
   state["SessionState"] --> step
   step --> next["new SessionState"]
-  step --> effects["Effect list: event, speak, session.rest, session.end, payment.start"]
+  step --> effects["Effect list: event, speak, session.rest, session.end, payment.start, ask"]
 ```
 
 | File in `src/sessions` | Content |
@@ -371,7 +375,8 @@ flowchart LR
 | `glance.ts` | Recognition results: the glance prompt, the unknown line, the look-alike answer, and the aim hint |
 | `answers.ts` | The answers: yes, no, undo, the cart edit, and `accepts`, which tells if an answer counts |
 | `checkout.ts` | The kiosk code, the pay prompt, and the result of the payment |
-| `general.ts` | The device state, the profile patch, and the intents stop, repeat, total, cart, and help |
+| `general.ts` | The device state, the profile patch, and the intents stop, repeat, total, cart, help, and ask |
+| `ask.ts` | The question window, the product that a question is about, and the answer line |
 | `say.ts` | The priority, the sound, and the interrupt value of each line |
 | `view.ts` | `inView`, `excludeList` for the recognition worker, and `toSnapshot` for a client that connects |
 | `warnings.ts` | `warningsFor`: the allergen and diet warnings of a product for one profile |
@@ -396,6 +401,7 @@ The rules that exist:
 - An undo removes the last added unit that the cart still holds (R12). A cart edit sets the quantity of a cart line from 0 to 99.
 - An add that crosses the budget of the profile warns one time. See "Budget guard".
 - A yes or a no with no valid target gets one hint, if a prompt finished in the last 15 seconds (R20). Silence adds nothing (R21).
+- A double tap with no current prompt opens the question window in place of that hint. See "Questions about a product".
 - A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code. With its line, a busy kiosk also gives the event `error` with the code `kiosk.busy`.
 - A yes pays only as an answer to the pay prompt (R16). The effect `payment.start` asks the runtime for the payment, and the input `payment.result` brings its result.
 - A product held up during a checkout suspends it. The pay prompt returns with the new total when the product has left the view and the code is in view (R17).
@@ -435,6 +441,47 @@ An `ambiguous` result names two or more candidates. The model cannot tell which 
 - The line names the words that end each spoken name: "I cannot tell which oat drink this is. Turn the front to me." Names with no common last word give "I cannot tell if this is oat drink or rye bread. Turn the front to me.", with the first two candidates.
 - The line and the event say no price.
 - The default script of fake mode has such a result at second 33.
+
+### Questions about a product
+
+The shopper asks a question about one product, and a text call of the model answers it from the catalog data of that product. The rules are in `src/sessions/ask.ts`, and the call is in `src/ask`.
+
+```mermaid
+sequenceDiagram
+  participant Phone
+  participant Socket as Device socket
+  participant Runtime as SessionRuntime
+  participant Rules as step
+  participant Gemini
+  Phone->>Socket: intent ask, or a double tap with no current prompt
+  Socket->>Runtime: dispatch(intent)
+  Runtime->>Rules: step
+  Rules-->>Runtime: askUntil is now plus 10 seconds, speak "Listening."
+  Runtime->>Socket: speak "Listening."
+  Phone->>Socket: speech.final that is no command
+  Socket->>Runtime: dispatch(question)
+  Runtime->>Rules: step
+  Rules-->>Runtime: effect ask with the question and the product
+  Runtime->>Gemini: generateContent with agents/answers.md, the question, and the data of the product
+  Gemini-->>Runtime: text
+  Runtime->>Rules: step with the input answer
+  Rules-->>Runtime: speak with the answer
+  Runtime->>Socket: speak with the answer
+```
+
+- The question window opens for 10 seconds (`ASK_WINDOW_MS`) with the line "Listening." Two inputs open it: the intent `ask` from each source, and a yes from the touchpad while no prompt is current.
+- The intent `ask` needs no prompt ID, and a current prompt stays current. The microphone button of the phone UI sends it.
+- A double tap still answers a current prompt. After an add, the first double tap gets the hint of R10, and a later one opens the window.
+- The device socket turns a `speech.final` that is no command, with a confidence of 0.5 or more, into the input `question`. A command word stays a command, also inside the window.
+- A question outside the window has no effect. A question inside it closes the window.
+- The question is about the product of the current prompt. With no product prompt it is about the product in view that was seen last. With no product in view it is about the product of the last add. With no such product the voice says "Hold a product up, then ask."
+- The runtime gives the call 4 seconds (`ASK_TIMEOUT_MS`). An answer gets the line `ask.answer` with its text, at the priority `low`. A failed or late call gets "I could not answer that."
+- The request names the language of the profile, the question, and one product as JSON: `name`, `brand`, `packSize`, `price`, `allergens`, `vegan`, and `vegetarian`. It holds no other product and no image.
+- `agents/answers.md` tells the model to answer only from that data, to say "I do not have that information." when the data does not hold the answer, and never to say that a product is safe.
+- `answerQuestion` cuts the answer at a sentence end to 200 characters or fewer.
+- The call uses `GEMINI_API_KEY` and `GEMINI_MODEL`. It makes one attempt and sets no response schema.
+- With real speech, each new answer text is one ElevenLabs call.
+- A browser client has no microphone. Its question window closes after 10 seconds with no question.
 
 ### Budget guard
 
@@ -503,6 +550,7 @@ Only the server computes a total, and each price comes from the catalog. Each ti
 - A line gets its text at once. Then it waits in the outbox of the session for its clip. The outbox sends one message at a time, so the phone gets the lines in the order of the rules, also when an early clip is slow.
 - Each line goes to the phone as `speak` and to the bus as a `caption` event with the same ID (`s-1`, `s-2`). If the clip fails, the line goes out with `url: null`.
 - The effect `payment.start` starts the mock payment. After each step, the kiosk service reads the checkout of the session and updates the kiosk.
+- The effect `ask` starts the text call for a question. The runtime dispatches the input `answer` with the text, or with `null` after a failure or after 4 seconds. A stopped session gets no answer.
 - The runtime keeps the last 20 captions for the snapshot.
 - With no phone attached, the runtime drops the device messages. Events and captions still go to the bus.
 - After a step with an event, and after a profile patch, the runtime writes the session to the store. `dispatch` does not wait for the write. A sighting alone writes nothing.
@@ -606,7 +654,7 @@ The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2.
 - On open, the server sends a `snapshot`. Then it sends each event of the session as `event`, and each line as `speak`. A phone that comes back hears "Back online." after the snapshot.
 - One phone holds a session. A second socket for the same session takes over, and the server closes the older one. No message goes to both.
 - `intent`, `prompt.done`, `device.state`, `cart.edit`, and `profile.set` go to the rules. After `profile.set` the phone gets a new `snapshot`.
-- `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished.
+- `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished. Each other text becomes the input `question`.
 - A binary message is a frame. A frame that decodes goes to the recognition worker of the session, or to the log line of fake recognition. The server logs a frame that does not decode and drops it.
 - The server logs and drops a text message that is no `DeviceToServer`. The socket stays open.
 - `kiosk.seen` goes to the kiosk service. `biometric.result` has no effect yet.
@@ -647,15 +695,19 @@ The store tests of `src/db/mongo.test.ts` need a MongoDB server. Without `MONGOD
 MONGODB_URI_TEST=<connection string> npm test --workspace @glance/server -- mongo
 ```
 
-Two checks call a vendor, cost money, and are not part of the tests. Run each one by hand, one time:
+Three checks call a vendor, cost money, and are not part of the tests. Run each one by hand, one time:
 
 ```bash
 # The model ID, with no cost. With a JPEG path it also makes one recognition call.
 npm run model:check --workspace @glance/server -- <frame.jpg>
 # Expected: "model: <name>", then a result with "status", and "ms:" under 4000.
+
+# One question about one catalog product: one text call.
+npm run ask:check --workspace @glance/server -- oat-drink-1l "Does it contain nuts?"
+# Expected: "answer:" with one or two sentences that name gluten and do not say that the product is safe, and "ms:" under 4000.
 ```
 
-`model:check` reads `apps/server/.env`. To read another file, run `npx tsx --env-file=<file> scripts/check-model.ts <frame.jpg>` in `apps/server`. The fake switches have no effect on this command.
+`model:check` and `ask:check` read `apps/server/.env`. To read another file, run `npx tsx --env-file=<file> scripts/check-model.ts <frame.jpg>` or `npx tsx --env-file=<file> scripts/check-ask.ts <productId> "<question>" [en|it]` in `apps/server`. The fake switches have no effect on these commands.
 
 ### Smoke check of a running server
 

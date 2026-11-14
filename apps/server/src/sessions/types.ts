@@ -25,7 +25,8 @@ export type Line =
   | { key: 'info.help' }
   | { key: 'device.cameraOff' } | { key: 'device.regularCheckout' } | { key: 'device.paused' }
   | { key: 'device.battery'; percent: 20 | 10 }
-  | { key: 'net.backOnline' } | { key: 'recognition.slow' };
+  | { key: 'net.backOnline' } | { key: 'recognition.slow' }
+  | { key: 'ask.listening' } | { key: 'ask.noProduct' } | { key: 'ask.failed' } | { key: 'ask.answer'; text: string };
 
 /** doneAt is the time when the phone reported the end of the clip, or null while the clip plays. */
 export type PromptState =
@@ -69,6 +70,8 @@ export type SessionState = {
   /** R18. */
   mutedKioskId: string | null;
   checkout: CheckoutState | null;
+  /** The end of the question window, or null while the server waits for no question. */
+  askUntil: number | null;
   /** The last product or kiosk in view (R22). */
   lastTargetAt: number;
   /** For the repeat intent. */
@@ -92,7 +95,11 @@ export type RuleInputBody =
   /** 3 recognition calls in a row failed. */
   | { type: 'recognition.slow' }
   /** The device socket of the session opened. */
-  | { type: 'socket.open' };
+  | { type: 'socket.open' }
+  /** Speech of the shopper that is no command. */
+  | { type: 'question'; text: string }
+  /** The answer to the last `ask` effect, or null when no answer came. */
+  | { type: 'answer'; text: string | null };
 export type RuleInput = RuleInputBody & { now: number };
 
 export type SpeakEffect = {
@@ -104,6 +111,8 @@ export type Effect =
   | SpeakEffect
   | { type: 'session.rest' }
   | { type: 'session.end' }
-  | { type: 'payment.start'; kiosk: KioskRef; totalCents: number };
+  | { type: 'payment.start'; kiosk: KioskRef; totalCents: number }
+  /** The runtime asks the model and answers with an `answer` input. */
+  | { type: 'ask'; question: string; product: Product };
 
 export type RuleContext = { catalog: CatalogIndex };

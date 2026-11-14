@@ -1,4 +1,5 @@
 import { type IntentSource, type Product, TIMING, cartTotalCents, localize } from '@glance/shared';
+import { openAskWindow } from './ask';
 import { afterCartChange, cancelCheckout, isPaying, startPayment } from './checkout';
 import { say } from './say';
 import { type Turn, emit, speak } from './turn';
@@ -64,7 +65,16 @@ export function onAnswer(turn: Turn, kind: 'yes' | 'no', source: IntentSource, p
     } else if (!s.lastAdd.hinted) {
       s.lastAdd.hinted = true;
       speak(turn, say({ key: 'hint.holdAgainForAnother' }));
+    } else if (source === 'touch' && s.prompt === null) {
+      // R10 gave its hint for this add, so a later double tap means "listen".
+      openAskWindow(turn);
     }
+    return;
+  }
+
+  // Spec section 16: a double tap means "listen" when no prompt waits. This replaces the hint of R20 for that case.
+  if (kind === 'yes' && source === 'touch' && s.prompt === null) {
+    openAskWindow(turn);
     return;
   }
 

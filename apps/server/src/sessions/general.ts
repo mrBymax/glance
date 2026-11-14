@@ -1,4 +1,5 @@
 import { type DeviceState, type IntentKind, TIMING } from '@glance/shared';
+import { openAskWindow } from './ask';
 import { closeCheckout, isPaying } from './checkout';
 import { say } from './say';
 import { type Turn, emit, emitSessionState, itemCount, speak } from './turn';
@@ -82,7 +83,7 @@ export function onProfileSet(turn: Turn, input: Extract<RuleInput, { type: 'prof
   turn.s.profile = { ...turn.s.profile, ...input.patch };
 }
 
-/** The intents that are no answer to a prompt. The intent `ask` has no effect yet. */
+/** The intents that are no answer to a prompt. */
 export function onGeneralIntent(turn: Turn, kind: Exclude<IntentKind, 'yes' | 'no' | 'undo'>): void {
   const { s } = turn;
   switch (kind) {
@@ -107,7 +108,9 @@ export function onGeneralIntent(turn: Turn, kind: Exclude<IntentKind, 'yes' | 'n
     case 'help':
       speak(turn, say({ key: 'info.help' }));
       return;
+    // The microphone button of the page. A current prompt stays current.
     case 'ask':
+      openAskWindow(turn);
       return;
   }
 }

@@ -1,4 +1,5 @@
-import type { Caption, KioskRef, Lang, ServerToDevice, SessionSnapshot } from '@glance/shared';
+import type { Caption, KioskRef, Lang, Product, ServerToDevice, SessionSnapshot } from '@glance/shared';
+import { ASK_TIMEOUT_MS } from '../ask/ask';
 import { type EventBus, sessionTopic } from '../bus';
 import type { CatalogIndex } from '../catalog/catalog';
 import type { Clock } from '../clock';
@@ -19,6 +20,8 @@ export type RuntimeDeps = {
   /** The address of the speech clip, or null when no clip exists. */
   clipUrl: (text: string, lang: Lang) => Promise<string | null>;
   startPayment: (session: SessionRuntime, kiosk: KioskRef, totalCents: number) => void;
+  /** Answers a question about one product. A call that fails rejects. */
+  ask: (question: string, product: Product, lang: Lang) => Promise<string>;
   /** Runs after each step, with the state from before the step. */
   afterStep: (session: SessionRuntime, before: SessionState) => void;
 };
@@ -87,6 +90,9 @@ export class SessionRuntime {
           break;
         case 'payment.start':
           this.deps.startPayment(this, effect.kiosk, effect.totalCents);
+          break;
+        case 'ask':
+          this.ask(effect.question, effect.product);
           break;
       }
     }
@@ -183,6 +189,22 @@ export class SessionRuntime {
       this.captions.push(caption);
       if (this.captions.length > KEPT_CAPTIONS) this.captions.shift();
       this.deps.bus.publish(sessionTopic(this.id), { type: 'caption', ...caption });
+    });
+  }
+
+  /** Gives the rules the answer, or null when the call fails or takes longer than its limit. */
+  private ask(question: string, product: Product): void {
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), ASK_TIMEOUT_MS);
+    });
+    const answer = this.deps.ask(question, product, this.state.profile.lang).catch((error) => {
+      console.error(`session ${this.id}: no answer to a question:`, error);
+      return null;
+    });
+    void Promise.race([answer, late]).then((text) => {
+      clearTimeout(timer);
+      if (!this.hasStopped) this.dispatch({ type: 'answer', text });
     });
   }
 

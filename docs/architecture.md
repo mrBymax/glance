@@ -45,7 +45,8 @@ flowchart LR
   socket -- "frames" --> recognition
   recognition -- "one JPEG for each call" --> gemini
   recognition -- "recognition result" --> runtime
-  socket -- "intent, prompt.done, device.state, cart.edit, profile.set" --> runtime
+  runtime -- "a question with the data of one product" --> gemini
+  socket -- "intent, prompt.done, device.state, cart.edit, profile.set, question" --> runtime
   rest -- "intent, cart.edit, profile.set" --> runtime
   socket -- "kiosk.seen" --> kiosks
   kiosks -- "kiosk.seen with the kiosk, payment.result" --> runtime
@@ -168,6 +169,34 @@ Rules of this path:
 A result with the status `ambiguous` gives no prompt. The server sends the event `glance.ambiguous` with the candidates and speaks "I cannot tell which oat drink this is. Turn the front to me." If the pending product is one of the candidates, `glance.cleared` comes first, so a yes cannot add it.
 
 The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. When an add takes the total over the budget of the profile, the event `budget.exceeded` follows `cart.updated`, and the added line has the sound `warning`. The server README lists each rule from R1 to R24.
+
+## A question about a product
+
+The intent `ask` opens a question window of 10 seconds, and the voice says "Listening." The microphone button of the page sends that intent. A yes from the touchpad with no current prompt opens the window too.
+
+```mermaid
+sequenceDiagram
+  participant App as Android app
+  participant Socket as Device socket
+  participant Runtime as SessionRuntime
+  participant Gemini
+
+  App->>Socket: intent ask
+  Socket->>Runtime: dispatch(intent)
+  Runtime->>Socket: speak "Listening."
+  App->>Socket: speech.final with a text that is no command
+  Socket->>Runtime: dispatch(question)
+  Note over Runtime: step selects the product and gives the effect ask
+  Runtime->>Gemini: generateContent with the question and the data of that product
+  Gemini-->>Runtime: text
+  Note over Runtime: dispatch(answer), with null after a failure or after 4 seconds
+  Runtime->>Socket: speak with the answer, or "I could not answer that."
+```
+
+- The question is about the product of the current prompt, else the product in view, else the product of the last add. With no such product the voice says "Hold a product up, then ask."
+- The model gets the name, the brand, the pack size, the price, the allergens, and the diet fields of that one product. It gets no frame. Its instruction is `agents/answers.md`.
+- A `speech.final` outside the window that is no command has no effect.
+- In fake mode no call goes to Gemini, and each question gets the answer "I do not have that information."
 
 ## Phases of a session
 

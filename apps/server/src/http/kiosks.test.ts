@@ -199,7 +199,7 @@ it('shows idle again after the result time', async () => {
   const payments = createPayments({ store, clock: systemClock, kiosks, delayMs: 10 });
   const registry = new SessionRegistry({
     clock: systemClock, catalog: indexCatalog(products), store, bus, clipUrl: async () => null,
-    startPayment: payments, afterStep: (session, before) => kiosks.sync(session, before),
+    startPayment: payments, ask: async () => '', afterStep: (session, before) => kiosks.sync(session, before),
   });
   const { kioskId, code } = await kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
   const views: KioskEvent[] = [];

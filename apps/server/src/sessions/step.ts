@@ -1,5 +1,6 @@
 import { EMPTY_CART, type Profile, TIMING } from '@glance/shared';
 import { onAnswer, onCartEdit, onPromptDone, onUndo } from './answers';
+import { expireAskWindow, onAnswerText, onQuestion } from './ask';
 import { expireCheckout, onKioskSeen, onPaymentResult } from './checkout';
 import { onDeviceState, onGeneralIntent, onProfileSet, onRecognitionSlow, onSocketOpen, restWhenIdle } from './general';
 import { onRecognition } from './glance';
@@ -29,6 +30,7 @@ export function createSessionState(profile: Profile, now: number): SessionState 
     kioskSeen: null,
     mutedKioskId: null,
     checkout: null,
+    askUntil: null,
     lastTargetAt: now,
     lastSpeak: null,
     device: null,
@@ -83,6 +85,12 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
     case 'socket.open':
       onSocketOpen(turn);
       break;
+    case 'question':
+      onQuestion(turn, input);
+      break;
+    case 'answer':
+      onAnswerText(turn, input);
+      break;
     case 'tick':
       break;
   }
@@ -131,5 +139,6 @@ function expire(turn: Turn): void {
   }
 
   expireCheckout(turn);
+  expireAskWindow(turn);
   restWhenIdle(turn);
 }

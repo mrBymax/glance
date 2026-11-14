@@ -185,4 +185,8 @@ export const LINES_EN: LineTemplates = {
   'device.battery': (line, profile) => `Glasses battery at ${numberToWords(line.percent, profile.lang)} percent.`,
   'net.backOnline': () => 'Back online.',
   'recognition.slow': () => 'Recognition is slow right now.',
+  'ask.listening': () => 'Listening.',
+  'ask.noProduct': () => 'Hold a product up, then ask.',
+  'ask.failed': () => 'I could not answer that.',
+  'ask.answer': (line) => line.text,
 };

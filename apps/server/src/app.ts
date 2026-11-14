@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import { formatKioskCode } from '@glance/shared';
+import { type Lang, formatKioskCode } from '@glance/shared';
 import { EventBus } from './bus';
 import type { CatalogIndex } from './catalog/catalog';
 import type { Clock } from './clock';
@@ -17,6 +17,7 @@ import type { Recognizer } from './recognition/gemini';
 import { createFrameHandler, saveFrameWith } from './recognition/intake';
 import type { FrameSaver } from './recognition/save';
 import { SessionRegistry } from './sessions/registry';
+import type { RuntimeDeps } from './sessions/runtime';
 import { ClipCache } from './speech/clips';
 import type { Synthesize } from './speech/elevenlabs';
 import { createClipUrl } from './speech/service';
@@ -30,6 +31,8 @@ export type AppDeps = {
   recognizer?: Recognizer;
   /** Makes the speech clips. Without it, and with FAKE_SPEECH, each line goes out with no clip. */
   synthesize?: Synthesize;
+  /** Answers a spoken question about a product. Fake recognition does not use it. */
+  ask?: RuntimeDeps['ask'];
   /** Gets each frame of each phone, in place of the recognizer. With neither, the server drops the frames. */
   onFrame?: FrameHandler;
   /** Writes each frame to disk. Only main.ts makes one, and only with SAVE_FRAMES. Without it the server stores no frame. */
@@ -54,6 +57,9 @@ declare module 'fastify' {
 
 /** The kiosk that the fake server has from its start. A printed "GL1 K3X7" code then starts a checkout. */
 const FAKE_KIOSK = { name: 'Checkout 3', store: 'Demo Market', code: 'K3X7' };
+
+/** With fake recognition no model answers a question, so each question gets this line. */
+const FAKE_ANSWER: Record<Lang, string> = { en: 'I do not have that information.', it: 'Non ho questa informazione.' };
 
 /** The body of a request with the JSON content type and a text that is no JSON. */
 const NOT_JSON = Symbol('not JSON');
@@ -126,6 +132,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const clips = new ClipCache(config.speechCacheDir, deps.store);
   const kiosks = new KioskService({ store: deps.store, bus, clock: deps.clock });
   const payments = createPayments({ store: deps.store, clock: deps.clock, kiosks, delayMs: config.paymentDelayMs });
+  let ask: RuntimeDeps['ask'];
+  if (fakeScript !== null) ask = async (_question, _product, lang) => FAKE_ANSWER[lang];
+  else ask = deps.ask ?? (async () => { throw new Error('The server has no answer service.'); });
   const sessions = new SessionRegistry({
     clock: deps.clock,
     catalog: deps.catalog,
@@ -141,6 +150,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       log: (line) => app.log.warn(line),
     }),
     startPayment: payments,
+    ask,
     afterStep: (session, before) => kiosks.sync(session, before),
   });
   app.decorate('bus', bus);

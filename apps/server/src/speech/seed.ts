@@ -12,6 +12,7 @@ const FIXED_KEYS: readonly FixedKey[] = [
   'checkout.empty', 'checkout.busy', 'checkout.cancelled', 'checkout.failed',
   'info.help', 'device.cameraOff', 'device.regularCheckout', 'device.paused',
   'net.backOnline', 'recognition.slow',
+  'ask.listening', 'ask.noProduct', 'ask.failed',
 ];
 
 const AIM_HINTS = ['left', 'right', 'up', 'down', 'closer', 'farther', 'turn'] as const;
