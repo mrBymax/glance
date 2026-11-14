@@ -16,6 +16,7 @@ flowchart LR
   subgraph phone["Phone"]
     app["Android app: apps/mobile/android"]
     page["Phone UI in the WebView: apps/mobile/ui"]
+    service["SessionService: foreground service with a wake lock and the notification"]
   end
 
   subgraph server["Server: apps/server"]
@@ -40,6 +41,8 @@ flowchart LR
   glasses -- "frames, motion samples (gyroscope and accelerometer), device state" --> app
   page -- "PageToNative" --> app
   app -- "NativeToPage" --> page
+  app -- "sessionActive, and the texts of the notification" --> service
+  service -- "Stop camera, from the notification" --> app
   app -- "DeviceToServer, binary frames" --> socket
   socket -- "ServerToDevice" --> app
   app -- "session calls, speech clips" --> rest
@@ -85,8 +88,8 @@ flowchart LR
 | Part | Folder | Task |
 |---|---|---|
 | Contract | `packages/shared` | Each message type as a zod schema, one JSON fixture for each message variant, `TIMING`, the frame codec, the kiosk code helpers, and the GTIN helpers. |
-| Android app | `apps/mobile/android` | Connects to the glasses through the DAT SDK, sends frames and answers to the server, reads the barcode of a product, plays the lines, and hosts the phone UI. |
-| Phone UI | `apps/mobile/ui` | The setup screen links the glasses. The session screen shows the current prompt, the last lines as text, the cart, the pay prompt, the receipt, and the settings. It has no network code: each message goes through a `GlanceBridge`. |
+| Android app | `apps/mobile/android` | Connects to the glasses through the DAT SDK, sends frames and answers to the server, reads the barcode of a product, plays the lines, selects the vibrations, and hosts the phone UI. Its foreground service keeps a session alive with the screen off. |
+| Phone UI | `apps/mobile/ui` | The setup screen links the glasses and asks for the camera and for notifications. The session screen shows the current prompt, the last lines as text, the cart, the pay prompt, the receipt, and the settings. It has no network code: each message goes through a `GlanceBridge`. |
 | Server | `apps/server` | Recognizes the product in a frame, finds the product of a barcode, runs the cart rules, writes the spoken lines, answers a question about a product, and runs the checkout with a mock payment. |
 | Website | `apps/website` | The kiosk page shows the code that starts a checkout, and then the cart and the result. The mirror page shows the spoken lines and the cart of one session, and plays the speech clips. The landing page and the privacy page show fixed text and make no call to the server. |
 | Display HUD | `apps/display-pow` | A mockup of the screen for glasses with a display. It shows the pending product, the total, and the last line of one session, and it sends a yes or a no. Without a session it plays a recording. |
@@ -100,6 +103,7 @@ Facts that the diagram does not show:
 - With `FAKE_PRODUCT_INFO`, the server makes no call to Open Food Facts. The details of a scanned product come from fixture files. The flag `--fake` turns the three fake switches on.
 - With `FAKE_SPEECH`, the server makes no ElevenLabs call. Each line has `url: null`, and the phone reads the text with its own voice.
 - Mock glasses are MockDeviceKit of the DAT SDK. The app uses them through `MockGlassesController`.
+- A session needs the page only for the taps of the shopper. The frames, the answers of the head, the lines, the sounds, and the vibrations do not go through the page, so they continue while the screen is off. See "A session with the screen off".
 - The `EventBus` has one topic for each session and one topic for each kiosk. It delivers inside the server process only.
 - The server checks a token on the device socket and on each path with a session ID. The events stream of a kiosk needs the token of the kiosk. A missing or wrong token gets 401.
 - The server sends two `error` events: `kiosk.busy` for a kiosk that another session holds, and `recognition.slow` after 3 failed recognition calls in a row, which never comes in fake mode. Each other `error` event comes from the Android app, with a code that starts with `native.`.
@@ -483,12 +487,55 @@ sequenceDiagram
 
 - A double tap carries the ID of the last finished prompt, also after that prompt ended, and the server decides if it counts. A swipe sends `intent repeat` with the source `touch`, and the server sends its last line again.
 - The app sends each final speech result as `speech.final` and maps no word to an intent. The server drops a result with a confidence below 0.5 and a text that is no command.
-- Volume up is a yes and volume down is a no, only when `mainYes` of the profile is `key` and a prompt is current. In each other case the key changes the volume of the phone.
+- Volume up is a yes and volume down is a no, only when `mainYes` of the profile is `key` and a prompt is current. In each other case the key changes the volume of the phone. The keys reach the app only while its screen shows, so they are no input with the screen off.
 - Speech needs the microphone permission of the glasses. The app asks for it when the page sets `mainYes` to `voice`, and when the page sends the intent `ask`.
+
+## A session with the screen off
+
+A shop continues when the shopper presses the power button and puts the locked phone in a pocket. The app does not keep the screen on, and it has no pocket mode. `SessionService` of the Android app is a foreground service with the types `connectedDevice` and `mediaPlayback`. It holds a partial wake lock and the notification while `SessionController.sessionActive` is true.
+
+```mermaid
+sequenceDiagram
+  participant Shopper
+  participant Glasses as Glasses, or mock glasses
+  participant Page as Phone UI
+  participant App as Android app
+  participant Service as SessionService
+  participant Socket as Device socket
+  Shopper->>Page: tap Start shopping
+  Page->>App: session.start
+  App->>Service: start, while the app is visible
+  Service->>Service: startForeground, wake lock, notification
+  App->>Socket: device.state with the stream streaming
+  Shopper->>App: power button: the screen is off and the phone is locked
+  Note over Page: the activity is stopped, and Android can pause the page
+  Glasses->>App: frames and motion samples
+  App->>Socket: frames
+  Socket->>App: event glance.pending, then speak with the prompt ID
+  App->>Glasses: the line, as media sound
+  App->>Shopper: vibration prompt, selected by HapticRules
+  Glasses->>App: motion samples of a nod
+  App->>Glasses: answer sound
+  App->>Socket: intent yes, source head
+  Socket->>App: event cart.updated
+  App->>Shopper: vibration added
+  App->>Service: new notification text: item count and total
+  Shopper->>App: unlock and open Glance
+  App->>Page: native.state, profile, and snapshot again
+```
+
+- The service owns no part of the session. It stops itself when `sessionActive` is false: after `session.end`, after `session.rest`, after End on the page, after "Stop camera" in the notification, and after a start that failed.
+- Android lets an app start a foreground service only while the app is visible. So the start is the tap on Start shopping, and a session that ended with the screen off does not start again by itself.
+- After a lost link or a closed hinge, the service stays while the app waits for the glasses, for 5 minutes at most. A new DAT session then starts with the screen off.
+- The notification shows the state as its title and the item count and the total as its text. Android 13 or later needs a permission for it, and the setup of the page asks for that permission. A denied permission does not stop a shop.
+- The app selects each vibration from the events of the server and the state of the camera stream (`HapticRules`). The page has no message for a vibration.
+- Android can end the renderer of the page while the screen is off. The app then loads the page again, and the page gets its state from `native.state`, `profile`, and the snapshot.
+- The volume keys are no input with the screen off. The head, the touchpad of the glasses, and the voice are.
+- As of 2026-11-14 nobody measured a session of the real glasses with the screen off. `apps/mobile/android/README.md` lists the open points and the checks, in "The session service" and "Checks with the glasses or with sound".
 
 ## The fingerprint and the still photo in the Android app
 
-Two extras have their Android side: the fingerprint above 50 EUR, and the sharp second look. Each one starts with a message of the server. The still of a barcode is in "A barcode scan and a label frame". No still starts while a prompt waits for a head answer, because a still stalls the motion samples for seconds.
+Two extras have their Android side: the fingerprint before a payment, and the sharp second look. Each one starts with a message of the server. The server sends `biometric.request` only with its setting `BIOMETRIC_ABOVE_CENTS`. With no such setting, which is the default, a yes pays each total. The still of a barcode is in "A barcode scan and a label frame". No still starts while a prompt waits for a head answer, because a still stalls the motion samples for seconds.
 
 ```mermaid
 sequenceDiagram
@@ -496,7 +543,7 @@ sequenceDiagram
   participant Shopper
   participant App as Android app
   participant Socket as Device socket
-  alt fingerprint above 50 EUR
+  alt fingerprint, only for a server with BIOMETRIC_ABOVE_CENTS and a total above it
     Socket->>App: biometric.request
     App->>Shopper: biometric prompt of Android, "Confirm payment"
     Shopper-->>App: fingerprint, face, or screen lock
@@ -515,6 +562,7 @@ sequenceDiagram
 
 - A phone with no screen lock and no biometric shows no prompt. The app sends `ok: false`, and the page gets the `error` event `native.biometric_unavailable`.
 - The app closes an open prompt when the checkout ends: at `checkout.cancelled` and at `session.end`.
+- The prompt needs a screen that the shopper sees. With the screen off or the phone locked, the app sends `ok: false` at once.
 - If face detection fails on the phone, the still does not leave the phone.
 - A second look that waited 5 seconds for a prompt is dropped: the shopper holds something else then. The still of a reference picture waits 30 seconds at most, and the label still waits in `LabelPolicy`. `apps/mobile/android/README.md` has the rules, in "No still while a prompt waits".
 
@@ -555,8 +603,8 @@ stateDiagram-v2
   offered --> suspended: a product gets a prompt
   suspended --> offered: the product left the view and the code is in view
   offered --> offered: cart change, or the code comes back after the head window
-  offered --> paying: accepted yes on the pay prompt, total of 50 EUR or less
-  offered --> biometric: accepted yes on the pay prompt, total above 50 EUR
+  offered --> paying: accepted yes on the pay prompt, no fingerprint limit or a total at or below it
+  offered --> biometric: accepted yes on the pay prompt, total above the fingerprint limit
   biometric --> paying: biometric.result with ok true
   biometric --> [*]: biometric.result with ok false, code out of view for 30 seconds, or stop intent
   offered --> [*]: no on the pay prompt
@@ -575,7 +623,7 @@ stateDiagram-v2
 | The shopper shows that product | none. The line is "Thank you." The next `kiosk.seen` gives `checkout.offered` | `connected` |
 | `offered` again | `checkout.offered` with a new prompt ID and the new total | `connected` |
 | `suspended` | `checkout.suspended`, then `glance.pending` for the product | `connected` |
-| `biometric` | none. The phone gets the line "Over fifty euros. Confirm with your fingerprint on the phone." and then the message `biometric.request` | `connected` |
+| `biometric` | none. The phone gets the line "Confirm with your fingerprint on the phone." and then the message `biometric.request` | `connected` |
 | `paying` | none | `connected` |
 | The payment succeeds | `checkout.paid` with the receipt, `cart.updated` with an empty cart, `session.state` with the phase `paid` | `paid` with the receipt for 10 seconds, then `idle` |
 | The payment fails | `checkout.failed`, `session.state` with the phase `shopping` | `failed` for 10 seconds, then `idle` |
@@ -586,8 +634,9 @@ stateDiagram-v2
 - One session holds a kiosk from the start of its checkout to its end.
 - Each pay prompt has a new ID. An answer with the ID of an older pay prompt cannot pay.
 - The yes on the pay prompt gives the effect `payment.start`. The mock payment waits `PAYMENT_DELAY_MS`, writes an order to the store, and dispatches `payment.result`. No money moves.
-- `checkout.offered` has `needsBiometric: true` for a total above 50 EUR. The yes on that pay prompt starts no payment: the server sends `biometric.request`, and the phone answers with `biometric.result`. A result with `ok: false` ends the checkout as a no does. A result with no request has no effect.
-- While the step is `biometric`, no answer, no undo, no cart edit, and no recognition result has an effect. The checkout still ends when the code was out of view for 30 seconds, so a browser client, which has no fingerprint check, loses its checkout above 50 EUR after that time.
+- The fingerprint limit is the server setting `BIOMETRIC_ABOVE_CENTS`. It is not set by default, and then no payment needs a fingerprint: `needsBiometric` is false for each total, the step `biometric` never starts, and a yes pays each total.
+- With the setting, `checkout.offered` has `needsBiometric: true` for a total above the limit. The yes on that pay prompt starts no payment: the server sends `biometric.request`, and the phone answers with `biometric.result`. A result with `ok: false` ends the checkout as a no does. A result with no request has no effect.
+- While the step is `biometric`, no answer, no undo, no cart edit, and no recognition result has an effect. The checkout still ends when the code was out of view for 30 seconds, so a browser client, which has no fingerprint check, loses its checkout above the limit after that time.
 - While the step is `paying`, no answer, no undo, no cart edit, and no stop intent has an effect.
 - After a no on the pay prompt, and after a failed payment, the kiosk is muted until its code has left the view. So the shopper looks away and back to start again.
 - A failed payment keeps the cart. A kiosk that registered with `failPayment: true` declines each payment.
@@ -599,7 +648,9 @@ Missing parts:
 
 - `ProbeDecisions.SPEECH` of the Android app is false until the probe run on the glasses. So a session with the real glasses attaches no Speech and sends no `speech.final`. The voice commands and the spoken question work with mock glasses only.
 - `SECOND_LOOK_WAIT_MS` has the default 0, so the server does not wait for a still. The Android app sends the still in both cases.
-- A browser client has no fingerprint check and no microphone. Its checkout above 50 EUR ends after 30 seconds with no payment, and its question window closes with no question.
+- A browser client has no fingerprint check and no microphone. On a server with `BIOMETRIC_ABOVE_CENTS`, its checkout above the limit ends after 30 seconds with no payment. Its question window closes with no question.
+- A phone with the screen off cannot show the fingerprint prompt. On a server with `BIOMETRIC_ABOVE_CENTS`, a payment above the limit fails with the phone in a pocket: the app answers `ok: false`.
+- A session with the screen off is not measured on the real glasses. The frame rate, the rate of the motion samples, and the battery use with a locked phone are open.
 - The Display HUD shows the product prompt, the total, and the last line. It has no view for the pay prompt, the receipt, the look-alike candidates, or the spot check.
 - A snapshot has no field for the spot check, and a `KioskEvent` does not name the product of the spot check.
 - The prices of `apps/server/catalog/store-list.dev.json` are invented for the demo. A real shop needs the list of the store, or an ERP client behind `StoreList`.

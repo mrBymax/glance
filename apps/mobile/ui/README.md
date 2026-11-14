@@ -2,7 +2,7 @@
 
 The phone UI of Meta Glance: a Vite app with React 19 and Astryx. The Android app shows its build in a WebView. A desktop browser can also open it.
 
-The app has two screens. The setup screen links the glasses and asks for the camera in three steps. The session screen shows the product card of the current prompt, the last spoken lines as text, the cart, the checkout sheet with the receipt, and the settings sheet. It has a phone button for each action of the shopper, and a pocket mode. One banner on each screen states the device and error states. A debug panel sends events into the page.
+The app has two screens. The setup screen links the glasses, asks for the camera, and asks for notifications, in four steps. The session screen shows the product card of the current prompt, the last spoken lines as text, the cart, the checkout sheet with the receipt, and the settings sheet. It has a phone button for each action of the shopper. One banner on each screen states the device and error states. A debug panel sends events into the page.
 
 `docs/design.md` holds the design: the references, the reference lock, the decision ledger, and the tokens.
 
@@ -60,7 +60,7 @@ Query flags of the page in a browser:
 | `api=<origin>` | `BrowserBridge` uses the server at this origin. `api=/` means the origin of the page, through the `/api` proxy of the dev server. |
 | `replay=1` | The page plays `DEMO_RUN` of `src/debug/demoRun.ts`: one shop of 13 seconds, from the first glance to the payment. It needs no server. |
 | `debug=1` | The debug panel also shows inside the WebView. In a browser it shows with no flag. |
-| `native=<key>` | The page starts in one native state of `NATIVE_PRESETS` in `src/bridge/fakeNative.ts`. It wins over `ready`. The keys are `ready`, `metaAiMissing`, `notRegistered`, `cameraDenied`, `glassesNotFound`, `updateRequired`, `paused`, `stopped`, `offFace`, `battery20`, `battery10`, `tooWarm`, `batteryFlat`, and `offline`. |
+| `native=<key>` | The page starts in one native state of `NATIVE_PRESETS` in `src/bridge/fakeNative.ts`. It wins over `ready`. The keys are `ready`, `metaAiMissing`, `notRegistered`, `cameraDenied`, `notificationsNotAsked`, `notificationsDenied`, `glassesNotFound`, `updateRequired`, `paused`, `stopped`, `offFace`, `battery20`, `battery10`, `tooWarm`, `batteryFlat`, and `offline`. |
 
 The session screen shows only with a session. So open `?replay=1&ready=1` for the session screen with the checkout sheet, and `?native=stopped&replay=1` for the banner of a stopped session.
 
@@ -132,7 +132,6 @@ flowchart LR
   cart["CartList"]
   checkout["CheckoutSheet"]
   settings["SettingsSheet"]
-  pocket["PocketMode"]
   debug["DebugPanel"]
 
   bridge -- NativeToPage --> provider
@@ -141,7 +140,6 @@ flowchart LR
   app --> setup
   app --> screen
   app --> debug
-  screen --> pocket
   setup --> banner
   screen --> banner
   screen --> card
@@ -150,15 +148,14 @@ flowchart LR
   screen --> cart
   screen --> checkout
   screen --> settings
-  setup -- "send: setup.register, setup.requestCamera, session.start" --> provider
+  setup -- "send: setup.register, setup.requestCamera, setup.requestNotifications, session.start" --> provider
   card -- "send: intent yes or no, with the prompt ID" --> provider
   checkout -- "send: intent yes or no, with the ID of the pay prompt" --> provider
   settings -- "setProfile: profile.set. send: data.delete" --> provider
   captions -- "send: intent repeat" --> provider
   cart -- "send: cart.edit" --> provider
-  screen -- "send: intent undo, session.end, pocket.set" --> provider
+  screen -- "send: intent undo, session.end" --> provider
   debug -- "dispatch, or inject into a BrowserBridge" --> provider
-  provider -- "haptic, for each message with a pattern" --> bridge
   provider -- PageToNative --> bridge
 ```
 
@@ -213,20 +210,22 @@ stateDiagram-v2
   state setup {
     [*] --> link
     link --> camera: registration is registered
-    camera --> ready: cameraPermission is granted
+    camera --> notifications: cameraPermission is granted
+    notifications --> ready: notificationPermission is granted or denied
   }
-  setup --> session: ready, and a snapshot brings a session ID
-  session --> setup: local.reset, or a native state before ready
+  setup --> session: the camera is granted, and a snapshot brings a session ID
+  session --> setup: local.reset, or a native state before the notification step
 ```
 
 - `loading` shows until the host sends the first `native.state`.
-- The list of steps shows only the three labels. The text and the button of the current step sit below the list, under a heading with the label of the step. Inside a vertical step the content is indented, and "Start shopping" did not fit at a root font size of 200 percent on a 360 px screen.
+- The list of steps shows only the four labels. The text and the button of the current step sit below the list, under a heading with the label of the step. Inside a vertical step the content is indented, and "Start shopping" did not fit at a root font size of 200 percent on a 360 px screen.
 - Step 1, link: the page says that Meta AI opens, what to confirm there, and how to return. If the Meta AI app is missing, the step shows a link to its Play Store page (`META_AI_STORE_URL`). With no network it shows the cause as a warning and Try again. While the registration runs, it shows a spinner with "Waiting for Meta AI." and no button. The taps of the jump to Meta AI show as a numbered list.
 - Step 2, camera: the page states the purpose of the camera before it asks. A denied permission adds a warning above the purpose, and the button asks again.
-- Step 3, ready: Start shopping sends `session.start`. The session screen shows when the snapshot arrives.
-- `local.reset` returns to step 3. The Done button of the receipt, the banner of an ended session, and Delete my data run it.
+- Step 3, notifications: the page says what the notification of a shop shows, and the button sends `setup.requestNotifications`. The step shows only while `notificationPermission` is `unknown`, so each answer of the shopper leads to step 4. A shop that already runs shows the session screen also in this step.
+- Step 4, ready: Start shopping sends `session.start`. The session screen shows when the snapshot arrives. With `notificationPermission` at `denied`, the step has a warning that says what is missing, and a second button "Allow notifications" below Start shopping. Start shopping works with each value.
+- `local.reset` returns to step 4. The Done button of the receipt, the banner of an ended session, and Delete my data run it.
 
-### Phone buttons and haptics
+### Phone buttons
 
 Each action that the shopper can do with the head or the voice also has a button on the session screen.
 
@@ -236,8 +235,7 @@ Each action that the shopper can do with the head or the voice also has a button
 | Undo | Dock at the bottom of the screen. Hidden while the cart is empty. | `{ t: 'intent', kind: 'undo' }` |
 | Repeat, with the name "Repeat the last line" | Beside the heading of the captions. Hidden with no caption. | `{ t: 'intent', kind: 'repeat' }` |
 | Remove, with the name "Remove <product>" | Each cart line | `{ t: 'cart.edit', productId, qty }` with one unit less. The quantity 0 removes the line. |
-| Pocket mode | Row under the cart | `{ t: 'pocket.set', on: true }` |
-| End | Row under the cart | Opens an `AlertDialog`. End sends `{ t: 'session.end' }`, and "Keep shopping" sends nothing. |
+| End | Full row under the cart | Opens an `AlertDialog`. End sends `{ t: 'session.end' }`, and "Keep shopping" sends nothing. |
 
 End asks first, because the server takes no input for a session that ended.
 
@@ -247,33 +245,9 @@ End asks first, because the server takes no input for a session that ended.
 
 "Ask a question" needs no prompt ID. The Android app relays the intent, and `BrowserBridge` posts it as each other intent. The server opens a question window of 10 seconds for it and says "Listening." A browser has no microphone, so with `BrowserBridge` the window closes with no question.
 
-`hapticFor(before, action, after)` in `src/state/haptics.ts` returns the pattern for one message, or `null`. `BridgeProvider` calls it for each message of the bridge and sends `{ t: 'haptic', pattern }` for a result. The Android app vibrates only for these messages.
+The page plays no vibration and sends no message for one. The Android app selects each pattern itself, from the events of the server and the state of the camera, because the page does not run while the screen is off. `apps/mobile/android/README.md` has the rule in "A session".
 
-| Message | Pattern |
-|---|---|
-| `glance.pending` with a warning | `warning` |
-| `glance.pending` with no warning, `checkout.offered` | `prompt` |
-| `cart.updated` with the change `add` or `remove` | `added` or `removed`. No pattern for the add that brings the total over the budget of the profile: `budget.exceeded` follows it |
-| `budget.exceeded` | `warning` |
-| `checkout.paid` | `paid` |
-| `checkout.failed`, `error` | `error` |
-| `native.state` with a stream that changes to `paused` | `cameraPaused` |
-| `native.state` with a stream that changes from `streaming` or `paused` to `stopped` | `cameraOff` |
-
-- Each other message gives no pattern: a caption, a snapshot, a `cart.updated` with no change, the first native state, and a native state with the same stream value.
-- One event of the shop gives one pattern. `apps/server/README.md` lists each sound and each vibration with its trigger, in "A guard for the voice".
-- With `profile.haptics` off, no message gives a pattern.
-- `BridgeProvider` keeps the newest state in a ref. Two messages can arrive before the next render, and each pattern needs the state before its message.
-
-### Pocket mode
-
-The button "Pocket mode" sends `pocket.set` with `on: true`. `SessionScreen` then renders `PocketMode` in place of all its other content: a black screen in the dark mode of the theme, with the total of the server, the item count, and the button Unlock.
-
-- Unlock opens an `AlertDialog`, and Leave returns to the session screen. The two taps are in two places, so a touch through cloth does not leave the mode.
-- `PocketMode` sends `pocket.set` with `on: false` when it goes away: after Leave, and when the page changes the screen with no tap.
-- The checkout sheet and the receipt do not show in pocket mode. The shopper pays with the head, and the receipt shows after Leave.
-- The live region still announces each caption and each cart change, because `BridgeProvider` owns it.
-- `src/styles/pocket.css` paints the screen black. No Astryx token is pure black.
+The page has no mode for a phone in a pocket. A shop continues with the screen off and the phone locked, so the shopper presses the power button. See "The session service" in `apps/mobile/android/README.md`.
 
 ### Debug panel
 
@@ -286,7 +260,7 @@ The button "Pocket mode" sends `pocket.set` with `on: true`. `SessionScreen` the
 | Run | "Play the demo run" plays `DEMO_RUN`. Reset runs `local.reset`. |
 | Sent | For a `BrowserBridge` only: the last 10 messages of the page as JSON, and `Session query: s=...&t=...` while a server session exists. |
 
-- With a `BrowserBridge`, a tap delivers the message through `bridge.inject`. The message then takes the path of a message of the app, and the list Sent shows its haptic message. Inside the WebView, a tap runs `dispatch`, and the app gets no haptic message.
+- With a `BrowserBridge`, a tap delivers the message through `bridge.inject`. The message then takes the path of a message of the app, as a message of the server does. Inside the WebView, a tap runs `dispatch`.
 - The session query opens the mirror page of the website: `/mirror?<query>`.
 - A sheet under another sheet measures smaller in the browser: a control of the settings sheet gave 46 px under the checkout sheet, and 48 px alone. Measure a sheet only while it is the top one.
 
@@ -296,7 +270,7 @@ The button "Pocket mode" sends `pocket.set` with `on: true`. `SessionScreen` the
 
 - The pay view names the kiosk, the store, the item count, and the total of the server. Pay sends `intent` with `yes` and the ID of the pay prompt. Cancel sends `no`.
 - The server sends no event when a payment starts. So the sheet keeps its answer to each prompt ID: after Pay the button shows a spinner, and the sheet sends nothing more for that ID. A new `checkout.offered` has a new ID, and the sheet takes one answer again.
-- With `needsBiometric` in the pay prompt, the pay view shows the info banner "Over fifty euros. Confirm with your fingerprint on the phone.", and the pay button has the name "Pay with fingerprint". Its visible text stays "Pay", because the full name is cut at a font scale of 200 percent. The button sends the same yes. The page shows no fingerprint prompt of its own.
+- With `needsBiometric` in the pay prompt, the pay view shows the info banner "Confirm with your fingerprint on the phone.", and the pay button has the name "Pay with fingerprint". Its visible text stays "Pay", because the full name is cut at a font scale of 200 percent. The button sends the same yes. The page shows no fingerprint prompt of its own. The server sets `needsBiometric` only with its setting `BIOMETRIC_ABOVE_CENTS`, so with the default server this state never shows.
 - After Cancel the sheet closes at once. A dismissed pay view (the back key, Escape) counts as Cancel. A dismissed sheet after Pay sends nothing.
 - An `error` event shows inside the pay view, because the main screen is under the sheet then.
 - The receipt view shows the total, the kiosk, each line, the order ID, the time, and the line "Demo payment. No money moved.". Done runs `local.reset`.
@@ -361,7 +335,7 @@ npx eslint apps/mobile/ui
 
 ## Accessibility checks
 
-`src/a11y.test.tsx` opens 12 scenes of the app: the setup steps, the session, the checkout sheet, the receipt, the settings sheet, the end dialog, pocket mode, a banner with an action, and the debug panel. For each scene it expects one `main` landmark, one `h1`, a name for each control, no control that the 48 px rules do not cover, and no `Switch`, `Slider`, or `StatusDot`. One more test expects that the assertive live region stays empty.
+`src/a11y.test.tsx` opens 13 scenes of the app: the setup steps with both notification states, the session, the checkout sheet, the receipt, the settings sheet, the end dialog, a banner with an action, and the debug panel. For each scene it expects one `main` landmark, one `h1`, a name for each control, no control that the 48 px rules do not cover, and no `Switch`, `Slider`, or `StatusDot`. One more test expects that the assertive live region stays empty.
 
 jsdom has no layout and no colors. Measure these three in a browser, at 360 x 800 px with a touch device, on `?replay=1&ready=1`:
 
@@ -380,6 +354,8 @@ jsdom has no layout and no colors. Measure these three in a browser, at 360 x 80
 On 2026-11-14 headless Chrome ran check 2 with two scanned products (names of 80 characters with accents, one with a word of 33 characters), in English and in Italian, at 100 and at 200 percent. On the product card, the cart, the checkout sheet, the receipt, and the attribution of the settings sheet, no element ended to the right of 360 px and no text was cut. A word that is longer than a line breaks inside the word.
 
 After the redesign, on the same day, a script in headless Chrome ran checks 1 and 2 and measured the contrast of each text: 24 scenes (each setup step, the session with each prompt and banner, a cart of 1 and of 7 lines, the checkout, the fingerprint step, the payment, the receipt, the settings sheet, pocket mode, the end dialog, and `?replay=1`), at 360 x 800 and 412 x 915, in light and dark mode, at 100 and 200 percent, in English and in Italian. In all 384 pictures no element ended right of the screen, the page did not scroll sideways, no label was cut, and no control was below 48 x 48 px. The lowest contrast of a text was 5.22:1 (the End button of the end dialog in dark mode). The ring of an empty check box, of a radio, and of the budget field measured 5.41:1 in light mode and 5.65:1 in dark mode.
+
+Pocket mode is gone since that run, and the setup has a notification step. Later on the same day, headless Chrome took the notification step, the ready step with denied notifications, the ready step, and the session screen at 360 x 800, in light and dark mode, at 100 percent and in English. In these 8 pictures no element ended right of the screen. Nobody measured these scenes at 200 percent, at 412 x 915, or in Italian.
 
 ## Touch targets of 48 px
 

@@ -110,6 +110,16 @@ The challenge asks for a prototype that handles permissions, errors, connectivit
 
 Consequence: for the demo, keep the app in the foreground with the screen on and a touch-locked "pocket" screen. Background operation is a later step.
 
+Update of 2026-11-14. The app now has that later step, and the "pocket" screen is gone.
+
+| Fact | Source |
+|---|---|
+| The CameraAccess sample of Meta keeps a camera stream alive "when the screen is locked or the app is in the background" with a foreground service of the type `connectedDevice` and a partial wake lock. It sets `compressVideo = true` and decodes the frames itself. | `samples/CameraAccess`, `stream/StreamingService.kt`, in `facebook/meta-wearables-dat-android` |
+| The jars of DAT 1.0.1 (`mwdat-core`, `mwdat-camera`, `mwdat-motion`) hold no check of the foreground, of the screen state, or of a wake lock. | read in the jars |
+| The Android docs of the SDK still state no background rule. The rule "only in the foreground" is in the iOS reference only. | `Stream`, `StreamConfiguration`, and the streaming guide |
+
+Consequence: Glance has `SessionService`, a foreground service with the types `connectedDevice` and `mediaPlayback` and a partial wake lock. Glance uses the frames that the SDK decodes, which the sample does not show behind a locked screen. Nobody measured it on the glasses yet. `apps/mobile/android/README.md` has the checks, in "Checks with the glasses or with sound". If the decoded frames stop with the screen off, the next step is `compressVideo = true` with a decoder in the app.
+
 ## Registration and distribution
 
 | Fact | Source |

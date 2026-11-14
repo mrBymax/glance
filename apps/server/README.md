@@ -1128,7 +1128,7 @@ What the phone plays by itself. The Android app and the phone UI were read for t
 | The pattern `paid` or `error` | `checkout.paid`, `checkout.failed`, or an `error` event | One for each event. The server sends `recognition.slow` at most one time each 60 seconds |
 | The pattern `cameraPaused` or `cameraOff` | The stream state of the app changes | One for each change |
 
-- The Android app vibrates only for a `haptic` message of the page, and the page sends one only for the rows above.
+- The Android app selects each vibration itself, with `HapticRules`, and it vibrates only for the rows above. The page sends no message for a vibration, so the patterns also play with the screen off.
 - A still, a label upload, a reference picture, and a barcode report play no sound and give no vibration on the phone.
 - The answer sound came with the rework of the head gestures, after the audit. The line "Added" or "Removed" that answers the nod keeps its sound field in the `speak` message. The app plays the clip alone, so the shopper hears one sound for one answer. An answer that the rules reject has its answer sound, and no "Added" line follows.
 - One fault was found and fixed: the add that crosses the budget gave two patterns, `added` and then `warning`. It gives one now.

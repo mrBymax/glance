@@ -25,6 +25,7 @@ flowchart LR
     Session --> Pipeline[FramePipeline with CodeScanner, DigitReader, and FaceFinder]
     Session --> Queue[SpeechQueue with ExoLinePlayer]
     Session <--> Socket[DeviceSocket]
+    Service[SessionService: foreground service, wake lock, notification] -- "runs while sessionActive" --> Session
     Session --> Api[GlanceApi]
     Socket <--> Server[Glance server]
     Api --> Server
@@ -41,6 +42,7 @@ flowchart LR
 ```
 
 - `GlanceApp` owns one `DatLink`, one `MockGlassesController`, one `ProfileStore`, and one `SessionController`. A new activity keeps the session.
+- `SessionService` keeps a session alive with the screen off. It owns no part of the session. See "The session service".
 - `DatLink` is the one connection to the DAT SDK. It gives a `snapshot` of the state, the `faults` of the SDK, and the `frames` of the stream. Call its functions on the main thread.
 - A frame is a `RawFrame` in I420 layout. `frames` holds the newest frame only. A frame with an odd width or height, or with fewer bytes than its size needs, is dropped with one log line.
 - While a session runs, the device of the snapshot comes from the session. After the session, it comes from the device list of the SDK again.
@@ -64,13 +66,15 @@ flowchart LR
 - The Gradle task `syncUi` copies `apps/mobile/ui/dist` into the APK as the folder `ui`. It does not run npm. Build the phone UI first: `npm run build --workspace @glance/phone-ui` at the repository root.
 - A debug build with `glance.uiDevUrl` loads that address in place of the assets.
 - The page sends a message with `window.GlanceNative.postMessage(json)`. The app sends one with `window.__glanceReceive(json)`. `WebBridge` sends nothing before the first `ui.ready`. A page that loads again gets no message until its own `ui.ready`, and the answer to that brings the state, the profile, and the snapshot again.
+- A session does not need the page. With the screen off the activity is stopped, and Android can pause the page or drop a message to it. So each time the activity becomes visible, the app sends the state, the profile, and the snapshot again.
+- Android can end the renderer of a page that is not visible. `MainActivity` answers that event, so the app continues, and it loads the page again. If the renderer ends again within 10 seconds, the app loads no third page, and the screen stays empty until the activity starts again.
 - A link to another site opens outside the app.
 - The text of the page follows the font size of the phone.
-- `ProfileStore` keeps the profile, the yes input that the shopper selected, the server session, the server address, the gesture sensitivity, the placeholder switch, the two times of the label still, and the switch "Record motion in sessions" in the preferences file `glance`.
+- `ProfileStore` keeps the profile, the yes input that the shopper selected, the server session, the server address, the gesture sensitivity, the placeholder switch, the two times of the label still, the switch "Record motion in sessions", and the fact that the app asked for notifications, in the preferences file `glance`.
 
 ## The setup
 
-`MainActivity` and `SessionController` handle the three setup messages of the page.
+`MainActivity` and `SessionController` handle the four setup messages of the page.
 
 ```mermaid
 sequenceDiagram
@@ -93,6 +97,10 @@ sequenceDiagram
     Page->>App: setup.requestCamera
     App->>Sdk: RequestPermissionContract with CAMERA
     Sdk-->>App: granted, denied, or an error
+    Page->>App: setup.requestNotifications
+    App->>Android: ask for POST_NOTIFICATIONS (Android 13 or later)
+    Android-->>App: granted or denied
+    App-->>Page: native.state with notificationPermission
     Page->>App: setup.openUpdate
     App->>Sdk: openDATGlassesAppUpdate or openFirmwareUpdate
 ```
@@ -107,6 +115,9 @@ sequenceDiagram
 - A permission check suspends. If `DatLink.initialize` runs again before the answer arrives, for example at a change between mock glasses and the SDK, the app drops that answer.
 - The answer to a permission request of the app is newer than a check of that permission that started before it. The app drops the answer of such a check.
 - Meta AI opens the app again through the `glance` scheme. `onCreate` and `onNewIntent` give the intent to the SDK, after the SDK started.
+- `notificationPermission` of the native state is `unknown` until the app showed the request of Android one time, then `granted` or `denied`. Before Android 13 it is always `granted`. Android tells no app that a request was denied, so a permission that is missing after a request counts as `denied`. `StateMapper.notificationPermission` in `core` holds the rule.
+- A denied notification permission does not block a session. The service still runs, and Android lists it in the Task Manager of the notification drawer. The notification itself, with the total and the action "Stop camera", does not show.
+- After two denied requests, Android shows its prompt no more. `setup.requestNotifications` then opens the notification settings of the app. Each resume reads the permission again.
 
 ## A session
 
@@ -160,20 +171,20 @@ Rules of `SessionController`:
 - When a DAT session stops with no request from the app, `StopCauses.classify` names the cause, and the page gets its `error` event. The app reads the cause 500 ms after the stop, because the glasses can report a closed hinge after the stop.
 - After a lost link or a closed hinge, a new DAT session starts by itself when the glasses are connected, open, and not off the face. The app waits 2 seconds first, and it stops after 5 such starts in a row with no stream.
 - A stream that ends by itself after it ran also ends its DAT session.
-- The screen stays on while a DAT session runs, and in pocket mode.
-- `haptic` of the page plays the pattern of `HapticPatterns`, if `haptics` of the profile is true. The app never vibrates by itself.
-- `pocket.set` on dims the screen to 1 percent and hides the system bars. A swipe from the edge shows them for a short time. `pocket.set` off gives the brightness of the phone again. The page draws the black screen and blocks the touches. A new activity starts with pocket mode off.
+- The app does not keep the screen on. The screen follows the timeout of the phone, and a session continues with the screen off and the phone locked. See "The session service".
+- The app selects each vibration itself, if `haptics` of the profile is true. The page has no message for it, because the page does not run with the screen off. `HapticRules` in `core` maps an event of the server and a change of the camera stream to one of the 8 patterns of `HapticPatterns`: `prompt` for a product prompt and a pay prompt, `warning` for a product prompt with a warning and for `budget.exceeded`, `added`, `removed`, `paid`, `error` for `checkout.failed` and each `error` event, `cameraPaused`, and `cameraOff`. The add that brings the total over the budget gives the `warning` of its `budget.exceeded` only.
 - Five seconds after the first `STREAMING`, `MainYesResolver` selects the yes input that works. A change goes to the page and to the server as a profile patch.
+- The volume keys answer a prompt only while "Glance" is on the screen. With the screen off, or with another app in front, Android gives the keys to no activity, so `mainYes: key` has no input then. A media session could take the keys, but it also puts media controls on the lock screen and takes the play and pause gestures of the glasses, so the app has none.
 - The volume keys of the phone answer a prompt when `mainYes` of the profile is `key`: up sends `intent yes`, and down sends `intent no`, each with the source `key` and the ID of the current prompt. A prompt is current from the end of its line until the server ends it or a new prompt replaces it. `MainActivity` then takes the key down, its repeat events, and its key up, so the volume does not change, and a key that stays down sends one answer. In each other case the key changes the volume as usual. `KeyInput` in `core` holds the rule.
 - A double tap on the touchpad of the glasses sends `intent yes` with the source `touch` and the ID of the last finished prompt, or with no ID before the first prompt. The server decides if it counts. A swipe in each direction sends `intent repeat` with the source `touch`, and the server sends the last line again. A session attaches Inputs with `ProbeDecisions.INPUT_SOURCES` when `ProbeDecisions.INPUTS` is true. `TouchInput` in `core` holds the rule. The single tap and the tap and hold belong to the glasses.
 - Each final speech result of the glasses goes to the server as `speech.final` with its text, its confidence, and the locale of the glasses. The app maps no word to an intent: the server owns the command words. With no confidence the app sends 0.5, and with no locale it sends `und`. A result that is not final, a blank text, and each result while a line plays or in the 500 ms after it send nothing, because the microphone hears each line. `VoiceInput` in `core` holds the rule.
 - A session attaches Speech when `DatLink.usesSpeech` is true and the microphone permission of the glasses is granted. `usesSpeech` is `ProbeDecisions.SPEECH`, and it is always true with mock glasses. The bridge has no message for the microphone permission. The app asks for it when the page sets `mainYes` to `voice` and when the page sends the intent `ask`, if `usesSpeech` is true and the permission is missing. A permission that arrives while a stream runs attaches Speech to that stream. A denied request sends no `error` event.
 - When a capability starts after the main yes was selected, and the profile does not have the input that the shopper selected, `MainYesResolver` selects again. So the voice becomes the main yes when Speech starts late.
 - The intent `ask` of the page goes to the server as each other page intent, with the source `phone` and no prompt ID.
+- The server sends `biometric.request` only with its setting `BIOMETRIC_ABOVE_CENTS`. With no such setting, which is the default, a yes pays each total and the three rules below never apply.
 - `biometric.request` of the server shows the biometric prompt of Android, with the title "Confirm payment" and the subtitle "Demo payment. No money moves." The shopper confirms with a fingerprint or a face, or with the screen lock of the phone (`BIOMETRIC_WEAK or DEVICE_CREDENTIAL`, which works from Android 10). A success sends `biometric.result` with `ok: true`. An error sends `ok: false`, and a cancel is an error. A finger that does not match sends nothing, because the prompt stays open. `PaymentConfirm` in `core` holds the rule: one result for each prompt.
 - On a phone with no screen lock and no biometric, the app shows no prompt. It sends `ok: false` and the `error` event `native.biometric_unavailable`.
-- The app closes an open payment prompt when the server sends `checkout.cancelled` or `session.end`, and at `data.delete`. The closed prompt sends `ok: false`. A second `biometric.request` while the prompt is open shows no second prompt. A request while the activity is in the background sends `ok: false`, because the biometric library shows no prompt then.
-- In pocket mode the screen has the brightness of the phone while the payment prompt shows, and it is dim again after the result.
+- The app closes an open payment prompt when the server sends `checkout.cancelled` or `session.end`, and at `data.delete`. The closed prompt sends `ok: false`. A second `biometric.request` while the prompt is open shows no second prompt. A request while the activity is in the background sends `ok: false`, because the biometric library shows no prompt then. That is also the answer with the screen off or the phone locked: the app shows no notification for it and does not wait.
 - A nod or a shake in the head window of a prompt sends `intent yes` or `intent no` with the source `head` and the ID of the prompt. For a product prompt the window opens while the line still plays, and the answer stops the line. See "Head gestures".
 - The event `glance.ambiguous` of the server makes the app take one still photo with `DatLink.captureStill`: the sharp second look. While a prompt waits for a head answer, this still waits, for 5 seconds at most. See "No still while a prompt waits". `StillPolicy` in `core` allows one capture at a time and one start each 5 seconds in a DAT session. `StillPhoto` crops the photo as a frame of the stream, scales its long side to 1440 pixels at most, pixelates each face, and makes a JPEG of quality 85. The header has `kind: still` and `blurred: true`. If face detection fails, the still is dropped. A still does not pass the upload gate, but it needs an open socket. The log line `still seq=...` has the milliseconds from the event to the upload.
 - The frames of the stream and the stills share one upload number, `seq`, which counts up for the life of the app process.
@@ -182,6 +193,52 @@ Rules of `SessionController`:
 - `FramePipeline` scans each frame for a kiosk code and for the barcode of a product, and selects the sharpest frame of each 150 ms that is not damaged. See "The barcode of a product" and "Damaged frames". `FaceFinder` looks for faces in that frame with ML Kit, on the phone. The upload is the center of the frame (80 percent of the width, 70 percent of the height) with each face pixelated, as a JPEG of quality 80 with a long side of 768 pixels at most: 494 x 768 for a stream of 720 x 1280, and 402 x 626 for the default stream of 504 x 896. Its header has `blurred: true`. If face detection fails, the frame is dropped. The app writes no frame to storage.
 - The app plays each line of the server one time, with the sound of the line. It plays one sound by itself: the answer sound of a head gesture, `added` for a yes and `removed` for a no, at the moment the app sends the answer. The line that answers the gesture then plays with no sound, so one answer gives one sound. See "Head gestures". A still, a label upload, and a barcode report play no sound. `apps/server/README.md` lists each sound and each vibration of a line with its trigger, in "A guard for the voice".
 - `ExoLinePlayer` plays the sound of a line, then its clip. A clip that does not load, that does not start in 3 seconds, or whose address is not an address, is replaced by the phone voice. The speech rate of the profile changes the clip, not the sound.
+
+## The session service
+
+`SessionService` is a foreground service with the types `connectedDevice` and `mediaPlayback`. It makes a session work with the screen off and the phone locked in a pocket. Without it, Android can stop the CPU and end the process a short time after the screen turns off.
+
+```mermaid
+sequenceDiagram
+    participant Shopper
+    participant Page
+    participant Session as SessionController
+    participant Service as SessionService
+    participant Android
+    Shopper->>Page: tap Start shopping
+    Page->>Session: session.start
+    Session->>Service: startForegroundService, while the app is visible
+    Service->>Android: startForeground with the notification
+    Session-->>Service: sessionActive true
+    Service->>Android: acquire a partial wake lock
+    Shopper->>Android: power button: screen off, phone locked
+    Android-->>Page: the activity stops, the page can pause
+    Note over Session,Service: frames, motion samples, the socket, the voice, the sounds, and the vibrations continue
+    Shopper->>Session: nod for a prompt, through the glasses
+    Session-->>Service: new cart: the notification shows the count and the total
+    Session-->>Service: sessionActive false, after session.end, session.rest, End, or Stop camera
+    Service->>Android: release the wake lock, stopForeground, stopSelf
+```
+
+- The service holds three things: the right of the process to run, one partial wake lock with the tag `Glance:session`, and the notification. Each object of the session stays in `GlanceApp`, and the service starts and stops none of them.
+- `SessionController.sessionActive` decides the life of the service. It is true while the camera starts, while a DAT session runs, in the 500 ms after a stop that the app did not ask for, and while the app waits for the glasses to start again. The service watches it and stops itself when it is false.
+- The start is the tap on Start shopping. Android lets an app start a foreground service only while the app is visible, and a start from the background fails (`ForegroundServiceStartNotAllowedException`). So a session that ended with the screen off does not start again by itself: `session.rest` and the 5 minute limit below both end the service, and the shopper starts the camera from the app.
+- A new DAT session after a lost link or a closed hinge needs no new service start, because the service runs through the wait. The wait ends after 5 minutes (`GlassesWait` in `core`), so the service and its wake lock do not stay forever.
+- The type `connectedDevice` needs the Bluetooth permission. The service asks for it only when `BLUETOOTH_CONNECT` is granted. Mock glasses run without Bluetooth, and the service then has the type `mediaPlayback` only.
+- A request to the service is a start command with an action, never `stopService`. A stop before the first `startForeground` makes Android end the app. The pattern is that of `StreamingService` in the CameraAccess sample of the DAT SDK.
+- The wake lock has a limit of 2 hours, and the service takes a new one each hour. So a lock that the app lost ends by itself, and a long shop keeps its lock.
+- The notification is ongoing and has low importance, so it makes no sound. Its title is the state: "Shopping", "Camera starts", "Camera paused", "Camera off", "Server not reachable", or "Glasses disconnected". Its text is the item count and the total, for example "3 items, 12.40 EUR". A tap opens "Glance". The one action "Stop camera" stops the camera as `session.rest` does: the cart and the server session stay. `SessionNotices` in `core` holds the texts, in English and in Italian.
+- The service is `START_NOT_STICKY`. If Android ends the process, or the shopper taps Stop in the Task Manager, nothing starts again. The next start of "Glance" finds the server session and gets the cart from the snapshot.
+- Each timer of a session is a `delay` or a `Handler` on the main thread, which count only while the CPU runs. The wake lock keeps the CPU on for the life of the service, so the timers run. With no session, the timers stop while the phone sleeps: the socket then connects again when the shopper opens the app.
+- The app asks for no battery exemption. Set the battery use of "Glance" and of "Meta AI" to "Unrestricted" by hand on a phone that ends background apps early.
+
+What nobody measured with the screen off, as of 2026-11-14. The checks in "Checks with the glasses or with sound" cover each one.
+
+- If the frames that the SDK decodes keep their rate. The CameraAccess sample of Meta shows a stream behind a locked screen with compressed frames, which the sample decodes itself. If the raw frames stop, `compressVideo = true` with a decoder in the app is the next step.
+- If Motion keeps its rate of samples, and how often the watchdog of the motion samples starts Motion again.
+- If the Meta AI app stays alive in the background on the test phone.
+- The step times of ML Kit. A process with no visible activity can get fewer fast cores.
+- The battery use and the heat of the phone for a full shop.
 
 ## The barcode of a product
 
@@ -721,7 +778,7 @@ flowchart LR
     Audio[audio: SpeechQueue, AnswerSoundOnce] --> Contract
     Input[input: PromptTracker, HeadInput, GlassesClock, MainYesResolver, KeyInput, TouchInput, VoiceInput, PaymentConfirm] --> Contract
     Input --> Gesture
-    State[state: StateMapper, StopCauses, NativeErrors, ConnectionAnnouncer, Revival, MotionWatchdog, MotionStats, HapticPatterns] --> Contract
+    State[state: StateMapper, StopCauses, NativeErrors, ConnectionAnnouncer, Revival, MotionWatchdog, MotionStats, HapticPatterns, HapticRules, SessionNotices, GlassesWait] --> Contract
     Net[net: GlanceApi, DeviceSocket, Backoff] --> Contract
     Net --> Frame
     BridgeText[bridge: Bridge] --> Contract
@@ -737,7 +794,7 @@ flowchart LR
 | `gesture` | `HeadGestureDetector` finds a nod and a shake in motion samples. `HeadAxes` gives it the pitch rate and the yaw rate of the head, from gravity. `GestureReport` is its decision about one pair of strokes, with a log line. `HeadGestureConfig.of` gives the limits of the levels `GENTLE`, `NORMAL`, and `FIRM`. `GyroScript` builds samples of head movements for tests and for mock glasses. `MotionCsv` reads and writes a motion file. See "Head gestures". |
 | `audio` | `SpeechQueue` plays one line at a time through a `LinePlayer`, with interrupt and priority. It reports each prompt whose line started and each prompt whose line ended, and it stops the line of a prompt that a head gesture answered. A line with no clip uses the phone voice. |
 | `input` | `PromptTracker` follows the prompts of the server. `HeadInput` turns a gesture into a yes or a no while the head window of a prompt is open, in the time of the samples, and says when a prompt waits for a head answer. `GlassesClock` puts the time of a sample on the clock of the phone. `MainYesResolver` selects the yes input that works. `KeyInput`, `TouchInput`, and `VoiceInput` hold the rules of the volume keys, the touchpad, and the voice. `PaymentConfirm` gives one `biometric.result` for each payment prompt. |
-| `state` | `StateMapper` maps the state of the DAT SDK to `NativeState` and `DeviceState`. `StopCauses` names the cause of a stopped session, and says if a new session starts by itself. `NativeErrors` holds the `error` events of the phone, with codes that start with `native.`. `ConnectionAnnouncer` gives the "Connection lost" line after 3 seconds without the socket. `Revival` limits the restarts of a capability. `MotionWatchdog` finds a stall of the motion samples and asks for a restart of Motion. `MotionStats` makes the log line of the motion samples. `HapticPatterns` holds the vibration timings of the 8 haptic patterns. |
+| `state` | `StateMapper` maps the state of the DAT SDK to `NativeState` and `DeviceState`. `StopCauses` names the cause of a stopped session, and says if a new session starts by itself. `NativeErrors` holds the `error` events of the phone, with codes that start with `native.`. `ConnectionAnnouncer` gives the "Connection lost" line after 3 seconds without the socket. `Revival` limits the restarts of a capability. `MotionWatchdog` finds a stall of the motion samples and asks for a restart of Motion. `MotionStats` makes the log line of the motion samples. `HapticPatterns` holds the vibration timings of the 8 haptic patterns, and `HapticRules` selects the pattern for an event of the server or a change of the camera stream. `SessionNotices` makes the texts of the session notification. `GlassesWait` limits the wait for glasses that disconnected to 5 minutes. |
 | `net` | `GlanceApi` makes the REST calls. It puts the socket address and each clip address of the server on the server address of the app. A server address that is not an HTTP address fails each call with an `IOException`, like a server that does not answer. `DeviceSocket` sends messages and frames, and connects again after 500, 1000, 2000, 4000, and 8000 ms. A message never waits for a later connection. |
 | `bridge` | `Bridge` builds the JavaScript call that gives a message to the page, and knows the MIME types of the page files. |
 
@@ -885,22 +942,24 @@ flowchart LR
 | `ProbeLinkTest` | `DatLink` with mock glasses: the paired device, the stream, the colors of a frame, the kiosk code in a frame, a stop and a new start, and six stops at the start of a stream. |
 | `ProbeScreenTest` | The probe screen: each test taps the buttons and reads the log, for the stream, the saved frame, `QR log`, `Barcode log`, `Pipeline test`, Motion, Inputs, Speech, `Speak line`, `Still`, `Record motion`, and `Play bad clip`. |
 | `PlaceholderPageTest` | The placeholder page in the WebView: state and profile, a stored profile patch, a page that loads again, and `Add` and `Skip` on a product prompt. |
-| `SetupFlowTest` | The setup messages with mock glasses: a registration, a registration that fails, a denied and an allowed camera request, the permissions after a resume, and the permissions when the glasses connect after the start. |
+| `SetupFlowTest` | The setup messages with mock glasses: a registration, a registration that fails, a denied and an allowed camera request, the permissions after a resume, and the permissions when the glasses connect after the start. One test replaces the notification check of the app: the state is `unknown` before a request, `denied` after it, and `granted` after a resume with the permission. |
+| `SessionServiceTest` | The session service, with the fake server of the app. The notification shows from the start of a session to `session.end`, with the title "Shopping". After an add its text is "2 items, 4.49 EUR". Its action "Stop camera" stops the stream and the service, and the server session stays. The command `rest` ends the service. |
+| `ScreenOffTest` | A session with the activity stopped, as with the screen off: frames go out, the prompt of the script arrives, and a mock nod adds the product. The test does not turn the screen off, so it does not show that Android keeps the process awake. |
 | `BluetoothPromptTest` | The Bluetooth prompt of Android: the test denies it, the app does not stop, and `setup.register` asks again and sends `native.bluetooth_denied`. At its end the test clears the flags of the permission. |
 | `DeviceStatesTest` | The states of the table in "Mock mode for seats without glasses": `NativeState`, the `error` events, and the `device.state` messages for each one. One test pays at a kiosk that declines each payment: `checkout.failed` and its line arrive, the cart stays, and the camera stays on. |
 | `RecognitionSlowTest` | The state "Recognition slow", with the command `slow` of the fake server of the app: the `error` event `recognition.slow` and its line arrive, the placeholder page gets the event, the app sends no error of its own, and the frames go on. |
-| `PaymentPromptTest` | The fingerprint above 50 EUR, with the command `bio` of the fake server of the app. Two tests show the real prompt of Android and close it with no finger: the back key sends `ok: false`, and `checkout.cancelled` closes the prompt. Four tests replace the prompt: a finger that does not match sends nothing and a match sends `ok: true` one time, a phone with no screen lock sends `ok: false` and `native.biometric_unavailable`, the screen is bright in pocket mode while the prompt shows, and the end of the checkout closes the prompt. |
+| `PaymentPromptTest` | The fingerprint before a payment, which only a server with `BIOMETRIC_ABOVE_CENTS` asks for, with the command `bio` of the fake server of the app. Two tests show the real prompt of Android and close it with no finger: the back key sends `ok: false`, and `checkout.cancelled` closes the prompt. Three tests replace the prompt: a finger that does not match sends nothing and a match sends `ok: true` one time, a phone with no screen lock sends `ok: false` and `native.biometric_unavailable`, and the end of the checkout closes the prompt. |
 | `StillPhotoTest` | The sharp second look, with the command `amb` of the fake server of the app: one still of 576 x 896 pixels goes out with `kind: still` and `blurred: true`, two events within one second give one still, each upload has a number of its own, and a mock nod answers a prompt after a still. |
 | `BarcodeScanTest` | The barcode of a product, with the clips of `make-clips.mjs` and the fake server of the app. The sharp code gives `barcode.seen` with the source `barcode`, then 3 to 5 reports in 3.3 seconds. The digits with no bars, and the sharp digits under blurred bars, never give another code than their own. The kiosk clip gives `kiosk.seen`, no `barcode.seen`, and no still. The blurred bars give one frame with `kind: label`, and no code. With blurred bars in the stream and the sharp code as the still, the phone sends one `barcode.seen` and takes no other still. The command `label` gives a label frame, or `barcode.seen` when the still holds a code that the phone reads. Two commands within one second give one still, and a `label` right after `amb` gives none. |
 | `LabelStillTest` | `LabelStill.read` with no glasses and no server. ML Kit reads the code of `barcode.png`, the blurred bars of `barcode-blurred.png` are one region with no text and the still goes to the server, and `scene.png` becomes a frame of 720 x 1280 pixels. With hits and words that the test gives: a photo of 3000 x 4000 pixels becomes 1200 x 1600 with no crop, a failed face detection drops the still, the digits under a region count and the digits of another product do not, and with no region only 12 or 13 digits count. |
 | `StillPhotoPrepareTest` | `StillPhoto.prepare` with no glasses and no server: a photo of 3000 x 4000 pixels becomes a JPEG of 1234 x 1440 pixels, the face box that the test gives is pixelated, and the stripes outside it stay. A photo with no result of face detection is dropped. |
 | `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items, the Barcode fields, and the Stream items change the stored settings. |
-| `HapticsPocketTest` | The 8 haptic buttons of the placeholder page give the 8 patterns, `haptics: false` gives none, and pocket mode dims the screen, hides the bars, and keeps the screen on. |
-| `VolumeKeysTest` | The volume keys with `mainYes: key`: volume up on a product prompt sends `intent yes` with the source `key` and adds the product, volume down sends `intent no`, and the media volume stays at 0. A key that stays down in pocket mode sends one yes. Before the first prompt, after the prompt ended, and with the head as the main yes, the app does not take the key. |
+| `HapticsTest` | The vibrations of a session, with the fake server of the app and no message of the page: a product prompt gives `prompt`, the add gives `added`, the command `slow` gives `error`, and the command `rest` gives `cameraOff`. With `haptics: false` no vibration plays. |
+| `VolumeKeysTest` | The volume keys with `mainYes: key`: volume up on a product prompt sends `intent yes` with the source `key` and adds the product, volume down sends `intent no`, and the media volume stays at 0. A key that stays down sends one yes. Before the first prompt, after the prompt ended, and with the head as the main yes, the app does not take the key. |
 | `TouchpadInputTest` | The touchpad of the mock glasses: a double tap after a product prompt sends `intent yes` with the source `touch` and the prompt ID, and the server adds the product. A double tap before the first prompt carries no ID and adds nothing. A swipe sends `intent repeat`, and the server sends the line of the prompt again. |
 | `VoiceCommandsTest` | The speech results of the mock glasses: a final "add" after a product prompt goes out as `speech.final`, and the server adds the product. A result that is not final sends nothing, and "skip" skips the product. With the microphone denied, `mainYes: voice` and the intent `ask` each make the app ask for the permission, and Speech starts in the running session. With a denied request, the head stays the main yes. |
 | `FaceFinderTest` | ML Kit face detection runs on the phone, and an image with no face gives an empty list. |
-| `PhoneUiPageTest` | The phone UI in the WebView. The setup test clicks through the three steps: link the glasses, a denied and then an allowed camera, and the start, which opens the session screen. The card test reads the product card of a prompt and the cart after `Add`. Both are skipped for an APK with no build of the phone UI. The setup test is skipped for a phone UI with no setup screen. |
+| `PhoneUiPageTest` | The phone UI in the WebView. The setup test clicks through the steps: link the glasses, a denied and then an allowed camera, and the start, which opens the session screen. The test runner grants the notification permission, so the notification step does not show. The card test reads the product card of a prompt and the cart after `Add`. Both are skipped for an APK with no build of the phone UI. The setup test is skipped for a phone UI with no setup screen. |
 
 `SpineTest`, `DeviceStatesTest`, `VolumeKeysTest`, `TouchpadInputTest`, `VoiceCommandsTest`, `PhoneUiPageTest`, and the prompt tests of `PlaceholderPageTest` need the server of `apps/server` with both fake switches at `BuildConfig.SERVER_URL`. They read `GET /healthz` first, and they fail if recognition or speech is real.
 
@@ -941,7 +1000,7 @@ Rules of the script and of the tests:
 - The server of `apps/server` reports slow recognition after 3 failed recognition calls in a row. With fake recognition it makes no recognition call, so the command `slow` of the fake server of the app stands in for it.
 - `PaymentPromptTest` shows the biometric prompt of Android on the test phone for about one second, two times. No test puts a finger on the sensor: see "Checks with the glasses or with sound".
 - The log of each server is in `<temp folder>/glance-integration`. The log of the fake server of the app ends with `-app-fake.log`.
-- The tests run with `GlanceTestRunner`. It stops the Bluetooth prompt at the start of "Glance", and it takes each vibration in place of the phone. So the phone stays quiet, and no prompt waits for a tap. `BluetoothPromptTest` turns the prompt on for itself and taps its deny button.
+- The tests run with `GlanceTestRunner`. It stops the Bluetooth prompt at the start of "Glance", it takes each vibration in place of the phone, and it grants the notification permission on Android 13 or later. So the phone stays quiet, and no prompt waits for a tap. `BluetoothPromptTest` turns the prompt on for itself and taps its deny button.
 - Each test with a stream has `TestStreamRule`: the app asks for 720 x 1280 at 7 frames each second in the test, and the stream settings of the phone are back after it.
 - `VolumeKeysTest` sends a volume key through the input system of Android only when the app must take it. For a key that Android must get, the test calls `MainActivity.onKeyDown` and reads the result, because the real key changes the media volume of the phone. If the volume is not 0 at the end of a test, the test sets it to 0 again.
 - The media volume is 0, so no line plays, and no test on the phone reaches the mute time of a line. `SpeechQueueTest` and `VoiceInputTest` of `core` check that rule. Check it by ear with sound: see "Checks with the glasses or with sound".
@@ -967,7 +1026,7 @@ Facts about MockDeviceKit that the tests found (DAT 1.0.1, Nothing Phone (1), An
 
 ## Checks with the glasses or with sound
 
-No test of the night covers these checks of Plan 2 Tasks 17 and 21 to 25. Each one needs the real glasses, a finger, or a phone that plays sound.
+No test of the night covers these checks of Plan 2 Tasks 17 and 21 to 25. Each one needs the real glasses, a finger, or a phone that plays sound. The checks with the screen off are in the second table.
 
 | Check | Expected |
 |---|---|
@@ -980,7 +1039,7 @@ No test of the night covers these checks of Plan 2 Tasks 17 and 21 to 25. Each o
 | On the glasses: say "add" for two prompts in a row. | Two messages. If the second one is missing, the `StateFlow` dropped an equal result: write it in the probe results file. |
 | Mock session against `tools/fake-server`. Type `bio`. Put a finger that the phone knows on the sensor. | The prompt "Confirm payment" shows. The fake server logs `biometric.result ok=true`. |
 | Type `bio`. Use a finger that the phone does not know, then cancel the prompt. | No line for the wrong finger, then `biometric.result ok=false`. |
-| Enable pocket mode on the page. Type `bio`. | The screen is bright while the prompt shows, and dim after it. |
+| Type `bio` with the screen off. | `biometric.result ok=false` at once, and no prompt shows after the unlock. |
 | On a phone or an emulator with no screen lock: type `bio`. | `biometric.result ok=false`, and the page logs `native.biometric_unavailable`. |
 | With sound on, type `slow` in the fake server. | The glasses, or the phone, say "Recognition is slow right now." |
 | On the glasses: start a session, hold a product up, type `amb`. | The fake server logs one frame with `kind=still blurred=true`. Write down its size, and the milliseconds of the log line `still seq=...` of the app. |
@@ -994,6 +1053,22 @@ No test of the night covers these checks of Plan 2 Tasks 17 and 21 to 25. Each o
 | On the glasses, after a label still: type `badclip`, wait for the prompt, and nod. | `intent yes` with the source `head`, and the sound `added` at once. The log has `head window open`, `nod accepted`, and `head answer yes`. If the nod has no effect, read the `nod rejected` lines and the `motion stall` lines: see "Checks of the head gestures with the glasses". |
 | On the glasses: look at a kiosk QR code from 2 meters for 5 seconds. | No `label still` line in the log. A line means that ML Kit reports the far QR code as a region that is not square. |
 | On the glasses, after that still: wait for the next prompt, and nod. | `intent yes` with the source `head`, and the sound `added` at once. If the nod has no effect, see "Checks of the head gestures with the glasses". |
+
+Checks with the screen off, in this order. Each one needs the real glasses and the test phone. Before the first one, set the battery use of "Glance" and of "Meta AI" to "Unrestricted", and allow the notifications of "Glance".
+
+| Check | Expected |
+|---|---|
+| Start a shop and press the power button. Wait 5 minutes. | Logcat still shows the `frame ... fps=` lines and the motion count lines of `DatLink` with no gap, and the server still gets frames. |
+| With the screen off, hold a product up, hear the prompt, and nod. | The answer sound plays, the server adds the product, and the phone vibrates for the prompt and for the add. |
+| With the screen off, hear one line with a clip, one line of the phone voice (stop the clip server for it), and one answer sound. | Each one plays in the glasses. |
+| Turn the screen on with the phone locked, and pull the notification drawer down. | The notification has the state as its title and the new count and total as its text. |
+| Tap "Stop camera" in the notification. | The stream stops, the notification goes away, and the cart shows in the app. Start camera in the app starts the stream again. |
+| With the screen off, fold the glasses, wait 10 seconds, and open them. | A new stream starts by itself, and the notification shows "Glasses disconnected" in between. |
+| Fold the glasses and leave them for 5 minutes with the screen off. | The log line "the glasses did not return: the wait for them ends", and the notification goes away. |
+| With the screen off for 5 minutes in a shop, turn the screen on and unlock. | The page shows the cart, the captions, and the state of this moment. |
+| Run `adb shell am kill com.metaglance.android` with the screen off in a session. | The process stays, because it has a foreground service. |
+| Tap Stop for "Glance" in the Task Manager of the notification drawer, then open "Glance". | The app starts new, the cart comes back from the snapshot of the server, and Start camera works. |
+| Shop for 30 minutes with the phone locked in a pocket. | Write down the battery use and the heat of the phone. |
 
 ## The sounds
 

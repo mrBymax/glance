@@ -810,3 +810,14 @@ The team did not decide these. Review them.
 | The ElevenLabs voice for English and for Italian | Speech |
 | Whether Meta mentors are at the venue | Risk handling |
 | A blind or low-vision tester for Saturday, if the organizers can find one | The pitch and the accessibility claim |
+
+## 24. Amendment of 2026-11-14: screen off, no pocket mode, no fingerprint
+
+The owner changed three decisions after the first tests on the glasses. Where this section and an older section differ, this section holds.
+
+- A session works with the screen off and the phone locked in a pocket. The Android app has a foreground service with a wake lock and a notification for it. This replaces the non-goal "Operation with the phone locked" of section 2, and point 8 of section 9, "Keep the screen on while a session runs": the app does not keep the screen on.
+- Pocket mode does not exist. The page message `pocket.set`, the black screen of section 10, and the rule "Kotlin keeps the screen on" are gone.
+- The page message `haptic` is gone. Kotlin selects each vibration from the events of the server and the state of the camera, with the patterns of section 6.4, because the page does not run with the screen off.
+- No payment needs a fingerprint. A nod pays each total. This replaces extra 6 of section 5, the line "Over fifty euros" of section 6, and the payment row of section 13. The server keeps the fingerprint step behind the setting `BIOMETRIC_ABOVE_CENTS`, which is not set by default.
+- The setup has four steps: link glasses, allow camera, allow notifications, ready. The native state has the field `notificationPermission`, and the page has the message `setup.requestNotifications`. A denied permission does not block a shop.
+- The volume keys are an input only while the app shows on the screen.

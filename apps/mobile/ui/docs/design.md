@@ -54,7 +54,8 @@ Refero research on 2026-11-14: 5 style searches, 2 full styles, 11 screen search
 | Choices of the settings as radio rows, not segments | ElevenReader, Uber allergies | RadioList | A segment of 62 px cut "While in view" and "Phone" at 360 px. A row holds a label of each length at 200 percent. |
 | Checkout sheet: store glyph, payee, item count, amount, fingerprint row, Pay, Cancel | App Store purchase sheet | BottomSheet, primary Button | The sheet states who gets paid and how much before the only commit. |
 | Receipt: a green check, "Paid", the amount, the lines, order and time, the demo line | Square receipt (prior research) | Green = paid | The paid state reads in one look and the details follow as a ledger. |
-| Pocket mode: black screen, lock glyph, the total, Unlock | Prior research | Black = pocket | Unchanged in function. The total is the only content. |
+| Setup, notification step: a bell glyph, one sentence of purpose, one primary button | The camera step of this screen | Card, primary Button | The step has the form of the two steps before it. A denied permission shows on the ready step as a warning with a secondary button, so Start shopping stays the only black button. |
+| End as one full row under the cart | Brink actions | Secondary Button | Pocket mode is gone: a shop runs with the screen off. The row holds one action, so the button takes the width. |
 
 ## Tokens
 
