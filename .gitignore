@@ -74,3 +74,6 @@ coverage/
 
 # Logs and saved frames of local demo runs
 logs/
+
+# Reference pictures of the store items. A picture can show a room and people.
+apps/server/catalog/reference/

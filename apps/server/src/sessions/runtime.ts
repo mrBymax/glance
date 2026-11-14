@@ -106,14 +106,21 @@ export class SessionRuntime {
           this.ask(effect.question, effect.product);
           break;
         case 'still.request':
-          // Not through the outbox: the code is in view now, and a line that waits for its clip must not hold the request.
-          this.sink?.send({ t: 'still.request', purpose: 'label' });
+          this.requestStill('label');
           break;
       }
     }
 
     if (changed) this.write();
     this.deps.afterStep(this, before);
+  }
+
+  /**
+   * Asks the phone for one still. Not through the outbox: the product is in view now, and a line that waits for its
+   * clip must not hold the request. With no phone attached, the request goes nowhere.
+   */
+  requestStill(purpose: Extract<ServerToDevice, { t: 'still.request' }>['purpose']): void {
+    this.sink?.send({ t: 'still.request', purpose });
   }
 
   snapshot(): SessionSnapshot {

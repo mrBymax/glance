@@ -24,17 +24,23 @@ export type TestApp = { app: FastifyInstance; base: string; wsBase: string; stor
 /**
  * Starts the app on a free port of 127.0.0.1, with a memory store, the dev catalog, the dev store list,
  * and the product details of the fixtures, so no test calls Open Food Facts.
- * The config has fake speech, a payment of 10 ms, and a speech cache in a new temp directory that close() removes. `env` changes it, and `over` replaces dependencies of the app.
+ * The config has fake speech, a payment of 10 ms, and a speech cache and a reference folder in new temp directories that close() removes. `env` changes it, and `over` replaces dependencies of the app.
  */
 export async function testApp(env: Record<string, string> = {}, over: Partial<AppDeps> = {}): Promise<TestApp> {
   const products = readCatalogFile(DEV_CATALOG);
   const store = new MemoryStore(products);
   const cacheDir = mkdtempSync(join(tmpdir(), 'glance-speech-'));
-  const removeCacheDir = (): void => rmSync(cacheDir, { recursive: true, force: true });
+  // A test app never reads or writes the reference pictures of a person: its folder is empty and temporary.
+  const referenceDir = mkdtempSync(join(tmpdir(), 'glance-reference-'));
+  const removeCacheDir = (): void => {
+    rmSync(cacheDir, { recursive: true, force: true });
+    rmSync(referenceDir, { recursive: true, force: true });
+  };
   let app: FastifyInstance;
   try {
     const config = loadConfig({
-      FAKE_SPEECH: '1', FAKE_PRODUCT_INFO: '1', GEMINI_API_KEY: 'test', PAYMENT_DELAY_MS: '10', SPEECH_CACHE_DIR: cacheDir, ...env,
+      FAKE_SPEECH: '1', FAKE_PRODUCT_INFO: '1', GEMINI_API_KEY: 'test', PAYMENT_DELAY_MS: '10', SPEECH_CACHE_DIR: cacheDir,
+      REFERENCE_DIR: referenceDir, ...env,
     }, []);
     app = await buildApp({
       config, clock: systemClock, store, catalog: indexCatalog(products), log: false,

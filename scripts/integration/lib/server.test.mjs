@@ -6,7 +6,7 @@ test('removes each server variable of the shell, and keeps the other variables',
   const shell = {
     PATH: '/bin', GEMINI_API_KEY: 'key', ELEVENLABS_API_KEY: 'key', MONGODB_URI: 'mongodb://shop', SECOND_LOOK_WAIT_MS: '900',
     FAKE_PRODUCT_INFO: '0', OFF_BASE_URL: 'https://world.openfoodfacts.org', PRODUCT_CACHE_DIR: '/cache',
-    PRODUCT_INFO_USER_AGENT: 'Shop/1', STORE_LIST_PATH: '/shop/list.json',
+    PRODUCT_INFO_USER_AGENT: 'Shop/1', STORE_LIST_PATH: '/shop/list.json', LABEL_MIN_CONFIDENCE: '0.9', REFERENCE_DIR: '/shop/pictures',
   };
   assert.deepEqual(fakeServerEnv(shell, { port: 18123, fakeScript: null, paymentDelayMs: 300, demoKey: null }), {
     PATH: '/bin', PORT: '18123', FAKE_RECOGNITION: '1', FAKE_SPEECH: '1', FAKE_PRODUCT_INFO: '1', PAYMENT_DELAY_MS: '300',

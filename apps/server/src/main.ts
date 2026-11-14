@@ -100,6 +100,8 @@ async function main(): Promise<void> {
   app.log.info(`store: ${config.mongodbUri === null ? 'memory' : 'mongo'}`);
   app.log.info(`catalog: ${catalog.products.length} products`);
   app.log.info(`store list: ${config.storeListPath}, ${storeItems.length} items`);
+  const pictures = [...(await app.references.all()).values()];
+  app.log.info(`reference pictures: ${config.referenceDir}, ${pictures.length} items, ${pictures.flat().length} pictures`);
   app.log.info(config.fakeProductInfo ? 'product info: fake' : `product info: ${config.offBaseUrl}, cache in ${config.productCacheDir}`);
   for (const line of priceConflicts(catalog.products, storeItems)) app.log.warn(line);
   app.log.info(config.fakeRecognition === null

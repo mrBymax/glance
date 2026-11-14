@@ -11,7 +11,9 @@ it('uses the defaults', () => {
     speechCacheDir: '.cache/speech', saveFramesDir: null, paymentDelayMs: 1500, secondLookWaitMs: 0,
     storeListPath: 'catalog/store-list.dev.json', fakeProductInfo: false, offBaseUrl: 'https://world.openfoodfacts.org',
     productInfoUserAgent: 'MetaGlance/0.1 (https://github.com/mrBymax/glance)', productCacheDir: '.cache/products',
+    referenceDir: 'catalog/reference',
   });
+  expect(loadConfig({ ...KEYS, REFERENCE_DIR: '/data/reference' }, []).referenceDir).toBe('/data/reference');
 });
 it('reads the demo key, and an empty value counts as not set', () => {
   expect(loadConfig(KEYS, []).demoKey).toBeNull();

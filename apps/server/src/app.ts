@@ -20,6 +20,7 @@ import { ProductResolver } from './products/resolver';
 import { ScannedProducts, gtinOfScannedId, scannedProduct, withScanned } from './products/scanned';
 import { type StoreEntry, notInCatalog, readStoreEntries } from './products/storeEntries';
 import type { StoreList } from './products/storeList';
+import { type ReferenceImages, createFolderReferences } from './reference/images';
 import { ScriptPlayer, readFakeScript } from './recognition/fake';
 import type { Recognizer } from './recognition/gemini';
 import { createFrameHandler, saveFrameWith } from './recognition/intake';
@@ -53,6 +54,8 @@ export type AppDeps = {
   onFrame?: FrameHandler;
   /** Writes each frame to disk. Only main.ts makes one, and only with SAVE_FRAMES. Without it the server stores no frame. */
   saveFrame?: FrameSaver;
+  /** The reference pictures of the store items. Without it the app reads and writes the folder of REFERENCE_DIR. */
+  references?: ReferenceImages;
 };
 
 type Closer = () => void | Promise<void>;
@@ -68,6 +71,7 @@ declare module 'fastify' {
     bus: EventBus;
     clips: ClipCache;
     kiosks: KioskService;
+    references: ReferenceImages;
   }
 }
 
@@ -191,6 +195,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.decorate('sessions', sessions);
   app.decorate('clips', clips);
   app.decorate('kiosks', kiosks);
+  const references = deps.references ?? createFolderReferences(config.referenceDir, deps.clock);
+  app.decorate('references', references);
   sessions.startTicks();
   app.closers.add(() => {
     sessions.stop();
@@ -260,6 +266,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     minItemConfidence: config.labelMinConfidence,
     requireBlur: config.requireBlur,
     saveFrame,
+    references,
   });
   app.closers.add(() => readLabel.stopAll());
   const onStreamFrame: FrameHandler = player ? logFrame : deps.onFrame ?? recognize ?? (() => undefined);
@@ -272,7 +279,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   registerKioskRoutes(app, { kiosks });
   registerSpeechRoutes(app, { cache: clips, fake: config.fakeSpeech });
-  registerDemoRoutes(app, { demoKey: config.demoKey });
+  registerDemoRoutes(app, { demoKey: config.demoKey, storeList: deps.storeList, references, capture: readLabel.capture });
   registerDeviceSocket(app, {
     onFrame: (session, frame) => (frame.header.kind === 'label' ? readLabel(session, frame) : onStreamFrame(session, frame)),
     onOpen: (session) => player?.start(session, { fakeDevice: false }),

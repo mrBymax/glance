@@ -1,5 +1,6 @@
 import { DEFAULT_OFF_BASE_URL, DEFAULT_PRODUCT_CACHE_DIR, DEFAULT_PRODUCT_INFO_USER_AGENT } from './products/openFoodFacts';
 import { DEFAULT_STORE_LIST_PATH } from './products/storeList';
+import { DEFAULT_REFERENCE_DIR } from './reference/images';
 
 export type Config = {
   port: number;
@@ -30,8 +31,10 @@ export type Config = {
    * Set it only when the phone sends a still for each glance.ambiguous event.
    */
   secondLookWaitMs: number;
-  /** The key of GET /api/demo/latest, or null. Without it that path answers 404. */
+  /** The key of the paths under /api/demo, or null. Without it those paths answer 404. */
   demoKey: string | null;
+  /** The folder with the reference pictures of the store items. */
+  referenceDir: string;
   /** The file with the items that the store sells. */
   storeListPath: string;
   /** Read the product details from fixtures, with no call to Open Food Facts. */
@@ -110,6 +113,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     paymentDelayMs: readNumber('PAYMENT_DELAY_MS', 1500, 0, 600_000, true),
     secondLookWaitMs: readNumber('SECOND_LOOK_WAIT_MS', 0, 0, 10_000, true),
     demoKey: read('DEMO_KEY'),
+    referenceDir: read('REFERENCE_DIR') ?? DEFAULT_REFERENCE_DIR,
     storeListPath: read('STORE_LIST_PATH') ?? DEFAULT_STORE_LIST_PATH,
     fakeProductInfo,
     offBaseUrl,
