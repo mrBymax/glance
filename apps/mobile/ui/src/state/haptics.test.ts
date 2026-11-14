@@ -38,3 +38,16 @@ it('gives no pattern for the first native state, a snapshot, and a local action'
 it('stays silent when haptics are off', () => {
   expect(pattern(eventMessage('checkout.paid'), { ...on, profile: { ...DEFAULT_PROFILE, haptics: false } })).toBeNull();
 });
+it('the add that crosses the budget gives one pattern: the warning of budget.exceeded, and no pattern for its cart.updated', () => {
+  const items = [{ productId: 'oat-drink-1l', name: 'Oat drink', packSize: '1 L', qty: 1, unitPriceCents: 189 }];
+  const withBudget: UiState = { ...on, profile: { ...DEFAULT_PROFILE, budgetCents: 300 }, cart: { items, totalCents: 189 } };
+  const crossing = eventMessage('cart.updated', { cart: { items: [{ ...items[0]!, qty: 2 }], totalCents: 378 }, change: change('add') });
+  expect(pattern(crossing, withBudget)).toBeNull();
+  expect(pattern(eventMessage('budget.exceeded'), reduce(withBudget, crossing))).toBe('warning');
+  // An add under the budget, an add when the total is already over it, and a removal keep their patterns.
+  const under = eventMessage('cart.updated', { cart: { items, totalCents: 250 }, change: change('add') });
+  expect(pattern(under, withBudget)).toBe('added');
+  expect(pattern(crossing, { ...withBudget, cart: { items, totalCents: 301 } })).toBe('added');
+  const removal = eventMessage('cart.updated', { cart: { items: [], totalCents: 0 }, change: change('remove') });
+  expect(pattern(removal, { ...withBudget, cart: { items, totalCents: 378 } })).toBe('removed');
+});
