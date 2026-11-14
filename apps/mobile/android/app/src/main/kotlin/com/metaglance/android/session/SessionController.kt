@@ -76,12 +76,15 @@ import com.metaglance.core.state.DatPermission
 import com.metaglance.core.state.DatSession
 import com.metaglance.core.state.DatSnapshot
 import com.metaglance.core.state.DatStream
+import com.metaglance.core.state.GlassesWait
 import com.metaglance.core.state.HapticPattern
 import com.metaglance.core.state.HapticPatterns
 import com.metaglance.core.state.HapticRules
 import com.metaglance.core.state.MotionFlow
 import com.metaglance.core.state.NativeError
 import com.metaglance.core.state.NativeErrors
+import com.metaglance.core.state.SessionNotice
+import com.metaglance.core.state.SessionNotices
 import com.metaglance.core.state.StateMapper
 import com.metaglance.core.state.StopCause
 import com.metaglance.core.state.StopCauses
@@ -114,7 +117,7 @@ import okhttp3.OkHttpClient
  *
  * Call each function on the main thread. `scope` must use the main dispatcher. The controller holds no cart
  * logic: it moves messages, and it decides when the camera runs. It keeps the last cart of the server only to
- * select a vibration.
+ * select a vibration and to fill the notification.
  *
  * A session continues with the screen off. So nothing that a session needs goes through the page or the activity.
  *
@@ -147,6 +150,10 @@ class SessionController(
 
     /** The last cart of the server, or null before the first one. */
     private var cart: Cart? = null
+        set(value) {
+            field = value
+            refreshNotice()
+        }
 
     // The frame thread reads the socket.
     @Volatile
@@ -222,8 +229,11 @@ class SessionController(
     private var waitingForGlasses = false
         set(value) {
             field = value
+            if (value) glassesWait.start(SystemClock.elapsedRealtime()) else glassesWait.end()
             refreshSessionActive()
+            refreshNotice()
         }
+    private val glassesWait = GlassesWait()
     private var restartsInARow = 0
     private var restartNotBeforeMs = 0L
 
@@ -264,6 +274,11 @@ class SessionController(
      */
     val sessionActive: StateFlow<Boolean> = _sessionActive.asStateFlow()
 
+    private val _notice = MutableStateFlow(readNotice())
+
+    /** The texts of the notification of `SessionService`, for the state and the cart of this moment. */
+    val notice: StateFlow<SessionNotice> = _notice.asStateFlow()
+
     init {
         watchPhoneNetwork()
         scope.launch { dat.snapshot.collect { onDatSnapshot(it) } }
@@ -289,9 +304,15 @@ class SessionController(
         scope.launch {
             while (true) {
                 delay(TICK_MS)
-                announcer.onTick(SystemClock.elapsedRealtime())?.let { line ->
+                val nowMs = SystemClock.elapsedRealtime()
+                announcer.onTick(nowMs)?.let { line ->
                     tap?.onLocalLine(line)
                     speech.sayLocal(line)
+                }
+                if (glassesWait.isOver(nowMs)) {
+                    // The service and its wake lock end with the wait. The shopper starts the camera from the app.
+                    log("the glasses did not return: the wait for them ends")
+                    waitingForGlasses = false
                 }
             }
         }
@@ -424,7 +445,15 @@ class SessionController(
         }
     }
 
-    private fun onUiReady() {
+    /**
+     * The activity is visible again. While it was stopped, Android can pause the page or drop its messages, so
+     * the page gets the full state again, as a new page does.
+     */
+    fun onScreenShown() = sendPageState()
+
+    private fun onUiReady() = sendPageState()
+
+    private fun sendPageState() {
         toPage(NativeToPage.NativeStateChanged(_nativeState.value))
         toPage(NativeToPage.ProfileChanged(profile))
         val session = serverSession?.takeIf { it.live } ?: return
@@ -688,6 +717,7 @@ class SessionController(
         if (value == profile) return
         profile = value
         store.profile = value
+        refreshNotice()
         toPage(NativeToPage.ProfileChanged(value))
     }
 
@@ -726,6 +756,7 @@ class SessionController(
         serverSession = null
         cart = null
         profile = store.profile
+        refreshNotice()
         toPage(NativeToPage.ProfileChanged(profile))
         refreshNativeState()
         toPage(NativeToPage.NativeStateChanged(_nativeState.value))
@@ -1162,6 +1193,7 @@ class SessionController(
         val before = _nativeState.value
         if (state == before) return
         _nativeState.value = state
+        refreshNotice()
         haptic(HapticRules.forStream(before.stream, state.stream))
         toPage(NativeToPage.NativeStateChanged(state))
     }
@@ -1178,6 +1210,12 @@ class SessionController(
         serverSession = session
         store.serverSession = session
     }
+
+    private fun refreshNotice() {
+        _notice.value = readNotice()
+    }
+
+    private fun readNotice(): SessionNotice = _nativeState.value.let { SessionNotices.of(it.stream, it.network, waitingForGlasses, cart, profile.lang) }
 
     private fun refreshSessionActive() {
         _sessionActive.value = starting || datRunning || stopSettles || waitingForGlasses

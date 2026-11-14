@@ -20,7 +20,9 @@ import androidx.core.content.ContextCompat
 import com.metaglance.android.GlanceApp
 import com.metaglance.android.MainActivity
 import com.metaglance.android.R
+import com.metaglance.core.state.SessionNotice
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -29,7 +31,9 @@ import kotlinx.coroutines.launch
  * Keeps a session alive with the screen off and the phone locked. It holds three things: the right of the
  * process to run, a wake lock for the CPU, and the notification. The session objects stay in `GlanceApp`.
  *
- * The service runs while `SessionController.sessionActive` is true, and it stops itself after that.
+ * The service runs while `SessionController.sessionActive` is true, and it stops itself after that. A request
+ * to the service is a start command with an action, never `stopService`: a stop that comes before the first
+ * `startForeground` makes Android end the app.
  * The pattern is that of `StreamingService` in the CameraAccess sample of the DAT SDK:
  * https://github.com/facebook/meta-wearables-dat-android
  */
@@ -37,27 +41,29 @@ class SessionService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var watch: Job? = null
     private var lastStartId = 0
+    private var foreground = false
 
     private val glance: GlanceApp get() = application as GlanceApp
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onCreate() {
-        super.onCreate()
-        val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) }
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         lastStartId = startId
-        // After startForegroundService, Android ends the app if this call does not follow. So it comes first.
+        val notice = glance.session.notice.value
+        // A channel that exists gets the name again, in the language of this moment.
+        val channel = NotificationChannel(CHANNEL_ID, notice.channel, NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) }
+        notifications.createNotificationChannel(channel)
+        // After startForegroundService, Android ends the app if this call does not follow. So it comes first,
+        // also for the action of the notification.
         try {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), serviceTypes())
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(notice), serviceTypes())
         } catch (e: IllegalStateException) {
             return giveUp(e)
         } catch (e: SecurityException) {
             return giveUp(e)
         }
+        foreground = true
+        if (intent?.action == ACTION_STOP_CAMERA) glance.session.stopCamera()
         if (watch == null) watch = glance.scope.launch { watchSession() }
         // The session can end before this command arrives. The watch does not see a value that it saw before.
         if (!glance.session.sessionActive.value) stop()
@@ -72,21 +78,27 @@ class SessionService : Service() {
     }
 
     private suspend fun watchSession() {
-        glance.session.sessionActive.collectLatest { active ->
-            if (!active) {
-                stop()
-                return@collectLatest
+        coroutineScope {
+            launch {
+                glance.session.notice.collect { notice -> if (foreground) notifications.notify(NOTIFICATION_ID, notification(notice)) }
             }
-            // The lock has a time limit, so a lock that the app lost does not stay forever. A long session gets a new one.
-            while (true) {
-                holdWakeLock()
-                delay(WAKE_LOCK_RENEW_MS)
+            glance.session.sessionActive.collectLatest { active ->
+                if (!active) {
+                    stop()
+                    return@collectLatest
+                }
+                // The lock has a time limit, so a lock that the app lost does not stay forever. A long session gets a new one.
+                while (true) {
+                    holdWakeLock()
+                    delay(WAKE_LOCK_RENEW_MS)
+                }
             }
         }
     }
 
     private fun stop() {
         Log.i(TAG, "session service: stop")
+        foreground = false
         releaseWakeLock()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         // A start that is on its way keeps the service, and its command comes next.
@@ -110,18 +122,19 @@ class SessionService : Service() {
         return ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or connected
     }
 
-    private fun notification(): Notification {
-        val open = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+    private val notifications: NotificationManager get() = getSystemService(NotificationManager::class.java)
+
+    /** A tap opens the app. The one action stops the camera, and the cart stays on the server. */
+    private fun notification(notice: SessionNotice): Notification {
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), flags)
+        val stopCamera = PendingIntent.getService(this, 0, Intent(this, SessionService::class.java).setAction(ACTION_STOP_CAMERA), flags)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_session)
-            .setContentTitle("Shopping")
-            .setContentText("The camera of the glasses is on.")
+            .setContentTitle(notice.title)
+            .setContentText(notice.text)
             .setContentIntent(open)
+            .addAction(0, notice.stopCamera, stopCamera)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
@@ -144,8 +157,10 @@ class SessionService : Service() {
     companion object {
         private const val TAG = "Glance"
         private const val CHANNEL_ID = "session"
-        private const val CHANNEL_NAME = "Shopping session"
-        private const val NOTIFICATION_ID = 1
+        private const val ACTION_STOP_CAMERA = "com.metaglance.android.session.STOP_CAMERA"
+
+        /** The instrumented tests find the notification with it. */
+        const val NOTIFICATION_ID = 1
         private const val WAKE_LOCK_TAG = "Glance:session"
         private const val WAKE_LOCK_LIMIT_MS = 2 * 60 * 60 * 1000L
         private const val WAKE_LOCK_RENEW_MS = 60 * 60 * 1000L
