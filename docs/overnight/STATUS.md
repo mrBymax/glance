@@ -2,33 +2,39 @@
 
 ## Summary
 
-State on 2026-11-14 at about 08:30: phases A, B, C, and D are done and merged in `feat/overnight-build` (8c5bba6). Phase E (other inputs and the extras) is next.
+State on 2026-11-14 at about 10:10: phases A to E are done and merged in `feat/overnight-build`. No task is `todo`. Two tasks are `morning`: Plan 2 Task 4 (the probe on the real glasses) and Plan 4 Task 8 (late content and the publish check). `MORNING.md` holds each step that needs a person.
 
-What works, checked on the merged tree:
+What works, checked on the merged tree after the last merge:
 
-- `npm test --workspaces --if-present`: shared 44, server 402 (7 MongoDB tests skipped, no database), website 119, phone UI 169. `npm run lint` is clean.
-- `apps/mobile/android`: `./gradlew ktlintCheck test :app:assembleDebug` passes (151 unit tests).
+- `npm test --workspaces --if-present`: shared 44, server 518 (7 MongoDB tests skipped, no database), website 125, phone UI 211, Display HUD 43. `npm run lint` is clean.
+- `apps/mobile/android`: `./gradlew ktlintCheck test :app:assembleDebug` passes.
 - Integration test 1: `node scripts/integration/server-kotlin.mjs` passes.
-- Integration test 2: `node scripts/integration/server-web.mjs` passes (phone UI, kiosk page, mirror page) with one known defect line. `--strict` fails on it.
-- Integration test 3: `node scripts/integration/android/run-spine.mjs --integration` passes 3 of 3 on the phone P11262000912 (spine, 18 state tests, 2 page tests). `--all` runs each instrumented test.
-- One real Gemini call works (1349 ms) after the fix f26b800. Ledger: 2 of 20 Gemini calls, 0 of 5 ElevenLabs calls.
+- Integration test 2: `node scripts/integration/server-web.mjs` passes (phone UI, kiosk page, mirror page). The caption defect of the phone UI in a browser is fixed (71bf738).
+- Integration test 3: `node scripts/integration/android/run-spine.mjs --integration` passes 5 of 5 suites on the phone P11262000912 with mock glasses: the spine, the device states, the page, the other inputs, and the fingerprint prompt with the still photo. `--all` runs each instrumented test.
+- One real Gemini call works (1349 ms) after the fix f26b800. Ledger: 2 of 20 Gemini calls, 0 of 5 ElevenLabs calls. No clip was made, so nobody has heard the voice of ElevenLabs.
 
 Before each command: `source "$USERPROFILE/.glance-tools/env.sh"` (Git Bash).
 
-Open defects and limits:
+Built in phase E: the volume keys, the touchpad, and the voice as inputs, and the extras 1 to 9 (allergen guard, budget guard, look-alike answer, Display HUD, question about a product, fingerprint above 50 EUR, Italian, spot check, sharp second look) on the server, in the Android app, and in the web pages.
 
-- The phone UI with `?api=` (BrowserBridge) does not show the caption "Paid. ...", because the bridge closes the event stream at the phase `paid` and the server sends the caption later. The Android path is not affected. A fix is planned in phase E.
-- No instrumented test covers the state "Recognition slow". The server rule now exists (Plan 1 Task 18). Planned in phase E.
-- The Vite dev proxy loses calls on this machine (Node 26, Windows). The test harness adds an HTTP agent. The app configs are unchanged: see `MORNING.md`.
-- Not done, needs a person: the Lighthouse audit of Plan 3 Task 15, a camera read of the kiosk QR code, the real catalog (Plan 4 Task 1), the Vultr instance (Plan 1 Task 22), the final signed APK (Plan 2 Task 20), the probe on the glasses (Plan 2 Task 4).
+Open limits:
 
-Lane worktrees: `C:UsersmarcoDesktopglance-wt<lane>` with the branches `overnight/server`, `overnight/android`, `overnight/web`, `overnight/integ`, `overnight/hud`.
+- Nothing ran with real glasses. Each device test uses mock glasses. The probe (Plan 2 Task 4) decides which inputs work on the glasses.
+- Plan 4 Task 7 Steps 6 and 7 did not run: the Display simulator and its clip. The runtime audit of the HUD has one open kind of finding: the caption repeats a fact of the screen. No test renders `HudPage.tsx`.
+- `SECOND_LOOK_WAIT_MS` has the default 0, so the server does not wait for the still of the Android app until the team sets it.
+- No native speaker has read the Italian text. Nobody has put a finger on the payment prompt.
+- Three instrumented tests failed one time each during phase E. Two causes were races and are fixed (7175326, 211f1f3). The cause of the third is not proven; 461fe8a changes how the test counts sessions.
+- The Vite dev proxy loses calls on this machine (Node 26, Windows). Only the test harness works around it.
+- Not done, needs a person: the Lighthouse audit, a camera read of the kiosk QR code, the real catalog (Plan 4 Task 1), the Vultr instance (Plan 1 Task 22), MongoDB Atlas, the final signed APK (Plan 2 Task 20).
+
+Lane worktrees: `C:\Users\marco\Desktop\glance-wt\<lane>` with the branches `overnight/server`, `overnight/android`, `overnight/web`, `overnight/integ`, `overnight/hud`. They can go after the review.
 
 ## Log of attempts
 
 - Integration test 3, spine: a running mock stream keeps its camera feed, so the test folds and unfolds the glasses for the QR clip. Fixes on the way: a 500 ms settle time in SessionController, a delayed Inputs revival, and a 1 s wait in DatLink.stop against a native abort in the video decoder of mwdat-camera 1.0.1.
 - Integration test 2 failed after the merge of phases C and D, because the phone UI now starts on the setup screen. The test was stale and now clicks through the screens.
 - Gemini check: the first call got status 400 for a 4 s server deadline. Fixed in f26b800.
+- Phase E: the merges of the web, hud, and android lanes had conflicts in `docs/architecture.md` and `README.md`. A documentation pass after the merges made both true again (a5744ba, 43ad02c).
 - Details of each lane: `QUESTIONS.md` and `MORNING.md` section 8.
 
 ## Tasks
@@ -64,14 +70,14 @@ Status values: `todo`, `done`, `blocked`, `morning`.
 | 1 | 20 | Catalog check and seed (C3) | D | server | done | merged in 8c5bba6 |
 | 1 | 21 | Replay tool (C3) | D | server | done | merged in 8c5bba6 |
 | 1 | 22 | Deployment on Vultr with HTTPS (C3) | D | server | done | merged in 8c5bba6 |
-| 1 | 23 | Allergen guard (Extra 1) | E | server | todo | |
-| 1 | 24 | Budget guard (Extra 2) | E | server | todo | |
-| 1 | 25 | Answer for look-alike products (Extra 3) | E | server | todo | |
-| 1 | 26 | Ask about a product (Extra 5) | E | server | todo | |
-| 1 | 27 | Fingerprint above 50 EUR, server part (Extra 6) | E | server | todo | |
-| 1 | 28 | Voice in Italian (Extra 7) | E | server | todo | |
-| 1 | 29 | Spot check (Extra 8) | E | server | todo | |
-| 1 | 30 | Sharp second look (Extra 9) | E | server | todo | |
+| 1 | 23 | Allergen guard (Extra 1) | E | server | done | 3a1318e |
+| 1 | 24 | Budget guard (Extra 2) | E | server | done | 5ec869e |
+| 1 | 25 | Answer for look-alike products (Extra 3) | E | server | done | ae20eec |
+| 1 | 26 | Ask about a product (Extra 5) | E | server | done | c519aeb |
+| 1 | 27 | Fingerprint above 50 EUR, server part (Extra 6) | E | server | done | 829d5e4 |
+| 1 | 28 | Voice in Italian (Extra 7) | E | server | done | f0f7930 |
+| 1 | 29 | Spot check (Extra 8) | E | server | done | ba172ea |
+| 1 | 30 | Sharp second look (Extra 9) | E | server | done | 03b4704 |
 | 2 | 1 | Gradle project, motion CSV, probe screen (C1) | B | android | done | merge 396d89e |
 | 2 | 2 | Probe link: registration, session, stream, frames (C1) | B | android | done | merge 396d89e |
 | 2 | 3 | Probe capabilities: Motion, Inputs, Speech, audio, still (C1) | B | android | done | merge 396d89e |
@@ -92,11 +98,11 @@ Status values: `todo`, `done`, `blocked`, `morning`.
 | 2 | 18 | Face blur and crop (C3) | D | android | done | merged in 8c5bba6 |
 | 2 | 19 | Haptics and pocket mode (C3) | D | android | done | merged in 8c5bba6 |
 | 2 | 20 | Signed demo APK (C3) | D | android | done | merged in 8c5bba6 |
-| 2 | 21 | Volume keys as yes and no (Extra, core if the probe selects it) | E | android | todo | |
-| 2 | 22 | Double tap and swipe (Extra) | E | android | todo | |
-| 2 | 23 | Voice commands (Extra) | E | android | todo | |
-| 2 | 24 | Fingerprint above 50 EUR (Extra 6) | E | android | todo | |
-| 2 | 25 | Sharp second look (Extra 9) | E | android | todo | |
+| 2 | 21 | Volume keys as yes and no (Extra, core if the probe selects it) | E | android | done | b485770 |
+| 2 | 22 | Double tap and swipe (Extra) | E | android | done | f4cc81b |
+| 2 | 23 | Voice commands (Extra) | E | android | done | fe11047 |
+| 2 | 24 | Fingerprint above 50 EUR (Extra 6) | E | android | done | 52bc795 |
+| 2 | 25 | Sharp second look (Extra 9) | E | android | done | 5c6b4f8 |
 | 3 | 1 | Website scaffold with Astryx and a router (C2) | B | web | done | merge fcc07c1 |
 | 3 | 2 | Phone UI scaffold and the 48 px rules (C2) | B | web | done | merge fcc07c1 |
 | 3 | 3 | Bridges (C2) | B | web | done | merge fcc07c1 |
@@ -112,20 +118,20 @@ Status values: `todo`, `done`, `blocked`, `morning`.
 | 3 | 13 | Mirror page (C3) | D | web | done | merged in 8c5bba6 |
 | 3 | 14 | Debug panel (C3) | D | web | done | merged in 8c5bba6 |
 | 3 | 15 | Accessibility checks of spec section 10 (C3) | D | web | done | merged in 8c5bba6 |
-| 3 | 16 | Allergen and diet settings, and the warning on the card (Extra 1) | E | web | todo | |
-| 3 | 17 | Budget setting and the warning (Extra 2) | E | web | todo | |
-| 3 | 18 | Look-alike message (Extra 3) | E | web | todo | |
-| 3 | 19 | Microphone button for a question (Extra 5) | E | web | todo | |
-| 3 | 20 | Fingerprint state at checkout (Extra 6) | E | web | todo | |
-| 3 | 21 | Language switch (Extra 7) | E | web | todo | |
-| 3 | 22 | Spot check on the kiosk and on the phone (Extra 8) | E | web | todo | |
+| 3 | 16 | Allergen and diet settings, and the warning on the card (Extra 1) | E | web | done | d1a85c2 |
+| 3 | 17 | Budget setting and the warning (Extra 2) | E | web | done | 0786865 |
+| 3 | 18 | Look-alike message (Extra 3) | E | web | done | 52b2f6c |
+| 3 | 19 | Microphone button for a question (Extra 5) | E | web | done | 05d3414 |
+| 3 | 20 | Fingerprint state at checkout (Extra 6) | E | web | done | 51d9a43 |
+| 3 | 21 | Language switch (Extra 7) | E | web | done | 929026e |
+| 3 | 22 | Spot check on the kiosk and on the phone (Extra 8) | E | web | done | 1c3f236 |
 | 4 | 1 | Catalog content (C3) | D | web | done | merged in 8c5bba6 |
 | 4 | 2 | Landing content and the copy guard (C3) | D | web | done | merged in 8c5bba6 |
 | 4 | 3 | Landing page (C3) | D | web | done | merged in 8c5bba6 |
 | 4 | 4 | Privacy page (C3) | D | web | done | merged in 8c5bba6 |
 | 4 | 5 | Run sheet for the demo and the shoot (C3) | D | web | done | merged in 8c5bba6 |
-| 4 | 6 | HUD project, state, and feeds (Extra 4) | E | hud | todo | |
-| 4 | 7 | HUD screen, verification, and the simulator clip (Extra 4) | E | hud | todo | |
+| 4 | 6 | HUD project, state, and feeds (Extra 4) | E | hud | done | 66f368c |
+| 4 | 7 | HUD screen, verification, and the simulator clip (Extra 4) | E | hud | done | f076365 |
 | 4 | 8 | Late content and the publish check (C3) | - | main | morning | |
 | I | 1 | Integration: server and Kotlin client | C | main | done | merged in 8c5bba6 |
 | I | 2 | Integration: server and web pages | C | main | done | merged in 8c5bba6 |

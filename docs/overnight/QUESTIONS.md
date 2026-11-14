@@ -366,3 +366,38 @@ Each entry: the decision or the fact, the reason, and the address of the source.
 - Decision: the known defect (lost 'Paid.' caption in the phone UI with `?api=`) stays a `known defect:` line with `--strict` as the failing test. Reason: Plan 3 line 688 (close the stream on paid or ended) and Plan 3 line 1139 (caption after session.state paid) conflict with the event order of the real server, so the team decides.
 - Fact: removing FAKE_SPEECH from the runner does not turn fake mode off, because `--fake` sets both switches when the variables are not set (apps/server/src/config.ts lines 52-55).
 - Decision: the root README.md was not changed in this lane, because 93b236c on feat/overnight-build rewrote it and it has no line for scripts/integration there (`git show feat/overnight-build:README.md` has no match for 'integration').
+
+## Phase E
+
+### Lane server
+
+- Should an ambiguous result stay silent while one of its candidates is muted (just added or skipped and still in view)?
+- Is the order 'allergen, diet, missing data' right for a product with more than one warning?
+- At the detailed level, should the line glance.inCart also list each allergen of the product in its warning, as glance.new does?
+- Is a fixed fake answer ('I do not have that information.') right for a question in fake mode, or should fake mode say ask.failed?
+- After an add, should a second double tap open the question window (current), or should only the microphone button do that?
+- Should a stopped camera stream end a checkout that waits for the fingerprint? Now only R19 and a stop intent end it.
+- Should catalog:seed --lang it make only the Italian clips, in place of English and Italian?
+- Spot check, decisions that the plan does not state: (1) If the product of the check leaves the cart, the server asks for the line that now has the highest price, with a new checkout.spotcheck event and a new ask line. A change of another cart line keeps the product. An empty cart ends the checkout with no 'empty' line. (2) A product that the shopper just added and still holds (muted by R8/R10) also passes the check. (3) No event reports the passed check; the phone UI leaves its spot check state with the next checkout.offered (Plan 3 Task 6 reducer). (4) A new appearance of the code during the step spotcheck does not repeat the ask line; the repeat intent does. (5) If the catalog holds no product of the cart, the checkout starts with the pay prompt. (6) SessionSnapshot has no field for the spot check, so a client that connects in that step sees the phase checkout, the kiosk, and no prompt.
+- Second look, decisions that the plan does not state: (1) An identified result of a stream frame also drops the held line, not only a still. (2) A still result that is not sure has no effect other than the held line: no unknown line, no aim hint, no second glance.ambiguous event. Reason: a second event would ask the phone for one more still. With wait 0 a still result counts as a stream frame, as before. (3) A still with status none, and an identified still with a product ID that the catalog does not hold, count as not sure. (4) A session that stops, rests, or is in the step biometric or paying drops the held line. (5) Other candidates during the wait give a new event and replace the held line, with a new start time. (6) The range of SECOND_LOOK_WAIT_MS is 0 to 10000, my choice. (7) RuntimeDeps.secondLookWaitMs is optional with the default 0, so the plan file list grew by src/sessions/runtime.ts; buildApp always sets it from the config.
+- Plan test values: no plan test was wrong. The existing seed tests counted 31 fixed lines; they now expect 32 because spotcheck.thanks is a line with no parameter (the comment in seed.ts asks for that).
+- Should an ambiguous result stay silent while one of its candidates is muted?
+- Is the order 'allergen, diet, missing data' right for a product with more than one warning?
+- Should a kiosk with spotCheck ask again in each new checkout of one session, after a cancel or after R19? It does now, because the plan has no rule for it.
+
+### Lane android
+
+- Should fake mode of apps/server be able to report slow recognition (see notes for the exact change)? Without it, no test covers the real path from 3 failed calls to the phone.
+- Is it right that a `biometric.request` with the app in the background answers `ok: false` at once? The biometric library shows no prompt then and reports nothing, so the alternative is a checkout that ends only by R19 after 30 seconds.
+
+### Lane web
+
+- Astryx advises against several banners of the same status in a stack (output of `npx @astryxdesign/cli component Banner`). Plan 3 Task 16 asks for one warning Banner for each warning on the card, and I followed the plan. Should the team want one combined banner?
+- Task 20: the visible text of the pay button is 'Pay' also when the server asks for a fingerprint, and only its accessible name is 'Pay with fingerprint'. The plan says 'the pay button has the label payFingerprint', and its test passes. Should the team want the long text visible, the button needs two lines at a large font size.
+- Task 22: the plan says KIOSK_SPOT_RUN is 'KIOSK_RUN with one spotcheck event of 4 seconds after each connected event', and gives no times. I chose: connected for 2 seconds, spotcheck for 4 seconds, connected again for the original time. Each later event moves by 6 seconds, so the loop is 36 seconds. Is this the order that the team wants for the video? Plan 1 Task 29 starts a real checkout in the spot check, before the pay prompt.
+- Task 22: during a spot check the phone keeps the card of a product prompt under the banner, because Plan 1 Task 29 rule 6 lets another product make a prompt in that step. The plan text says only 'the prompt area shows one Banner'.
+- Task 22: the phone clears the spot check banner at checkout.offered, checkout.cancelled, checkout.paid, and a snapshot. After the shopper shows the product, Plan 1 Task 29 sets the step 'suspended' and names no event for it. If the server sends none, the banner stays until the next checkout.offered. Should the reducer also clear it at checkout.suspended?
+- Astryx advises against several banners of the same status in a stack. Plan 3 Task 16 asks for one warning Banner for each warning, and the code follows the plan. Does the team want one combined banner?
+
+### Lane hud
+
