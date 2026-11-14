@@ -123,10 +123,30 @@ export class SessionRuntime {
     } while (outbox !== this.outbox || writes !== this.writes);
   }
 
-  /** The listener runs one time when the session stops. If the session has stopped, it runs at once. */
-  onStop(listener: () => void): void {
-    if (this.hasStopped) listener();
-    else this.stopListeners.push(listener);
+  /**
+   * The listener runs one time when the session stops. If the session has stopped, it runs at once.
+   * Returns a function that removes the listener.
+   */
+  onStop(listener: () => void): () => void {
+    if (this.hasStopped) {
+      listener();
+      return () => undefined;
+    }
+    this.stopListeners.push(listener);
+    return () => {
+      const index = this.stopListeners.indexOf(listener);
+      if (index >= 0) this.stopListeners.splice(index, 1);
+    };
+  }
+
+  /** Tells the phone that the session is over, closes its socket, and stops. For a session that a client deletes. */
+  end(): void {
+    this.enqueue(async () => {
+      this.sink?.send({ t: 'session.end' });
+      this.sink?.close();
+      this.sink = null;
+      this.stop();
+    });
   }
 
   /** Runs the stop listeners one time. A stopped session still answers a snapshot, and it writes no record. */

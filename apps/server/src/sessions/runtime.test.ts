@@ -118,6 +118,19 @@ it('runs a stop listener at once when the session has stopped', () => {
   session.onStop(late);
   expect(late).toHaveBeenCalledTimes(1);
 });
+it('does not run a stop listener that was removed', () => {
+  const removed = vi.fn();
+  session.onStop(removed)();
+  session.stop();
+  expect(removed).not.toHaveBeenCalled();
+});
+it('end tells the phone, closes its socket, and stops', async () => {
+  session.attach(sink); session.end(); await session.settled();
+  expect(sink.sent).toEqual([{ t: 'session.end' }]);
+  expect(sink.closed).toBe(true);
+  expect(session.connected).toBe(false);
+  expect(session.stopped).toBe(true);
+});
 it('keeps the last 20 captions, oldest first', async () => {
   for (let i = 0; i < 25; i += 1) session.dispatch(help);
   await session.settled();

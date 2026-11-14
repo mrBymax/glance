@@ -1,9 +1,17 @@
+import { fileURLToPath } from 'node:url';
 import { afterAll, expect, it } from 'vitest';
-import { buildApp } from './app';
+import { type AppDeps, buildApp } from './app';
+import { indexCatalog, readCatalogFile } from './catalog/catalog';
 import { systemClock } from './clock';
 import { loadConfig } from './config';
+import { MemoryStore } from './db/memory';
 
-const app = await buildApp({ config: loadConfig({}, ['--fake']), clock: systemClock, log: false });
+const products = readCatalogFile(fileURLToPath(new URL('../catalog/catalog.dev.json', import.meta.url)));
+const deps = (): AppDeps => ({
+  config: loadConfig({}, ['--fake']), clock: systemClock, store: new MemoryStore(products), catalog: indexCatalog(products), log: false,
+});
+
+const app = await buildApp(deps());
 afterAll(() => app.close());
 
 it('answers the health check', async () => {
@@ -31,7 +39,7 @@ it('answers a body that fails to parse with 400', async () => {
   expect(res.json()).toEqual({ error: 'bad_request' });
 });
 it('runs each close function when the app closes', async () => {
-  const other = await buildApp({ config: loadConfig({}, ['--fake']), clock: systemClock, log: false });
+  const other = await buildApp(deps());
   let closed = 0;
   other.closers.add(() => { closed += 1; });
   await other.close();
