@@ -21,6 +21,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `agents/recognition.md` (repository root) | The instruction for the recognition model, with the placeholder `{{catalog}}`. |
 | `fixtures/fake-script.json` | The default script of fake recognition. |
 | `scripts/check-model.ts` | `npm run model:check`: a check of the model ID with the real service. |
+| `scripts/replay.ts` | `npm run replay`: the accuracy of the real service on a folder of frames. See "Replay a test set". |
 | `src/sessions/` | The cart rules as the pure function `step`, the session runtime, and the registry. See "Rules" and "Session runtime". |
 | `src/speech/` | The text of each spoken line, and the speech clips. See "Spoken text" and "Speech clips". |
 | `src/kiosk/` | The kiosks and the mock payment. See "Kiosk and payment". |
@@ -168,6 +169,7 @@ sequenceDiagram
 | `intake.ts` | `createFrameHandler`: one worker for each session, between the device socket and the rules |
 | `save.ts` | `createFrameSaver`: the writer of the `SAVE_FRAMES` switch |
 | `fake.ts` | The script file and `ScriptPlayer` of fake recognition |
+| `replay.ts` | `listFrames`, `replayFrames`, `summarize`, and `formatTable` of the replay tool |
 
 The request:
 
@@ -205,6 +207,37 @@ Without `SAVE_FRAMES` the server stores no frame. A frame lives in memory from i
 - At its start the server logs `SAVE_FRAMES is on. The server writes each frame to <directory>.` at `warn` level.
 - `GET /healthz` answers `"saveFrames": true` while the switch is on. Check for `false` before the demo (spec section 11.1).
 - `src/recognition/save.ts` is the only file on the frame path that imports the file system. A test checks this.
+
+### Replay a test set
+
+`npm run replay` sends a folder of frames to the real recognition service and prints how many answers are correct. Each frame is one paid Gemini call, so set `--limit` for a first run.
+
+```bash
+npm run replay --workspace @glance/server -- --frames testdata/frames
+npm run replay --workspace @glance/server -- --frames testdata/frames --media-resolution low --limit 20
+```
+
+- The frames lie in `<dir>/<label>/<name>.jpg`. A label is a product ID of the catalog, `unknown` for a product outside the catalog, or `none` for a frame with no product. Each other folder name stops the command. Git ignores `testdata/`.
+- `SAVE_FRAMES` collects frames as `<dir>/<sessionId>/<seq>.jpg`. A person moves each one to the folder of its label.
+- `--media-resolution default|low` and `--min-confidence <n>` take the place of `GEMINI_MEDIA_RESOLUTION` and `RECOGNITION_MIN_CONFIDENCE`. `--limit <n>` sends at most n frames, taken from each label in turn.
+- The command reads `apps/server/.env` for the key, the model, and `CATALOG_PATH`. The fake switches have no effect on it.
+- It sends one frame at a time, with the time limit of 4 seconds and the request of the live path. So the times match those of a shop.
+
+The output is one line for each frame, then a table with one row for each label, then three lines:
+
+```text
+label         frames  correct  wrong  ambiguous  unsure  unknown  none  failed
+oat-drink-1l      10        9      0          0       1        0     0       0
+none               5        5      0          0       0        0     0       0
+accuracy: 93.3% (14 of 15)
+wrong identified: 0
+latency: median 1340 ms, p95 2210 ms
+```
+
+- `correct`: for a product label, `identified` with that ID. For `unknown` and `none`, the status with that name.
+- `wrong`: `identified` with another ID, and each `identified` for the labels `unknown` and `none`. Spec section 15 wants 0. With 1 or more, the exit code is 1: raise `--min-confidence` and replay again.
+- `failed`: the call failed or took more than 4 seconds. The latency counts these calls too.
+- The numbers of the table above are an example of the format. No replay with the real service has run yet.
 
 Frames with `blurred: false` did not go through face detection on the phone. Without `REQUIRE_BLUR` they still go to Gemini, and the server logs `frame not blurred: the phone did not run face detection` one time for each session. With `REQUIRE_BLUR=1` the server drops them and logs `frame dropped: not blurred` one time for each session.
 
