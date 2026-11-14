@@ -81,6 +81,17 @@ export const EN = {
   deleteConfirm: 'Delete',
   deleteCancel: 'Keep',
 
+  undo: 'Undo',
+  end: 'End',
+  repeat: 'Repeat',
+  repeatLabel: 'Repeat the last line',
+  remove: 'Remove',
+  removeLabel: (name: string) => `Remove ${name}`,
+  endTitle: 'End this shop?',
+  endText: 'The camera stops. You cannot add products to this cart after that.',
+  endConfirm: 'End',
+  endCancel: 'Keep shopping',
+
   // The title and the description of a banner together hold the spoken line of the design, section 6.6.
   banner: {
     paymentFailed: { title: 'Payment failed.', description: 'Nothing was charged. Look at the code to try again.' },

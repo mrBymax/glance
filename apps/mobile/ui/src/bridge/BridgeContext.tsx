@@ -1,6 +1,7 @@
 import type { GlanceBridge, PageToNative, ProfilePatch } from '@glance/shared';
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { snapshotCaptionsOf, useSpokenText, type SnapshotCaptions } from '../components/useSpokenText';
+import { hapticFor } from '../state/haptics';
 import { initialUiState, reduce, type UiAction, type UiState } from '../state/uiState';
 import { stringsFor, type Strings } from '../text/strings';
 
@@ -21,7 +22,13 @@ const ATTEMPTS: ReadonlySet<PageToNative['t']> = new Set(['setup.register', 'set
 
 export function BridgeProvider(props: { bridge: GlanceBridge; children: ReactNode }) {
   const { bridge, children } = props;
-  const [state, dispatch] = useReducer(reduce, initialUiState);
+  const [state, setState] = useState(initialUiState);
+  // The newest state. Two messages can arrive before the next render, and the haptic pattern needs the state before each one.
+  const newest = useRef(initialUiState);
+  const dispatch = useCallback((action: UiAction) => {
+    newest.current = reduce(newest.current, action);
+    setState(newest.current);
+  }, []);
   const strings = stringsFor(state.profile.lang);
   const snapshotCaptions = useRef<SnapshotCaptions>(new Map());
   useSpokenText(state, strings, snapshotCaptions);
@@ -30,23 +37,26 @@ export function BridgeProvider(props: { bridge: GlanceBridge; children: ReactNod
     // The host answers ui.ready at once, so the page must listen first.
     const unsubscribe = bridge.subscribe((message) => {
       if (message.t === 'snapshot') snapshotCaptions.current = snapshotCaptionsOf(message.session.captions);
+      const before = newest.current;
       dispatch(message);
+      const pattern = hapticFor(before, message, newest.current);
+      if (pattern) bridge.send({ t: 'haptic', pattern });
     });
     bridge.send({ t: 'ui.ready' });
     return unsubscribe;
-  }, [bridge]);
+  }, [bridge, dispatch]);
 
   const send = useCallback((message: PageToNative) => {
     if (ATTEMPTS.has(message.t)) dispatch({ t: 'local.attempt' });
     bridge.send(message);
-  }, [bridge]);
+  }, [bridge, dispatch]);
 
   const setProfile = useCallback((patch: ProfilePatch) => {
     dispatch({ t: 'local.profile', patch });
     bridge.send({ t: 'profile.set', patch });
-  }, [bridge]);
+  }, [bridge, dispatch]);
 
-  const ui = useMemo(() => ({ state, strings, bridge, send, dispatch, setProfile }), [state, strings, bridge, send, setProfile]);
+  const ui = useMemo(() => ({ state, strings, bridge, send, dispatch, setProfile }), [state, strings, bridge, send, dispatch, setProfile]);
   return <UiContext.Provider value={ui}>{children}</UiContext.Provider>;
 }
 

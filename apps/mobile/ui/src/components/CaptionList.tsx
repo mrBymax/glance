@@ -1,3 +1,4 @@
+import { Button } from '@astryxdesign/core/Button';
 import { Heading } from '@astryxdesign/core/Heading';
 import { List, ListItem } from '@astryxdesign/core/List';
 import { Text } from '@astryxdesign/core/Text';
@@ -11,17 +12,20 @@ const SHOWN_CAPTIONS = 4;
  * The Astryx Text type has no lang prop, so a span inside it names the language of the line for a screen reader.
  */
 export function CaptionList() {
-  const { state, strings } = useUi();
+  const { state, strings, send } = useUi();
   const captions = state.captions.slice(-SHOWN_CAPTIONS);
   return (
     <VStack as="section" gap={2}>
       <Heading level={2}>{strings.captions}</Heading>
       {captions.length === 0 ? <Text>{strings.noCaptions}</Text> : (
-        <List>
-          {captions.map((caption) => (
-            <ListItem key={caption.id} label={<Text><span lang={caption.lang}>{caption.text}</span></Text>} />
-          ))}
-        </List>
+        <>
+          <List>
+            {captions.map((caption) => (
+              <ListItem key={caption.id} label={<Text><span lang={caption.lang}>{caption.text}</span></Text>} />
+            ))}
+          </List>
+          <Button label={strings.repeatLabel} onClick={() => send({ t: 'intent', kind: 'repeat' })}>{strings.repeat}</Button>
+        </>
       )}
     </VStack>
   );
