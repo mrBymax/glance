@@ -158,6 +158,7 @@ Rules of this path:
 - The upload stops while the socket is down, while an earlier frame is not sent yet, and while the glasses are off the face.
 - The recognition worker runs one call at a time for each session. While a call runs, the newest frame waits, and a call that takes 4 seconds is dropped.
 - Results for one product inside 3 seconds belong to one appearance, and one appearance gets one prompt.
+- `glance.pending` and the glance line carry the allergen and diet warnings of the product for the profile of the session. A line with a warning has the sound `warning`. No message says that a product is safe.
 - A yes from the head counts only with the ID of the current prompt, after `prompt.done`, with the product in view, and inside the head window of the profile. The default is 8 seconds.
 - A yes from the page carries the ID of the prompt on its card and needs no `prompt.done`. In the WebView the app sends it as an intent with the source `phone`. In a browser it is a `POST /api/sessions/:id/intents` call.
 - The runtime sends the lines in the order of the rules. A line waits for its clip, and a clip that fails gives `url: null`.
