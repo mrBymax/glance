@@ -25,7 +25,9 @@ beforeEach(() => {
   logLines = [];
 });
 
-function resolver(over: { storeList?: StoreList; info?: ProductInfo; budgetMs?: number } = {}): ProductResolver {
+type Info = Pick<ProductInfo, 'byGtin'>;
+
+function resolver(over: { storeList?: StoreList; info?: Info; budgetMs?: number } = {}): ProductResolver {
   return new ProductResolver({
     catalog, storeList: over.storeList ?? storeList, info: over.info ?? createFakeProductInfo(), scanned,
     log: (line) => { logLines.push(line); }, ...(over.budgetMs === undefined ? {} : { budgetMs: over.budgetMs }),
@@ -109,7 +111,7 @@ it('gives null for a code that the store list does not hold, and asks no databas
   expect(info.byGtin).not.toHaveBeenCalled();
 });
 it('uses the name of the store when the database fails', async () => {
-  const info: ProductInfo = { byGtin: async () => { throw new Error('Open Food Facts answered 503.'); } };
+  const info: Info = { byGtin: async () => { throw new Error('Open Food Facts answered 503.'); } };
   expect(await resolver({ info }).resolve(NUTELLA)).toMatchObject({ name: { en: 'Nutella' }, priceCents: 399, allergens: null });
   expect(logLines.join('\n')).toMatch(/product info: no details. gtin=3017624010701 Open Food Facts answered 503/);
 });
@@ -120,7 +122,7 @@ it('does not wait for the database longer than the budget', async () => {
 });
 it('a later resolve replaces the product that had no details', async () => {
   let down = true;
-  const info: ProductInfo = { byGtin: async () => { if (down) throw new Error('down'); return details; } };
+  const info: Info = { byGtin: async () => { if (down) throw new Error('down'); return details; } };
   const lookup = resolver({ info });
   await lookup.resolve(NUTELLA);
   down = false;
@@ -136,7 +138,7 @@ it('rejects when the store list does not answer inside the budget, or fails', as
 it('gives the store list and the database one budget together', async () => {
   const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
   const slowList: StoreList = { byGtin: async () => { await wait(60); return nutella; }, all: async () => [nutella] };
-  const slowInfo: ProductInfo = { byGtin: async () => { await wait(60); return details; } };
+  const slowInfo: Info = { byGtin: async () => { await wait(60); return details; } };
   const product = await resolver({ storeList: slowList, info: slowInfo, budgetMs: 90 }).resolve(NUTELLA);
   expect(product?.allergens).toBeNull();
 });

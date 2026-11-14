@@ -10,18 +10,18 @@ export const FAKE_PRODUCT_INFO_DIR = 'fixtures/product-info';
  * Each fixture is a saved answer of Open Food Facts. A code with no fixture is "not found".
  */
 export function createFakeProductInfo(dir: string = FAKE_PRODUCT_INFO_DIR): ProductInfo {
-  return {
-    async byGtin(gtin13) {
-      // The code becomes a file name, so it must be digits only.
-      if (!/^\d{13}$/.test(gtin13)) return null;
-      let body: string;
-      try {
-        body = await readFile(join(dir, `${gtin13}.json`), 'utf8');
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
-        throw error;
-      }
-      return parseOffAnswer(JSON.parse(body));
-    },
+  const byGtin: ProductInfo['byGtin'] = async (gtin13) => {
+    // The code becomes a file name, so it must be digits only.
+    if (!/^\d{13}$/.test(gtin13)) return null;
+    let body: string;
+    try {
+      body = await readFile(join(dir, `${gtin13}.json`), 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    }
+    return parseOffAnswer(JSON.parse(body));
   };
+  // Each fixture is a file, so each read is a read with no network call.
+  return { byGtin, cached: byGtin };
 }

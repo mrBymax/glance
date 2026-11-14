@@ -9,6 +9,10 @@ export type LabelAnswer = {
   packSize: string | null;
   /** 0 to 1, for the brand and the name. */
   confidence: number;
+  /** The code of the store item that the package is, as the model chose it from the store list, or null. */
+  item: string | null;
+  /** 0 to 1, for the item. */
+  itemConfidence: number;
 };
 
 /** Reads the label of one still. A call that fails rejects. */
@@ -27,11 +31,15 @@ export const LabelAnswerSchema = z.object({
   name: printed,
   packSize: printed,
   confidence: z.number().min(0).max(1),
+  // A fake script from before these fields has none of them.
+  item: printed.default(null),
+  itemConfidence: z.number().min(0).max(1).default(0),
 });
 
 /** The answer for a still with no label. Frozen, because each caller shares it. */
 export const NO_LABEL: LabelAnswer = Object.freeze({
   digits: Object.freeze([]) as unknown as string[], brand: null, name: null, packSize: null, confidence: 0,
+  item: null, itemConfidence: 0,
 });
 
 /** An answer that fails the schema counts as a still with no label. */

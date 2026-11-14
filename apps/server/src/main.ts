@@ -14,6 +14,7 @@ import { createFakeProductInfo } from './products/fakeProductInfo';
 import { createOpenFoodFactsInfo } from './products/openFoodFacts';
 import type { ProductInfo } from './products/productInfo';
 import { priceConflicts } from './products/resolver';
+import { type StoreEntry, readStoreEntries } from './products/storeEntries';
 import { type StoreList, readStoreListFile } from './products/storeList';
 import { ELEVENLABS_MODEL, createSynthesize } from './speech/elevenlabs';
 import { FakeScriptError } from './recognition/fake';
@@ -47,10 +48,10 @@ function openRecognizer(config: Config, catalog: CatalogIndex): Recognizer | und
 }
 
 /** The reader of label stills, or undefined with fake recognition. It uses the key and the model of recognition. */
-function openLabelReader(config: Config): LabelReader | undefined {
+function openLabelReader(config: Config, entries: readonly StoreEntry[]): LabelReader | undefined {
   if (config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
   return createGeminiLabelReader({
-    apiKey: config.geminiApiKey, model: config.geminiModel, template: readFileSync(LABEL_TEMPLATE_PATH, 'utf8'),
+    apiKey: config.geminiApiKey, model: config.geminiModel, template: readFileSync(LABEL_TEMPLATE_PATH, 'utf8'), entries,
   });
 }
 
@@ -81,13 +82,16 @@ async function main(): Promise<void> {
   const catalog = indexCatalog(await store.listProducts());
   const recognizer = openRecognizer(config, catalog);
   const ask = openAsk(config);
-  const labelReader = openLabelReader(config);
   const storeList = openStoreList(config);
-  const storeItems = await storeList.all();
+  const productInfo = openProductInfo(config);
+  // One read of the store list for the whole run: the label reader builds its instruction from it.
+  const storeEntries = await readStoreEntries(storeList, productInfo, (line) => console.error(line));
+  const storeItems = storeEntries.map((entry) => entry.item);
+  const labelReader = openLabelReader(config, storeEntries);
   // loadConfig has checked that the key exists when FAKE_SPEECH is off.
   const synthesize = config.fakeSpeech || config.elevenlabsApiKey === null ? undefined : createSynthesize(config.elevenlabsApiKey);
   const app = await buildApp({
-    config, clock: systemClock, store, catalog, storeList, productInfo: openProductInfo(config),
+    config, clock: systemClock, store, catalog, storeList, productInfo,
     ...(recognizer ? { recognizer } : {}), ...(labelReader ? { labelReader } : {}), ...(ask ? { ask } : {}), ...(synthesize ? { synthesize } : {}),
     ...(config.saveFramesDir === null ? {} : { saveFrame: createFrameSaver(config.saveFramesDir) }),
   });

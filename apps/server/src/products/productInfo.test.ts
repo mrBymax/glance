@@ -70,6 +70,10 @@ it('the fake reader reads a fixture by the 13 digits and makes no call', async (
   expect(await info.byGtin('0000080177173')).toMatchObject({ brand: 'Ferrero', quantity: '15 g', vegan: false });
   expect(await info.byGtin('5449000000996')).toMatchObject({ brand: 'COCA-COLA SERVICES SA/NV', allergens: null });
 });
+it('the fake reader holds each fixture with no network call', async () => {
+  expect(await createFakeProductInfo().cached('0000080177173')).toMatchObject({ brand: 'Ferrero', quantity: '15 g' });
+  expect(await createFakeProductInfo().cached('4006381333931')).toBeNull();
+});
 it('the fake reader knows no other code', async () => {
   expect(await createFakeProductInfo().byGtin('4006381333931')).toBeNull();
   expect(await createFakeProductInfo().byGtin('../../package')).toBeNull();

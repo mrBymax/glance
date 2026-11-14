@@ -246,6 +246,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     log: app.log,
     clock: deps.clock,
     minConfidence: config.minConfidence,
+    minItemConfidence: config.labelMinConfidence,
     requireBlur: config.requireBlur,
     saveFrame,
   });

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, afterEach, expect, it, vi } from 'vitest';
 import { CreateSessionResponseSchema, type ProfilePatch, type ServerEvent, type ServerToDevice } from '@glance/shared';
 import type { AppDeps } from '../app';
-import type { LabelAnswer, LabelReader } from '../label/reader';
+import { type LabelAnswer, type LabelReader, NO_LABEL } from '../label/reader';
 import type { Recognizer } from '../recognition/gemini';
 import { NO_RESULT, type RecognitionResult } from '../recognition/result';
 import { type TestApp, type TestPhone, connectPhone, testApp } from '../testing';
@@ -113,7 +113,7 @@ it('an invalid code gives nothing', async () => {
 it('with Open Food Facts down the prompt has the name of the store, and the allergen data is missing', async () => {
   const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   try {
-    const down = { byGtin: vi.fn(async () => { throw new Error('Open Food Facts answered 503.'); }) };
+    const down = { byGtin: vi.fn(async () => { throw new Error('Open Food Facts answered 503.'); }), cached: async () => null };
     const { phone } = await shop({ productInfo: down }, {}, { allergens: ['nuts'] });
     phone.send({ t: 'barcode.seen', code: '8076809513753', source: 'barcode' });
     const pending = eventOf<'glance.pending'>(await phone.next(isEvent('glance.pending')));
@@ -273,7 +273,7 @@ it('a code that the model sees in 2 frames and cannot read asks the phone for a 
   expect(phone.messages.filter(isSpeak)).toEqual([]);
 });
 
-const nutellaLabel: LabelAnswer = { digits: [], brand: 'Ferrero', name: 'Nutella', packSize: '400 g', confidence: 0.9 };
+const nutellaLabel: LabelAnswer = { ...NO_LABEL, brand: 'Ferrero', name: 'Nutella', packSize: '400 g', confidence: 0.9 };
 
 it('in fake mode a scripted code asks for a still, and the label frame gives the product through the fake reader', async () => {
   const script = tempScript({
@@ -331,6 +331,18 @@ it('a label frame goes to the label reader and not to recognition, and a match b
   expect(eventOf<'glance.pending'>(await phone.next(isEvent('glance.pending'))).product.id).toBe('gtin-3017624010701');
   expect(reader.calls.map((jpeg) => [...jpeg])).toEqual([[...JPEG]]);
   expect(recognize).not.toHaveBeenCalled();
+});
+it('a label in another language gives the item that the model chose from the store list', async () => {
+  const reader = labelReaderOf({ ...NO_LABEL, name: 'Hasselpahkinalevite', confidence: 0.9, item: NUTELLA, itemConfidence: 0.9 });
+  const { phone } = await shop({ labelReader: reader });
+  phone.sendFrame(label, JPEG);
+  expect(eventOf<'glance.pending'>(await phone.next(isEvent('glance.pending'))).product.id).toBe('gtin-3017624010701');
+});
+it('an item of the model below LABEL_MIN_CONFIDENCE gives no product', async () => {
+  const reader = labelReaderOf({ ...NO_LABEL, name: 'Hasselpahkinalevite', confidence: 0.9, item: NUTELLA, itemConfidence: 0.9 });
+  const { phone } = await shop({ labelReader: reader }, { LABEL_MIN_CONFIDENCE: '0.95' });
+  phone.sendFrame(label, JPEG);
+  expect(await phone.next(isSpeak)).toMatchObject({ text: 'I cannot read this code. Hold it closer.' });
 });
 it('a label that selects no item, and a label call that fails, give the unreadable line', async () => {
   const unknown = await shop({ labelReader: labelReaderOf({ ...nutellaLabel, brand: 'Rigoni', name: 'Nocciolata' }) });

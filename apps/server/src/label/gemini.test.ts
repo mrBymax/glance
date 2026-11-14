@@ -1,13 +1,26 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { LABEL_TEMPLATE_PATH, createGeminiLabelReader, labelResponseSchema } from './gemini';
+import type { StoreEntry } from '../products/storeEntries';
+import { LABEL_TEMPLATE_PATH, buildLabelInstruction, createGeminiLabelReader, labelResponseSchema } from './gemini';
 import { type LabelReader, NO_LABEL } from './reader';
 
 // No test of this file reaches Google. Each reader gets a fetch function of the test.
 
 const template = readFileSync(LABEL_TEMPLATE_PATH, 'utf8');
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
-const answer = { digits: ['8076800195057'], brand: 'Barilla', name: 'Spaghetti n.5', packSize: '500 g', confidence: 0.9 };
+const answer = {
+  digits: ['8076800195057'], brand: 'Barilla', name: 'Spaghetti n.5', packSize: '500 g', confidence: 0.9,
+  item: '8076800195057', itemConfidence: 0.9,
+};
+const entries: StoreEntry[] = [
+  { item: { gtin: '8076800195057', priceCents: 109, name: 'Spaghetti n.5', brand: 'Barilla', packSize: '500 g' }, details: null },
+  { item: { gtin: '6438574558384', priceCents: 349, name: 'Paper cups' }, details: null },
+  {
+    item: { gtin: '7312220096019', priceCents: 279, name: 'Biscoff' },
+    details: { brand: 'Lotus', quantity: '250 g', allergens: ['gluten', 'soy'], vegan: true, vegetarian: true },
+  },
+];
+const GTINS = entries.map((entry) => entry.item.gtin);
 
 type Call = { url: string; headers: Headers; body: Record<string, unknown> };
 let calls: Call[];
@@ -24,7 +37,9 @@ const fetchStub = vi.fn<typeof fetch>(async (input, init) => {
   return reply();
 });
 
-const reader = (): LabelReader => createGeminiLabelReader({ apiKey: 'test-key', model: 'gemini-3.5-flash-lite', template, fetch: fetchStub });
+const reader = (): LabelReader => createGeminiLabelReader({
+  apiKey: 'test-key', model: 'gemini-3.5-flash-lite', template, entries, fetch: fetchStub,
+});
 const signal = () => new AbortController().signal;
 
 beforeEach(() => {
@@ -45,21 +60,52 @@ it('sends one still with the label instruction and the answer schema', async () 
   const contents = body.contents as { parts: { inlineData?: { mimeType: string; data: string }; text?: string }[] }[];
   expect(contents).toHaveLength(1);
   expect(contents[0]!.parts[0]).toEqual({ inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } });
-  expect(JSON.stringify(body.systemInstruction)).toContain('Never guess a digit');
+  const instruction = JSON.stringify(body.systemInstruction);
+  expect(instruction).toContain('Never guess a digit');
+  expect(instruction).toContain('- gtin: 6438574558384 | name: Paper cups');
+  expect(instruction).not.toContain('{{storeList}}');
 
   const config = body.generationConfig as { responseMimeType: string; responseJsonSchema: unknown };
   expect(config.responseMimeType).toBe('application/json');
-  expect(config.responseJsonSchema).toEqual(labelResponseSchema());
+  expect(config.responseJsonSchema).toEqual(labelResponseSchema(GTINS));
   // A still keeps the default media resolution: the digits are small.
   expect(config).not.toHaveProperty('mediaResolution');
 });
-it('asks for digits, brand, name, pack size, and confidence', () => {
-  const schema = labelResponseSchema() as { required: string[]; properties: Record<string, { type?: unknown; items?: unknown }> };
-  expect(schema.required).toEqual(['digits', 'brand', 'name', 'packSize', 'confidence']);
+type Schema = { required: string[]; properties: Record<string, { type?: unknown; items?: unknown; anyOf?: unknown[]; minimum?: number; maximum?: number }> };
+
+it('asks for digits, brand, name, pack size, confidence, and one item of the store list with its own confidence', () => {
+  const schema = labelResponseSchema(GTINS) as Schema;
+  expect(schema.required).toEqual(['digits', 'brand', 'name', 'packSize', 'confidence', 'item', 'itemConfidence']);
   expect(schema.properties.digits).toMatchObject({ type: 'array', items: { type: 'string' } });
+  expect(schema.properties.item!.anyOf).toEqual([{ type: 'string', enum: GTINS }, { type: 'null' }]);
+  expect(schema.properties.itemConfidence).toMatchObject({ type: 'number', minimum: 0, maximum: 1 });
 });
-it('the instruction file names each field and the rule for the digits', () => {
-  for (const word of ['digits', 'brand', 'name', 'packSize', 'confidence', 'Never guess a digit']) expect(template).toContain(word);
+it('with an empty store list the item of the answer can only be null', () => {
+  expect((labelResponseSchema([]) as Schema).properties.item).toEqual({ type: 'null' });
+  expect(buildLabelInstruction('List:\n{{storeList}}', [])).toBe('List:\n(The store list is empty.)');
+});
+it('writes one line for each store item, with the brand and the pack size of the database when the list has none', () => {
+  expect(buildLabelInstruction('List:\n{{storeList}}\nEnd.', entries).split('\n')).toEqual([
+    'List:',
+    '- gtin: 8076800195057 | name: Spaghetti n.5 | brand: Barilla | pack: 500 g',
+    '- gtin: 6438574558384 | name: Paper cups',
+    '- gtin: 7312220096019 | name: Biscoff | brand: Lotus | pack: 250 g',
+    'End.',
+  ]);
+  // The model selects an item, and the price comes from the store list.
+  expect(buildLabelInstruction('{{storeList}}', entries)).not.toContain('349');
+});
+it('rejects a template with no placeholder for the store list', () => {
+  expect(() => buildLabelInstruction('Rules.', entries)).toThrow(/\{\{storeList\}\}/);
+});
+it('the instruction file names each field, the rule for the digits, and the rules for the item', () => {
+  for (const word of ['digits', 'brand', 'name', 'packSize', 'confidence', 'item', 'itemConfidence', 'Never guess a digit', '{{storeList}}']) {
+    expect(template).toContain(word);
+  }
+  // The package of the first test with the glasses: Finnish and Swedish print, an English name in the list.
+  expect(template).toContain('"Kartonkipikari / Pappersmugg" is "Paper cups"');
+  expect(template).toMatch(/another language/);
+  expect(template).toMatch(/not a similar one/);
   expect(template).not.toContain('{{catalog}}');
 });
 it('gives an empty answer for a text that is empty, no JSON, or no label', async () => {

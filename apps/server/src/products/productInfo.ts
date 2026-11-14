@@ -17,6 +17,11 @@ export type ProductDetails = {
 export interface ProductInfo {
   /** Resolves null when the database does not have the code. Rejects when the read fails. */
   byGtin(gtin13: string): Promise<ProductDetails | null>;
+  /**
+   * The details that the reader holds now, with no network call. Resolves null when it holds none.
+   * The start of the server reads the whole store list this way, because the database limits the reads of one address.
+   */
+  cached(gtin13: string): Promise<ProductDetails | null>;
 }
 
 /** The tags of the allergens taxonomy of Open Food Facts for the 14 EU allergens. Each other tag has no allergen of the contract. */

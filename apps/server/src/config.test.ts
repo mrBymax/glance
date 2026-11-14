@@ -7,7 +7,7 @@ it('uses the defaults', () => {
   expect(loadConfig(KEYS, [])).toMatchObject({
     port: 8080, publicBaseUrl: 'http://localhost:8080', mongodbUri: null, mongodbDb: 'glance',
     catalogPath: 'catalog/catalog.dev.json', geminiModel: 'gemini-3.5-flash-lite',
-    geminiMediaResolution: 'default', minConfidence: 0.6, requireBlur: false, fakeRecognition: null, fakeSpeech: false,
+    geminiMediaResolution: 'default', minConfidence: 0.6, labelMinConfidence: 0.7, requireBlur: false, fakeRecognition: null, fakeSpeech: false,
     speechCacheDir: '.cache/speech', saveFramesDir: null, paymentDelayMs: 1500, secondLookWaitMs: 0,
     storeListPath: 'catalog/store-list.dev.json', fakeProductInfo: false, offBaseUrl: 'https://world.openfoodfacts.org',
     productInfoUserAgent: 'MetaGlance/0.1 (https://github.com/mrBymax/glance)', productCacheDir: '.cache/products',
@@ -55,6 +55,10 @@ it('rejects a value outside its range', () => {
   expect(() => loadConfig({ RECOGNITION_MIN_CONFIDENCE: '1.5' }, ['--fake'])).toThrow(/RECOGNITION_MIN_CONFIDENCE/);
   expect(() => loadConfig({ GEMINI_MEDIA_RESOLUTION: 'high' }, ['--fake'])).toThrow(/GEMINI_MEDIA_RESOLUTION/);
   expect(() => loadConfig({ PORT: '70000' }, ['--fake'])).toThrow(/PORT/);
+});
+it('reads the confidence that the item of a label needs', () => {
+  expect(loadConfig({ LABEL_MIN_CONFIDENCE: '0.85' }, ['--fake']).labelMinConfidence).toBe(0.85);
+  expect(() => loadConfig({ LABEL_MIN_CONFIDENCE: '1.1' }, ['--fake'])).toThrow(/LABEL_MIN_CONFIDENCE/);
 });
 it('reads the wait for the sharp second look, which is off at 0', () => {
   expect(loadConfig({}, ['--fake']).secondLookWaitMs).toBe(0);

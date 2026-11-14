@@ -35,6 +35,8 @@ export function createLabelHandler(deps: {
   storeList: StoreList; report: BarcodeReport; log: FastifyBaseLogger; clock: Clock;
   /** For a match by brand and name. */
   minConfidence: number;
+  /** For the item that the model chose from the store list. */
+  minItemConfidence: number;
   /** Drop each frame that did not go through face detection on the phone. */
   requireBlur: boolean;
   saveFrame: FrameSaver | null;
@@ -62,8 +64,8 @@ export function createLabelHandler(deps: {
     try {
       const answer: LabelAnswer = await Promise.race([reader.read(jpeg, { signal: abort.signal }), late]);
       // What the model read, so that a person can see why a still gave no product.
-      deps.log.info(`label answer seq=${seq} digits=${JSON.stringify(answer.digits)} brand=${JSON.stringify(answer.brand)} name=${JSON.stringify(answer.name)} confidence=${answer.confidence} session=${session.id}`);
-      gtin = matchLabel(answer, await deps.storeList.all(), deps.minConfidence);
+      deps.log.info(`label answer seq=${seq} digits=${JSON.stringify(answer.digits)} brand=${JSON.stringify(answer.brand)} name=${JSON.stringify(answer.name)} confidence=${answer.confidence} item=${answer.item ?? 'null'} itemConfidence=${answer.itemConfidence} session=${session.id}`);
+      gtin = matchLabel(answer, await deps.storeList.all(), deps.minConfidence, deps.minItemConfidence);
     } catch (error) {
       const { name, message } = error instanceof Error ? error : { name: 'Error', message: String(error) };
       deps.log.warn(`label call failed. seq=${seq} ${name}: ${message.slice(0, LOGGED_MESSAGE_CHARS)} session=${session.id}`);

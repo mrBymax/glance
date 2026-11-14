@@ -43,7 +43,7 @@ function handler(reader: LabelReader) {
   const write = (line: string): void => { lines.push(line); };
   return createLabelHandler({
     reader, storeList, report, log: { info: write, warn: write } as unknown as FastifyBaseLogger,
-    minConfidence: 0.6, requireBlur: false, saveFrame: null, clock: { now: () => now },
+    minConfidence: 0.6, minItemConfidence: 0.7, requireBlur: false, saveFrame: null, clock: { now: () => now },
   });
 }
 const pending = (): { reader: LabelReader; answer: (value: LabelAnswer) => void; signals: AbortSignal[] } => {
@@ -63,6 +63,13 @@ it('tells the rules that a label frame arrived, and reports the code of a match 
   await settled();
   expect(inputs).toEqual([{ type: 'label', read: 'started' }]);
   expect(lines.join('\n')).toMatch(/label session=s-1 seq=4 match=3017624010701 ms=\d+/);
+});
+it('logs what the model read, with the item that it chose', async () => {
+  handler({ read: async () => ({ ...NO_LABEL, name: 'KARTONKIPIKARI', item: '3017624010701', itemConfidence: 0.9 }) })(session, { header, jpeg: JPEG });
+  await vi.waitFor(() => expect(report).toHaveBeenCalledWith(session, '3017624010701', 'label'));
+  expect(lines.join('\n')).toContain(
+    'label answer seq=4 digits=[] brand=null name="KARTONKIPIKARI" confidence=0 item=3017624010701 itemConfidence=0.9 session=s-1',
+  );
 });
 it('tells the rules that the read failed when the lookup of the match gives no product', async () => {
   report.mockResolvedValue('dropped');

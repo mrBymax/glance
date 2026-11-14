@@ -25,20 +25,31 @@ function packKey(packSize: string): string {
 /**
  * Selects the store item of a label, or returns null. Free text of the model never becomes a product by itself:
  * 1. Digits count with a right check digit and an item of the store list. Two codes of two items give no product.
- * 2. Else the brand and the name must select exactly one item: the brand, the name, and the pack size of the answer
+ * 2. Else the item that the model chose counts, with the confidence `minItemConfidence` and when the store list holds it.
+ *    The model reads the meaning of the package text, so a Finnish package can select an item with an English name.
+ *    Digits of one item and a chosen item that is another one give no product.
+ * 3. Else the brand and the name must select exactly one item: the brand, the name, and the pack size of the answer
  *    together hold each word of the brand of the item, each word of its name, and each number of that name.
  *    Words of 1 or 2 letters do not count. An item with no brand matches by each word of its name alone.
  *    Between items with one brand and one name, the pack size selects. Two matches or none give no product.
- * The second way also needs the confidence `minConfidence`. Returns the 13 digits of the item.
+ * The third way also needs the confidence `minConfidence`. Returns the 13 digits of the item.
  */
-export function matchLabel(answer: LabelAnswer, items: readonly StoreItem[], minConfidence: number): string | null {
+export function matchLabel(
+  answer: LabelAnswer, items: readonly StoreItem[], minConfidence: number, minItemConfidence: number,
+): string | null {
   const sold = new Set(items.map((item) => item.gtin));
   const codes = new Set<string>();
   for (const digits of answer.digits) {
     const gtin = normalizeGtin(digits.replace(/\s/g, ''));
     if (gtin !== null && sold.has(gtin)) codes.add(gtin);
   }
-  if (codes.size > 0) return codes.size === 1 ? [...codes][0]! : null;
+  if (codes.size > 1) return null;
+
+  const chosen = answer.item === null || answer.itemConfidence < minItemConfidence ? null : normalizeGtin(answer.item);
+  const item = chosen !== null && sold.has(chosen) ? chosen : null;
+  const [code] = codes;
+  if (code !== undefined) return item === null || item === code ? code : null;
+  if (item !== null) return item;
 
   if (answer.confidence < minConfidence) return null;
   const read = new Set(words(`${answer.brand ?? ''} ${answer.name ?? ''} ${answer.packSize ?? ''}`));

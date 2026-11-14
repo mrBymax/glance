@@ -33,7 +33,7 @@ export class ProductResolver {
   private readonly budgetMs: number;
 
   constructor(private readonly deps: {
-    catalog: CatalogIndex; storeList: StoreList; info: ProductInfo;
+    catalog: CatalogIndex; storeList: StoreList; info: Pick<ProductInfo, 'byGtin'>;
     /** Gets each product that the catalog does not hold. */
     scanned: ScannedProducts;
     budgetMs?: number;

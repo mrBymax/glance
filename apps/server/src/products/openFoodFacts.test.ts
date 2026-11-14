@@ -134,6 +134,19 @@ it('keeps each answer as a file, so a new process makes no call', async () => {
   await reader().byGtin('4006381333931');
   expect(fetchStub).toHaveBeenCalledTimes(1);
 });
+it('gives the details that it holds with no request, from memory and from a file of an older process', async () => {
+  const info = reader();
+  expect(await info.cached(SPAGHETTI)).toBeNull();
+  const hit = await info.byGtin(SPAGHETTI);
+  fetchStub.mockClear();
+  expect(await info.cached(SPAGHETTI)).toEqual(hit);
+  expect(await reader().cached(SPAGHETTI)).toEqual(hit);
+  // A code of one store is never a code of the database.
+  expect(await reader().cached('2000000000015')).toBeNull();
+  now += OFF_HIT_TTL_MS;
+  expect(await reader().cached(SPAGHETTI)).toBeNull();
+  expect(fetchStub).not.toHaveBeenCalled();
+});
 it('reads again when a cache file is broken', async () => {
   writeFileSync(join(cacheDir, `${SPAGHETTI}.json`), '{"fetchedAt":');
   expect(await reader().byGtin(SPAGHETTI)).toMatchObject({ brand: 'Barilla' });

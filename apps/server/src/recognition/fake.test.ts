@@ -209,7 +209,7 @@ it('reads a barcode step, the code of a result step, and the answer of the fake 
     { atMs: 2000, forMs: 1000, result: { status: 'unknown', code: { visible: true, digits: '3017624010701' } } },
   ] });
   const read = readFakeScript(path, catalog);
-  expect(read.label).toEqual(label);
+  expect(read.label).toEqual({ ...label, item: null, itemConfidence: 0 });
   expect(scriptAt(read, 0)).toEqual({ result: NO_RESULT, kiosk: null, barcode: '80177173' });
   expect(scriptAt(read, 1000).result).toEqual({ ...NO_RESULT, confidence: 0.95, code: { visible: true, digits: null } });
   expect(scriptAt(read, 2000).result).toMatchObject({ status: 'unknown', code: { visible: true, digits: '3017624010701' } });
