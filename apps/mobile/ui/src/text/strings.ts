@@ -38,6 +38,16 @@ export const EN = {
   cameraDenied: 'The camera permission was denied. Glance cannot name a product without it.',
   readyText: 'Hold a product up to hear its price. Nod to add it. Look at a checkout code and nod to pay.',
   start: 'Start shopping',
+
+  checkout: 'Checkout',
+  pay: 'Pay',
+  cancel: 'Cancel',
+  payee: (kiosk: string, store: string) => `${kiosk} at ${store}`,
+  receipt: 'Receipt',
+  paid: 'Paid',
+  order: (id: string) => `Order ${id}`,
+  demoPayment: 'Demo payment. No money moved.',
+  done: 'Done',
 };
 
 export type Strings = typeof EN;
