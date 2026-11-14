@@ -421,6 +421,7 @@ The server sends the event `glance.ambiguous` for products that look alike. A st
 - The app reads the setting at each camera start and logs `second look still: off` or `second look still: on`. A running camera keeps its value.
 - The app keeps the value over a restart. The key of `local.properties` sets the value of the build, and from the first tap the value of the menu wins.
 - `SecondLook` in `core` holds the default and the texts. `StillPhotoTest` and one test of `BarcodeScanTest` set the setting to on with `SecondLookRule`.
+- The instrumented tests did not run after this change: they need the test phone. They compile.
 
 ## Damaged frames
 
@@ -672,6 +673,7 @@ A label still that waits behind a prompt dies with its reason:
 - The reason: the answer gives the product its name, or the shopper put the product down. In the session of 2026-11-14 a `still.request` waited 7 seconds behind two prompts. The phone took its still 47 ms after the nod that added the product, and the label call of that still ended with a line about a code that nobody showed.
 - The server waits 5 seconds for the label frame of its request, and a still takes 2.3 to 4.8 seconds. So a request that is 3 seconds old gives a frame that the server does not wait for.
 - The server also drops a label frame for a product that has its name. See "Label frames" in `apps/server/README.md`.
+- Tests of `LabelPolicy` in `core` cover these rules, with the times of that session. No session with the glasses ran after the change.
 
 - A still that waits uses no time of `StillPolicy`.
 - When the wait ends, the session starts one still that waited: the reference picture before the second look.
