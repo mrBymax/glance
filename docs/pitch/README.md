@@ -18,6 +18,7 @@ The presentation runs for strictly 180 seconds (~420 spoken words at 140 words p
 
 - [`00-master-deck.md`](00-master-deck.md): Complete 5-slide presentation deck with visual layouts, key bullet points, and live presenter speaker notes.
 - [`00-master-script.md`](00-master-script.md): Complete 180-second continuous voiceover script with timestamp cues, camera direction, and audio earcons for Raylight.
+- [`irl-shot-list.md`](irl-shot-list.md): Actionable physical video shot list to film IRL with a smartphone/camera for intercutting with Raylight AI and screen captures.
 
 ## Technical Appendices
 
@@ -33,6 +34,7 @@ For agentic LLM workers, video generators, and deck builders:
 | Full slide deck content or PDF slides | [`00-master-deck.md`](00-master-deck.md) | Targeted beat files (`01` through `05`) |
 | Raylight video prompts or full voiceover track | [`00-master-script.md`](00-master-script.md) | Targeted beat files (`01` through `05`) |
 | Specific video scene prompts for Beat N | `0<N>-beat-*.md` | [`00-master-script.md`](00-master-script.md) |
+| Physical camera shot list to film IRL | [`irl-shot-list.md`](irl-shot-list.md) | [`02-beat-hero-poc-grocery.md`](02-beat-hero-poc-grocery.md) |
 | Peer money exchange or neural band tech details | [`vision-peer-payment-spec.md`](vision-peer-payment-spec.md) | [`04-beat-future-vision-handshake.md`](04-beat-future-vision-handshake.md) |
 | Judge Q&A answers or edge-case handling | [`qa-and-objections.md`](qa-and-objections.md) | [`../research/2026-11-13-accessibility-and-trust.md`](../research/2026-11-13-accessibility-and-trust.md) |
 | Retailer business model or deployment economics | [`03-beat-meta-speed-advantage.md`](03-beat-meta-speed-advantage.md) | [`qa-and-objections.md`](qa-and-objections.md) |

@@ -17,7 +17,8 @@ docs/
 │   ├── 04-beat-future-vision-handshake.md
 │   ├── 05-beat-accessibility-impact-ask.md
 │   ├── vision-peer-payment-spec.md
-│   └── qa-and-objections.md
+│   ├── qa-and-objections.md
+│   └── irl-shot-list.md           # Actionable physical video shot list to film IRL
 ├── research/                      # Domain research conducted for the hackathon
 │   ├── 2026-11-13-context-and-prior-art.md
 │   ├── 2026-11-13-accessibility-and-trust.md
@@ -49,6 +50,7 @@ Quickly locate exact files for specific agent tasks:
 |---|---|---|
 | Pitch presentation slides | [`pitch/00-master-deck.md`](pitch/00-master-deck.md) | [`pitch/README.md`](pitch/README.md) |
 | Raylight video script and scene prompts | [`pitch/00-master-script.md`](pitch/00-master-script.md) | Individual beat files in `pitch/` |
+| Physical camera shot list to film IRL | [`pitch/irl-shot-list.md`](pitch/irl-shot-list.md) | [`pitch/02-beat-hero-poc-grocery.md`](pitch/02-beat-hero-poc-grocery.md) |
 | Grocery PoC architecture and user loop | [`pitch/02-beat-hero-poc-grocery.md`](pitch/02-beat-hero-poc-grocery.md) | [`superpowers/specs/2026-11-13-meta-glance-design.md`](superpowers/specs/2026-11-13-meta-glance-design.md) |
 | Meta zero-to-one implementation speed | [`pitch/03-beat-meta-speed-advantage.md`](pitch/03-beat-meta-speed-advantage.md) | [`pitch/00-master-deck.md`](pitch/00-master-deck.md) |
 | Peer money exchange & neural band handshake | [`pitch/vision-peer-payment-spec.md`](pitch/vision-peer-payment-spec.md) | [`pitch/04-beat-future-vision-handshake.md`](pitch/04-beat-future-vision-handshake.md) |
