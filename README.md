@@ -117,7 +117,8 @@ The server knows a barcode only when the store list holds it. `apps/server/catal
 3. Start the server again. The start log has `store list: catalog/store-list.dev.json, <n> items`. A wrong digit stops the start: the message names the entry and says that the check digit is wrong.
 4. Show the barcode to the glasses, or to the phone camera in mock mode.
 
-- `brand` and `packSize` are optional. Without `brand`, the still of a label cannot find the item by its name, and only the digits can.
+- `brand` and `packSize` are optional. With real recognition, the model gets each item of the list and chooses one by the meaning of the package text. So an item with an English name matches a package with Finnish or Swedish text.
+- With real recognition, start the server with the demo files: `CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.json npm run dev --workspace @glance/server`. The demo catalog holds no invented product, and the demo store list is the dev list with five more items. `apps/server/README.md` has the details, in "A demo with real products".
 - With `dev:fake` the server does not ask Open Food Facts. A product with no file in `apps/server/fixtures/product-info` then has no allergen data, and the voice says so to a shopper with an allergen or a diet in the profile.
 - `FAKE_PRODUCT_INFO=0 npm run dev:fake --workspace @glance/server` keeps recognition and speech fake, and reads the allergens and the diets from Open Food Facts. That call needs no key and costs no money. Open Food Facts allows 15 product reads each minute, and the server keeps each answer in `apps/server/.cache/products`.
 - A test of the server wants a fixture for each item of `store-list.dev.json`. So do not commit the demo entries. For a list of your own, copy the file and give its path in `STORE_LIST_PATH`.

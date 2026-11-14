@@ -214,6 +214,7 @@ Rules that keep a wrong product out:
 - After the first report, the phone sends the same code one time each second while it stays in view. A gap of 1000 ms with no read keeps the appearance. After a longer gap the code needs its reads again.
 - With more than one code in a frame, the largest one counts. OCR counts only when the region holds exactly one code.
 - A region counts only when its long side is at least 1.25 times its short side. So a kiosk QR code that is too far to decode asks for no still.
+- A region also counts only up to half of the frame width and 30 percent of the frame height (`BarcodeRegion.fits`). A real code of that size decodes. The scanner reported the text of a laptop screen as a region of 361 x 242 pixels in a frame of 504 x 896, and the phone took a still each 6 to 10 seconds.
 - The frame gets one NV21 copy, for the scan. The crops for the second scan and for OCR read the Y plane of the frame.
 - The log (tag `Glance`) has `barcode read <code> <source>` for each read before the first report of a code.
 
@@ -229,6 +230,7 @@ The still photo:
 - A still with a code gives `barcode.seen`, and the still stays on the phone.
 - A still with no code goes to the server as a frame with `kind: label` and `blurred: true`: the full photo with no crop, each face pixelated, a long side of 1600 pixels at most, and JPEG quality 85. If face detection fails, the still is dropped.
 - The log line `label still asked: region <box> in <w>x<h>` or `label still asked: server request` says why the phone takes a still.
+- The log line `stream size <w>x<h>` comes with the first frame of a stream and with each change of the frame size. The glasses lower the size when Bluetooth is slow, and a smaller frame makes each code harder to read.
 - The log line `label still <w>x<h>: ...` has the size of the photo and the milliseconds from the trigger to the result. `DatLink` logs `still <w>x<h> <variant> <ms> ms` for the capture alone.
 
 ### The two times of the label still
@@ -269,10 +271,18 @@ In the stream of the sharp clip `barcode.mp4`, OCR of the crop read the digits a
 
 So each of the three ways reads a code that the way before it does not read. The wrong code at 20 has a right check digit. In the stream, `BarcodeVote` asks for 2 equal reads, and the server adds only a code of the store list. The test clips use the radius 12.
 
+Measured with Ray-Ban Meta glasses on 2026-11-14, in one test:
+
+- The stream fell to 504 x 896, the Bluetooth ladder of the glasses. The uploaded frames were about 402 x 626 and blurred.
+- The scanner decoded no code at the length of an arm.
+- A label still was 1080 x 1440 (HEIC) and took 2.3 to 2.9 seconds. In one still the barcode of a pack of paper cups was about 95 pixels wide, which is too small to read.
+- With no barcode in view, the scanner reported the text of a laptop screen as a region. See the size rule above.
+
 What nobody measured:
 
 - The distance at which a code decodes from the stream of the real glasses. ML Kit asks for 2 pixels for each narrow bar, so an EAN-13 code must be 190 pixels wide in the frame. The research of 2026-11-13 estimates 7 to 11 cm for that. See "Checks with the glasses or with sound".
-- The size and the time of a still on Android, and whether a still stops Motion.
+- Whether a still stops Motion.
+- The size rule of a region and the barcode wait of 1000 ms with the real glasses. The instrumented tests did not run after these changes: they need the test phone.
 - The time of one scan with the 5 formats and the regions, and the time of one OCR run, on the phone.
 - The text that ML Kit gives for a UPC-E code. The app expects 8 digits.
 

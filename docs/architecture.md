@@ -305,17 +305,53 @@ sequenceDiagram
     Socket->>Label: label frame
     Label->>Runtime: dispatch(label, started)
     Label->>Gemini: label call with agents/label.md, default media resolution, 4 seconds
-    Gemini-->>Label: digits, brand, name, packSize, confidence
+    Gemini-->>Label: digits, brand, name, packSize, confidence, item, itemConfidence
     Note over Label: matchLabel selects one item of the store list, or none
     alt one item
       Label->>Runtime: the lookup of barcode.seen, then dispatch(barcode, outcome product)
       Runtime->>Socket: event glance.pending, speak the glance line
+    else the answer is empty: the still shows no product
+      Label->>Runtime: dispatch(label, empty), which speaks no line
     else no item, or the call failed
       Label->>Runtime: dispatch(label, failed)
       Runtime->>Socket: speak "I cannot read this code. Hold it closer.", at most one time each 10 seconds
     end
   end
 ```
+
+The label call gets the store list in its instruction. It answers with `item`, the code of the one store item that the package is, and the server takes it with an `itemConfidence` of `LABEL_MIN_CONFIDENCE` or more. So a package with Finnish text selects an item with an English name.
+
+The fourth diagram shows a product that recognition by sight cannot name. The same still and the same label call read its package, with no barcode in view.
+
+```mermaid
+sequenceDiagram
+  participant App as Android app
+  participant Runtime as SessionRuntime
+  participant Label as Label handler
+  participant Gemini
+
+  App->>Runtime: frame with the status unknown or unsure
+  Note over Runtime: the line "I do not know this product." waits
+  App->>Runtime: a second such frame inside 2 seconds
+  Note over Runtime: the limits of a still for a code: no code or product accepted in the last 3 seconds, one request each 6 seconds
+  Runtime->>App: still.request with the purpose label
+  alt the phone sends a label frame
+    App->>Label: frame with the kind label
+    Label->>Gemini: label call
+    alt the answer selects one item
+      Label->>Runtime: dispatch(barcode, outcome product)
+      Runtime->>App: event glance.pending, speak the glance line
+    else the answer read a package and selects no item
+      Runtime->>App: speak "I do not know this product."
+    else the still shows no product
+      Note over Runtime: no line
+    end
+  else no label frame in 5 seconds
+    Runtime->>App: speak "I do not know this product."
+  end
+```
+
+Recognition by sight also knows the store list. Its instruction lists each store item that the catalog does not hold, with the ID `gtin-<13 digits>`, and the answer schema takes these IDs. A clear frame of a store item then gives `identified`, and the product goes through `ProductResolver` to the normal prompt. The server reads the store list one time at its start, with the details that the product cache holds, and makes no call to Open Food Facts then.
 
 Rules of this path:
 
@@ -325,8 +361,10 @@ Rules of this path:
 - Open Food Facts answers are kept for 30 days, and "not found" for 1 day, in memory and in files. After a failed read the next request for that code waits 30 seconds, and after the status 429 each code waits 60 seconds. The server never asks for a code that starts with `2`, `02`, or `04`: only one store knows such a code.
 - An empty allergen list of Open Food Facts counts as no data. The shopper then hears "Allergen data is missing for this product." when the profile lists an allergen or a diet.
 - Digits that the model read count only with a right check digit and a product of the catalog or the store list. Then one frame is enough. The model never causes the line "This product is not in this store."
-- A label gives a product only when its answer selects exactly one item of the store list: by digits with a right check digit, or by each word of the brand and each word and number of the name. Free text of the model never becomes a product.
-- One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight speaks no unknown line and no aim hint. The recognition instruction also gives the status `none` to a package shown with its barcode side.
+- A label gives a product only when its answer selects exactly one item of the store list: by digits with a right check digit, else by the item that the model chose from the list, else by each word of the brand and each word and number of the name. Digits of one item and a chosen item that is another one give no product. Free text of the model never becomes a product.
+- A still that shows no product gets no line. The line "I cannot read this code." is for an answer that read something and selected no item.
+- One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight speaks no unknown line and no aim hint. The same holds while the server waits for a still that it asked for, and for its label call. The recognition instruction also gives the status `none` to a package shown with its barcode side.
+- 2 frames with a product that sight cannot name ask for a still, with the limits of a still for a code. The unknown line waits for the still and its label call, and plays only when they gave no product.
 - The phone takes a label still by itself when a barcode region was in view for the barcode wait with no accepted code, and after each `still.request`. It takes at most one each still gap.
 - A label call is one more Gemini call. The server asks for a still at most one time each 6 seconds for a session, and each 30 seconds after 2 requests with no code read. It starts at most one label call each 5 seconds for a session, and none for a session that does not shop.
 - A lookup result that arrives after the result of a later report of another code is dropped.
@@ -523,6 +561,7 @@ Checks that nobody did:
 - No native speaker has read the Italian lines of the server or the Italian table of the phone UI.
 - Nobody has checked the Display HUD in the Display simulator or on glasses with a display. The checks ran in a browser.
 - No replay of a frame set has run with the real recognition service, and no test has run the store tests against a MongoDB server.
-- Nobody has read a barcode with the real glasses, so the distance at which the phone or the model reads a code is not known. Nobody knows if the barcode wait of 2500 ms feels long, which is why it is a setting.
+- One test with Ray-Ban Meta glasses ran on 2026-11-14. The stream fell to 504 x 896, and the scanner of the phone read no code at the length of an arm. A label still took 2.3 to 2.9 seconds and its label call 1.5 to 2.3 seconds. The distance at which the phone reads a code is still not known.
+- The changes after that test have not run with the real glasses or the real model: the item that the label call chooses, the store items in the recognition instruction, the still for an unknown product, the size limit of a barcode region, and the barcode wait of 1000 ms.
 - The instrumented tests of the Android app did not run after the group `Barcode` came to "Glance Mock". They need the test phone.
 - The label call and the `code` field of the recognition call have not run with the real model. The server code has made no call to Open Food Facts: the tests use a fetch function of their own and fixture files.

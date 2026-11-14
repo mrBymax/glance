@@ -18,13 +18,14 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `scripts/catalog-check.ts`, `scripts/catalog-seed.ts` | `npm run catalog:check` and `npm run catalog:seed`. See "Catalog". |
 | `catalog/catalog.dev.json` | The dev catalog with four products. The tests use its IDs and prices. |
 | `catalog/store-list.dev.json` | The dev store list: 10 real barcodes with invented prices. See "Barcode scan". |
+| `catalog/catalog.demo.json`, `catalog/store-list.demo.json` | The files of a demo with real products: a catalog with no invented product, and the dev store list with five more items. See "A demo with real products". |
 | `src/products/` | The store list, the product details of Open Food Facts, and the lookup of a barcode. See "Barcode scan". |
 | `src/label/` | The model call that reads the still of a label, and its match against the store list. See "Label frames". |
-| `agents/label.md` (repository root) | The instruction for the label call. |
+| `agents/label.md` (repository root) | The instruction for the label call, with the placeholder `{{storeList}}`. |
 | `fixtures/product-info/` | One saved answer of Open Food Facts for each item of the dev store list. `FAKE_PRODUCT_INFO` and the tests read them. |
 | `catalog/catalog.json` | The 12 product slots of the demo, with `FILL_` texts and the price 0. A person fills them, and `catalog:check` reports each price of 0 as an error. |
 | `src/recognition/` | The recognition of a frame, and the script player that stands in for it. See "Recognition" and "Fake mode". |
-| `agents/recognition.md` (repository root) | The instruction for the recognition model, with the placeholder `{{catalog}}`. |
+| `agents/recognition.md` (repository root) | The instruction for the recognition model, with the placeholders `{{catalog}}` and `{{storeItems}}`. |
 | `fixtures/fake-script.json` | The default script of fake recognition. |
 | `scripts/check-model.ts` | `npm run model:check`: a check of the model ID with the real service. |
 | `src/ask/` | The answer to a spoken question about one product. See "Questions about a product". |
@@ -79,6 +80,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | The recognition model. |
 | `GEMINI_MEDIA_RESOLUTION` | `default` | `default` or `low`. |
 | `RECOGNITION_MIN_CONFIDENCE` | `0.6` | A number from 0 to 1. An `identified` answer below it counts as `unsure`. |
+| `LABEL_MIN_CONFIDENCE` | `0.7` | A number from 0 to 1. The label call chooses one item of the store list, and the server takes it from this confidence on. See "Label frames". |
 | `REQUIRE_BLUR` | off | `1` means on. The server then drops each frame that the phone sent with `blurred: false`. |
 | `FAKE_RECOGNITION` | off | `1` selects `fixtures/fake-script.json`. Each other value is the path of a script file. |
 | `FAKE_SPEECH` | off | `1` means on. |
@@ -117,6 +119,7 @@ Three switches let the other apps work with no key and no call to another servic
 - In a `kiosk` step the session sees the kiosk one time each second. `"newest"` names the kiosk that registered last. Each other value is a kiosk code.
 - In a `barcode` step the session gets the code one time each second, as `barcode.seen` of a phone with the source `barcode`.
 - A `result` step can set `code`, with `visible` and `digits`. Digits go to the lookup with the source `model`.
+- A `result` step with the status `unknown` or `unsure` asks a phone for a still after its second frame, as real recognition does. The unknown line waits for that still. See "A product that sight cannot name".
 - The device socket still decodes each frame. It logs `frame seq=<n> w=<w> h=<h> blurred=<b> kind=<k> bytes=<n>` at `info` level and drops the frame. With `SAVE_FRAMES` it saves the frame first.
 - A frame with the kind `label` goes to a fake label reader. Its answer is the field `label` of the script. With no such field it reads nothing. See "Label frames".
 - The server has one kiosk from the start: `Checkout 3` at `Demo Market` with the code `K3X7`. A printed `GL1 K3X7` code starts a checkout.
@@ -139,8 +142,9 @@ A script file, as `fixtures/fake-script.json`:
 - A step covers the times from `atMs` up to, and not including, `atMs + forMs`. With `loop`, the script starts again after `lengthMs`.
 - A `result` holds some fields of a recognition result. The other fields come from the empty result, with the confidence 0.95.
 - A `barcode` holds 8 to 14 digits. The script does not check them: a code with a wrong check digit, and a code that the store does not sell, are valid steps.
-- The optional field `label` beside `steps` holds `digits`, `brand`, `name`, `packSize`, and `confidence`.
-- A file that is no script, an unknown key, and a product ID that the catalog does not have stop the server at its start. The message names the file and the step, counted from 1.
+- The optional field `label` beside `steps` holds `digits`, `brand`, `name`, `packSize`, and `confidence`. It can also hold `item` and `itemConfidence`: with none, they are `null` and 0.
+- A product ID is an ID of the catalog, or `gtin-<13 digits>` for an item of the store list that the catalog does not hold.
+- A file that is no script, an unknown key, and a product ID that the catalog and the store list do not have stop the server at its start. The message names the file and the step, counted from 1.
 
 `FAKE_PRODUCT_INFO`:
 
@@ -194,7 +198,7 @@ sequenceDiagram
 | File in `src/recognition` | Content |
 |---|---|
 | `result.ts` | `RecognitionResult` with the code of the frame, and `normalizeResult`, which checks an answer of the model |
-| `prompt.ts` | The system instruction with the catalog, the JSON Schema of the answer, and the text of a request |
+| `prompt.ts` | The system instruction with the catalog and the store items, the JSON Schema of the answer, and the text of a request |
 | `gemini.ts` | `createGeminiRecognizer`: one `generateContent` call of `@google/genai` for each frame |
 | `worker.ts` | `RecognitionWorker`: the calls of one session |
 | `intake.ts` | `createFrameHandler`: one worker for each session, between the device socket and the rules |
@@ -205,7 +209,8 @@ sequenceDiagram
 The request:
 
 - The system instruction is `agents/recognition.md` with one line for each product in place of `{{catalog}}`: ID, name, brand, pack size, look, and look-alikes. It holds no price.
-- The answer is JSON with the six fields of spec section 11.1 and the field `code`. Its schema lets `productId` and `candidates` take only catalog IDs.
+- `{{storeItems}}` gets one line for each item of the store list that the catalog does not hold: the ID `gtin-<13 digits>`, the name, and the brand and the pack size when the store list or the product cache has them. A store item has no look. The instruction says that the package text can be in another language than the name, and that a similar product is no match. See "Recognition knows the store list".
+- The answer is JSON with the six fields of spec section 11.1 and the field `code`. Its schema lets `productId` and `candidates` take only the IDs of the catalog and of the store items. With no ID at all, `productId` can only be `null`.
 - `code` is `{ visible, digits }`: the barcode of the frame, as the model sees it. See "The model also reads the code".
 - The text part is `Exclude: none.` or `Exclude: <id>, <id>.`, with the products that the shopper skipped in the last 10 seconds (R9).
 - The call makes one attempt, with a time limit of 4 seconds. The SDK default is 5 attempts.
@@ -214,8 +219,8 @@ The request:
 `normalizeResult` never turns another status into `identified`:
 
 - An answer that fails the schema counts as no product.
-- `identified` with an ID outside the catalog becomes `unknown`. With an excluded ID it becomes `none`. Below `RECOGNITION_MIN_CONFIDENCE` it becomes `unsure`.
-- `ambiguous` keeps the candidates that are in the catalog and not excluded. With one candidate left it becomes `unsure` with the aim hint `turn`. With none it becomes `unknown`.
+- `identified` with an ID outside the catalog and the store items becomes `unknown`. With an excluded ID it becomes `none`. Below `RECOGNITION_MIN_CONFIDENCE` it becomes `unsure`.
+- `ambiguous` keeps the candidates that are in the catalog or the store items and not excluded. With one candidate left it becomes `unsure` with the aim hint `turn`. With none it becomes `unknown`.
 - Each status keeps the code. The digits lose their spaces, and digits with another character become `null`. A code with digits counts as visible. An answer with no code, or with a bad one, keeps its other fields.
 
 The worker:
@@ -228,6 +233,7 @@ The worker:
 - The worker stops when its session stops and when the app closes.
 - Each result gets the log line `recognition session=<id> seq=<n> status=<status> code=<digits|visible|no> ms=<n>`. `code` is what the model said about a barcode in the frame. Each request for a still gets the line `still.request session=<id>`. It gives the server share of the time from glance to voice.
 - The digits of the code of a result go to the lookup of a barcode. A frame with the kind `label` never reaches the worker.
+- A result that names a store item waits for `ProductResolver.resolve` before it reaches the rules. See "Recognition knows the store list".
 
 ### Stored frames
 
@@ -313,6 +319,7 @@ sequenceDiagram
 | `src/products/fakeProductInfo.ts` | `createFakeProductInfo`: the reader of `FAKE_PRODUCT_INFO` |
 | `src/products/scanned.ts` | `scannedProduct` builds the product of a store item. `ScannedProducts` keeps these products, and `withScanned` adds them to the index of the rules |
 | `src/products/resolver.ts` | `ProductResolver.resolve`: the catalog, then the store list, then the details |
+| `src/products/storeEntries.ts` | `readStoreEntries`: the store list as the server reads it one time at its start, with the details that the product cache holds |
 | `src/products/barcodes.ts` | `createBarcodeReports`: the check of a code, its lookup, and the rule input `barcode` |
 | `src/sessions/barcode.ts`, `src/sessions/code.ts` | The rules |
 | `src/label/` | The label frame: the model call, the match against the store list, and the frame handler |
@@ -334,7 +341,8 @@ The store list decides what the store sells. A code that the list does not hold 
 - The dev list has 10 products that Italian supermarkets sell. Each code was read from Open Food Facts on 2026-11-14. The prices are invented for the demo.
 - `8076809513753` is the Barilla pesto alla genovese, and `8076800195057` is the Barilla spaghetti n.5.
 - A catalog product with a `gtin` wins over the store list: a barcode then gives the catalog product, with the price and the spoken texts of the catalog. The Barista oat drink of the dev catalog has the code `7394376616037`. If the two prices of one code differ, the server logs one `store list:` warning at its start.
-- An item with no `brand` never matches a label by its name. See "Label frames".
+- `brand` and `packSize` are optional. The label call and recognition by sight get each item with the fields that it has, and choose an item by the meaning of the package text. See "Label frames" and "Recognition knows the store list".
+- `catalog/store-list.demo.json` is the dev list with five more items that have a name only, for example "Paper cups". See "A demo with real products".
 
 ### An ERP in place of the file
 
@@ -397,10 +405,10 @@ Limits of Open Food Facts:
 - `notInStore`: the voice says "This product is not in this store." one time for each appearance of that code. No prompt and no event follows. The line waits while the product of a prompt is in view.
 - `invalid`: a code with a wrong check digit, or with 14 digits, has no effect.
 - A scanned product has the ID `gtin-<13 digits>`. The cart, the warnings, the snapshot, a question, the cart by voice, the spot check, and a new profile language find it by that ID as they find a catalog product.
-- The recognition prompt lists only the catalog products, and the clip seed makes no clip for a scanned product. With real speech, each new line of a scanned product is one ElevenLabs call.
-- One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight gives no unknown line and no aim hint. So a shopper who shows a barcode does not hear "Turn the front to me."
+- The clip seed makes no clip for a scanned product. With real speech, each new line of a scanned product is one ElevenLabs call.
+- One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight gives no unknown line and no aim hint. So a shopper who shows a barcode does not hear "Turn the front to me." The same holds while the server waits for a still that it asked for (5 seconds), and for the label call of that still (6.5 seconds at most).
 - A result that arrives after the session stopped is dropped. A result that arrives after the result of a later report of another code is dropped too: the shopper shows the other code now.
-- The scanned products live in the memory of the process. When a stored session loads after a restart, the server resolves the scanned products of its cart again. A product that the store list no longer holds stays a cart line with its old price: the shopper can remove it, and the voice does not name it.
+- The scanned products live in the memory of the process. The start puts each item of the store list there, with the details that the product cache holds, and each lookup puts the product there again with the details of that time. When a stored session loads after a restart, the server resolves the scanned products of its cart again. A product that the store list no longer holds stays a cart line with its old price: the shopper can remove it, and the voice does not name it.
 
 Each lookup gets the log line `barcode session=<id> source=<barcode|ocr|model|label> gtin=<digits> outcome=<product|notInStore|invalid|dropped> ms=<n>`. `dropped` is the late result of the rule above.
 
@@ -426,9 +434,9 @@ sequenceDiagram
     else
       Phone->>Server: frame with the kind label
       Server->>Gemini: label call, default media resolution
-      Gemini-->>Server: digits, brand, name, packSize, confidence
+      Gemini-->>Server: digits, brand, name, packSize, confidence, item, itemConfidence
       Note over Server: matchLabel against the store list
-      Server-->>Phone: glance.pending and the glance line, or "I cannot read this code. Hold it closer."
+      Server-->>Phone: glance.pending and the glance line, or "I cannot read this code. Hold it closer.", or no line for a still with no product
     end
   end
 ```
@@ -440,22 +448,69 @@ sequenceDiagram
 - After 2 requests with no code read, the next request waits 30 seconds. A still can stop Motion on the glasses for a moment, and a code that no reader can read must not cause one each 6 seconds. A code that was read brings the 6 seconds back.
 - The lookup of the digits can take up to 2500 ms for a product that the cache does not hold. A second frame in that time can still ask for a still. The still then gives the same product, and one appearance gets one prompt.
 
+### A product that sight cannot name
+
+The uploaded frame is small, and the catalog holds few products. So recognition often answers `unknown` or `unsure` for a product that the store sells. The label call can read the package text in a still, also with no barcode in view.
+
+```mermaid
+sequenceDiagram
+  participant Phone
+  participant Server
+  participant Gemini
+  Phone->>Server: frame
+  Gemini-->>Server: status unknown or unsure
+  Note over Server: the first frame. The line "I do not know this product." waits
+  Phone->>Server: frame, less than 2 seconds later
+  Gemini-->>Server: status unknown or unsure
+  Server-->>Phone: still.request with the purpose label
+  alt the phone sends a label frame, and the label call selects an item
+    Server-->>Phone: glance.pending and the glance line
+  else the label call read a package and selects no item, or the call fails
+    Server-->>Phone: "I do not know this product."
+  else the still shows no product
+    Note over Server: no line. The next unknown frame gets the line at once
+  else no label frame in 5 seconds
+    Server-->>Phone: "I do not know this product."
+  end
+```
+
+- 2 stream frames with the status `unknown` or `unsure`, less than 2 seconds apart, ask the phone for a still. The rule is `onUnnamedProduct` in `src/sessions/code.ts`. The still of the sharp second look does not count.
+- The request has the limits of a still for a code, and shares them: no code or product accepted in the last 3 seconds, one request each 6 seconds, and 30 seconds after 2 requests with no code read.
+- The unknown line of a new appearance waits while a still can follow. It plays after 2 seconds when no second frame asked for a still, after 5 seconds when no label frame came, and at the end of a label call that gave no product. A barcode report, a product by sight, and a look-alike answer drop it.
+- When the limits allow no still, the unknown line plays at once, as before.
+- An aim hint does not wait. It is quiet from the request to the end of the label call.
+- A session with no phone gets no still. Its unknown line plays 5 seconds after the request.
+
+### Recognition knows the store list
+
+A store item has a name and a price, and no description of its package. With a clear frame, the model can still tell that a package is "Paper cups", also when its text is Finnish.
+
+- At its start the server reads the store list one time, through `readStoreEntries`. Each item gets the details that `ProductInfo.cached` holds: the fixtures with `FAKE_PRODUCT_INFO`, else the cache files of Open Food Facts. The start makes no call to Open Food Facts, because the database allows 15 reads each minute and a list can hold more items.
+- Each item that the catalog does not hold by its `gtin` is a line of the recognition instruction and an ID of the answer schema. `ScannedProducts` holds its product from the start, so the rules and a fake script find it by its ID.
+- `identified` with the ID of a store item opens the normal prompt. Before the result reaches the rules, `ProductResolver.resolve` reads the product again, as for a scanned barcode. So the first prompt of an item makes the one call to Open Food Facts for its allergens, inside the 2500 ms of a lookup, and each later prompt reads the cache.
+- A result of a later frame can reach the rules before a result that waits for its read. An item that the store list no longer holds gets no prompt, with the log line `recognition result dropped: the store does not sell <id>`.
+- The store list is read at the start. An ERP that changes its list needs a restart of the server before recognition and the label call know a new item. A barcode of the phone finds a new item at once.
+
 ### Label frames
 
-A frame with the kind `label` is the still of a barcode that the phone could not read. It goes to one model call, and never to recognition.
+A frame with the kind `label` is the still of a package that the phone could not read. It goes to one model call, and never to recognition.
 
 - The call uses `GEMINI_API_KEY` and `GEMINI_MODEL`, the instruction `agents/label.md`, a response schema of its own, the default media resolution, one attempt, and a time limit of 4 seconds.
-- The answer is `digits` (a list of digit runs), `brand`, `name`, `packSize`, and `confidence`. An answer that fails the schema counts as an empty one.
+- The instruction holds the store list in place of `{{storeList}}`: one line for each item, with its `gtin`, its name, and its brand and pack size when the store list or the product cache has them. It holds no price. The server builds the instruction and the schema one time, at its start.
+- The answer is `digits` (a list of digit runs), `brand`, `name`, `packSize`, `confidence`, `item`, and `itemConfidence`. `item` is the `gtin` of the one store item that the package is, or `null`. The schema lets it take only a code of the store list. An answer that fails the schema counts as an empty one.
+- The instruction says: the package text can be in another language than the name in the store list ("Kartonkipikari / Pappersmugg" is "Paper cups"), choose an item only when the package is that product and not a similar one, answer `null` when not sure, and never guess a digit.
 - `matchLabel` in `src/label/match.ts` selects the store item. Free text of the model never becomes a product by itself:
   1. Digits count with a right check digit and an item of the store list. Two codes of two items give no product.
-  2. Else the brand and the name must select exactly one item. The brand, the name, and the pack size of the answer must together hold each word of the brand of the item, each word of its name, and each number of its name. The compare has no regard to case and accents, and words of 1 or 2 letters do not count. So "Pesto alla calabrese" never selects "Pesto alla genovese", and "Spaghetti n.3" never selects "Spaghetti n.5". An item with no brand in the store list matches by each word of its name alone, so give a demo item a name that is printed on its package. This way also needs a confidence of `RECOGNITION_MIN_CONFIDENCE` or more.
-  3. Between items with one brand and one name, the pack size selects. Two matches or none give no product.
+  2. Else `item` counts with an `itemConfidence` of `LABEL_MIN_CONFIDENCE` or more, when the store list holds it. Digits of one item and an `item` that is another one give no product.
+  3. Else the brand and the name must select exactly one item. The brand, the name, and the pack size of the answer must together hold each word of the brand of the item, each word of its name, and each number of its name. The compare has no regard to case and accents, and words of 1 or 2 letters do not count. So "Pesto alla calabrese" never selects "Pesto alla genovese", and "Spaghetti n.3" never selects "Spaghetti n.5". An item with no brand in the store list matches by each word of its name alone, so give a demo item a name that is printed on its package. This way also needs a confidence of `RECOGNITION_MIN_CONFIDENCE` or more.
+     Between items with one brand and one name, the pack size selects. Two matches or none give no product.
 - A match goes through the lookup of `barcode.seen`, with the source `label`.
-- With no match, and when the call fails or is late, the voice says "I cannot read this code. Hold it closer.", at most one time each 10 seconds.
+- An answer with no digits, no brand, no name, and no item is an empty answer: the still showed no product. The voice says nothing for it.
+- With an answer that read something and matched nothing, and when the call fails or is late, the voice says "I cannot read this code. Hold it closer.", at most one time each 10 seconds. When recognition by sight asked for the still, the voice says "I do not know this product." in its place.
 - One label call runs at a time for each session, and a session starts at most one call each 5 seconds. A label frame that arrives during a call, or too early, is dropped with a `label frame dropped` warning.
 - A label frame of a session that rests, is paid, or ended is dropped with no call.
 - With `REQUIRE_BLUR=1` the server drops a label frame with `blurred: false`. With `SAVE_FRAMES` it saves each label frame that it accepts.
-- Each label frame gets the frame log line at `info` level, and each call gets `label session=<id> seq=<n> match=<13 digits|none> ms=<n>`. Before it, the line `label answer seq=<n> digits=[...] brand=... name=... confidence=<n> session=<id>` shows what the model read, so a person can see why a still gave no product.
+- Each label frame gets the frame log line at `info` level, and each call gets `label session=<id> seq=<n> match=<13 digits|none> ms=<n>`. Before it, the line `label answer seq=<n> digits=[...] brand=... name=... confidence=<n> item=<13 digits|null> itemConfidence=<n> session=<id>` shows what the model read, so a person can see why a still gave no product.
 - With real recognition, each label call is one paid Gemini call. The phone sends at most one still each 6 seconds by default. A person can set that gap on the phone, down to 2 seconds, and the limit of 5 seconds on the server holds for a phone that sends more.
 
 ### Try it in fake mode
@@ -489,9 +544,30 @@ For a code that the store does not sell, and for a label frame, write a script o
 
 - At second 2 the events stream gets the caption "This product is not in this store."
 - At second 8.5 a phone on the device socket gets `still.request`. A browser client has no device socket and gets nothing.
-- `label` is the answer of the fake label reader for each label frame of a phone. Here a label frame gives `glance.pending` for the Nutella. A script with no `label` reads nothing, and the voice says "I cannot read this code. Hold it closer."
+- `label` is the answer of the fake label reader for each label frame of a phone. Here a label frame gives `glance.pending` for the Nutella. A script with no `label` reads nothing, and the voice says nothing.
 
-Not measured: nobody has read a barcode with the real glasses, and no label call has run with the real model. The distance at which the phone or the model reads a code is not known.
+### A demo with real products
+
+`catalog/catalog.dev.json` holds three invented products. In a test with the glasses on 2026-11-14, recognition named a pack of paper cups "Rye bread", which is one of them. For a demo with products on a table, use the two demo files:
+
+```bash
+CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.json npm run dev
+```
+
+- `catalog/catalog.demo.json` holds the one product of the dev catalog that has a barcode: the Barista oat drink of Oatly.
+- `catalog/store-list.demo.json` holds the 10 items of the dev list and five items with a name only. Add the products on the table to a copy of it. `README.md` at the repository root says how.
+- The start log has `catalog: 1 products` and `store list: catalog/store-list.demo.json, 15 items`.
+- The server starts with a catalog that holds one product, or none. Recognition by sight then names only store items.
+- The demo catalog is no input for `catalog:check` and `catalog:seed`: the check wants a look-alike pair and 12 products.
+- The default script of `--fake` names products of the dev catalog. So use the demo catalog with real recognition, or with a script of your own.
+
+Measured in the test of 2026-11-14, with Ray-Ban Meta glasses and the real model:
+
+- The stream fell to 504 x 896, so the uploaded frames were about 402 x 626 and blurred. The scanner of the phone read no code at the length of an arm.
+- A label still was 1080 x 1440 and took 2.3 to 2.9 seconds. The label call took 1.5 to 2.3 seconds.
+- In one still the barcode was about 95 pixels wide, which is too small to read. The model read the name on the package right.
+
+Not measured: the label call with `item`, the store items in the recognition instruction, and the still for an unknown product have not run with the real model. The distance at which the phone or the model reads a code is not known.
 
 ## Speech clips
 
@@ -548,7 +624,7 @@ A catalog file is a JSON array. Each entry is a `Product` of `@glance/shared`. P
 - `readCatalogFile` stops at the first entry that fails the schema. Its message names the file, the index of the entry, and the ID.
 - `indexCatalog` rejects a catalog that holds one ID two times.
 - In `allergens`, `null` means "no data", and an empty list means "no allergen". The potato crisps of the dev catalog have no data.
-- A product with a `gtin` also answers its barcode. The Barista oat drink of the dev catalog has the code `7394376616037`, read from Open Food Facts. The other three products are invented and have no code.
+- A product with a `gtin` also answers its barcode. The Barista oat drink of the dev catalog has the code `7394376616037`, read from Open Food Facts. The other three products are invented and have no code. `catalog/catalog.demo.json` holds the Barista oat drink alone. See "A demo with real products".
 
 ### Check a catalog
 
@@ -644,7 +720,7 @@ The rules that exist:
 - A product prompt ends when its product left the view for 15 seconds (R5).
 - A product in the cart gets the prompt for "add another" (R11).
 - A glance prompt carries the warnings of its product for the profile of the shopper. See "Allergen guard".
-- An unknown product gets one line for each appearance (R13). An aim hint plays at most one time each 5 seconds.
+- An unknown product gets one line for each appearance (R13). The line waits while a still can name the product. See "A product that sight cannot name". An aim hint plays at most one time each 5 seconds.
 - An `ambiguous` result gets the look-alike answer, and never a prompt. See "Look-alike products".
 - A yes or a no counts only with the ID of the current prompt (R3). From the head it also needs a finished prompt, the product in view, and the head window (R4). From voice, touchpad, key, or camera it needs a finished prompt (R5). From the phone or the HUD it needs the ID alone (R6).
 - An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
@@ -663,7 +739,8 @@ The rules that exist:
 - While the payment runs, no answer, no undo, and no cart edit has an effect.
 - A total above 50 EUR needs a fingerprint check on the phone before the payment. See "Fingerprint above 50 EUR".
 - A barcode of a product that the store sells gets the prompt of that product. A code that the store does not sell gets one line. See "Barcode scan".
-- While the shopper shows a barcode, and for 3 seconds after, recognition gives no unknown line and no aim hint.
+- While the shopper shows a barcode, and for 3 seconds after, recognition gives no unknown line and no aim hint. The same holds while the server waits for a still and its label call.
+- 2 frames with a product that sight cannot name ask the phone for a still, and the label call reads the package. See "A product that sight cannot name".
 
 ### Allergen guard
 

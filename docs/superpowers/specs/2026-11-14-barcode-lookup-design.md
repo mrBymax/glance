@@ -124,6 +124,19 @@ The research of 2026-11-13 and of today says that the stream gives 2 pixels for 
 - `tools/fake-server` logs `barcode.seen` and the kind of each frame. The instrumented tests feed a clip with an EAN-13 and a clip with digits only (made by `make-clips.mjs`).
 - `run-spine.mjs` reads the serial from `ANDROID_SERIAL`, and uses the one attached phone when it is not set.
 
+## Changes after the first test with the glasses
+
+One test with Ray-Ban Meta glasses ran on 2026-11-14, in Finland. The stream fell to 504 x 896, and the scanner of the phone decoded nothing at the length of an arm. The package text was Finnish and Swedish, and the store list names its items in English, so the word match found nothing. These changes followed:
+
+- The label call gets the store list and answers with `item`, the code of the one store item that the package is, and `itemConfidence`. `matchLabel` takes digits first, then `item` from `LABEL_MIN_CONFIDENCE` (0.7) on, then the word match. Digits and an item that name two items give no product.
+- An empty label answer speaks no line. "I cannot read this code." stays for an answer that read something and selected no item.
+- 2 frames with the status `unknown` or `unsure` inside 2 seconds ask for a still, with the limits of a still for a code. The line "I do not know this product." waits for the still and its label call.
+- The recognition instruction lists each store item, with the ID `gtin-<13 digits>`. The server reads the store list one time at its start and makes no call to Open Food Facts then.
+- `catalog/catalog.demo.json` holds no invented product.
+- On the phone, a region that did not decode and is wider than half of the frame, or higher than 30 percent of it, is no barcode region. The barcode wait before a label still is 1000 ms by default.
+
+The text above describes the first design. `apps/server/README.md` and `apps/mobile/android/README.md` describe what is built.
+
 ## Not in this change
 
 - Prices from Open Prices. The store list is the only price.
