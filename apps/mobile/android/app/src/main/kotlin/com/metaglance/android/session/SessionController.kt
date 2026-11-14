@@ -771,7 +771,8 @@ class SessionController(
         val snapshot = dat.snapshot.value
         val works = MainYesResolver.resolve(store.wantedMainYes, snapshot.motionStarted, snapshot.inputsActive, snapshot.speechStarted)
         if (works == profile.mainYes) return
-        log("main yes: ${store.wantedMainYes} does not work on these glasses, so it is $works")
+        val wanted = store.wantedMainYes
+        log(if (works == wanted) "main yes: $wanted works now" else "main yes: $wanted does not work on these glasses, so it is $works")
         val patch = buildJsonObject { put("mainYes", GlanceJson.encodeToJsonElement(MainYes.serializer(), works)) }
         setProfile(Profiles.applyPatch(profile, patch))
         send(DeviceToServer.ProfileSet(patch))
