@@ -16,10 +16,11 @@ The repository is one npm workspace with a Gradle project for the Android app. T
 
 - The message contract.
 - The server, with fake modes that need no key and no database.
-- The Android app with its probe screen, and the phone UI with its session screen.
-- The kiosk page of the website.
+- The Android app with its probe screen and its mock mode, and the phone UI with its setup screen and its session screen.
+- The four pages of the website: the landing page, the privacy page, the kiosk page, and the mirror page.
+- The Display HUD mockup.
 
-One shop runs from the first glance to the mock payment with the fake server. Nobody has run the app with real glasses yet. `docs/architecture.md` shows the parts, the messages between them, and the parts that do not exist yet.
+One shop runs from the first glance to the mock payment with the fake server. Nobody has run the app with real glasses yet. `docs/architecture.md` shows the parts, the messages between them, the parts that do not exist yet, and the checks that nobody did.
 
 ## Folders
 
@@ -31,7 +32,9 @@ One shop runs from the first glance to the mock payment with the fake server. No
 | `apps/mobile/ui` | `@glance/phone-ui`: the phone UI that the Android app shows in a WebView. |
 | `apps/website` | `@glance/website`: the landing page, the privacy page, the kiosk page, and the mirror page. |
 | `apps/display-pow` | `@glance/display-pow`: the Display HUD mockup, one screen on the Display toolkit. It plays a recording, or it follows a live session. |
-| `agents` | `recognition.md`, the instruction for the recognition model. |
+| `agents` | `recognition.md`, the instruction for the recognition model, and `answers.md`, the instruction for the model that answers a question. |
+| `infra` | The Docker image of the server and the Caddy proxy, for one machine with HTTPS. |
+| `scripts/integration` | The tests that run the apps against the server in fake mode. |
 | `skills` | The agent skills of the project (part "Agent Skills"). |
 | `scripts/hooks` | The pre-commit checks (part "Hooks"). |
 | `docs/architecture.md` | The parts, the path of one glance, the phases of a session, and the steps of a checkout. |
@@ -90,7 +93,7 @@ Run each `npm` command at the repository root, after `npm install`.
 ```bash
 npm run dev:fake --workspace @glance/server    # port 8080, no key, no database, no vendor call
 curl http://localhost:8080/healthz
-# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"store":"memory"}
+# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"store":"memory","saveFrames":false}
 ```
 
 - Set `PORT` for another port, for example `PORT=18473 npm run dev:fake --workspace @glance/server`.
@@ -116,6 +119,14 @@ npm run build --workspace @glance/website     # writes apps/website/dist
 Open `http://localhost:5174/kiosk` for a kiosk of the server on port 8080. Open `http://localhost:5174/kiosk?replay=1` for a recorded run with no server.
 
 Both dev servers send each `/api` request to `GLANCE_SERVER_ORIGIN`. The default is `http://localhost:8080`.
+
+### Display HUD
+
+```bash
+npm run dev --workspace @glance/display-pow -- --port 5175 --strictPort
+```
+
+Open `http://localhost:5175/` for a recording with no server. `apps/display-pow/README.md` shows how to follow a live session.
 
 ### Android app
 

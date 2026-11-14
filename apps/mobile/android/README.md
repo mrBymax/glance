@@ -15,8 +15,6 @@ The app has three screens. Each one has its own icon on the phone.
 
 The debug APK has about 110 MB, because it holds the ML Kit models and the libraries of the DAT SDK.
 
-`biometric.request` of the server has no handler yet. The app logs it.
-
 ## Parts
 
 ```mermaid

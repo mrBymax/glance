@@ -175,7 +175,7 @@ flowchart LR
 - `useSpokenText` announces each new caption, and the line `Cart: 2 items, 4.49 EUR.` after each cart change. It does not announce the captions of a snapshot, also when the snapshot loads again after a lost connection. `BridgeProvider` gives it the captions of the last snapshot.
 - Each string of the page is in `src/text/strings.ts`: the table `EN`, and the table `IT` with the same keys. `stringsFor(lang)` selects the table of `profile.lang`, so a change of the language shows at once. `src/text/format.ts` formats an amount as `1.89 EUR` in both languages.
 - `BridgeProvider` sets the `lang` attribute of the document to `profile.lang`. A screen reader selects its voice from it.
-- These texts stay English in the Italian page: the words of Astryx itself (for example "completed" in the list of steps and "Clear" in the name of the clear button), the debug panel, and each caption until the server speaks Italian. The page shows a caption as the server sends it.
+- These texts stay English in the Italian page: the words of Astryx itself (for example "completed" in the list of steps and "Clear" in the name of the clear button), and the debug panel. The page shows a caption as the server sends it, and the server writes it in the language of the profile. A product with no Italian text in the catalog keeps its English name.
 - `src/text/strings.test.ts` expects an Italian text for each English text, and the copy rules in both tables. No native speaker has read the Italian table yet.
 
 The field `checkout` follows the checkout events:
@@ -238,7 +238,7 @@ Each action that the shopper can do with the head or the voice also has a button
 
 End asks first, because the server takes no input for a session that ended.
 
-"Ask a question" needs no prompt ID. The Android app relays the intent, and `BrowserBridge` posts it as each other intent. The server takes the intent and does nothing with it yet: it has no question window.
+"Ask a question" needs no prompt ID. The Android app relays the intent, and `BrowserBridge` posts it as each other intent. The server opens a question window of 10 seconds for it and says "Listening." A browser has no microphone, so with `BrowserBridge` the window closes with no question.
 
 `hapticFor(before, action, after)` in `src/state/haptics.ts` returns the pattern for one message, or `null`. `BridgeProvider` calls it for each message of the bridge and sends `{ t: 'haptic', pattern }` for a result. The Android app vibrates only for these messages.
 

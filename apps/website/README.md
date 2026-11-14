@@ -125,7 +125,7 @@ The server selects each state after `idle`. The page only shows it.
 - The page shows the total of the event. It never adds prices. It shows 7 cart lines, and then the line `and <n> more items`.
 - The page drops a message that is not JSON and a message that `KioskEventSchema` of `@glance/shared` rejects.
 - When the stream drops, the browser opens it again. The page keeps the code and the cart, and it shows "Connection lost. Reconnecting." The first message of the new stream is the current view.
-- When the server refuses the stream, the browser does not open it again. This occurs after a restart of the server, which keeps its kiosks in memory. The page then registers a new kiosk each 3 seconds until one call succeeds. The new kiosk has a new code.
+- When the server refuses the stream, the browser does not open it again. This occurs after a restart of a server with no `MONGODB_URI`, which keeps its kiosks in memory. The page then registers a new kiosk each 3 seconds until one call succeeds. The new kiosk has a new code.
 - Each load of the page makes a new kiosk. The server has no call that removes one.
 
 `src/kiosk/kiosk.css` holds the sizes. On a screen of 1920 x 1080 px the total has a font of 160 px, a row has a font of 48 px, and the code is 960 px wide. The code is never smaller than 15 cm, with its quiet zone. To measure, open `/kiosk?replay=1` at 100 percent zoom, wait for the cart, and run this in the console. It must print `[true, true, true]`.

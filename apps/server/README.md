@@ -17,6 +17,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/catalog/check.ts` | `checkCatalog` finds the errors of a catalog file. See "Catalog". |
 | `scripts/catalog-check.ts`, `scripts/catalog-seed.ts` | `npm run catalog:check` and `npm run catalog:seed`. See "Catalog". |
 | `catalog/catalog.dev.json` | The dev catalog with four products. The tests use its IDs and prices. |
+| `catalog/catalog.json` | The 12 product slots of the demo, with `FILL_` texts and the price 0. A person fills them, and `catalog:check` reports each price of 0 as an error. |
 | `src/recognition/` | The recognition of a frame, and the script player that stands in for it. See "Recognition" and "Fake mode". |
 | `agents/recognition.md` (repository root) | The instruction for the recognition model, with the placeholder `{{catalog}}`. |
 | `fixtures/fake-script.json` | The default script of fake recognition. |
@@ -799,7 +800,7 @@ The store tests of `src/db/mongo.test.ts` need a MongoDB server. Without `MONGOD
 MONGODB_URI_TEST=<connection string> npm test --workspace @glance/server -- mongo
 ```
 
-Three checks call a vendor, cost money, and are not part of the tests. Run each one by hand, one time:
+Three checks call a vendor and are not part of the tests: `npm run replay` (see "Replay a test set"), and the two below. Run each one by hand, one time:
 
 ```bash
 # The model ID, with no cost. With a JPEG path it also makes one recognition call.
