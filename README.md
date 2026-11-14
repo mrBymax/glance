@@ -6,53 +6,51 @@
   <img alt="Glance logo" src="assets/Glance.png">
 </picture>
 
-> Monorepo for team **Meta Glance** at **HackJunction 2026**.
+Meta Glance is a proof of concept for the Meta challenge at Junction 2026. Smart glasses replace the scanner in scan-as-you-shop: a glance tells the name and the price of a product, a nod adds it to the cart, and a nod at the kiosk code pays.
 
-## Overview
+The design is in `docs/superpowers/specs/2026-11-13-meta-glance-design.md`. The implementation plans are in `docs/superpowers/plans/`.
 
-This repository is organized as an agentic-first monorepo hosting the applications, shared packages, AI agent definitions, skills, and documentation for Meta Glance.
+## State of the build
 
-## Repository Structure
+The repository is one npm workspace. One package has code: `packages/shared`, the message contract. The app folders are empty until their plans are done.
 
-```text
-glance/
-├── apps/
-│   ├── website/        # Web application
-│   ├── mobile/         # Mobile application (iOS / Android)
-│   └── display-pow/    # Display Proof of Work / implementations
-├── packages/
-│   └── shared/         # Shared libraries, utilities, and schemas
-├── agents/             # AI agent definitions, personas, and prompts
-├── skills/             # Agentic workflows, playbooks, and capabilities
-├── docs/               # Architecture, hackathon submission, specifications
-├── .gitignore          # Comprehensive monorepo ignore rules
-└── README.md           # Project orientation and instructions
+## Folders
+
+| Path | Content |
+|---|---|
+| `packages/shared` | `@glance/shared`: the message types as zod schemas, the JSON fixtures, the money and kiosk code helpers, and the frame codec. See its `README.md`. |
+| `apps/server`, `apps/mobile`, `apps/website`, `apps/display-pow` | Empty. The plans in `docs/superpowers/plans/` say what each one gets. |
+| `agents` | Empty. It gets the model prompts. |
+| `skills` | The agent skills of the project (part "Agent Skills") |
+| `scripts/hooks` | The pre-commit checks (part "Hooks") |
+| `docs/superpowers` | The design document and the implementation plans |
+| `docs/research` | The research behind the design |
+| `assets` | The logo files |
+
+## Tools
+
+- Node 22 or later, with npm. `.nvmrc` names the version. Do not use pnpm or yarn.
+- Git.
+
+## Install, test, and lint
+
+Run each command at the repository root.
+
+```bash
+npm install          # installs each workspace and turns the pre-commit hook on
+npm test             # runs the tests of each workspace
+npm run typecheck    # runs the TypeScript compiler on each workspace, with no output files
+npm run lint         # runs ESLint on each JavaScript and TypeScript file
 ```
 
-### Directory Details
+To check one workspace, add its name: `npm test --workspace @glance/shared`.
 
-| Path               | Purpose                                                                          |
-| ------------------ | -------------------------------------------------------------------------------- |
-| `apps/website`     | Front-end web application                                                        |
-| `apps/mobile`      | Mobile application (React Native / Flutter / native)                             |
-| `apps/display-pow` | Display Proof of Work module and future implementations                          |
-| `packages/shared`  | Reusable utilities, shared types, and shared configurations                      |
-| `agents`           | System prompts, model configs, and agentic specifications                        |
-| `skills`           | Reusable task playbooks and tool skills for coding assistants and runtime agents |
-| `docs`             | Project architecture, design specs, and hackathon presentation material          |
+`eslint.config.mjs` holds the lint rules for each workspace, and `tsconfig.base.json` holds the compiler options. A workspace package extends `tsconfig.base.json` and adds no ESLint of its own.
 
-## Getting Started
+## Branches and commits
 
-1. **Clone the repository:**
-
-   ```bash
-   git clone https://github.com/mrBymax/glance.git
-   cd glance
-   ```
-
-2. **Branching & Workflow:**
-   - Create feature branches off `main` (e.g. `feature/<name>` or `fix/<name>`).
-   - Keep empty target folders tracked with `.gitkeep` until initial project code is generated.
+- Do not commit on `main`. Work on a branch.
+- Each commit message is a conventional commit: `type(scope): description`.
 
 ## Hooks
 
