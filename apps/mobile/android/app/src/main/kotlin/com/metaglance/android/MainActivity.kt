@@ -9,10 +9,12 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -43,6 +45,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pageUrl: String
 
     private val glance: GlanceApp get() = application as GlanceApp
+
+    /** The time of the last page renderer that Android ended, or null for none. */
+    private var rendererGoneAtMs: Long? = null
 
     /** The volume keys whose key down was an answer to a prompt. Android does not get their repeat events and their key up. */
     private val answerKeys = HashSet<Int>()
@@ -77,7 +82,6 @@ class MainActivity : AppCompatActivity() {
         volumeControlStream = AudioManager.STREAM_MUSIC
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         buildWebView()
-        bridge = WebBridge(webView, glance.session::onPageMessage)
 
         // After a registration, Meta AI opens this activity again. The SDK must run before it gets the intent.
         if (glance.mockGlasses.enabled || bluetoothGranted()) glance.datLink.initialize(bluetoothGranted())
@@ -96,6 +100,11 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         glance.datLink.handleIntent(this, intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        glance.session.onScreenShown()
     }
 
     override fun onResume() {
@@ -178,10 +187,30 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         glance.session.detachPage(this)
+        dropWebView()
+        super.onDestroy()
+    }
+
+    private fun dropWebView() {
         bridge.close()
         (webView.parent as? FrameLayout)?.removeView(webView)
         webView.destroy()
-        super.onDestroy()
+    }
+
+    /**
+     * Android ended the renderer of the page, for example to get memory while the screen is off. The session does
+     * not need the page, so the app continues and loads the page again. The new page gets the state with its
+     * `ui.ready`. A renderer that ends again at once gets no third page: that page crashes it.
+     */
+    private fun onRendererGone(crashed: Boolean) {
+        val nowMs = SystemClock.elapsedRealtime()
+        val again = rendererGoneAtMs?.let { nowMs - it < RENDERER_RETRY_MS } ?: false
+        rendererGoneAtMs = nowMs
+        Log.w(TAG, "page: the renderer is gone, crashed=$crashed, load again=${!again}")
+        dropWebView()
+        buildWebView()
+        glance.session.attachPage(bridge::send, this)
+        if (!again) webView.loadUrl(pageUrl)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -204,8 +233,10 @@ class MainActivity : AppCompatActivity() {
         val root = uiRoot()
         Log.i(TAG, "page root: $root")
         val loader = WebViewAssetLoader.Builder().addPathHandler("/", UiAssetsHandler(assets, root)).build()
-        webView = WebView(this)
-        webView.settings.apply {
+        val view = WebView(this)
+        webView = view
+        bridge = WebBridge(view, glance.session::onPageMessage)
+        view.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
             allowFileAccess = false
@@ -213,7 +244,13 @@ class MainActivity : AppCompatActivity() {
             // The page follows the font size of the phone.
             textZoom = (resources.configuration.fontScale * 100).toInt()
         }
-        webView.webViewClient = object : WebViewClient() {
+        view.webViewClient = object : WebViewClient() {
+            // Without the answer `true`, Android ends the app together with the renderer.
+            override fun onRenderProcessGone(gone: WebView, detail: RenderProcessGoneDetail): Boolean {
+                if (gone === webView) onRendererGone(detail.didCrash())
+                return true
+            }
+
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? = loader.shouldInterceptRequest(request.url)
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -223,7 +260,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val frame = FrameLayout(this).apply { fitsSystemWindows = true }
-        frame.addView(webView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        frame.addView(view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         setContentView(frame)
     }
 
@@ -260,5 +297,6 @@ class MainActivity : AppCompatActivity() {
         const val PAGE_URL = "https://appassets.androidplatform.net/index.html"
         const val UI_ROOT = "ui"
         const val PLACEHOLDER_ROOT = "placeholder"
+        const val RENDERER_RETRY_MS = 10_000L
     }
 }
