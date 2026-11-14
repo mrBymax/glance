@@ -157,29 +157,30 @@ sequenceDiagram
   App->>Page: event glance.pending
   Note over Page: PromptCard shows the product
   Runtime->>Clips: text of the line
+  Runtime->>Clips: texts of the answer lines "Added ..." and "Skipped.", in the background
   Clips-->>Runtime: address of the clip, or null
   Runtime->>Socket: speak with promptId p-0001
   Socket->>App: speak with promptId p-0001
   Runtime->>Socket: event caption, through the EventBus
   Note over App: SpeechQueue plays the line
-  App->>Socket: prompt.done p-0001
-  Socket->>Runtime: dispatch(prompt.done)
-  Note over App: the head window of p-0001 starts, in the time of the motion samples
-  Note over Runtime: the prompt is finished, so a head answer can count (R4)
-  Glasses->>App: motion samples with a nod
+  Note over App: the head window of p-0001 opens 1200 ms after the start of the line
+  Glasses->>App: motion samples with a nod, while the line plays
   Note over App: HeadInput finds the nod in the head window
   App->>Socket: intent yes, source head, promptId p-0001
-  Note over App: the answer sound added plays at once
+  Note over App: the answer sound added plays at once, and the line stops. No prompt.done goes out
   Socket->>Runtime: dispatch(intent)
-  Note over Runtime: step accepts the yes and adds one unit (R3, R4, R7)
+  Note over Runtime: step accepts the yes by the ID of the prompt and adds one unit (R3, R4, R7)
+  Note over Runtime: log line intent ... accepted=true
   Runtime->>Socket: events glance.cleared and cart.updated
   Socket->>App: events glance.cleared and cart.updated
   App->>Page: events glance.cleared and cart.updated
   Note over Page: CartList shows the cart and the total of the server
-  Runtime->>Socket: speak "Added ..." with the sound added
+  Runtime->>Socket: speak "Added ..." with the sound added. Its clip is in the cache
   Socket->>App: speak
   Note over App: the clip plays with no sound, because the answer sound played
 ```
+
+A shopper who waits for the end of the line gets the old order: the app sends `prompt.done`, and the nod follows in the head window.
 
 Rules of this path:
 
@@ -188,9 +189,13 @@ Rules of this path:
 - The recognition worker runs up to 3 calls at the same time for each session (`RECOGNITION_CONCURRENCY`). With no free call, the newest frame waits. A call that takes 4 seconds is dropped. The rules get the results in the order of the frames: the worker drops the result of an older frame that arrives after the result of a newer frame.
 - Results for one product inside 3 seconds belong to one appearance, and one appearance gets one prompt.
 - `glance.pending` and the glance line carry the allergen and diet warnings of the product for the profile of the session. A line with a warning has the sound `warning`. No message says that a product is safe.
-- The head window is on the phone. It starts when the line of the prompt ended and lasts `headWindowMs` of the profile: 8 seconds by default. `HeadInput` keeps it in the time of the motion samples: a sample counts when the glasses took it inside the window, also when it arrives up to 6 seconds late. The time of the window does not run in a stall of the samples or during a still, for 15 seconds more at most.
-- The server has no head window of its own. A yes from the head counts with the ID of the current prompt, after `prompt.done`, and with the product in view. It must arrive less than the head window plus 21 seconds after `prompt.done`, on the clock of the server. The 21 seconds are the 15 seconds and the 6 seconds of the phone, so the phone is the judge of the time. A prompt that ended, or that another prompt replaced, takes no answer.
-- "In view" for a head answer: the frames showed no product for less than 3 seconds. A time of more than 1.5 seconds with no recognition result is a stall, and it does not count. For the pay prompt no stall counts: the kiosk code needs a report in the last 3 seconds.
+- The head window is on the phone. For a product prompt it opens 1200 ms after the line starts to play, and for a pay prompt when the line ended. It ends `headWindowMs` of the profile after the end of the line: 8 seconds by default. `HeadInput` keeps it in the time of the motion samples: a sample counts when the glasses took it inside the window, also when it arrives up to 6 seconds late. The time of the window does not run in a stall of the samples or during a still, for 15 seconds more at most.
+- A head answer while the line of a product prompt plays stops that line at once. The app sends no `prompt.done` for it.
+- The server has no head window of its own. A yes or a no from the head for a product prompt counts with the ID of the current prompt alone: the product can be out of view, and `prompt.done` can be missing. It must arrive less than the head window plus 21 seconds after `prompt.done`, or after the start of the prompt when no `prompt.done` came, on the clock of the server. The 21 seconds are the 15 seconds and the 6 seconds of the phone, so the phone is the judge of the time. A prompt that ended, or that another prompt replaced, takes no answer.
+- A head answer for the pay prompt needs more: `prompt.done`, and a report of the kiosk code in the last 3 seconds.
+- A yes or a no with no prompt to answer says nothing. The server logs each intent with `accepted` and the reason.
+- When a product prompt opens, the runtime asks for the clips of the lines that a yes and a no will speak. So the line after the answer waits for no synthesis. The answer line interrupts the line that plays.
+- The glance line is short: at the standard level a name of more than 3 words gets no pack size, and only the first 2 prompts of a session name the yes input.
 - The app plays the answer sound at the moment it sends a head answer: `added` for a yes, `removed` for a no. The next line of the server then plays its clip with no sound, when it has the same sound. This holds for 3 seconds.
 - A yes from the page carries the ID of the prompt on its card and needs no `prompt.done`. In the WebView the app sends it as an intent with the source `phone`. In a browser it is a `POST /api/sessions/:id/intents` call.
 - The server writes each line in the language of the profile, English or Italian. `speak` and `caption` carry that language as `lang`. A profile patch with a new language gives `cart.updated` with each cart name in that language.
@@ -215,7 +220,6 @@ sequenceDiagram
   Note over Glasses,App: the link stalls: no frame and no motion sample arrives
   Note over App: MotionWatchdog says STALLED after 500 ms, and the time of the head window stops
   Note over Glasses: the shopper nods
-  Note over Runtime: no recognition result for more than 1.5 seconds: the view is unknown
   Glasses->>App: the samples of the stall, 10 seconds late
   Note over App: GlassesClock gives each sample the time at which the glasses took it
   Note over App: HeadInput finds the nod in the head window
@@ -223,7 +227,7 @@ sequenceDiagram
   Note over App: the answer sound added plays at once
   Socket->>Runtime: dispatch(intent)
   Note over Runtime: p-0001 is current, and the answer came less than 29 seconds after prompt.done
-  Note over Runtime: the time of the stall is no time out of view, so step accepts the yes (R4)
+  Note over Runtime: the view does not count for a product prompt, so step accepts the yes (R4)
   Runtime->>Socket: speak "Added ..." with the sound added
   Socket->>App: speak
   Note over App: the clip plays with no sound
@@ -614,7 +618,7 @@ Checks that nobody did:
 - No replay of a frame set has run with the real recognition service, and no test has run the store tests against a MongoDB server.
 - One test with Ray-Ban Meta glasses ran on 2026-11-14. The stream fell to 504 x 896, and the scanner of the phone read no code at the length of an arm. A label still took 2.3 to 2.9 seconds and its label call 1.5 to 2.3 seconds. The distance at which the phone reads a code is still not known.
 - The changes after that test have not run with the real glasses or the real model: the item that the label call chooses, the store items in the recognition instruction, the still for an unknown product, the size limit of a barcode region, and the barcode wait of 1000 ms.
-- The head gestures after their rework have only synthetic tests. This holds for the rules of the detector for a nod and a shake, and for the head window in the time of the samples. It also holds for the watchdog of the motion samples with its restart of Motion, and for the gate that holds a still while a prompt waits. No recording of a real nod with these glasses exists.
-- The rule of the server for a late head answer (R4) and the one answer sound have tests of their rules only. No session with the glasses ran with them.
+- The head gestures after their rework have only synthetic tests. This holds for the rules of the detector for a nod and a shake, and for the head window in the time of the samples. It also holds for the watchdog of the motion samples with its restart of Motion, and for the gate that holds a still while a prompt waits. No recording of a real nod with these glasses exists. One session of 2026-11-14 gave log lines of real nods, and the rule for the other axis of a gesture comes from them.
+- These changes after that session have tests of their rules only, and no session with the glasses ran with them: the head window that opens while the line of a product prompt plays, the stop of that line at a head answer, the head answer that counts by the ID of its prompt (R4), the clips of the answer lines that the server makes in advance, and the one answer sound.
 - The instrumented tests of the Android app did not run after the group `Barcode` came to "Glance Mock". They also did not run after the rework of the head gestures. They need the test phone.
 - The label call and the `code` field of the recognition call have not run with the real model. The server code has made no call to Open Food Facts: the tests use a fetch function of their own and fixture files.
