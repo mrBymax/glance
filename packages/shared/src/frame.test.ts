@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FrameFormatError, decodeFrame, encodeFrame } from './frame';
+import { type FrameHeader, FrameFormatError, decodeFrame, encodeFrame } from './frame';
 
 const jpeg = new Uint8Array([0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9]);
 const header = { seq: 7, ts: 1794600000000, w: 576, h: 768, blurred: true };
@@ -7,6 +7,13 @@ const header = { seq: 7, ts: 1794600000000, w: 576, h: 768, blurred: true };
 describe('frame codec', () => {
   it('round-trips a frame', () => {
     expect(decodeFrame(encodeFrame(header, jpeg))).toEqual({ header, jpeg });
+  });
+  it('round-trips each frame kind, and rejects a kind that it does not know', () => {
+    for (const kind of ['frame', 'still', 'label'] as const) {
+      expect(decodeFrame(encodeFrame({ ...header, kind }, jpeg)).header.kind).toBe(kind);
+    }
+    const other = encodeFrame({ ...header, kind: 'video' } as unknown as FrameHeader, jpeg);
+    expect(() => decodeFrame(other)).toThrow(FrameFormatError);
   });
   it('writes the header length as 4 big-endian bytes', () => {
     const message = encodeFrame(header, jpeg);

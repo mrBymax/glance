@@ -26,12 +26,18 @@ export const DeviceStateSchema = z.object({
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
+// 'barcode' is a code from the barcode decoder. 'ocr' is a code from the digits under the bars.
+export const BarcodeSourceSchema = z.enum(['barcode', 'ocr']);
+export type BarcodeSource = z.infer<typeof BarcodeSourceSchema>;
+
 const promptId = z.string().min(1);
 
 export const DeviceToServerSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('intent'), kind: IntentKindSchema, source: IntentSourceSchema, promptId: promptId.optional() }),
   z.object({ t: z.literal('prompt.done'), promptId }),
   z.object({ t: z.literal('kiosk.seen'), text: z.string() }),
+  // The code as the phone read it. The server checks it and makes 13 digits of it (gtin.ts).
+  z.object({ t: z.literal('barcode.seen'), code: z.string().regex(/^\d{8,14}$/), source: BarcodeSourceSchema }),
   z.object({
     t: z.literal('speech.final'),
     text: z.string(),
@@ -65,6 +71,9 @@ export const ServerToDeviceSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('session.rest') }),
   z.object({ t: z.literal('session.end') }),
   z.object({ t: z.literal('biometric.request') }),
+  // The server asks for one still when it sees a barcode that it cannot read. The phone answers with barcode.seen
+  // or with a frame of the kind 'label', and its limit for stills can drop the request.
+  z.object({ t: z.literal('still.request'), purpose: z.literal('label') }),
 ]);
 export type ServerToDevice = z.infer<typeof ServerToDeviceSchema>;
 

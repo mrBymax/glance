@@ -1,6 +1,6 @@
 # @glance/shared
 
-The message contract of Meta Glance. The package holds each message type as a zod schema with its TypeScript type, and one JSON fixture for each message variant. It also holds the money helpers, the kiosk code helpers, the frame codec, and the timing defaults.
+The message contract of Meta Glance. The package holds each message type as a zod schema with its TypeScript type, and one JSON fixture for each message variant. It also holds the money helpers, the kiosk code helpers, the GTIN helpers, the frame codec, and the timing defaults.
 
 The package exports its TypeScript source. It has no build step.
 
@@ -30,7 +30,8 @@ flowchart LR
 | `allergens.ts`, `profile.ts`, `catalog.ts`, `cart.ts` | `Profile`, `ProfilePatch`, `Product`, `ProductRef`, `Cart` |
 | `events.ts`, `snapshot.ts` | `ServerEvent`, `SessionSnapshot` |
 | `device.ts` | `DeviceToServer`, `ServerToDevice` |
-| `frame.ts` | `encodeFrame`, `decodeFrame` for the binary frame message |
+| `frame.ts` | `encodeFrame`, `decodeFrame` for the binary frame message. The header has the kind `frame`, `still`, or `label`. |
+| `gtin.ts` | `hasGs1CheckDigit`, `expandUpcE`, `normalizeGtin`, `isStoreInternalGtin`. The rules for the digits of a product barcode. |
 | `bridge.ts` | `PageToNative`, `NativeToPage`, `NativeState`, `GlanceBridge` |
 | `rest.ts` | The bodies and the answers of the REST calls, and `KioskEvent` |
 
@@ -63,8 +64,8 @@ When you add a variant to a union, add one valid example to the folder of that u
 |---|---|---|
 | `catalog` | `ProductSchema` | 1 |
 | `events` | `ServerEventSchema` | 16 |
-| `device-to-server` | `DeviceToServerSchema` | 8 |
-| `server-to-device` | `ServerToDeviceSchema` | 6 |
+| `device-to-server` | `DeviceToServerSchema` | 9 |
+| `server-to-device` | `ServerToDeviceSchema` | 7 |
 | `bridge-page-to-native` | `PageToNativeSchema` | 12 |
 | `bridge-native-to-page` | `NativeToPageSchema` | 4 |
 | `rest` | the schema with the name of the file | 8 |
@@ -83,6 +84,7 @@ npm run lint
 
 ## Gotchas
 
+- `barcode.seen` has no field for the barcode format, and `normalizeGtin` reads 8 digits as EAN-8. A phone that reads a UPC-E code sends the 12 digits of `expandUpcE`.
 - A schema drops each key that it does not know. A parsed message can have fewer keys than its input.
 - `ProfileSchema` fills each default. `ProfilePatchSchema` fills none, so a patch holds only the keys that the sender set.
 - `EMPTY_CART` and `DEFAULT_PROFILE` are frozen, because each app shares the one object. A write to one of them throws `TypeError`. Make a new object: `{ ...cart, items: [...cart.items, item] }`.

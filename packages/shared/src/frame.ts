@@ -13,7 +13,8 @@ export const FrameHeaderSchema = z.object({
   h: z.number().int().positive(),
   // false means that the frame did not go through face detection.
   blurred: z.boolean(),
-  kind: z.enum(['frame', 'still']).optional(),
+  // No kind means 'frame'. A 'label' is a still of a barcode that the phone did not read.
+  kind: z.enum(['frame', 'still', 'label']).optional(),
 });
 export type FrameHeader = z.infer<typeof FrameHeaderSchema>;
 
