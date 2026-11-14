@@ -1,6 +1,7 @@
 package com.metaglance.android.dat
 
 import com.meta.wearable.dat.camera.types.StreamState
+import com.meta.wearable.dat.camera.types.VideoQuality
 import com.meta.wearable.dat.core.session.DeviceSessionState
 import com.meta.wearable.dat.core.types.DatError
 import com.meta.wearable.dat.core.types.Device
@@ -11,6 +12,7 @@ import com.meta.wearable.dat.core.types.LinkState
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationState
 import com.meta.wearable.dat.core.types.ThermalLevel
+import com.metaglance.core.image.StreamQuality
 import com.metaglance.core.state.DatCompatibility
 import com.metaglance.core.state.DatDevice
 import com.metaglance.core.state.DatDon
@@ -39,6 +41,8 @@ internal fun DeviceCompatibility.toCore(): DatCompatibility = DatCompatibility.v
 internal fun DeviceSessionState.toCore(): DatSession = DatSession.valueOf(name)
 
 internal fun StreamState.toCore(): DatStream = DatStream.valueOf(name)
+
+internal fun StreamQuality.toSdk(): VideoQuality = VideoQuality.valueOf(name)
 
 internal fun PermissionStatus.toCore(): DatPermission = if (this == PermissionStatus.Granted) DatPermission.GRANTED else DatPermission.DENIED
 

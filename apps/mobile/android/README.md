@@ -179,7 +179,7 @@ Rules of `SessionController`:
 - The frames of the stream and the stills share one upload number, `seq`, which counts up for the life of the app process.
 - With the socket down for 3 seconds, the phone voice says "Connection lost. Your cart is safe. Glances are paused."
 - With the media volume at 0, no line plays, and each prompt is reported at once.
-- `FramePipeline` scans each frame for a kiosk code and for the barcode of a product, and selects the sharpest frame of each 300 ms. See "The barcode of a product". `FaceFinder` looks for faces in that frame with ML Kit, on the phone. The upload is the center of the frame (80 percent of the width, 70 percent of the height) with each face pixelated, as a JPEG of quality 80 with a long side of 768 pixels at most: 494 x 768 for the stream of 720 x 1280. Its header has `blurred: true`. If face detection fails, the frame is dropped. The app writes no frame to storage.
+- `FramePipeline` scans each frame for a kiosk code and for the barcode of a product, and selects the sharpest frame of each 300 ms that is not damaged. See "The barcode of a product" and "Damaged frames". `FaceFinder` looks for faces in that frame with ML Kit, on the phone. The upload is the center of the frame (80 percent of the width, 70 percent of the height) with each face pixelated, as a JPEG of quality 80 with a long side of 768 pixels at most: 494 x 768 for a stream of 720 x 1280, and 402 x 626 for the default stream of 504 x 896. Its header has `blurred: true`. If face detection fails, the frame is dropped. The app writes no frame to storage.
 - The app plays each line of the server one time, with the sound of the line. It plays one sound by itself: the answer sound of a head gesture, `added` for a yes and `removed` for a no, at the moment the app sends the answer. The line that answers the gesture then plays with no sound, so one answer gives one sound. See "Head gestures". A still, a label upload, and a barcode report play no sound. `apps/server/README.md` lists each sound and each vibration of a line with its trigger, in "A guard for the voice".
 - `ExoLinePlayer` plays the sound of a line, then its clip. A clip that does not load, that does not start in 3 seconds, or whose address is not an address, is replaced by the phone voice. The speech rate of the profile changes the clip, not the sound.
 
@@ -189,10 +189,12 @@ The shopper looks at the barcode of a product, and the phone reads the code. The
 
 ```mermaid
 flowchart TD
-    F[Frame of the stream, 720 x 1280] --> S[CodeScanner: one scan for QR, EAN-13, EAN-8, UPC-A, UPC-E]
+    F[Frame of the stream, 504 x 896 by default] --> S[CodeScanner: one scan for QR, EAN-13, EAN-8, UPC-A, UPC-E]
     S --> Q{QR code with a kiosk text?}
     Q -- yes --> KD[KioskDwell, then kiosk.seen]
-    S --> B{Product code with a right check digit?}
+    S --> D{Frame damaged?}
+    D -- yes --> DX[No product code and no region. No upload.]
+    D -- no --> B{Product code with a right check digit?}
     B -- yes --> V[BarcodeVote]
     B -- no --> R{Region of a barcode in view?}
     R -- no --> X[Nothing. The upload of the frame goes on.]
@@ -221,6 +223,7 @@ Rules that keep a wrong product out:
 - With more than one code in a frame, the largest one counts. OCR counts only when the region holds exactly one code.
 - A region counts only when its long side is at least 1.25 times its short side. So a kiosk QR code that is too far to decode asks for no still.
 - A region also counts only up to half of the frame width and 30 percent of the frame height (`BarcodeRegion.fits`). A real code of that size decodes. The scanner reported the text of a laptop screen as a region of 361 x 242 pixels in a frame of 504 x 896, and the phone took a still each 6 to 10 seconds.
+- A damaged frame gives no product code and no region: the scanner reports the blocks of such a frame as regions. See "Damaged frames".
 - The frame gets one NV21 copy, for the scan. The crops for the second scan and for OCR read the Y plane of the frame.
 - The log (tag `Glance`) has `barcode read <code> <source>` for each read before the first report of a code.
 
@@ -303,6 +306,100 @@ What nobody measured:
 - The size rule of a region and the barcode wait of 1000 ms with the real glasses. The instrumented tests did not run after these changes: they need the test phone.
 - The time of one scan with the 5 formats and the regions, and the time of one OCR run, on the phone.
 - The text that ML Kit gives for a UPC-E code. The app expects 8 digits.
+
+## The stream settings
+
+The app asks the glasses for a frame size and a frame rate. A person can change both on the phone with no new build, to compare them.
+
+| Setting | Item of "Glance Mock" | Key of `local.properties` | Default | Values |
+|---|---|---|---|---|
+| The frame size | `Stream quality: <name> <width> x <height>` | `glance.streamQuality` | `MEDIUM` | `HIGH` 720 x 1280, `MEDIUM` 504 x 896, `LOW` 360 x 640 |
+| The frames each second | `Stream frame rate: <n>` | `glance.streamFps` | `7` | 2, 7, 15, 24, 30 |
+
+1. Open "Glance Mock" and go to the group `Stream`, at the end of the list.
+2. Tap an item. Each tap goes to the next value, and from the last value to the first.
+3. Start the camera again: end the session in "Glance" and start a new one.
+4. Read the log: `adb logcat -s Glance`. Each camera start has the line `stream config: quality=<name> fps=<n>`.
+
+- The values are the ones that the DAT SDK 1.0.1 accepts: the three constants of `VideoQuality`, and the five values of `StreamConfiguration.frameRate`. `StreamSetup` in `core` has them.
+- The app keeps both values over a restart. They also count for real glasses and for the probe.
+- The keys of `local.properties` set the values of the build. From the first tap, the value of the menu wins, and no item gives the value of the build again.
+- The default was 720 x 1280 before. The glasses lowered that stream to 504 x 896 in each session of 2026-11-14. The guide of Meta says: "Requesting a lower resolution, a lower frame rate, or both can yield higher visual quality with less compression loss." So the default asks for 504 x 896 at once.
+- The glasses can give less than the app asked for. The line `stream size <w>x<h>` shows each change of the frame size, and the line `frame <w>x<h> #<n> fps=<rate>` shows the frame rate that arrives, one time each second.
+- The damage lines show what a setting does to the picture: see "Damaged frames".
+
+What follows the settings:
+
+| Part | 720 x 1280 | 504 x 896 | 360 x 640 |
+|---|---|---|---|
+| The upload: the center crop, with no scale up | 494 x 768 | 402 x 626 | 288 x 448 |
+| The largest region of a barcode that did not decode (`BarcodeRegion.fits`) | 360 x 384 | 252 x 268 | 180 x 192 |
+| The smallest face that `FaceFinder` asks ML Kit for: 5 percent of the width | 36 pixels | 25 pixels | 18 pixels |
+
+- At 2 frames each second, one missed frame is a gap of 1000 ms. A rule that must last over one missed frame has a gap of 2.5 frame times at least (`StreamSetup.gapMs`): 1250 ms at 2 frames each second for the kiosk dwell (600 ms at the other rates), the barcode vote (1000 ms), the region of the label still (600 ms), and the frame flow of the motion watchdog (1000 ms).
+- At 2 frames each second, each window of 300 ms has one frame at most, so the phone uploads each frame that is not damaged.
+- The smallest crop of a region is 16 pixels at each size, and the second scan scales a crop 2 or 3 times at each size. So a barcode must be nearer to the glasses at a smaller frame size.
+- The instrumented tests ask for 720 x 1280 at 7 frames each second (`TestStreamRule`), because their clips and their checks are for that stream.
+
+What nobody measured:
+
+- Each setting other than 720 x 1280 at 7 frames each second with the real glasses: the frame size and the frame rate that arrive, and the damage lines.
+- The frame size of the mock glasses for `MEDIUM` and `LOW`. The mock stream had 720 x 1280 and 30 frames each second for a request of `HIGH` at 7.
+- The distance at which a barcode decodes at 504 x 896 and at 360 x 640.
+- Whether ML Kit finds each face in a frame of 360 x 640. A face that it does not find is not pixelated.
+
+## Damaged frames
+
+In a session of 2026-11-14, some uploads were pictures of large blocks with smeared colors, where the frame before showed the scene. The glasses compress the stream with HEVC for the bandwidth of Bluetooth. When the data for a frame is too little or is lost, the decoder of the SDK gives such a picture, and the frames after it keep the damage until the stream recovers. `FrameDamage` in `core` finds these frames, and `FramePipeline` keeps them out.
+
+What the pipeline does with a damaged frame:
+
+- It is never uploaded. `SharpestFramePicker` selects the sharpest frame of the window that is not damaged, and a window with only damaged frames uploads nothing.
+- It gives no product code and no barcode region, so it starts no second scan, no OCR, and no label still. For `BarcodeVote` and `LabelPolicy` it is a frame with nothing in view.
+- Its kiosk code counts. The scan for the QR code runs in each case, and a QR code that decodes to a kiosk text is not a product of the blocks.
+- The log (tag `Glance`) has `frames damaged=<n> of <m>` for each 3 seconds with a damaged frame: `<n>` damaged frames of the `<m>` frames of that time. No line means no damaged frame. At the end of the stream, the log has `frames damaged total=<n> of <m>`.
+- The line `frame <w>x<h> #<n> fps=<rate>` has no damage count: `DatLink` writes it, and the measure runs later, in the pipeline.
+
+### The measure
+
+The HEVC decoder works in blocks of 16, 32, or 64 pixels that start at the frame corner. So the edges of the blocks are on the lines at each 16th pixel, in both directions. A scene has its edges at any place.
+
+1. The frame is cut into bands of 16 rows. The measure reads 4 rows of each band (rows 2, 6, 10, and 14) and adds them, so each column has one sum for the band.
+2. The step at a column is the mean of the 4 pixels from it to the right, minus the mean of the 4 pixels to its left. A step counts when it is 6 luma levels or more above the larger step of its two neighbors, 4 pixels away. So a thin line and a slow change of light do not count, and the edge of a block does, also after the decoder made it soft.
+3. For each of the 16 places of a column in a block, the measure has the share of the bands with a step there.
+4. The ratio is the share on the block lines over the median share in the middle of the blocks, 5 to 11 pixels from a line. A median below 0.02 counts as 0.02, so a flat wall and a dark frame have the ratio 0.
+5. The same runs for the lines between rows, with bands of 16 columns.
+6. The score is the smaller ratio of the two directions. A frame with a score of 1.45 or more is damaged (`FrameDamage.DAMAGED_AT`).
+
+- The measure also looks for block lines that do not start at the frame corner. It takes the best ratio of the 15 other starts, times 0.7, so such lines need a ratio of 2.07. The best of 15 ratios is larger by chance, and the text lines of a laptop screen reached 1.8 in one direction.
+- The measure reads one quarter of the luma pixels two times: 460 800 reads for 720 x 1280. On the JVM of the build computer it took 0.6 ms for a frame of 720 x 1280, about the time of the NV21 copy that each frame already gets. Nobody measured it on a phone.
+- A scene is not damage by these rules: blur (few steps at each place), a flat wall or a dark frame (no steps), and one long straight edge on a block line (one edge is a small share of the places). The tests of `FrameDamageTest` cover each one, with pictures that the test draws.
+
+### What the real frames gave
+
+The server kept the uploads of one session of 2026-11-14, with a request of 720 x 1280 at 7 frames each second: 312 stream frames of 402 x 626, the center crop of 504 x 896. 53 of them were sorted by eye into three groups before the threshold was set. The table has the lowest value, the median, and the highest value of each group.
+
+| Group | Frames | Damage score | Sharpness (`Sharpness.of`) | Damaged by the threshold |
+|---|---|---|---|---|
+| Heavy: blocks in the full picture, the scene is lost | 21 | 1.49 / 2.09 / 5.21 | 11 / 19 / 93 | 21 |
+| Moderate: blocks in a part, the objects show | 23 | 1.01 / 1.34 / 1.65 | 24 / 79 / 298 | 5 |
+| Good, with 2 frames of motion blur | 9 | 0.85 / 1.05 / 1.22 | 25 / 258 / 386 | 0 |
+| All frames | 312 | median 1.03 | median 83 | 26 |
+
+- The 26 damaged frames are the 21 heavy ones and 5 moderate ones. The highest score of a frame that was not sorted is 1.42.
+- 13 of the damaged frames came in a row, for about 4 seconds: the damage stays until the stream recovers.
+- The block lines were at each 16th pixel from the frame corner: in the files they were at the columns 14, 30, 46 and at the rows 10, 26, 42, and the crop starts at column 50 and row 134. So the SDK gives the frame as the decoder made it, with no scale, at 504 x 896.
+- A damaged frame is not sharp by the measure of the picker: the median sharpness of the damaged frames is 24, and that of the other frames is 91. So the picker did not prefer damaged frames. They went to the server because each frame of their window was damaged.
+- Measures that do not use the place of the block lines did not divide the groups. The share of flat blocks of 16 x 16 was 0.01 to 0.12 for the heavy group and 0.01 to 0.18 for the good group: the blocks of a damaged frame are not flat. The share of the luma steps in straight runs of 8 pixels or more was 0.51 to 0.75 for the heavy group and 0.34 to 0.79 for the good group: the text lines of a screen are straight too. The plain ratio of the steps on a grid of 16 pixels was 1.32 to 1.59 and 1.13 to 1.49.
+
+What nobody measured:
+
+- The I420 frames. The numbers are from the uploads, after the crop and JPEG quality 80. JPEG has its own grid of 8 pixels, at other columns and rows than the block lines of these frames. So the scores in the app can differ, and the threshold can need a change. The damage lines of the log show it.
+- Damage at 720 x 1280 and at 360 x 640, and other scenes: all numbers are from one evening in one room. The first 6 uploads of the session came from frames of 720 x 1280 and were scaled, so their block lines are at other places, and they are not in the numbers.
+- Whether the SDK gives frames with no scale at each quality. A frame that the SDK scaled has its block lines at other places, and the measure then finds no damage.
+- A scene with a pattern of 16 pixels in both directions, for example a tiled wall at one distance. It can read as damage while the head is still.
+- The time of the measure on a phone.
+- The pipeline with a damaged frame on a phone: no instrumented test gives it one. Each frame of the test clips has a score below 1, measured with a decoder on the build computer.
 
 ## Head gestures
 
@@ -526,6 +623,9 @@ Each line has the tag `Glance`. Read them with `adb logcat -s Glance`.
 | `<label, second look, reference> still waits: a prompt waits for its answer` | A still must wait | |
 | `<second look, reference> still dropped: it waited too long for a prompt` | The wait took longer than its limit | |
 | `motion recorded: motion/<file> rows=<n>` | A head window ended with "Record motion in sessions" on | |
+| `stream config: quality=<name> fps=<n>` | Each camera start | What the app asks of the stream. See "The stream settings". |
+| `frames damaged=<n> of <m>` | Each 3 seconds with a damaged frame | See "Damaged frames". |
+| `frames damaged total=<n> of <m>` | The end of the stream | |
 
 The reasons of a rejected pair:
 
@@ -595,7 +695,7 @@ flowchart LR
     Frame[frame: FrameCodec] --> Contract
     Kiosk[kiosk: KioskCode, KioskDwell] --> Contract
     Barcode[barcode: Gtin, BarcodeVote, LabelPolicy, LabelTiming, BarcodeRegion, TextRows] --> Contract
-    Image[image: Sharpness, SharpestFramePicker, UploadGate, FrameGeometry, Pixelate, FramePrep, I420, StillPolicy, WaitingStills, Pace] --> Contract
+    Image[image: Sharpness, FrameDamage, DamageLog, SharpestFramePicker, StreamSetup, UploadGate, FrameGeometry, Pixelate, FramePrep, I420, StillPolicy, WaitingStills, Pace] --> Contract
     Barcode --> Image
     Gesture[gesture: HeadGestureDetector, HeadAxes, GestureReport, GyroScript, MotionCsv]
     Audio[audio: SpeechQueue, AnswerSoundOnce] --> Contract
@@ -613,7 +713,7 @@ flowchart LR
 | `frame` | `FrameCodec` builds and reads the binary frame message: a 4-byte header length, the JSON header, the JPEG. |
 | `kiosk` | `KioskCode` parses the QR text `GL1 <code>`. `KioskDwell` reports a kiosk code after 1500 ms in view, then one time each second. |
 | `barcode` | `Gtin` holds the rules of `gtin.ts` in `packages/shared` for the digits of a product barcode: the GS1 check digit, the UPC-A form of a UPC-E code, the 13-digit form, and the codes of one store. `Gtin.digitRuns` finds each code of 8, 12, or 13 digits with a right check digit in an OCR text, also when the text has the digits in groups such as `8 076809 513753` or in neighbouring text elements. It reads 8 digits as EAN-8, never as UPC-E. `Gtin.fromDecoder` gives the code of a decoder as the phone sends it. `BarcodeVote` reports a code when frames agree on it, then one time each second. `LabelPolicy` says when a still must read a barcode. `LabelTiming` holds the two times of that policy that a person can set, with their limits, and reads the text of a settings field. `BarcodeRegion` gives the crops around a region that did not decode, and says if a box has the form of a product barcode. `TextRows` puts the words of an OCR result into rows and finds the codes in them. |
-| `image` | `Sharpness` and `SharpestFramePicker` select the sharpest frame of each 300 ms. `UploadGate` gives the reason to skip an upload. `FrameGeometry` and `FramePrep` crop and scale a frame to a long side of 768 pixels at most. `FrameGeometry.mapBox` maps a face box into the output and never makes it smaller. `Pixelate` covers a box that is 20 percent larger on each side with blocks of one color. A block has one sixth of the box width, and 8 pixels at least. `I420.cropScaleToArgb` converts with BT.709 limited range. `I420.cropLumaToArgb` gives a crop of the Y plane as gray pixels in a larger scale. `StillPolicy` limits the still photos: one at a time, and one start each 5 seconds. `WaitingStills` keeps a still that waits for the answer to a prompt. `Pace` limits a slow step, for example OCR, to one run in a given time. |
+| `image` | `Sharpness` and `SharpestFramePicker` select the sharpest frame of each 300 ms that is not damaged. `FrameDamage` tells a frame of decoder blocks, and `DamageLog` counts these frames for the log. `StreamSetup` has the frame sizes and the frame rates that the app can ask of the glasses. `UploadGate` gives the reason to skip an upload. `FrameGeometry` and `FramePrep` crop and scale a frame to a long side of 768 pixels at most. `FrameGeometry.mapBox` maps a face box into the output and never makes it smaller. `Pixelate` covers a box that is 20 percent larger on each side with blocks of one color. A block has one sixth of the box width, and 8 pixels at least. `I420.cropScaleToArgb` converts with BT.709 limited range. `I420.cropLumaToArgb` gives a crop of the Y plane as gray pixels in a larger scale. `StillPolicy` limits the still photos: one at a time, and one start each 5 seconds. `WaitingStills` keeps a still that waits for the answer to a prompt. `Pace` limits a slow step, for example OCR, to one run in a given time. |
 | `gesture` | `HeadGestureDetector` finds a nod and a shake in motion samples. `HeadAxes` gives it the pitch rate and the yaw rate of the head, from gravity. `GestureReport` is its decision about one pair of strokes, with a log line. `HeadGestureConfig.of` gives the limits of the levels `GENTLE`, `NORMAL`, and `FIRM`. `GyroScript` builds samples of head movements for tests and for mock glasses. `MotionCsv` reads and writes a motion file. See "Head gestures". |
 | `audio` | `SpeechQueue` plays one line at a time through a `LinePlayer`, with interrupt and priority. It reports each prompt whose line started and each prompt whose line ended, and it stops the line of a prompt that a head gesture answered. A line with no clip uses the phone voice. |
 | `input` | `PromptTracker` follows the prompts of the server. `HeadInput` turns a gesture into a yes or a no while the head window of a prompt is open, in the time of the samples, and says when a prompt waits for a head answer. `GlassesClock` puts the time of a sample on the clock of the phone. `MainYesResolver` selects the yes input that works. `KeyInput`, `TouchInput`, and `VoiceInput` hold the rules of the volume keys, the touchpad, and the voice. `PaymentConfirm` gives one `biometric.result` for each payment prompt. |
@@ -640,7 +740,7 @@ Open "Glance Probe" on the phone. The text field above the buttons gives the lab
 | `Bluetooth permission` | Asks for `BLUETOOTH_CONNECT`, then starts the DAT SDK |
 | `Register` | Starts the registration in the Meta AI app |
 | `Camera permission`, `Mic permission` | Asks for the DAT permission in the Meta AI app |
-| `Start session`, `Start session (no camera)`, `Stop session` | Starts a session with or without the stream at 720 x 1280 and 7 frames per second, or stops it |
+| `Start session`, `Start session (no camera)`, `Stop session` | Starts a session with or without the stream, or stops it. The stream has the settings of "Glance Mock": see "The stream settings". |
 | `Save frame` | Saves the next frame as `probe/frames/<label>-<nn>.jpg` |
 | `QR log` | Logs each QR code in the stream, at most 2 lines each second |
 | `Barcode log` | Logs what the scanner and OCR read of a product barcode, each kind of line at most 2 times each second. `barcode <format> "<text>" valid=<check digit> width=<pixels> frame=<w>x<h>` is a decoded code. `barcode region <w>x<h> at <left>,<top> frame=<w>x<h>` is a region that did not decode. `barcode digits "<row>" codes=[...] crop=<w>x<h>` is a row with digits that OCR read under the largest code. |
@@ -695,6 +795,7 @@ The top line of the menu shows `NativeState` and `DeviceState` as JSON, live. Th
 | Force | `Meta AI missing`, `Update required`, `Stream error BATTERY_LOW`, `Stream error THERMAL_HOT`. MockDeviceKit has no call for these states, so the debug hooks of `DatLink` make them. |
 | App | `Server URL`. `Drop server link 10 s`: the socket closes and connects again after 10 seconds. `Sensitivity: gentle, normal, firm` for the head gestures. `Use placeholder page`. |
 | Barcode | `Barcode wait (ms)`, `Still gap (ms)`, and `Save barcode waits`: the two times of the label still, from the next camera start. They also count for real glasses. See "The two times of the label still". |
+| Stream | `Stream quality` and `Stream frame rate`: what the app asks of the camera stream, from the next camera start. Each tap goes to the next value. They also count for real glasses. See "The stream settings". |
 
 The states of the app, and the items that make each one:
 
@@ -773,7 +874,7 @@ flowchart LR
 | `BarcodeScanTest` | The barcode of a product, with the clips of `make-clips.mjs` and the fake server of the app. The sharp code gives `barcode.seen` with the source `barcode`, then 3 to 5 reports in 3.3 seconds. The digits with no bars, and the sharp digits under blurred bars, never give another code than their own. The kiosk clip gives `kiosk.seen`, no `barcode.seen`, and no still. The blurred bars give one frame with `kind: label`, and no code. With blurred bars in the stream and the sharp code as the still, the phone sends one `barcode.seen` and takes no other still. The command `label` gives a label frame, or `barcode.seen` when the still holds a code that the phone reads. Two commands within one second give one still, and a `label` right after `amb` gives none. |
 | `LabelStillTest` | `LabelStill.read` with no glasses and no server. ML Kit reads the code of `barcode.png`, the blurred bars of `barcode-blurred.png` are one region with no text and the still goes to the server, and `scene.png` becomes a frame of 720 x 1280 pixels. With hits and words that the test gives: a photo of 3000 x 4000 pixels becomes 1200 x 1600 with no crop, a failed face detection drops the still, the digits under a region count and the digits of another product do not, and with no region only 12 or 13 digits count. |
 | `StillPhotoPrepareTest` | `StillPhoto.prepare` with no glasses and no server: a photo of 3000 x 4000 pixels becomes a JPEG of 1234 x 1440 pixels, the face box that the test gives is pixelated, and the stripes outside it stay. A photo with no result of face detection is dropped. |
-| `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items and the Barcode fields change the stored settings. |
+| `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items, the Barcode fields, and the Stream items change the stored settings. |
 | `HapticsPocketTest` | The 8 haptic buttons of the placeholder page give the 8 patterns, `haptics: false` gives none, and pocket mode dims the screen, hides the bars, and keeps the screen on. |
 | `VolumeKeysTest` | The volume keys with `mainYes: key`: volume up on a product prompt sends `intent yes` with the source `key` and adds the product, volume down sends `intent no`, and the media volume stays at 0. A key that stays down in pocket mode sends one yes. Before the first prompt, after the prompt ended, and with the head as the main yes, the app does not take the key. |
 | `TouchpadInputTest` | The touchpad of the mock glasses: a double tap after a product prompt sends `intent yes` with the source `touch` and the prompt ID, and the server adds the product. A double tap before the first prompt carries no ID and adds nothing. A swipe sends `intent repeat`, and the server sends the line of the prompt again. |
@@ -821,6 +922,7 @@ Rules of the script and of the tests:
 - `PaymentPromptTest` shows the biometric prompt of Android on the test phone for about one second, two times. No test puts a finger on the sensor: see "Checks with the glasses or with sound".
 - The log of each server is in `<temp folder>/glance-integration`. The log of the fake server of the app ends with `-app-fake.log`.
 - The tests run with `GlanceTestRunner`. It stops the Bluetooth prompt at the start of "Glance", and it takes each vibration in place of the phone. So the phone stays quiet, and no prompt waits for a tap. `BluetoothPromptTest` turns the prompt on for itself and taps its deny button.
+- Each test with a stream has `TestStreamRule`: the app asks for 720 x 1280 at 7 frames each second in the test, and the stream settings of the phone are back after it.
 - `VolumeKeysTest` sends a volume key through the input system of Android only when the app must take it. For a key that Android must get, the test calls `MainActivity.onKeyDown` and reads the result, because the real key changes the media volume of the phone. If the volume is not 0 at the end of a test, the test sets it to 0 again.
 - The media volume is 0, so no line plays, and no test on the phone reaches the mute time of a line. `SpeechQueueTest` and `VoiceInputTest` of `core` check that rule. Check it by ear with sound: see "Checks with the glasses or with sound".
 - No test sends `setup.openUpdate`, because the SDK opens the Meta AI app for it.
@@ -865,6 +967,8 @@ No test of the night covers these checks of Plan 2 Tasks 17 and 21 to 25. Each o
 | Run `node android/run-spine.mjs --suite barcode` and `--class com.metaglance.android.ProbeScreenTest` on an unlocked phone with the media volume 0. | Each test passes. On 2026-11-14 each of the 18 tests of the suite and the 6 tests of `ProbeScreenTest` passed on the test phone, with mock glasses. If the test of the blurred bars fails after a new version of ML Kit, the log says which: a `barcode.seen` means that ML Kit decodes the blur of the clip, and no label frame means that ML Kit reports no region for it. Change `BLUR_SIGMA` in `make-clips.mjs` then. |
 | On the glasses: open "Glance Probe", start a session, tap `Barcode log`. Hold a product with an EAN-13 code at 40 cm and move it closer. | Write down the distance of the first `barcode region` line, of the first `barcode EAN_13 ... valid=true` line with its `width`, and of the first `barcode digits` line with the right code in `codes`. These three values are the range of the three ways. Until then the distance is not measured. |
 | The same session with the code in view. Tap `Barcode log` off and `Pipeline test` on. | `barcode <code> barcode` one time each second. Write down the frame rate of the log line `frame ... fps=` with and without `Pipeline test`: it shows what the scan costs. |
+| On the glasses: run one session of 2 minutes for each stream setting to compare, with the same walk and the same products. Start with `MEDIUM` at 7, `MEDIUM` at 2, `LOW` at 7, and `HIGH` at 7. | Write down for each one: the `stream config` line, each `stream size` line, the rate of the `frame ... fps=` lines, and the line `frames damaged total=<n> of <m>`. The setting with the smallest share of damaged frames, at a frame size that still reads a barcode, is the one to keep. |
+| The same sessions, with the frames that the server kept. | No upload is a picture of blocks. Each time with such a picture in the session before has a `frames damaged` line now. If a picture of blocks is uploaded, or a good scene has `frames damaged` lines, the threshold `FrameDamage.DAMAGED_AT` needs a change. |
 | On the glasses, with a session of "Glance" against `tools/fake-server`: hold a barcode at a distance where `Barcode log` showed a region and no code, for 3 seconds. | The log of the app has `still <w>x<h> <variant> <ms> ms` and `label still <w>x<h>: ...`. Write down the size, the variant, and both times. The fake server logs `barcode.seen`, or one frame with `kind=label blurred=true`. |
 | On the glasses: type `label` in the fake server while no barcode is in view. | The same two log lines, and one frame with `kind=label`. |
 | On the glasses, after a label still: type `badclip`, wait for the prompt, and nod. | `intent yes` with the source `head`, and the sound `added` at once. The log has `head window open`, `nod accepted`, and `head answer yes`. If the nod has no effect, read the `nod rejected` lines and the `motion stall` lines: see "Checks of the head gestures with the glasses". |
@@ -937,6 +1041,8 @@ Git ignores `local.properties`. Each key is optional, and each one is also a Gra
 | `glance.uiDevUrl` | empty | Address of the dev server of the phone UI, as `BuildConfig.UI_DEV_URL` |
 | `glance.labelWaitMs` | `1000` | The time in milliseconds that a barcode region is in view before the label still, as `BuildConfig.LABEL_WAIT_MS`. The app keeps it from 300 to 10000. A value that is no whole number stops the build. |
 | `glance.labelGapMs` | `6000` | The shortest time in milliseconds between two label stills, as `BuildConfig.LABEL_GAP_MS`. The app keeps it from 2000 to 60000. |
+| `glance.streamQuality` | `MEDIUM` | The frame size that the app asks of the glasses, as `BuildConfig.STREAM_QUALITY`: `HIGH` (720 x 1280), `MEDIUM` (504 x 896), or `LOW` (360 x 640). Another value stops the build. See "The stream settings". |
+| `glance.streamFps` | `7` | The frames each second that the app asks for, as `BuildConfig.STREAM_FPS`: 2, 7, 15, 24, or 30. The app takes the nearest of these for another number. A value that is no whole number stops the build. |
 | `glance.demoStoreFile` | `glance-demo.jks` | The keystore of the demo build, as a path from the folder `app` |
 | `glance.demoStorePassword` | empty | The password of the keystore |
 | `glance.demoKeyAlias` | `glance-demo` | The name of the key in the keystore |

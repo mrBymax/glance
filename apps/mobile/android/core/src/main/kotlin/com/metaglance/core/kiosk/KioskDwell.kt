@@ -14,7 +14,7 @@ data class SeenCode(val code: String, val areaPx: Int)
 class KioskDwell(
     private val dwellMs: Long = Timing.kioskDwellMs,
     private val repeatMs: Long = 1000,
-    private val gapMs: Long = 600,
+    private val gapMs: Long = DEFAULT_GAP_MS,
     private val switchRatio: Double = 1.2
 ) {
     private var candidate: String? = null
@@ -51,5 +51,9 @@ class KioskDwell(
         lastSeenMs = nowMs
         dwellStartMs = nowMs
         lastReportMs = null
+    }
+
+    companion object {
+        const val DEFAULT_GAP_MS = 600L
     }
 }

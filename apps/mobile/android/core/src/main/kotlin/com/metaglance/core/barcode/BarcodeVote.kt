@@ -20,7 +20,7 @@ class BarcodeVote(
     private val ocrReads: Int = 3,
     private val ocrWindowMs: Long = 2500,
     private val repeatMs: Long = 1000,
-    private val gapMs: Long = 1000
+    private val gapMs: Long = DEFAULT_GAP_MS
 ) {
     private class Read(val atMs: Long, val source: BarcodeSource)
 
@@ -69,5 +69,9 @@ class BarcodeVote(
         reads.clear()
         acceptedSource = null
         lastReportMs = null
+    }
+
+    companion object {
+        const val DEFAULT_GAP_MS = 1000L
     }
 }

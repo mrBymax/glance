@@ -9,6 +9,8 @@ import com.metaglance.core.contract.MainYes
 import com.metaglance.core.contract.Profile
 import com.metaglance.core.contract.Profiles
 import com.metaglance.core.gesture.Sensitivity
+import com.metaglance.core.image.StreamQuality
+import com.metaglance.core.image.StreamSetup
 import kotlinx.serialization.SerializationException
 
 /** The session of the server that the app last created. `live` is false after the server ended it. */
@@ -80,6 +82,20 @@ class ProfileStore(context: Context) {
     val labelTiming: LabelTiming
         get() = LabelTiming.within(labelWaitMs ?: BuildConfig.LABEL_WAIT_MS, labelGapMs ?: BuildConfig.LABEL_GAP_MS)
 
+    /** The stream quality that the mock menu set, or null for the value of the build. */
+    var streamQuality: StreamQuality?
+        get() = prefs.getString(KEY_STREAM_QUALITY, null)?.let(StreamSetup::quality)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_STREAM_QUALITY) else putString(KEY_STREAM_QUALITY, value.name) }.apply()
+
+    /** The frame rate of the stream that the mock menu set, or null for the value of the build. */
+    var streamFps: Int?
+        get() = if (prefs.contains(KEY_STREAM_FPS)) prefs.getInt(KEY_STREAM_FPS, 0) else null
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_STREAM_FPS) else putInt(KEY_STREAM_FPS, value) }.apply()
+
+    /** What the next camera start asks of the stream. */
+    val streamSetup: StreamSetup
+        get() = StreamSetup.within(streamQuality?.name ?: BuildConfig.STREAM_QUALITY, streamFps ?: BuildConfig.STREAM_FPS)
+
     /** True makes the app show its placeholder page in place of the phone UI. */
     var usePlaceholder: Boolean
         get() = prefs.getBoolean(KEY_USE_PLACEHOLDER, false)
@@ -120,6 +136,8 @@ class ProfileStore(context: Context) {
         const val KEY_LABEL_WAIT_MS = "labelWaitMs"
         const val KEY_LABEL_GAP_MS = "labelGapMs"
         const val KEY_RECORD_MOTION = "recordMotion"
+        const val KEY_STREAM_QUALITY = "streamQuality"
+        const val KEY_STREAM_FPS = "streamFps"
         val SESSION_KEYS = listOf(KEY_SESSION_ID, KEY_SESSION_TOKEN, KEY_SESSION_WS_URL, KEY_SESSION_LIVE)
     }
 }

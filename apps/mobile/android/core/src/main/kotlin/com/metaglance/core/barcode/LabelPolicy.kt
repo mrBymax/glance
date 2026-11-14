@@ -17,7 +17,7 @@ package com.metaglance.core.barcode
 class LabelPolicy(
     private val dwellMs: Long = LabelTiming.DEFAULT_WAIT_MS,
     private val everyMs: Long = LabelTiming.DEFAULT_GAP_MS,
-    private val gapMs: Long = 600,
+    private val gapMs: Long = DEFAULT_GAP_MS,
     private val maxRegionStills: Int = 3
 ) {
     private var regionSinceMs: Long? = null
@@ -69,5 +69,9 @@ class LabelPolicy(
         if (waited) regionStills += 1
         regionSinceMs = null
         return true
+    }
+
+    companion object {
+        const val DEFAULT_GAP_MS = 600L
     }
 }

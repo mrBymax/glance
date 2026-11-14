@@ -61,6 +61,8 @@ class BarcodeRegionTest {
         assertFalse(BarcodeRegion.fits(RectPx(0, 0, 100, 269), 504, 896))
         assertTrue(BarcodeRegion.fits(RectPx(0, 0, 360, 384), 720, 1280))
         assertFalse(BarcodeRegion.fits(RectPx(0, 0, 361, 384), 720, 1280))
+        assertTrue(BarcodeRegion.fits(RectPx(0, 0, 180, 192), 360, 640))
+        assertFalse(BarcodeRegion.fits(RectPx(0, 0, 181, 192), 360, 640))
     }
 
     @Test fun `a crop holds the points inside it`() {

@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LabelTimingTest {
-    private fun LabelPolicy.stills(range: IntProgression): List<Int> = range.filter { onFrame(it.toLong(), regionInView = true, codeAccepted = false) }
+    private fun LabelPolicy.stills(range: Iterable<Int>): List<Int> = range.filter { onFrame(it.toLong(), regionInView = true, codeAccepted = false) }
 
     @Test fun `the default wait is 1000 ms, and the default gap is 6000 ms`() {
         assertEquals(1000L, LabelTiming.DEFAULT_WAIT_MS)
@@ -52,6 +52,13 @@ class LabelTimingTest {
     @Test fun `the label policy waits and limits with the two values`() {
         assertEquals(listOf(800, 3800, 6800), LabelTiming(waitMs = 800, gapMs = 3000).labelPolicy().stills(0..9000 step 100))
         assertEquals(listOf(2500, 8500), LabelTiming(waitMs = 2500, gapMs = 6000).labelPolicy().stills(0..12000 step 100))
+    }
+
+    // At 2 frames each second, one missed frame is a gap of 1000 ms.
+    @Test fun `the label policy of a slow stream keeps the wait of a region over a longer gap`() {
+        val frames = listOf(0, 500, 1500, 2000, 2500)
+        assertEquals(listOf(2500), LabelTiming(waitMs = 1000, gapMs = 6000).labelPolicy().stills(frames))
+        assertEquals(listOf(1500), LabelTiming(waitMs = 1000, gapMs = 6000).labelPolicy(regionGapMs = 1250).stills(frames))
     }
 
     @Test fun `the shared still limit is never longer than the gap of the label stills`() {
