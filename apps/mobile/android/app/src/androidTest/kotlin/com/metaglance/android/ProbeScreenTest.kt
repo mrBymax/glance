@@ -13,6 +13,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.metaglance.android.probe.ProbeActivity
 import com.metaglance.android.support.TestClips
+import com.metaglance.android.support.TestStreamRule
 import com.metaglance.android.support.assetUri
 import com.metaglance.android.support.onMainSync
 import com.metaglance.android.support.requireSilentPhone
@@ -42,6 +43,9 @@ import org.junit.runner.RunWith
 class ProbeScreenTest {
     @get:Rule
     val scenarioRule = ActivityScenarioRule(ProbeActivity::class.java)
+
+    @get:Rule
+    val testStream = TestStreamRule()
 
     private lateinit var targetContext: Context
 

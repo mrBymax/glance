@@ -25,6 +25,7 @@ import com.metaglance.android.pipeline.LabelStill
 import com.metaglance.android.pipeline.StillPhoto
 import com.metaglance.core.audio.AnswerSoundOnce
 import com.metaglance.core.audio.SpeechQueue
+import com.metaglance.core.barcode.LabelPolicy
 import com.metaglance.core.barcode.LabelTiming
 import com.metaglance.core.contract.Codec
 import com.metaglance.core.contract.DeviceState
@@ -48,6 +49,7 @@ import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.gesture.HeadSample
 import com.metaglance.core.image.StillPolicy
+import com.metaglance.core.image.StreamSetup
 import com.metaglance.core.image.UploadGate
 import com.metaglance.core.image.WaitingStill
 import com.metaglance.core.image.WaitingStills
@@ -688,6 +690,8 @@ class SessionController(
         val labelTiming = store.labelTiming
         stillPolicy = StillPolicy(labelTiming.stillEveryMs)
         log("label still: wait ${labelTiming.waitMs} ms, gap ${labelTiming.gapMs} ms")
+        // The same holds for the stream settings. DatLink reads them in the call below.
+        val stream = store.streamSetup
         if (!dat.startSession(withCamera = true, autoAttach = true)) {
             // The SDK error of a failed start arrives through dat.faults, after this call returns.
             scope.launch { sendError(if (INSUFFICIENT_SDK in sessionErrors) NativeErrors.SDK_TOO_OLD else NativeErrors.SESSION_FAILED) }
@@ -695,7 +699,7 @@ class SessionController(
         }
         datRunning = true
         refreshScreen()
-        startPipeline(labelTiming)
+        startPipeline(labelTiming, stream)
     }
 
     /** Stops the DAT session because the app, the page, or the server asked for it. No error event follows. */
@@ -708,7 +712,7 @@ class SessionController(
         dat.stopSession()
     }
 
-    private fun startPipeline(labelTiming: LabelTiming) {
+    private fun startPipeline(labelTiming: LabelTiming, stream: StreamSetup) {
         pipelineJob?.cancel()
         // The frame work runs on one background thread. dat.frames keeps only the newest frame, so nothing queues.
         pipelineJob = scope.launch(Dispatchers.Default.limitedParallelism(1)) {
@@ -737,8 +741,9 @@ class SessionController(
                 findFaces = { faces.find(it) },
                 crop = true,
                 nextSeq = uploadSeq::incrementAndGet,
-                label = labelTiming.labelPolicy(),
+                label = labelTiming.labelPolicy(stream.gapMs(LabelPolicy.DEFAULT_GAP_MS)),
                 holdStills = { holdsStills(SystemClock.elapsedRealtime()) },
+                stream = stream,
                 log = ::log
             )
             framePipeline = pipeline

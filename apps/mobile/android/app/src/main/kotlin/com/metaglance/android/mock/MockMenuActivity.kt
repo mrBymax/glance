@@ -185,6 +185,9 @@ class MockMenuActivity : AppCompatActivity() {
 
         group("Barcode")
         addBarcodeFields()
+
+        group("Stream")
+        addStreamItems()
     }
 
     /** Each change of mode stops a running session first, and waits for its end. */
@@ -324,6 +327,28 @@ class MockMenuActivity : AppCompatActivity() {
             waitField.setText(saved.waitMs.toString())
             gapField.setText(saved.gapMs.toString())
             status("Barcode wait: ${saved.waitMs} ms. Still gap: ${saved.gapMs} ms. The next camera start uses them.")
+        }
+    }
+
+    /**
+     * The frame size and the frame rate that the app asks of the glasses, from the next camera start. Each tap
+     * goes to the next value. The value of the menu wins over the value of the build from the first tap.
+     */
+    private fun addStreamItems() {
+        val store = glance.profileStore
+        fun qualityLabel() = store.streamSetup.quality.let { "Stream quality: ${it.name} ${it.width} x ${it.height}" }
+        fun fpsLabel() = "Stream frame rate: ${store.streamSetup.fps}"
+        lateinit var quality: Button
+        quality = item(qualityLabel()) {
+            store.streamQuality = store.streamSetup.nextQuality().quality
+            quality.text = qualityLabel()
+            status("${qualityLabel()}. The next camera start uses it.")
+        }
+        lateinit var fps: Button
+        fps = item(fpsLabel()) {
+            store.streamFps = store.streamSetup.nextFps().fps
+            fps.text = fpsLabel()
+            status("${fpsLabel()}. The next camera start uses it.")
         }
     }
 

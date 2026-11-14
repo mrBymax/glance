@@ -39,6 +39,9 @@ abstract class MockDeviceKitTestCase<T : Activity>(activityClass: Class<T>) {
     @get:Rule
     val scenarioRule = ActivityScenarioRule(activityClass)
 
+    @get:Rule
+    val testStream = TestStreamRule()
+
     protected lateinit var mockDeviceKit: MockDeviceKitInterface
     protected lateinit var targetContext: Context
 

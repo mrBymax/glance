@@ -19,6 +19,19 @@ fun localMs(key: String, default: Long): String {
     return "${text.toLongOrNull() ?: error("$key must be a whole number of milliseconds. Got \"$text\".")}L"
 }
 
+// The name of a stream quality, as a String of BuildConfig. StreamSetup in :core has the three names.
+fun localQuality(key: String, default: String): String {
+    val name = local(key, default).trim().uppercase()
+    if (name !in listOf("HIGH", "MEDIUM", "LOW")) error("$key must be HIGH, MEDIUM, or LOW. Got \"$name\".")
+    return "\"$name\""
+}
+
+// The app brings the frame rate to a value that the DAT SDK accepts, with StreamSetup in :core.
+fun localInt(key: String, default: Int): String {
+    val text = local(key, default.toString()).trim()
+    return (text.toIntOrNull() ?: error("$key must be a whole number. Got \"$text\".")).toString()
+}
+
 android {
     namespace = "com.metaglance.android"
     compileSdk = 36
@@ -35,6 +48,8 @@ android {
         buildConfigField("String", "UI_DEV_URL", "\"${local("glance.uiDevUrl", "")}\"")
         buildConfigField("long", "LABEL_WAIT_MS", localMs("glance.labelWaitMs", 1000))
         buildConfigField("long", "LABEL_GAP_MS", localMs("glance.labelGapMs", 6000))
+        buildConfigField("String", "STREAM_QUALITY", localQuality("glance.streamQuality", "MEDIUM"))
+        buildConfigField("int", "STREAM_FPS", localInt("glance.streamFps", 7))
         testInstrumentationRunner = "com.metaglance.android.support.GlanceTestRunner"
     }
     // The demo build is the APK for the testers: not debuggable, with no probe screen and no cleartext traffic,

@@ -42,7 +42,7 @@ class GlanceApp : Application() {
     @Volatile
     var paymentPrompt: PaymentPrompt = BiometricPaymentPrompt()
 
-    val datLink: DatLink by lazy { DatLink(this, scope) { datLog(it) } }
+    val datLink: DatLink by lazy { DatLink(this, scope, { profileStore.streamSetup }) { datLog(it) } }
     val mockGlasses: MockGlassesController by lazy { MockGlassesController(this) }
     val profileStore: ProfileStore by lazy { ProfileStore(this) }
 

@@ -19,6 +19,7 @@ import com.metaglance.core.image.RawFrame
 import com.metaglance.core.image.RectPx
 import com.metaglance.core.image.SharpestFramePicker
 import com.metaglance.core.image.Sharpness
+import com.metaglance.core.image.StreamSetup
 import com.metaglance.core.image.UploadSkip
 import com.metaglance.core.kiosk.KioskCode
 import com.metaglance.core.kiosk.KioskDwell
@@ -57,12 +58,14 @@ class FramePipeline(
     private val nextSeq: (() -> Int)? = null,
     private val label: LabelPolicy = LabelPolicy(),
     private val holdStills: () -> Boolean = { false },
+    /** What the app asked of the stream. A slow stream gets longer gaps for a missed frame. */
+    stream: StreamSetup = StreamSetup.DEFAULT,
     private val log: (String) -> Unit
 ) {
     private val scanner = CodeScanner()
     private val digits = DigitReader()
-    private val dwell = KioskDwell()
-    private val vote = BarcodeVote()
+    private val dwell = KioskDwell(gapMs = stream.gapMs(KioskDwell.DEFAULT_GAP_MS))
+    private val vote = BarcodeVote(gapMs = stream.gapMs(BarcodeVote.DEFAULT_GAP_MS))
     private val ocrPace = Pace(OCR_EVERY_MS)
     private val labelRequested = AtomicBoolean()
     private val stillGaveCode = AtomicBoolean()

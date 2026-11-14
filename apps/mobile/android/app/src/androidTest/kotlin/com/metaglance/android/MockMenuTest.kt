@@ -15,6 +15,8 @@ import com.metaglance.android.support.requireSilentPhone
 import com.metaglance.android.support.waitUntil
 import com.metaglance.core.barcode.LabelTiming
 import com.metaglance.core.gesture.Sensitivity
+import com.metaglance.core.image.StreamQuality
+import com.metaglance.core.image.StreamSetup
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -39,6 +41,8 @@ class MockMenuTest {
     private var placeholderBefore = false
     private var labelWaitBefore: Long? = null
     private var labelGapBefore: Long? = null
+    private var streamQualityBefore: StreamQuality? = null
+    private var streamFpsBefore: Int? = null
 
     private val glance: GlanceApp get() = targetContext.applicationContext as GlanceApp
 
@@ -51,6 +55,8 @@ class MockMenuTest {
         placeholderBefore = glance.profileStore.usePlaceholder
         labelWaitBefore = glance.profileStore.labelWaitMs
         labelGapBefore = glance.profileStore.labelGapMs
+        streamQualityBefore = glance.profileStore.streamQuality
+        streamFpsBefore = glance.profileStore.streamFps
     }
 
     @After
@@ -63,6 +69,8 @@ class MockMenuTest {
             glance.profileStore.usePlaceholder = placeholderBefore
             glance.profileStore.labelWaitMs = labelWaitBefore
             glance.profileStore.labelGapMs = labelGapBefore
+            glance.profileStore.streamQuality = streamQualityBefore
+            glance.profileStore.streamFps = streamFpsBefore
             glance.session.applySensitivity()
         }
     }
@@ -186,6 +194,32 @@ class MockMenuTest {
         assertEquals(LabelTiming.within(BuildConfig.LABEL_WAIT_MS, BuildConfig.LABEL_GAP_MS), glance.profileStore.labelTiming)
     }
 
+    @Test
+    fun theStreamItemsGoToTheNextValueAndStoreIt() {
+        onMainSync {
+            glance.profileStore.streamQuality = StreamQuality.HIGH
+            glance.profileStore.streamFps = 24
+        }
+        scenarioRule.scenario.recreate()
+
+        tap("Stream quality: HIGH 720 x 1280")
+        awaitStatus("Stream quality: MEDIUM 504 x 896. The next camera start uses it.")
+        tap("Stream quality: MEDIUM 504 x 896")
+        awaitStatus("Stream quality: LOW 360 x 640. The next camera start uses it.")
+        tap("Stream frame rate: 24")
+        awaitStatus("Stream frame rate: 30. The next camera start uses it.")
+        tap("Stream frame rate: 30")
+        awaitStatus("Stream frame rate: 2. The next camera start uses it.")
+        assertEquals(StreamSetup(StreamQuality.LOW, 2), glance.profileStore.streamSetup)
+
+        // With no stored value, the values of the build count.
+        onMainSync {
+            glance.profileStore.streamQuality = null
+            glance.profileStore.streamFps = null
+        }
+        assertEquals(StreamSetup.within(BuildConfig.STREAM_QUALITY, BuildConfig.STREAM_FPS), glance.profileStore.streamSetup)
+    }
+
     private fun type(hint: String, text: String) {
         scenarioRule.scenario.onActivity { activity ->
             val field = views<EditText>(activity).firstOrNull { it.hint?.toString() == hint }
@@ -244,7 +278,7 @@ class MockMenuTest {
             "Say add", "Say skip",
             "Meta AI missing", "Update required", "Stream error BATTERY_LOW", "Stream error THERMAL_HOT",
             "Save server URL", "Drop server link 10 s", "Sensitivity: gentle", "Sensitivity: normal", "Sensitivity: firm",
-            "Use placeholder page", "Save barcode waits"
+            "Use placeholder page", "Save barcode waits", "Stream quality", "Stream frame rate"
         )
     }
 }

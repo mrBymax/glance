@@ -14,7 +14,6 @@ import com.meta.wearable.dat.camera.types.PhotoData
 import com.meta.wearable.dat.camera.types.StreamConfiguration
 import com.meta.wearable.dat.camera.types.StreamState
 import com.meta.wearable.dat.camera.types.VideoFrame
-import com.meta.wearable.dat.camera.types.VideoQuality
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.SpecificDeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSession
@@ -56,6 +55,7 @@ import com.metaglance.core.gesture.HeadSample
 import com.metaglance.core.gesture.MotionRow
 import com.metaglance.core.image.I420
 import com.metaglance.core.image.RawFrame
+import com.metaglance.core.image.StreamSetup
 import com.metaglance.core.image.StreamSize
 import com.metaglance.core.input.TouchEvent
 import com.metaglance.core.input.Transcript
@@ -104,11 +104,12 @@ class MotionHealth(val flow: MotionFlow, val stalledSinceMs: Long?)
  * The one connection of the app to the DAT SDK: registration, permissions, the device, the session, and the stream.
  *
  * Call each function on the main thread. `scope` must use the main dispatcher. The frame collector and the
- * collector of the motion samples each run on a thread of their own.
+ * collector of the motion samples each run on a thread of their own. Each camera start reads `streamSetup`.
  */
 class DatLink(
     private val app: Application,
     private val scope: CoroutineScope,
+    private val streamSetup: () -> StreamSetup,
     private val log: (String) -> Unit
 ) {
     private val _snapshot = MutableStateFlow(
@@ -610,6 +611,9 @@ class DatLink(
         private var cameraScope: CoroutineScope? = null
         private var cameraRequested = false
 
+        /** What this run asked of the stream. */
+        private var stream = StreamSetup.DEFAULT
+
         /** When the app asked for the camera, and when its stream first reached STREAMING. */
         private var cameraAtMs: Long? = null
         private var streamingAtMs: Long? = null
@@ -738,7 +742,9 @@ class DatLink(
         private fun attachCamera() {
             cameraRequested = true
             cameraAtMs = SystemClock.elapsedRealtime()
-            session.addCamera(StreamConfiguration(videoQuality = VideoQuality.HIGH, frameRate = STREAM_FPS)).fold(
+            stream = streamSetup()
+            log(stream.logLine)
+            session.addCamera(StreamConfiguration(videoQuality = stream.quality.toSdk(), frameRate = stream.fps)).fold(
                 onSuccess = { added ->
                     camera = added
                     val stream = added.stream
@@ -829,7 +835,7 @@ class DatLink(
             // Mock glasses send samples only while a motion feed plays, so a time with no sample is no stall there.
             // A restart would also play the feed again, and the app would take that for a second nod.
             if (_snapshot.value.mock) return
-            val framesFlow = nowMs - lastFrameAtMs < FRAMES_FLOW_MS
+            val framesFlow = nowMs - lastFrameAtMs < stream.gapMs(FRAMES_FLOW_MS)
             val tick = synchronized(motionLock) { motionWatch.onTick(nowMs, framesFlow, stillRunning).also { publishMotionHealth() } }
             tick.lines.forEach(log)
             if (!tick.restart || !canRevive) return
@@ -1046,7 +1052,6 @@ class DatLink(
     }
 
     private companion object {
-        const val STREAM_FPS = 7
         const val NS_PER_SECOND = 1_000_000_000L
         const val REVIVE_DELAY_MS = 750L
 
@@ -1060,7 +1065,7 @@ class DatLink(
         const val MOTION_TICK_MS = 100L
         const val MOTION_RESTART_SETTLE_MS = 3000L
 
-        /** Video frames flow when one arrived in this time. The stream has 7 frames each second. */
+        /** Video frames flow when one arrived in this time, or in 2.5 frame times of a slower stream. */
         const val FRAMES_FLOW_MS = 1000L
         const val EVENT_BUFFER = 16
 

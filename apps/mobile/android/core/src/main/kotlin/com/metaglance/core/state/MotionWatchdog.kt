@@ -98,7 +98,7 @@ class MotionWatchdog(
         return line
     }
 
-    /** Call it about 10 times each second. `framesFlow` is true when a video frame arrived in the last second. */
+    /** Call it about 10 times each second. `framesFlow` is true when a video frame arrived a short time ago. */
     fun onTick(nowMs: Long, framesFlow: Boolean, stillRuns: Boolean): Tick {
         if (flow == MotionFlow.IDLE) return NOTHING
         val lines = ArrayList<String>(2)
