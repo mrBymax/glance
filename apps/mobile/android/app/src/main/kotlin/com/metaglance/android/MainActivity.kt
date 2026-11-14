@@ -12,7 +12,6 @@ import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
-import android.view.WindowManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -21,9 +20,6 @@ import android.widget.FrameLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewAssetLoader
 import com.meta.wearable.dat.core.Wearables
@@ -49,9 +45,6 @@ class MainActivity : AppCompatActivity() {
 
     /** The volume keys whose key down was an answer to a prompt. Android does not get their repeat events and their key up. */
     private val answerKeys = HashSet<Int>()
-
-    private var pocket = false
-    private var paymentPromptOpen = false
 
     private var afterBluetooth: (Boolean) -> Unit = {}
     private val bluetoothRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -133,28 +126,12 @@ class MainActivity : AppCompatActivity() {
         microphoneRequest.launch(Permission.MICROPHONE)
     }
 
-    /**
-     * The native side of pocket mode: a dim screen with no system bars. The page draws the black screen and
-     * blocks the touches. `SessionController` keeps the screen on.
-     */
-    fun setPocket(on: Boolean) {
-        pocket = on
-        applyBrightness()
-        val bars = WindowCompat.getInsetsController(window, window.decorView)
-        if (on) {
-            bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            bars.hide(WindowInsetsCompat.Type.systemBars())
-        } else {
-            bars.show(WindowInsetsCompat.Type.systemBars())
-        }
-    }
-
     /** False for a phone with no screen lock and no biometric. Such a phone cannot confirm a payment. */
     fun paymentAvailable(): Boolean = glance.paymentPrompt.available(this)
 
     /**
-     * Shows the prompt that confirms a payment above 50 EUR. `onOutcome` gets each outcome of the prompt.
-     * In pocket mode the screen is bright while the prompt shows, and dim again after it.
+     * Shows the prompt that confirms a payment, for a server that asks for it. `onOutcome` gets each outcome of
+     * the prompt.
      */
     fun confirmPayment(onOutcome: (PromptOutcome) -> Unit) {
         // The biometric library shows no prompt after onSaveInstanceState, and it reports nothing then.
@@ -163,24 +140,10 @@ class MainActivity : AppCompatActivity() {
             onOutcome(PromptOutcome.ERROR)
             return
         }
-        paymentPromptOpen = true
-        applyBrightness()
-        glance.paymentPrompt.show(this) { outcome ->
-            if (outcome != PromptOutcome.ATTEMPT_FAILED) {
-                paymentPromptOpen = false
-                applyBrightness()
-            }
-            onOutcome(outcome)
-        }
+        glance.paymentPrompt.show(this, onOutcome)
     }
 
     fun cancelPayment() = glance.paymentPrompt.cancel()
-
-    private fun applyBrightness() {
-        window.attributes = window.attributes.apply {
-            screenBrightness = if (pocket && !paymentPromptOpen) POCKET_BRIGHTNESS else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-        }
-    }
 
     private fun onBluetoothAnswer(granted: Boolean) {
         glance.datLink.initialize(granted)
@@ -275,6 +238,5 @@ class MainActivity : AppCompatActivity() {
         const val PAGE_URL = "https://appassets.androidplatform.net/index.html"
         const val UI_ROOT = "ui"
         const val PLACEHOLDER_ROOT = "placeholder"
-        const val POCKET_BRIGHTNESS = 0.01f
     }
 }

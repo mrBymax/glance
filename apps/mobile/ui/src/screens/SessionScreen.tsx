@@ -8,7 +8,7 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
-import { Glasses, Lock, Mic, Power, ScanLine, Settings, Undo2 } from 'lucide-react';
+import { Glasses, Mic, Power, ScanLine, Settings, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { ASK_MESSAGE } from '../bridge/askMessage';
 import { useUi } from '../bridge/BridgeContext';
@@ -17,7 +17,6 @@ import { CartList } from '../components/CartList';
 import { CheckoutSheet } from '../components/CheckoutSheet';
 import { LookAlikeNotice } from '../components/LookAlikeNotice';
 import { Mark } from '../components/Mark';
-import { PocketMode } from '../components/PocketMode';
 import { PromptCard } from '../components/PromptCard';
 import { SettingsSheet } from '../components/SettingsSheet';
 import { StateBanner } from '../components/StateBanner';
@@ -31,11 +30,6 @@ export function SessionScreen() {
   const { state, strings, send } = useUi();
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isEndOpen, setEndOpen] = useState(false);
-  const [isPocket, setPocket] = useState(false);
-  const enterPocket = () => {
-    send({ t: 'pocket.set', on: true });
-    setPocket(true);
-  };
   const endShop = () => {
     send({ t: 'session.end' });
     setEndOpen(false);
@@ -43,7 +37,6 @@ export function SessionScreen() {
   // The server takes a question only while the shop is open.
   const canAsk = state.phase === 'shopping' || state.phase === 'checkout';
   const canUndo = state.cart.items.length > 0;
-  if (isPocket) return <PocketMode onLeave={() => setPocket(false)} />;
   const promptArea = () => {
     if (state.prompt?.kind === 'product') return <PromptCard prompt={state.prompt} />;
     if (state.lookAlikes) return <LookAlikeNotice candidates={state.lookAlikes} />;
@@ -75,10 +68,7 @@ export function SessionScreen() {
       {promptArea()}
       <CaptionList />
       <CartList />
-      <HStack className="glance-pair" gap={2} wrap="wrap">
-        <Button label={strings.pocketMode} icon={<Icon icon={Lock} />} size="lg" onClick={enterPocket} />
-        <Button label={strings.end} icon={<Icon icon={Power} />} size="lg" onClick={() => setEndOpen(true)} />
-      </HStack>
+      <Button label={strings.end} icon={<Icon icon={Power} />} size="lg" width="100%" onClick={() => setEndOpen(true)} />
       {canAsk || canUndo ? (
         <HStack className="glance-dock glance-pair" gap={2} wrap="wrap">
           {canAsk ? <Button label={strings.ask} icon={<Icon icon={Mic} />} size="lg" onClick={() => send(ASK_MESSAGE)}>{strings.askShort}</Button> : null}

@@ -125,13 +125,6 @@ export const EN = {
   endConfirm: 'End',
   endCancel: 'Keep shopping',
 
-  pocketMode: 'Pocket mode',
-  unlock: 'Unlock',
-  leavePocketTitle: 'Leave pocket mode?',
-  leavePocketText: 'The screen shows your cart again.',
-  leave: 'Leave',
-  stay: 'Stay',
-
   // The title and the description of a banner together hold the spoken line of the design, section 6.6.
   banner: {
     paymentFailed: { title: 'Payment failed.', description: 'Nothing was charged. Look at the code to try again.' },
@@ -296,13 +289,6 @@ export const IT: Strings = {
   endText: 'La fotocamera si spegne. Dopo non puoi più aggiungere prodotti a questo carrello.',
   endConfirm: 'Termina',
   endCancel: 'Continua la spesa',
-
-  pocketMode: 'Modalità tasca',
-  unlock: 'Sblocca',
-  leavePocketTitle: 'Uscire dalla modalità tasca?',
-  leavePocketText: 'Lo schermo mostra di nuovo il carrello.',
-  leave: 'Esci',
-  stay: 'Resta',
 
   banner: {
     paymentFailed: { title: 'Pagamento non riuscito.', description: 'Nessun addebito. Guarda il codice per riprovare.' },

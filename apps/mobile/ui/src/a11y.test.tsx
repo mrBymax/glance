@@ -25,7 +25,6 @@ const SCENES: [string, () => Promise<unknown>][] = [
   ['receipt', async () => renderWithUi(<App />, { messages: [...session, eventMessage('checkout.paid')] })],
   ['settings', async () => tap(renderWithUi(<App />, { messages: session }), 'Settings')],
   ['end dialog', async () => tap(renderWithUi(<App />, { messages: session }), 'End')],
-  ['pocket mode', async () => tap(renderWithUi(<App />, { messages: session }), 'Pocket mode')],
   ['banner with an action', async () => renderWithUi(<App />, { native: NATIVE_PRESETS.updateRequired, messages: session })],
   ['debug panel', async () => tap(renderWithUi(<App />, { messages: session }), 'Debug')],
 ];

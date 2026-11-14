@@ -81,8 +81,6 @@ const BUTTONS = [
   ['profile.set haptics false', { t: 'profile.set', patch: { haptics: false } }],
   ['profile.set mainYes key', { t: 'profile.set', patch: { mainYes: 'key' } }],
   ['profile.set mainYes voice', { t: 'profile.set', patch: { mainYes: 'voice' } }],
-  ['pocket.set on', { t: 'pocket.set', on: true }],
-  ['pocket.set off', { t: 'pocket.set', on: false }],
   ['data.delete', { t: 'data.delete' }],
 ];
 

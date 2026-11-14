@@ -1,7 +1,6 @@
 package com.metaglance.android
 
 import android.content.Context
-import android.view.WindowManager
 import androidx.fragment.app.FragmentActivity
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -11,7 +10,6 @@ import androidx.test.uiautomator.Until
 import com.metaglance.android.support.FakeServerTestCase
 import com.metaglance.android.support.waitUntil
 import com.metaglance.core.contract.DeviceToServer
-import com.metaglance.core.contract.PageToNative
 import com.metaglance.core.contract.ServerToDevice
 import com.metaglance.core.input.PromptOutcome
 import com.metaglance.core.state.NativeErrors
@@ -49,7 +47,6 @@ class PaymentPromptTest : FakeServerTestCase() {
         promptBefore?.let { before ->
             onMain {
                 glance.paymentPrompt.cancel()
-                glance.session.onPageMessage(PageToNative.PocketSet(on = false))
                 glance.paymentPrompt = before
             }
         }
@@ -118,25 +115,6 @@ class PaymentPromptTest : FakeServerTestCase() {
     }
 
     @Test
-    fun inPocketModeTheScreenIsBrightWhileThePromptShows() {
-        useFakePrompt()
-        startSession()
-        page(PageToNative.PocketSet(on = true))
-        waitUntil("the screen is dim", STEP_MS) { brightness() == POCKET_BRIGHTNESS }
-
-        command("bio")
-        waitUntil("the app shows the prompt", STEP_MS, ::state) { fake.shows == 1 }
-        assertEquals(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE, brightness(), 0f)
-        onMain { fake.report(PromptOutcome.ATTEMPT_FAILED) }
-        assertEquals(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE, brightness(), 0f)
-
-        onMain { fake.report(PromptOutcome.ERROR) }
-        waitUntil("biometric.result goes out", STEP_MS, ::state) { results().isNotEmpty() }
-        assertEquals(listOf(false), results())
-        assertEquals(POCKET_BRIGHTNESS, brightness(), 0f)
-    }
-
-    @Test
     fun theEndOfTheCheckoutClosesThePrompt() {
         useFakePrompt()
         startSession()
@@ -151,12 +129,6 @@ class PaymentPromptTest : FakeServerTestCase() {
     private fun useFakePrompt() = onMain { glance.paymentPrompt = fake }
 
     private fun results(): List<Boolean> = traffic.toServer.filterIsInstance<DeviceToServer.BiometricResult>().map { it.ok }
-
-    private fun brightness(): Float {
-        var value = 0f
-        scenarioRule.scenario.onActivity { value = it.window.attributes.screenBrightness }
-        return value
-    }
 
     /** Stands in for the prompt of Android. A test reports each outcome on the main thread. */
     private class FakePrompt : PaymentPrompt {
@@ -189,9 +161,5 @@ class PaymentPromptTest : FakeServerTestCase() {
             if (outcome != PromptOutcome.ATTEMPT_FAILED) onOutcome = null
             receiver(outcome)
         }
-    }
-
-    private companion object {
-        const val POCKET_BRIGHTNESS = 0.01f
     }
 }

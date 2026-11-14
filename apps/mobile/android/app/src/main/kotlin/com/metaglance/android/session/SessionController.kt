@@ -154,7 +154,6 @@ class SessionController(
     /** `debugDropSocket` sets it. No socket opens before this time. */
     private var socketBlockedUntilMs = 0L
     private var phoneOnline = true
-    private var pocketOn = false
 
     private val voice = PhoneVoice(app)
     private val player = ExoLinePlayer(app, voice) { url -> api().clipUrl(url) }
@@ -299,8 +298,6 @@ class SessionController(
         if (this.activity !== activity) abandonPaymentPrompt()
         page = send
         this.activity = activity
-        // A new activity has a new page, and that page is not in pocket mode.
-        pocketOn = false
     }
 
     /** A new activity can attach before the old one is destroyed. So only the attached activity detaches. */
@@ -330,10 +327,6 @@ class SessionController(
             is PageToNative.SetupRegister -> setupRegister()
             is PageToNative.SetupRequestCamera -> setupRequestCamera()
             is PageToNative.SetupOpenUpdate -> activity?.let(dat::openUpdate)
-            is PageToNative.PocketSet -> {
-                pocketOn = message.on
-                activity?.setPocket(message.on)
-            }
         }
     }
 

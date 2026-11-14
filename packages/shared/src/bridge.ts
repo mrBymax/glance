@@ -44,7 +44,6 @@ export const PageToNativeSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('intent'), kind: IntentKindSchema, promptId: z.string().min(1).optional() }),
   CartEditSchema.extend({ t: z.literal('cart.edit') }),
   z.object({ t: z.literal('profile.set'), patch: ProfilePatchSchema }),
-  z.object({ t: z.literal('pocket.set'), on: z.boolean() }),
   z.object({ t: z.literal('data.delete') }),
 ]);
 export type PageToNative = z.infer<typeof PageToNativeSchema>;

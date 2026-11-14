@@ -142,10 +142,6 @@ sealed interface PageToNative {
     data class ProfileSet(val patch: JsonObject) : PageToNative
 
     @Serializable
-    @SerialName("pocket.set")
-    data class PocketSet(val on: Boolean) : PageToNative
-
-    @Serializable
     @SerialName("data.delete")
     data object DataDelete : PageToNative
 }

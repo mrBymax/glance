@@ -10,7 +10,6 @@ import com.metaglance.android.support.waitFor
 import com.metaglance.core.contract.IntentKind
 import com.metaglance.core.contract.IntentSource
 import com.metaglance.core.contract.MainYes
-import com.metaglance.core.contract.PageToNative
 import com.metaglance.core.contract.ServerEvent
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -32,7 +31,6 @@ class VolumeKeysTest : ShopSessionTestCase() {
 
     @After
     override fun tearDown() {
-        page(PageToNative.PocketSet(on = false))
         // A key that the app did not take raised the volume. The phone must be silent for the next test.
         val audio = targetContext.getSystemService(AudioManager::class.java)
         if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) != 0) audio.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
@@ -72,10 +70,9 @@ class VolumeKeysTest : ShopSessionTestCase() {
     }
 
     @Test
-    fun aKeyThatStaysDownInPocketModeSendsOneYes() {
+    fun aKeyThatStaysDownSendsOneYes() {
         selectMainYes(MainYes.KEY)
         startSession()
-        page(PageToNative.PocketSet(on = true))
         val pending = awaitFinishedProductPrompt()
 
         val downAt = SystemClock.uptimeMillis()
