@@ -1,6 +1,7 @@
-/* The design asks for a black screen. No Astryx token is pure black. */
+/* The design asks for a black screen. No Astryx token is pure black. The screen covers each other part of the page. */
 .pocket-screen {
   position: fixed;
   inset: 0;
+  z-index: 2;
   background: #000;
 }

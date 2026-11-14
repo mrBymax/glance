@@ -12,3 +12,6 @@ it('raises the Astryx control heights to 48 px or more', () => {
 it('raises the clear button of an input to 48 px', () => {
   expect(css).toMatch(/\.astryx-input-clear-button\s*\{[^}]*block-size:\s*48px/);
 });
+it('raises each radio row to 48 px', () => {
+  expect(css).toMatch(/\.astryx-radio-list-item\s*\{[^}]*min-block-size:\s*var\(--size-element-md\)/);
+});

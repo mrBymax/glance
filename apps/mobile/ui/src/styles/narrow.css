@@ -1,4 +1,0 @@
-/* A phone of 360 px gives each of five segments 62 px. The stock inline padding of 12 px cuts the longest labels there. */
-.astryx-segmented-control-item {
-  padding-inline: 4px;
-}

@@ -1,5 +1,5 @@
 @import '@astryxdesign/core/reset.css';
 @import '@astryxdesign/core/astryx.css';
 @import './touch.css';
-@import './narrow.css';
 @import './pocket.css';
+@import './glance.css';

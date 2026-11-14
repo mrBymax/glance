@@ -1,0 +1,243 @@
+/*
+ * The app classes for the parts that Astryx has no prop for. docs/design.md holds the reasons.
+ * Each value is an Astryx token or a rem value, so each size grows with the font scale of the phone.
+ */
+
+/*
+ * The theme element of Astryx has no box, so this element paints the canvas of the page.
+ * It is also the container of the query for a large font scale at the end of this file.
+ */
+.glance-app {
+  container: glance / inline-size;
+  min-block-size: 100dvh;
+  background: var(--color-background-body);
+  color: var(--color-text-primary);
+}
+
+.glance-app > main {
+  flex: 1;
+}
+
+/* The price, the total, and the amount to pay: the largest text of each screen. */
+.glance-amount {
+  font-size: var(--text-display-1-size);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.glance-amount--total {
+  font-size: var(--text-heading-1-size);
+}
+
+/* A product name and the title of a result. A name of 80 characters wraps in full, and a word longer than the line breaks inside the word. */
+.glance-title {
+  font-size: var(--text-heading-1-size);
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.glance-wrap {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The disc that holds the glyph of a screen: the glasses of Glance, the check of a payment. */
+.glance-mark {
+  flex: none;
+  inline-size: var(--size-element-lg);
+  block-size: var(--size-element-lg);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.glance-mark svg {
+  inline-size: 50%;
+  block-size: 50%;
+}
+
+.glance-mark--lg {
+  inline-size: calc(var(--size-element-lg) * 1.5);
+  block-size: calc(var(--size-element-lg) * 1.5);
+}
+
+.glance-mark--success {
+  background: var(--color-success);
+  color: var(--color-on-success);
+}
+
+.glance-mark--muted {
+  background: var(--color-neutral);
+  color: var(--color-text-primary);
+}
+
+/* One fact of the status row. A problem gets the warning fill, a warning glyph, and its word. */
+.glance-pill {
+  padding-block: var(--spacing-1);
+  padding-inline: var(--spacing-2) var(--spacing-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-background-card);
+  color: var(--color-text-primary);
+}
+
+.glance-pill--problem {
+  border-color: transparent;
+  background: var(--color-warning-muted);
+  color: var(--color-on-warning-muted);
+}
+
+/* Two actions side by side. When both labels do not fit, each action takes a full row. */
+.glance-pair > * {
+  flex: 1 1 8rem;
+}
+
+/* The card of the current prompt, and the card that waits for one. */
+.glance-idle {
+  border: var(--border-width) dashed var(--color-border-emphasized);
+  background: transparent;
+}
+
+/* The captions: a dark transcript window of fixed height, so that a new line moves no other content. */
+.glance-captions {
+  border: var(--border-width) solid var(--color-border-emphasized);
+  border-radius: var(--radius-container);
+  background: var(--color-background-body);
+  color: var(--color-text-primary);
+}
+
+/* Each line keeps one size, so a line that stops being the newest does not move the others. */
+.glance-caption {
+  color: var(--color-text-secondary);
+  font-size: var(--text-large-size);
+  overflow-wrap: anywhere;
+}
+
+.glance-caption--newest {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+  animation: glance-caption-in var(--duration-medium) var(--ease-entrance);
+}
+
+@keyframes glance-caption-in {
+  from { opacity: 0; transform: translateY(0.25rem); }
+}
+
+/* The two fast actions stay under the thumb while the page scrolls. */
+.glance-dock {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 1;
+  margin-inline: calc(var(--glance-inset) * -1);
+  padding: var(--spacing-3) var(--glance-inset);
+  border-block-start: var(--border-width) solid var(--color-border);
+  background: var(--color-background-card);
+}
+
+/* A line of the cart or the receipt: the name, then the quantity and the price. */
+.glance-ledger-meta {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The note under a receipt, and each other note that is not a state. */
+.glance-note {
+  border: var(--border-width) dashed var(--color-border-emphasized);
+  border-radius: var(--radius-element);
+}
+
+/* The label of a group of settings names the group, so it reads as a title, not as a hint. */
+.astryx-field-label {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Radio rows look like the rows of a check box list: an inset and a hairline between rows. */
+.astryx-radio-list-item {
+  padding-inline: var(--spacing-3);
+}
+
+.astryx-radio-list-item + .astryx-radio-list-item {
+  border-block-start: var(--border-width) solid var(--color-border);
+}
+
+/*
+ * Insets. Astryx spacing is in rem, so at a font scale of 200 percent each inset doubles and a 360 px screen keeps
+ * 216 px for the text of a card. With a large font scale the insets keep their size at 100 percent.
+ */
+.glance-page {
+  --glance-inset: var(--spacing-4);
+  padding-inline: var(--glance-inset);
+}
+
+.glance-card {
+  padding: var(--spacing-5);
+}
+
+.glance-card--list {
+  padding: var(--spacing-3);
+}
+
+.glance-captions {
+  padding: var(--spacing-4);
+}
+
+.glance-sheet {
+  padding: var(--spacing-5);
+}
+
+@container glance (max-width: 16rem) {
+  .glance-page {
+    --glance-inset: var(--spacing-2);
+  }
+
+  .glance-card,
+  .glance-captions,
+  .glance-sheet {
+    padding: var(--spacing-2);
+  }
+
+  .glance-card--list {
+    padding: var(--spacing-1);
+  }
+
+  /* Two rows of large buttons would cover a third of the screen, so the dock scrolls with the page. */
+  .glance-dock {
+    position: static;
+    margin-inline: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  /* A mark beside a heading is decorative. At a large font scale the heading needs its width. */
+  .glance-mark:not(.glance-mark--lg) {
+    display: none;
+  }
+}
+
+/* At a large font scale a label takes a second line. Astryx cuts it with an ellipsis. */
+.astryx-button > span > span,
+.astryx-item > span > span,
+.astryx-step-label {
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: break-word;
+}
+
+.astryx-button[data-size] {
+  block-size: auto;
+  min-block-size: var(--size-element-md);
+  padding-block: var(--spacing-1);
+}
+
+.astryx-button[data-size='lg'] {
+  min-block-size: var(--size-element-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glance-caption--newest {
+    animation: none;
+  }
+}
