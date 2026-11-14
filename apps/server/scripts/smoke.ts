@@ -117,7 +117,8 @@ export async function runSmoke(baseUrl: string): Promise<SmokeResult> {
       await phone.next((message) => message.t === 'snapshot', `a snapshot from ${session!.wsUrl.replace(/\?.*$/, '')}`);
     }],
     ['events', async () => {
-      const response = await fetch(`${base}${sessionPath('/events')}`, { signal: stream.signal });
+      // The stream stays open, so the time limit is for its first answer only.
+      const response = await limit(fetch(`${base}${sessionPath('/events')}`, { signal: stream.signal }), 'the answer of the events stream');
       expectStatus(response, 200);
       events = response.body!.getReader();
     }],
