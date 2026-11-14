@@ -1,7 +1,7 @@
 package com.metaglance.android
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.metaglance.android.pipeline.QrScanner
+import com.metaglance.android.pipeline.CodeScanner
 import com.metaglance.android.support.MockDeviceKitTestCase
 import com.metaglance.android.support.TestClips
 import com.metaglance.android.support.waitFor
@@ -72,10 +72,10 @@ class ProbeLinkTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
         setCameraFeed(TestClips.KIOSK)
         val collector = collectFrames()
         startSession()
-        val scanner = QrScanner()
+        val scanner = CodeScanner()
         try {
             val hit = waitFor("the scanner reads a code", STREAM_MS) {
-                newest.getAndSet(null)?.let { frame -> scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height).firstOrNull() }
+                newest.getAndSet(null)?.let { frame -> scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height).firstOrNull { it.isQr && it.text != null } }
             }
             assertEquals(TestClips.KIOSK_TEXT, hit.text)
             assertTrue("area ${hit.areaPx}", hit.areaPx > 0)
@@ -98,10 +98,10 @@ class ProbeLinkTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
         waitUntil("the session stops", STREAM_MS, { datLog.toString() }) { glance.datLink.snapshot.value.session == DatSession.STOPPED }
         newest.set(null)
         startSession()
-        val scanner = QrScanner()
+        val scanner = CodeScanner()
         try {
             val hit = waitFor("the scanner reads the code of the new feed", STREAM_MS) {
-                newest.getAndSet(null)?.let { frame -> scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height).firstOrNull() }
+                newest.getAndSet(null)?.let { frame -> scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height).firstOrNull { it.isQr && it.text != null } }
             }
             assertEquals(TestClips.KIOSK_TEXT, hit.text)
         } finally {

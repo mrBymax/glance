@@ -2,7 +2,9 @@ package com.metaglance.core.barcode
 
 import com.metaglance.core.image.RectPx
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BarcodeRegionTest {
@@ -36,5 +38,22 @@ class BarcodeRegionTest {
         val large = RectPx(300, 300, 200, 90)
         assertEquals(large, BarcodeRegion.largest(listOf(small, large)))
         assertNull(BarcodeRegion.largest(emptyList()))
+    }
+
+    @Test fun `a region with the form of a product barcode is linear, and a square one is not`() {
+        assertTrue(BarcodeRegion.isLinear(RectPx(0, 0, 200, 90)))
+        assertTrue(BarcodeRegion.isLinear(RectPx(0, 0, 90, 200)))
+        assertTrue(BarcodeRegion.isLinear(RectPx(0, 0, 125, 100)))
+        assertFalse(BarcodeRegion.isLinear(RectPx(0, 0, 480, 480)))
+        assertFalse(BarcodeRegion.isLinear(RectPx(0, 0, 110, 100)))
+        assertFalse(BarcodeRegion.isLinear(RectPx(0, 0, 0, 100)))
+    }
+
+    @Test fun `a crop holds the points inside it`() {
+        val crop = RectPx(100, 200, 50, 20)
+        assertTrue(BarcodeRegion.holds(crop, 100, 200))
+        assertTrue(BarcodeRegion.holds(crop, 149, 219))
+        assertFalse(BarcodeRegion.holds(crop, 150, 210))
+        assertFalse(BarcodeRegion.holds(crop, 120, 199))
     }
 }

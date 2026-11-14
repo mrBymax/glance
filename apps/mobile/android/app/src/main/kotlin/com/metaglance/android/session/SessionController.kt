@@ -1,6 +1,7 @@
 package com.metaglance.android.session
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.Network
@@ -14,8 +15,12 @@ import com.metaglance.android.audio.ExoLinePlayer
 import com.metaglance.android.audio.PhoneVoice
 import com.metaglance.android.dat.DatLink
 import com.metaglance.android.dat.ProbeDecisions
+import com.metaglance.android.pipeline.CodeScanner
+import com.metaglance.android.pipeline.DigitReader
 import com.metaglance.android.pipeline.FaceFinder
 import com.metaglance.android.pipeline.FramePipeline
+import com.metaglance.android.pipeline.LabelOutcome
+import com.metaglance.android.pipeline.LabelStill
 import com.metaglance.android.pipeline.StillPhoto
 import com.metaglance.core.audio.SpeechQueue
 import com.metaglance.core.contract.Codec
@@ -154,6 +159,10 @@ class SessionController(
     private val sessionErrors = HashSet<String>()
     private val streamErrors = HashSet<String>()
     private var pipelineJob: Job? = null
+
+    /** The pipeline of the running stream. The frame thread sets it, and the main thread gives it a `still.request`. */
+    @Volatile
+    private var framePipeline: FramePipeline? = null
     private var mainYesJob: Job? = null
     private var mainYesResolved = false
     private var waitingForGlasses = false
@@ -501,8 +510,8 @@ class SessionController(
             is ServerToDevice.SessionRest -> stopDat()
             is ServerToDevice.SessionEnd -> onServerSessionEnd()
             is ServerToDevice.BiometricRequest -> onBiometricRequest()
-            // The label still is not built yet. The server gets no answer, as when the limit for stills drops a request.
-            is ServerToDevice.StillRequest -> log("still.request ${message.purpose}: no handler")
+            // The frame path owns the limit for label stills, so the request goes through it.
+            is ServerToDevice.StillRequest -> framePipeline?.requestLabelStill() ?: log("still.request: no stream")
         }
     }
 
@@ -675,6 +684,12 @@ class SessionController(
                     val sent = socket?.send(message) == true
                     tap?.onToServer(message, sent)
                 },
+                onBarcode = { read ->
+                    val message = DeviceToServer.BarcodeSeen(read.code, read.source)
+                    val sent = socket?.send(message) == true
+                    tap?.onToServer(message, sent)
+                },
+                onLabelStill = { main.post(::takeLabelStill) },
                 onUpload = { header, jpeg ->
                     val sent = socket?.sendFrame(header, jpeg) == true
                     tap?.onFrame(header, jpeg.size, sent)
@@ -685,9 +700,12 @@ class SessionController(
                 nextSeq = uploadSeq::incrementAndGet,
                 log = ::log
             )
+            framePipeline = pipeline
             try {
                 dat.frames.collect { pipeline.onFrame(it) }
             } finally {
+                // The pipeline of a new stream can be there already.
+                if (framePipeline === pipeline) framePipeline = null
                 pipeline.close()
                 faces.close()
             }
@@ -728,6 +746,60 @@ class SessionController(
             } finally {
                 policy.onEnd()
             }
+        }
+    }
+
+    /**
+     * The last way to read a barcode: one still photo, which has more pixels than a frame. `LabelPolicy` in the
+     * frame path asks for it, after a barcode region stayed in view with no code, or after a `still.request` of
+     * the server. This still and the still of the sharp second look share one `StillPolicy`. The phone reads the
+     * still first. Only a still with no code goes to the server, as a frame of the kind `label`.
+     */
+    private fun takeLabelStill() {
+        val startMs = SystemClock.elapsedRealtime()
+        val policy = stillPolicy
+        if (!datRunning || !policy.tryStart(startMs)) {
+            log(if (datRunning) "label still dropped: the last still is too new" else "label still dropped: no stream")
+            return
+        }
+        scope.launch {
+            try {
+                val photo = dat.captureStill() ?: return@launch
+                val capturedAt = System.currentTimeMillis()
+                val size = "${photo.width}x${photo.height}"
+                val outcome = withContext(Dispatchers.Default) { readLabelStill(photo) }
+                val took = "${SystemClock.elapsedRealtime() - startMs} ms"
+                when (outcome) {
+                    is LabelOutcome.Code -> {
+                        log("label still $size: code ${outcome.read.code} ${outcome.read.source.name.lowercase()}, $took")
+                        send(DeviceToServer.BarcodeSeen(outcome.read.code, outcome.read.source))
+                    }
+                    is LabelOutcome.Upload -> {
+                        val still = outcome.still
+                        val header = FrameHeader(uploadSeq.incrementAndGet(), capturedAt, still.width, still.height, blurred = true, kind = FrameKind.LABEL)
+                        val sent = socket?.sendFrame(header, still.jpeg) == true
+                        tap?.onFrame(header, still.jpeg.size, sent)
+                        val result = if (sent) "sent" else "not sent, the socket is down"
+                        log("label still $size: no code, seq=${header.seq} ${still.width}x${still.height} ${still.jpeg.size} bytes $result, $took")
+                    }
+                    LabelOutcome.Dropped -> log("label still $size dropped: face detection failed, $took")
+                }
+            } finally {
+                policy.onEnd()
+            }
+        }
+    }
+
+    private fun readLabelStill(photo: Bitmap): LabelOutcome {
+        val scanner = CodeScanner()
+        val digits = DigitReader()
+        val faces = FaceFinder()
+        try {
+            return LabelStill.read(photo, { scanner.scan(it) }, { digits.read(it) }, { faces.find(it) })
+        } finally {
+            scanner.close()
+            digits.close()
+            faces.close()
         }
     }
 

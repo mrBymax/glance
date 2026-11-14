@@ -37,9 +37,14 @@ import com.metaglance.android.audio.PhoneVoice
 import com.metaglance.android.dat.DatLink
 import com.metaglance.android.dat.ProbeDecisions
 import com.metaglance.android.mock.MockGlassesController
+import com.metaglance.android.pipeline.CodeScanner
+import com.metaglance.android.pipeline.DigitReader
 import com.metaglance.android.pipeline.FramePipeline
-import com.metaglance.android.pipeline.QrScanner
+import com.metaglance.android.pipeline.regionBitmap
 import com.metaglance.core.audio.PlayableLine
+import com.metaglance.core.barcode.BarcodeRegion
+import com.metaglance.core.barcode.Gtin
+import com.metaglance.core.barcode.TextRows
 import com.metaglance.core.contract.Lang
 import com.metaglance.core.contract.SoundName
 import com.metaglance.core.gesture.GyroSample
@@ -51,6 +56,7 @@ import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.gesture.MotionCsv
 import com.metaglance.core.gesture.Sensitivity
 import com.metaglance.core.image.I420
+import com.metaglance.core.image.Pace
 import com.metaglance.core.image.RawFrame
 import com.metaglance.core.net.GlanceApi
 import java.io.File
@@ -80,6 +86,7 @@ class ProbeActivity : AppCompatActivity() {
     private var datPermission: Permission = Permission.CAMERA
     private var afterPhoneCamera: () -> Unit = {}
     private var qrJob: Job? = null
+    private var barcodeJob: Job? = null
     private var recordJob: Job? = null
     private var enduranceJob: Job? = null
     private var gestureJob: Job? = null
@@ -123,6 +130,7 @@ class ProbeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         qrJob?.cancel()
+        barcodeJob?.cancel()
         recordJob?.cancel()
         enduranceJob?.cancel()
         gestureJob?.cancel()
@@ -161,6 +169,11 @@ class ProbeActivity : AppCompatActivity() {
         qrButton = addButton("QR log: off") {
             val on = toggleQrLog()
             qrButton.text = if (on) "QR log: on" else "QR log: off"
+        }
+        lateinit var barcodeButton: Button
+        barcodeButton = addButton("Barcode log: off") {
+            val on = toggleBarcodeLog()
+            barcodeButton.text = if (on) "Barcode log: on" else "Barcode log: off"
         }
         addButton("Mock: enable and pair") {
             mock.enable()
@@ -357,6 +370,8 @@ class ProbeActivity : AppCompatActivity() {
                 gate = { null },
                 onKioskText = { text -> log.line("kiosk $text") },
                 onUpload = { header, jpeg -> log.line("upload seq=${header.seq} ${header.w}x${header.h} ${jpeg.size} bytes") },
+                onBarcode = { read -> log.line("barcode ${read.code} ${read.source.name.lowercase()}") },
+                onLabelStill = { log.line("label still wanted") },
                 log = log::line
             )
             try {
@@ -486,13 +501,15 @@ class ProbeActivity : AppCompatActivity() {
             return false
         }
         qrJob = lifecycleScope.launch(Dispatchers.Default) {
-            val scanner = QrScanner()
+            val scanner = CodeScanner()
             var windowStartMs = 0L
             var linesInWindow = 0
             try {
                 datLink.frames.collect { frame ->
                     val nv21 = I420.toNv21(frame.i420, frame.width, frame.height)
                     for (hit in scanner.scan(nv21, frame.width, frame.height)) {
+                        val text = hit.text
+                        if (!hit.isQr || text == null) continue
                         val now = System.currentTimeMillis()
                         if (now - windowStartMs >= 1000) {
                             windowStartMs = now
@@ -500,12 +517,59 @@ class ProbeActivity : AppCompatActivity() {
                         }
                         if (linesInWindow < QR_LINES_PER_SECOND) {
                             linesInWindow += 1
-                            log.line("qr \"${hit.text}\" area=${hit.areaPx}")
+                            log.line("qr \"$text\" area=${hit.areaPx}")
                         }
                     }
                 }
             } finally {
                 scanner.close()
+            }
+        }
+        return true
+    }
+
+    // Logs what the scanner and OCR read of a product barcode. With it a person finds the distance at which
+    // a code decodes from the stream of the glasses. Each kind of line comes 2 times each second at most.
+    private fun toggleBarcodeLog(): Boolean {
+        barcodeJob?.let {
+            it.cancel()
+            barcodeJob = null
+            return false
+        }
+        barcodeJob = lifecycleScope.launch(Dispatchers.Default) {
+            val scanner = CodeScanner()
+            val digits = DigitReader()
+            val codeLines = Pace(BARCODE_LINE_MS)
+            val regionLines = Pace(BARCODE_LINE_MS)
+            val digitReads = Pace(BARCODE_LINE_MS)
+            try {
+                datLink.frames.collect { frame ->
+                    val now = System.currentTimeMillis()
+                    val size = "${frame.width}x${frame.height}"
+                    val hits = scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height).filterNot { it.isQr }
+                    for (hit in hits) {
+                        val box = hit.box ?: continue
+                        val text = hit.text
+                        if (text == null) {
+                            if (regionLines.tryRun(now)) log.line("barcode region ${box.width}x${box.height} at ${box.left},${box.top} frame=$size")
+                        } else if (codeLines.tryRun(now)) {
+                            log.line("barcode ${hit.formatName} \"$text\" valid=${hit.productCode != null} width=${box.width} frame=$size")
+                        }
+                    }
+                    // The digits under the largest code, also when the bars decode, so both ways show their range.
+                    val region = BarcodeRegion.largest(hits.mapNotNull { it.box }) ?: return@collect
+                    val crop = BarcodeRegion.forDigits(region, frame.width, frame.height) ?: return@collect
+                    if (!digitReads.tryRun(now)) return@collect
+                    val bitmap = frame.regionBitmap(crop)
+                    val rows = TextRows.rows(digits.read(bitmap))
+                    bitmap.recycle()
+                    for (row in rows.filter { words -> words.any { word -> word.any(Char::isDigit) } }) {
+                        log.line("barcode digits \"${row.joinToString(" ")}\" codes=${Gtin.digitRuns(row)} crop=${crop.width}x${crop.height}")
+                    }
+                }
+            } finally {
+                scanner.close()
+                digits.close()
             }
         }
         return true
@@ -554,6 +618,7 @@ class ProbeActivity : AppCompatActivity() {
         const val FRAME_WAIT_MS = 3000L
         const val JPEG_QUALITY = 95
         const val QR_LINES_PER_SECOND = 2
+        const val BARCODE_LINE_MS = 500L
         const val PROBE_LINE = "Oat drink, one litre, one eighty-nine. Nod to add."
         const val AXIS_TEST_MS = 4000L
         const val HALF_MINUTE_MS = 30_000L

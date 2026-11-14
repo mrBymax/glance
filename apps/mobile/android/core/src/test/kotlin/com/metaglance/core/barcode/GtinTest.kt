@@ -112,4 +112,19 @@ class GtinTest {
     @Test fun `gives no part of a code that it found`() {
         assertEquals(listOf("0036000291452"), Gtin.digitRuns("0 036000 291452"))
     }
+
+    @Test fun `gives the code of a decoder as the phone sends it`() {
+        assertEquals("8076809513753", Gtin.fromDecoder("8076809513753", upcE = false))
+        assertEquals("036000291452", Gtin.fromDecoder("036000291452", upcE = false))
+        assertEquals("73513537", Gtin.fromDecoder("73513537", upcE = false))
+        assertEquals("012345000065", Gtin.fromDecoder("01234565", upcE = true))
+    }
+
+    @Test fun `gives no code for a decoder text with a wrong check digit or a wrong form`() {
+        assertNull(Gtin.fromDecoder("8076809513758", upcE = false))
+        assertNull(Gtin.fromDecoder("01234566", upcE = true))
+        assertNull(Gtin.fromDecoder("1234565", upcE = true))
+        assertNull(Gtin.fromDecoder("GL1 K3X7", upcE = false))
+        assertNull(Gtin.fromDecoder("00012345600012", upcE = false))
+    }
 }

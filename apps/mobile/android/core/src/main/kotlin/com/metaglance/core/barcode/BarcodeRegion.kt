@@ -22,6 +22,18 @@ object BarcodeRegion {
     /** The region with the largest area: the code that the shopper holds up is the nearest one. */
     fun largest(boxes: List<RectPx>): RectPx? = boxes.maxByOrNull { it.width.toLong() * it.height }
 
+    /**
+     * True for a box whose long side is at least 1.25 times its short side, as the bars of a product barcode.
+     * The box of a QR code is square, so a kiosk code that is too far to decode is no region of a product.
+     */
+    fun isLinear(box: RectPx): Boolean {
+        val short = minOf(box.width, box.height)
+        return short > 0 && maxOf(box.width, box.height) * 4 >= short * 5
+    }
+
+    /** True when the point is inside the crop. */
+    fun holds(crop: RectPx, x: Int, y: Int): Boolean = x >= crop.left && x < crop.left + crop.width && y >= crop.top && y < crop.top + crop.height
+
     private fun grow(box: RectPx, frameWidth: Int, frameHeight: Int, below: Int): RectPx? {
         if (box.width <= 0 || box.height <= 0) return null
         val marginX = box.width * 15 / 100
