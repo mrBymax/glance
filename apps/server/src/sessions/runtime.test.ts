@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { type ServerEvent, type ServerToDevice, TIMING } from '@glance/shared';
@@ -6,6 +9,8 @@ import { indexCatalog, readCatalogFile } from '../catalog/catalog';
 import { systemClock } from '../clock';
 import { MemoryStore } from '../db/memory';
 import { NO_RESULT } from '../recognition/result';
+import { ClipCache } from '../speech/clips';
+import { createClipUrl } from '../speech/service';
 import { KIOSK, STREAMING } from './harness';
 import { SessionRegistry } from './registry';
 import type { DeviceSink, RuntimeDeps, SessionRuntime } from './runtime';
@@ -367,6 +372,54 @@ it('logs for each product prompt the time from the frame to the result, of the p
   expect(Number(match![1])).toBeGreaterThanOrEqual(35);
   // The line follows the speak line of its prompt.
   expect(logLines[logLines.indexOf(timing[0]!) - 1]).toMatch(/^speak .* prompt=p-0001$/);
+});
+const addedText = 'Added oat drink. Total one eighty-nine.';
+/** The real clip function with a cache in a new directory. `synthesize` stands for the speech service. */
+function clipsWith(synthesize: (text: string, voiceId: string) => Promise<Uint8Array>): { dir: string } {
+  const dir = mkdtempSync(join(tmpdir(), 'glance-answer-clips-'));
+  deps.clipUrl = createClipUrl({
+    fake: false, cache: new ClipCache(dir, store), synthesize, voiceId: { en: 'voice-en', it: null }, publicBaseUrl: 'http://localhost:8080',
+  });
+  return { dir };
+}
+it('asks for the clips of the answer lines when a product prompt opens, and the answer line takes its clip from the cache', async () => {
+  const synthesize = vi.fn(async (_text: string, _voiceId: string) => new Uint8Array([1]));
+  const { dir } = clipsWith(synthesize);
+  try {
+    session.attach(sink); session.dispatch(seeOat); await session.settled();
+    await vi.waitFor(() => expect(synthesize).toHaveBeenCalledTimes(3));
+    expect(synthesize.mock.calls.map((call) => call[0]).sort()).toEqual([addedText, glanceText, 'Skipped.'].sort());
+
+    session.dispatch({ type: 'intent', kind: 'yes', source: 'head', promptId: 'p-0001' }); await session.settled();
+    expect(synthesize).toHaveBeenCalledTimes(3);
+    expect(sink.sent.at(-1)).toMatchObject({ t: 'speak', text: addedText, url: expect.stringMatching(/\.mp3$/) });
+    expect(logLines).toContainEqual(expect.stringMatching(new RegExp(`^answer timing session=${session.id} key=cart.added clipMs=\\d+$`)));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+it('sends the prompt line while the clip of an answer line is not made yet', async () => {
+  const { dir } = clipsWith(async (text) => (text === addedText ? new Promise<Uint8Array>(() => undefined) : new Uint8Array([1])));
+  try {
+    session.attach(sink); session.dispatch(seeOat); await session.settled();
+    expect(sink.sent).toMatchObject([{ t: 'speak', text: glanceText, promptId: 'p-0001' }]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+it('asks for the clip of the remove line when the prompt is for a product in the cart', async () => {
+  const texts: string[] = [];
+  deps.clipUrl = async (text) => { texts.push(text); return null; };
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
+  time += TIMING.viewMs;
+  session.dispatch(seeOat);
+  await session.settled();
+  expect(texts).toContain('Added oat drink. Total three seventy-eight.');
+  expect(texts).toContain('Removed oat drink. Total zero euros.');
+  // The two answers ran on a copy of the state.
+  expect(session.state.cart.totalCents).toBe(189);
+  expect(session.state.prompt).toMatchObject({ id: 'p-0002', mode: 'inCart' });
 });
 it('a product prompt of an input with no measured times logs none for them', async () => {
   session.attach(sink);

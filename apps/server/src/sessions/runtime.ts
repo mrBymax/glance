@@ -6,7 +6,7 @@ import type { Clock } from '../clock';
 import type { SessionRecord, Store } from '../db/store';
 import { renderLine } from '../speech/render';
 import { step } from './step';
-import type { RuleContext, RuleInputBody, SessionState, SpeakEffect } from './types';
+import type { Line, RuleContext, RuleInputBody, SessionState, SpeakEffect } from './types';
 import { toSnapshot } from './view';
 
 /** The phone of a session, as the runtime sees it. */
@@ -43,6 +43,12 @@ export type RuntimeDeps = {
 export type PromptTrace = { frameToResultMs: number | null; resolveMs: number | null };
 
 const KEPT_CAPTIONS = 20;
+/** The lines that answer a yes or a no to a product prompt. Each one gets the log line `answer timing`. */
+const ANSWER_LINES: ReadonlySet<Line['key']> = new Set(['cart.added', 'cart.removed', 'glance.skipped']);
+
+function isProductPrompt(line: Line): line is Extract<Line, { key: 'glance.new' | 'glance.inCart' }> {
+  return line.key === 'glance.new' || line.key === 'glance.inCart';
+}
 /** The log line of a spoken line holds this number of characters of its text. */
 const LOGGED_TEXT_CHARS = 80;
 
@@ -146,6 +152,24 @@ export class SessionRuntime {
     this.sink?.send({ t: 'still.request', purpose });
   }
 
+  /**
+   * The texts of the lines that a yes and a no to this product prompt speak: "Added ..." with the total that the add
+   * gives, and "Skipped." or "Removed ...". The rules are pure, so the runtime runs both answers on the state of now
+   * and drops their results.
+   */
+  private answerTexts(promptId: string): string[] {
+    const now = this.deps.clock.now();
+    const texts = new Set<string>();
+    for (const kind of ['yes', 'no'] as const) {
+      // R6: an answer from the phone needs the ID of the prompt alone.
+      const answer = step(this.state, { type: 'intent', kind, source: 'phone', promptId, now }, this.ruleContext());
+      for (const effect of answer.effects) {
+        if (effect.type === 'speak') texts.add(renderLine(effect.line, answer.state.profile));
+      }
+    }
+    return [...texts];
+  }
+
   snapshot(): SessionSnapshot {
     return toSnapshot(this.id, this.state, this.captions, this.ruleContext());
   }
@@ -225,24 +249,32 @@ export class SessionRuntime {
     this.speakCount += 1;
     const id = `s-${this.speakCount}`;
     const { priority, sound, interrupt, promptId } = effect;
+    const answerTexts = promptId !== null && isProductPrompt(effect.line) ? this.answerTexts(promptId) : [];
 
     this.enqueue(async () => {
       let url: string | null = null;
       try {
-        url = await this.deps.clipUrl(text, lang);
+        const clip = this.deps.clipUrl(text, lang);
+        // The clips of the answer lines are made while the prompt plays, so the answer line waits for no synthesis.
+        // The prompt line does not wait for them. A clip that fails here is made again when its line goes out.
+        for (const answer of answerTexts) this.deps.clipUrl(answer, lang).catch(() => undefined);
+        url = await clip;
       } catch (error) {
         // The line still goes out. The phone reads a line with no clip in its own voice.
         console.error(`session ${this.id}: no clip for the line ${id}:`, error);
       }
       // What the shopper heard, in the order of the phone.
       this.deps.log?.(`speak session=${this.id} key=${effect.line.key} text=${text.slice(0, LOGGED_TEXT_CHARS)} prompt=${promptId ?? 'none'}`);
-      if (effect.line.key === 'glance.new' || effect.line.key === 'glance.inCart') {
-        // clipMs holds the wait in the outbox and the clip. The three numbers are the server share of the time from frame to voice.
-        const clipMs = Math.round(performance.now() - startedAt);
+      // clipMs holds the wait in the outbox and the clip.
+      const clipMs = Math.round(performance.now() - startedAt);
+      if (isProductPrompt(effect.line)) {
+        // The three numbers are the server share of the time from frame to voice.
         this.deps.log?.(
           `glance timing session=${this.id} product=${effect.line.product.id} frameToResultMs=${trace?.frameToResultMs ?? 'none'}`
           + ` resolveMs=${trace?.resolveMs ?? 'none'} clipMs=${clipMs}`,
         );
+      } else if (ANSWER_LINES.has(effect.line.key)) {
+        this.deps.log?.(`answer timing session=${this.id} key=${effect.line.key} clipMs=${clipMs}`);
       }
       this.sink?.send({ t: 'speak', id, priority, text, lang, url, sound, interrupt, promptId });
       const caption: Caption = { id, text, lang, priority, url };

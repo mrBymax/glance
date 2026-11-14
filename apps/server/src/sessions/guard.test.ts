@@ -232,6 +232,18 @@ it('never drops a line that answers an action of the shopper', () => {
   ]);
   expect(h.all.some((effect) => effect.type === 'speak.dropped')).toBe(false);
 });
+it('the line that confirms a nod during the prompt line always plays, with an interrupt', () => {
+  const h = harness();
+  h.see(OAT); h.advance(1300);
+  h.yes('head', 'p-0001');
+  expect(h.speak()).toMatchObject({ line: { key: 'cart.added' }, interrupt: true });
+  h.no('head', 'p-0001');
+  // The same text less than 20 seconds later, and less than 3 seconds after the prompt line.
+  h.advance(TIMING.viewMs); h.see(OAT); h.advance(1300);
+  h.yes('head', 'p-0002');
+  expect(h.speak()).toMatchObject({ line: { key: 'cart.added', totalCents: 189 }, interrupt: true });
+  expect(h.all.some((effect) => effect.type === 'speak.dropped')).toBe(false);
+});
 it('repeat always replays the last line that the shopper heard', () => {
   const h = harness({ cart: [RYE] });
   h.barcode(NOT_SOLD);

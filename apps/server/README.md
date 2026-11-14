@@ -953,6 +953,13 @@ glance timing session=<id> product=oat-drink-1l frameToResultMs=1420 resolveMs=0
 glance timing session=<id> product=gtin-3017624010701 frameToResultMs=none resolveMs=35 clipMs=2
 ```
 
+The line that answers a yes or a no to a product prompt gets its own line: `cart.added`, `cart.removed`, or `glance.skipped`.
+
+```text
+answer timing session=<id> key=cart.added clipMs=3
+```
+
+- `clipMs` of an answer line is small when its clip was made in advance. See "Session runtime".
 - `frameToResultMs`: from the arrival of the frame at the recognition worker to the result of its call. It holds the wait for a free call and the call. The numbers above are an example of the format.
 - `resolveMs`: the read of the product. It is 0 for a catalog product, a few milliseconds for a store item in the product cache, and up to 2500 for an item that the cache does not hold.
 - `clipMs`: from the rules to the `speak` message of the phone. It holds the wait behind an older line in the outbox, and the clip.
@@ -1239,6 +1246,8 @@ Only the server computes a total, and each price comes from the catalog or from 
 - The effect `speak.dropped` is a line that the guard for the voice dropped. The runtime logs `speak dropped session=<id> key=<key> reason=<reason>`, and the phone gets nothing.
 - Each line that goes to the phone gets the log line `speak session=<id> key=<key> text=<first 80 characters> prompt=<id|none>`.
 - Each product prompt gets the log line `glance timing session=<id> product=<id> frameToResultMs=<n|none> resolveMs=<n|none> clipMs=<n>`. The caller of `dispatch` gives the first two numbers, and the rules hold no state for them. See "A guard for the voice".
+- A product prompt also asks for the clips of its answer lines, at the moment its own clip is requested: "Added ..." with the total that the add gives, and "Skipped." or "Removed ...". The runtime gets the texts from `step`: it runs a yes and a no on the state of now and drops the results. The prompt line does not wait for these clips. So the line after a nod waits for no synthesis, and its `answer timing` line shows a small `clipMs`. The clip cache and the one request for each text keep this at one call for each new text. With `FAKE_SPEECH` no call goes out.
+- `cart.added`, `cart.removed`, and `glance.skipped` interrupt: the phone stops the line that plays and starts the answer line. They answer an action of the shopper, so the guard for the voice never drops them.
 - A line gets its text at once. Then it waits in the outbox of the session for its clip. The outbox sends one message at a time, so the phone gets the lines in the order of the rules, also when an early clip is slow.
 - Each line goes to the phone as `speak` and to the bus as a `caption` event with the same ID (`s-1`, `s-2`). If the clip fails, the line goes out with `url: null`.
 - The effect `payment.start` starts the mock payment. After each step, the kiosk service reads the checkout of the session and updates the kiosk.
