@@ -17,17 +17,18 @@ class StoredSession(val sessionId: String, val token: String, val wsUrl: String,
 class ProfileStore(context: Context) {
     private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences("glance", Context.MODE_PRIVATE)
 
-    /** A stored profile that this app version cannot read gives the default profile. */
+    /** A stored profile that this app version cannot read, or that the server does not accept, gives the default profile. */
     var profile: Profile
         get() {
             val text = prefs.getString(KEY_PROFILE, null) ?: return Profiles.DEFAULT
-            return try {
+            val stored = try {
                 GlanceJson.decodeFromString(Profile.serializer(), text)
             } catch (_: SerializationException) {
-                Profiles.DEFAULT
+                return Profiles.DEFAULT
             } catch (_: IllegalArgumentException) {
-                Profiles.DEFAULT
+                return Profiles.DEFAULT
             }
+            return if (Profiles.isValid(stored)) stored else Profiles.DEFAULT
         }
         set(value) = prefs.edit().putString(KEY_PROFILE, GlanceJson.encodeToString(Profile.serializer(), value)).apply()
 

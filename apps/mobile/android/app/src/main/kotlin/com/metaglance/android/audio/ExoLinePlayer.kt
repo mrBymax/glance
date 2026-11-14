@@ -6,6 +6,7 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -34,7 +35,8 @@ import com.metaglance.core.contract.SoundName
  */
 @OptIn(UnstableApi::class)
 class ExoLinePlayer(context: Context, private val voice: PhoneVoice, private val clipUrl: (String) -> String) : LinePlayer {
-    private class Run(val line: PlayableLine, val onEnd: () -> Unit)
+    /** `clip` is the address of the speech clip, or null for a line that the phone voice speaks. */
+    private class Run(val line: PlayableLine, val clip: String?, val onEnd: () -> Unit)
 
     private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
@@ -77,14 +79,13 @@ class ExoLinePlayer(context: Context, private val voice: PhoneVoice, private val
 
     override fun play(line: PlayableLine, onEnd: () -> Unit) {
         stop()
-        val run = Run(line, onEnd)
+        val run = Run(line, if (line.phoneVoice) null else line.url?.let(::clipAddress), onEnd)
         current = run
         val items = ArrayList<MediaItem>()
         line.sound?.let { sound ->
             items.add(MediaItem.Builder().setMediaId(SOUND_ID).setUri(Uri.parse("android.resource://${appContext.packageName}/${rawId(sound)}")).build())
         }
-        val url = line.url
-        if (!line.phoneVoice && url != null) items.add(MediaItem.Builder().setMediaId(CLIP_ID).setUri(clipUrl(url)).build())
+        run.clip?.let { items.add(MediaItem.Builder().setMediaId(CLIP_ID).setUri(it).build()) }
         if (items.isEmpty()) {
             speak(run)
             return
@@ -117,8 +118,16 @@ class ExoLinePlayer(context: Context, private val voice: PhoneVoice, private val
     }
 
     private fun onPlaylistEnd(run: Run) {
-        // A line for the phone voice has only its sound in the player.
-        if (run.line.phoneVoice || run.line.url == null) speak(run) else finish(run)
+        // A line with no clip has only its sound in the player.
+        if (run.clip == null) speak(run) else finish(run)
+    }
+
+    // A clip address that is not an address is a clip that does not load: the phone voice speaks the line.
+    private fun clipAddress(url: String): String? = try {
+        clipUrl(url)
+    } catch (e: IllegalArgumentException) {
+        Log.w(TAG, "clip address: ${e.message}")
+        null
     }
 
     // Each item of the line gets 3 seconds to start. An item that plays at that time is in order.
@@ -167,6 +176,7 @@ class ExoLinePlayer(context: Context, private val voice: PhoneVoice, private val
     }
 
     private companion object {
+        const val TAG = "Glance"
         const val HTTP_TIMEOUT_MS = 3000
         const val START_TIMEOUT_MS = 3000L
         const val MIN_RATE = 0.8f

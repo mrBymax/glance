@@ -324,6 +324,12 @@ class SessionController(
 
     private fun onSocketDown() {
         log("socket down")
+        // The server can close the socket of a session that it ended. That is not a lost connection:
+        // no new connection follows, and the "Connection lost" line stays unsaid.
+        if (serverSession?.live != true) {
+            closeSocket()
+            return
+        }
         socketOpen = false
         announcer.onSocketDown(SystemClock.elapsedRealtime())
         refreshNativeState()
@@ -370,10 +376,14 @@ class SessionController(
     }
 
     private fun onProfilePatch(patch: JsonObject) {
-        setProfile(Profiles.applyPatch(profile, patch))
+        val patched = Profiles.applyPatch(profile, patch)
+        // The page gets an answer to each patch, also to one that changes nothing, so it never shows a value
+        // that the app did not take.
+        if (patched == profile) toPage(NativeToPage.ProfileChanged(profile)) else setProfile(patched)
         send(DeviceToServer.ProfileSet(patch))
-        if ("mainYes" in patch) {
-            store.wantedMainYes = profile.mainYes
+        // The selection of the shopper changes only when the profile holds the value of the patch.
+        if (patch["mainYes"] == GlanceJson.encodeToJsonElement(MainYes.serializer(), patched.mainYes)) {
+            store.wantedMainYes = patched.mainYes
             // The shopper can select an input that does not work on these glasses.
             if (mainYesResolved) resolveMainYes()
         }

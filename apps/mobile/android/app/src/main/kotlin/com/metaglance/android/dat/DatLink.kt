@@ -162,6 +162,9 @@ class DatLink(
     private var deviceId: DeviceIdentifier? = null
     private var current: SessionRun? = null
 
+    /** Selects the device again from the metadata of the SDK. `watchDevices` sets it. */
+    private var selectDevice: () -> Unit = {}
+
     /**
      * Safe to call again. With `bluetoothGranted = false` it only records the fact, because the SDK needs Bluetooth.
      * With MockDeviceKit enabled it does not call the SDK: `MockDeviceKit.enable` initializes it.
@@ -347,6 +350,7 @@ class DatLink(
     // MockDeviceKit swaps the registration and device layers of the SDK, so each initialize call collects again.
     private fun collectAppFlows() {
         appFlows?.cancel()
+        selectDevice = {}
         appFlows = scope.launch {
             launch {
                 Wearables.registrationState.collect { state ->
@@ -377,6 +381,7 @@ class DatLink(
             // A running session reports its own device through deviceInfo.
             if (current == null) setDevice(id?.let { known[it.identifier] })
         }
+        selectDevice = ::select
         select()
         for (id in ids) {
             val metadata = Wearables.devicesMetadata[id] ?: continue
@@ -518,6 +523,9 @@ class DatLink(
                 _snapshot.update {
                     it.copy(stream = endStream(DatStream.STOPPED), motionStarted = false, inputsActive = false, speechStarted = false)
                 }
+                // During the run, the snapshot followed deviceInfo of the session, and that flow is closed now.
+                // The metadata of the SDK can hold a newer state, for example a lost link.
+                selectDevice()
             }
         }
 
@@ -718,6 +726,11 @@ class DatLink(
     // first, before any suspension.
     private fun onFrame(frame: VideoFrame, meter: FrameMeter) {
         if (frame.isCompressed) return
+        // I420 has one chroma sample for each 2 x 2 pixels, so a frame with an odd side has no I420 layout.
+        if (frame.width % 2 != 0 || frame.height % 2 != 0) {
+            meter.logOnce("odd:${frame.width}x${frame.height}", "frame size ${frame.width}x${frame.height} is odd, so the frame is dropped")
+            return
+        }
         val buffer = frame.buffer
         val position = buffer.position()
         val bytes = ByteArray(buffer.remaining())
@@ -726,7 +739,10 @@ class DatLink(
 
         val expected = I420.frameBytes(frame.width, frame.height)
         if (bytes.size != expected) {
-            meter.logSizeOnce(frame.width, frame.height, bytes.size, expected)
+            meter.logOnce(
+                "${frame.width}x${frame.height}:${bytes.size}",
+                "frame size ${frame.width}x${frame.height} has ${bytes.size} bytes, I420 has $expected"
+            )
             if (bytes.size < expected) return
         }
         frameCount += 1
@@ -735,7 +751,7 @@ class DatLink(
         meter.count(frame.width, frame.height)
     }
 
-    /** Logs the frame rate one time each second, and a buffer size that is not I420 one time for each size. */
+    /** Logs the frame rate one time each second, and a frame size that is not in order. */
     private inner class FrameMeter {
         private var windowStartNs = System.nanoTime()
         private var windowFrames = 0
@@ -753,11 +769,11 @@ class DatLink(
             windowFrames = 0
         }
 
-        fun logSizeOnce(width: Int, height: Int, bytes: Int, expected: Int) {
-            val key = "${width}x$height:$bytes"
+        /** Logs a line about a frame size that is not in order. Frames in a row with the same `key` give one line. */
+        fun logOnce(key: String, line: String) {
             if (key == reportedSize) return
             reportedSize = key
-            log("frame size ${width}x$height has $bytes bytes, I420 has $expected")
+            log(line)
         }
     }
 

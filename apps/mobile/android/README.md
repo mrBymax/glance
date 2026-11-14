@@ -39,7 +39,8 @@ flowchart LR
 
 - `GlanceApp` owns one `DatLink`, one `MockGlassesController`, one `ProfileStore`, and one `SessionController`. A new activity keeps the session.
 - `DatLink` is the one connection to the DAT SDK. It gives a `snapshot` of the state, the `faults` of the SDK, and the `frames` of the stream. Call its functions on the main thread.
-- A frame is a `RawFrame` in I420 layout. `frames` holds the newest frame only.
+- A frame is a `RawFrame` in I420 layout. `frames` holds the newest frame only. A frame with an odd width or height, or with fewer bytes than its size needs, is dropped with one log line.
+- While a session runs, the device of the snapshot comes from the session. After the session, it comes from the device list of the SDK again.
 - `attachMotion`, `attachInputs`, and `attachSpeech` add a capability to a started session. `gyro`, `motionRows`, `touches`, and `transcripts` give their data.
 - A capability that stops with no request from the app starts again, at most 3 times in a row. `Revival` in `core` holds this rule.
 - `captureStill` takes a photo while the stream runs.
@@ -103,7 +104,8 @@ Rules of `SessionController`:
 
 - A start with a live server session makes no new one. If its socket is down, the app first asks the server for the snapshot. With no answer, a new server session starts.
 - `session.rest` of the server stops the DAT session. The socket and the server session stay.
-- `session.end` of the server stops the DAT session and marks the server session as not live. The socket closes 5 seconds later, so the last lines still arrive.
+- `session.end` of the server stops the DAT session and marks the server session as not live. The socket closes 5 seconds later, so the last lines still arrive. If the server closes the socket first, the app does not connect again, and it does not say the "Connection lost" line.
+- `profile.set` of the page changes the profile only when the result is inside the limits of `packages/shared`: a speech rate from 0.8 to 2, a head window of 8000, 15000, or null, and a budget above 0 or null. The page gets a `profile` message after each `profile.set`, also when nothing changed.
 - When a DAT session stops with no request from the app, `StopCauses.classify` names the cause, and the page gets its `error` event.
 - After a lost link or a closed hinge, a new DAT session starts by itself when the glasses are connected, open, and not off the face. The app waits 2 seconds first, and it stops after 5 such starts in a row with no stream.
 - A stream that ends by itself after it ran also ends its DAT session.
@@ -112,7 +114,7 @@ Rules of `SessionController`:
 - With the socket down for 3 seconds, the phone voice says "Connection lost. Your cart is safe. Glances are paused."
 - With the media volume at 0, no line plays, and each prompt is reported at once.
 - `FramePipeline` scans each frame for a kiosk code, selects the sharpest frame of each 500 ms, and makes a JPEG of quality 80 with a long side of 768 pixels at most. It writes no frame to storage.
-- `ExoLinePlayer` plays the sound of a line, then its clip. A clip that does not load, or that does not start in 3 seconds, is replaced by the phone voice. The speech rate of the profile changes the clip, not the sound.
+- `ExoLinePlayer` plays the sound of a line, then its clip. A clip that does not load, that does not start in 3 seconds, or whose address is not an address, is replaced by the phone voice. The speech rate of the profile changes the clip, not the sound.
 
 ## The core module
 
@@ -137,7 +139,7 @@ flowchart LR
 
 | Package | Content |
 |---|---|
-| `contract` | The Kotlin mirror of `packages/shared`: one file for each TypeScript file, with the same type names and field names. `GlanceJson` is the one JSON format. `Codec` encodes and decodes the messages, and returns null for a message that it does not know. `Profiles.applyPatch` sets the keys of a profile patch. |
+| `contract` | The Kotlin mirror of `packages/shared`: one file for each TypeScript file, with the same type names and field names. `GlanceJson` is the one JSON format. `Codec` encodes and decodes the messages, and returns null for a message that it does not know. `Profiles.applyPatch` sets the keys of a profile patch, and changes nothing for a patch that does not decode or that leaves the limits of `ProfileSchema`. |
 | `frame` | `FrameCodec` builds and reads the binary frame message: a 4-byte header length, the JSON header, the JPEG. |
 | `kiosk` | `KioskCode` parses the QR text `GL1 <code>`. `KioskDwell` reports a kiosk code after 1500 ms in view, then one time each second. |
 | `image` | `Sharpness` and `SharpestFramePicker` select the sharpest frame of each 500 ms. `UploadGate` gives the reason to skip an upload. `FrameGeometry` and `FramePrep` crop and scale a frame to a long side of 768 pixels at most. `I420.cropScaleToArgb` converts with BT.709 limited range. |
@@ -145,7 +147,7 @@ flowchart LR
 | `audio` | `SpeechQueue` plays one line at a time through a `LinePlayer`, with interrupt and priority. It reports each prompt whose line ended. A line with no clip uses the phone voice. |
 | `input` | `PromptTracker` follows the prompts of the server. `HeadInput` turns a gesture into a yes or a no while the head window of a prompt is open. `MainYesResolver` selects the yes input that works. |
 | `state` | `StateMapper` maps the state of the DAT SDK to `NativeState` and `DeviceState`. `StopCauses` names the cause of a stopped session, and says if a new session starts by itself. `NativeErrors` holds the `error` events of the phone, with codes that start with `native.`. `ConnectionAnnouncer` gives the "Connection lost" line after 3 seconds without the socket. `Revival` limits the restarts of a capability. |
-| `net` | `GlanceApi` makes the REST calls. It puts the socket address and each clip address of the server on the server address of the app. `DeviceSocket` sends messages and frames, and connects again after 500, 1000, 2000, 4000, and 8000 ms. A message never waits for a later connection. |
+| `net` | `GlanceApi` makes the REST calls. It puts the socket address and each clip address of the server on the server address of the app. A server address that is not an HTTP address fails each call with an `IOException`, like a server that does not answer. `DeviceSocket` sends messages and frames, and connects again after 500, 1000, 2000, 4000, and 8000 ms. A message never waits for a later connection. |
 | `bridge` | `Bridge` builds the JavaScript call that gives a message to the page, and knows the MIME types of the page files. |
 
 The detector cuts the angle of each axis into strokes. A nod is a stroke down and a stroke back up to the start, then quiet. A shake is two strokes to opposite sides.
