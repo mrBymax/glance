@@ -1,5 +1,4 @@
 import { GoogleGenAI, MediaResolution } from '@google/genai';
-import { TIMING } from '@glance/shared';
 import type { CatalogIndex } from '../catalog/catalog';
 import { buildSystemInstruction, recognitionResponseSchema, userText } from './prompt';
 import { NO_RESULT, type RecognitionResult, normalizeResult } from './result';
@@ -42,7 +41,9 @@ export function createGeminiRecognizer(deps: {
           responseJsonSchema: responseSchema,
           abortSignal: opts.signal,
           // The SDK default is 5 attempts with a wait between them. One glance has 4 seconds, so one attempt is all it gets.
-          httpOptions: { timeout: TIMING.recognitionTimeoutMs, retryOptions: { attempts: 1 } },
+          // No `timeout` here: the SDK sends it as the header X-Server-Timeout, and the API rejects a deadline
+          // below 10 seconds with status 400. The signal of the caller ends the call after 4 seconds.
+          httpOptions: { retryOptions: { attempts: 1 } },
           ...(low ? { mediaResolution: MediaResolution.MEDIA_RESOLUTION_LOW } : {}),
         },
       });
