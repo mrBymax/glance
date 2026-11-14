@@ -373,6 +373,7 @@ flowchart LR
 | `general.ts` | The device state, the profile patch, and the intents stop, repeat, total, cart, and help |
 | `say.ts` | The priority, the sound, and the interrupt value of each line |
 | `view.ts` | `inView`, `excludeList` for the recognition worker, and `toSnapshot` for a client that connects |
+| `warnings.ts` | `warningsFor`: the allergen and diet warnings of a product for one profile |
 | `turn.ts` | The helpers that the handlers share |
 | `harness.ts` | A test helper that plays inputs with a clock of its own |
 | `runtime.ts` | `SessionRuntime`: one session in the process. It runs `step` and then the effects |
@@ -385,6 +386,7 @@ The rules that exist:
 - Results inside the view time belong to one appearance. A product that comes back after it left the view gets a new prompt.
 - A product prompt ends when its product left the view for 15 seconds (R5).
 - A product in the cart gets the prompt for "add another" (R11).
+- A glance prompt carries the warnings of its product for the profile of the shopper. See "Allergen guard".
 - An unknown product gets one line for each appearance (R13). An aim hint plays at most one time each 5 seconds.
 - A yes or a no counts only with the ID of the current prompt (R3). From the head it also needs a finished prompt, the product in view, and the head window (R4). From voice, touchpad, key, or camera it needs a finished prompt (R5). From the phone or the HUD it needs the ID alone (R6).
 - An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
@@ -399,6 +401,24 @@ The rules that exist:
 - A cart change during a pay prompt gives a new pay prompt with the new total. The old prompt cannot pay.
 - A checkout needs items in the cart. When the cart gets empty, the checkout ends, also while a product suspends it. So an empty cart never gets a pay prompt.
 - While the payment runs, no answer, no undo, and no cart edit has an effect.
+
+### Allergen guard
+
+`warningsFor(product, profile)` in `src/sessions/warnings.ts` compares a product with the allergens and the diets of the profile.
+
+| Profile | Product | Warning |
+|---|---|---|
+| Lists allergens | Holds one or more of them | `allergen`, with those allergens in the order of the profile |
+| Lists allergens | `allergens: null` | `allergenDataMissing` |
+| `vegan` | `vegan: false` | `diet` with `vegan` |
+| `vegetarian`, and no vegan warning | `vegetarian: false` | `diet` with `vegetarian` |
+| `vegan` or `vegetarian` | `null` for that diet | `allergenDataMissing`, because the contract has no warning for missing diet data |
+
+- The order of the list is: the allergen warning, the diet warning, the missing data warning. Each kind is in the list one time at most.
+- An empty list means that the guard found no match. The guard has no value and no line for "safe".
+- The event `glance.pending`, the lines `glance.new` and `glance.inCart`, and the prompt of the snapshot carry the list.
+- A glance line with a warning has the sound `warning`.
+- A profile patch does not change a prompt that is already spoken. The snapshot computes the list with the profile of that moment.
 
 The steps of a checkout:
 
@@ -500,7 +520,10 @@ The rules select a line by its key, and `renderLine(line, profile)` in `src/spee
 - `yesPhrases` in `phrases.ts` names the input of the shopper: "Nod to add.", "Double tap to add.", "Say add.", "Press Add on your phone.", or "Press volume up to add.". A shopper with `headGestures: false` gets the phone phrases.
 - The detail level `brief` shortens the glance line, the added line, and the removed line. The level `detailed` adds the brand, the long pack text, and "Contains gluten." for a product that lists allergens.
 - No level shortens the pay prompt.
-- The voice says nothing about allergens for a product with no allergen data. It never says that a product is safe.
+- A warning follows the price and comes before the yes phrase, at each detail level: "Oat drink, one litre, one eighty-nine. Warning: contains gluten. Nod to add." In the line for a product in the cart it follows the count.
+- The warning texts are "Warning: contains gluten, milk and nuts.", "Warning: not vegan.", "Warning: not vegetarian.", and "Allergen data is missing for this product." They equal the texts of the phone UI.
+- At the level `detailed`, an allergen warning names each allergen of the product, and the "Contains" sentence is left out.
+- With no allergen in the profile, the voice says nothing about allergens for a product with no allergen data. It never says that a product is safe.
 - The profile language `it` gives the English text. The Italian lines do not exist yet.
 
 ## Storage

@@ -1,4 +1,4 @@
-import { type Product, type Profile, localize } from '@glance/shared';
+import { type Product, type Profile, type Warning, localize } from '@glance/shared';
 import type { Line } from '../sessions/types';
 import { numberToWords, spokenPrice } from './numbers';
 import { answersWithNod, yesPhrases } from './phrases';
@@ -47,6 +47,35 @@ function wordList(words: readonly string[]): string {
   return `${words.slice(0, -1).join(', ')}, and ${words.at(-1)}`;
 }
 
+/** The list of a warning has no comma before "and", as the warning on the phone has none. */
+function warningList(words: readonly string[]): string {
+  if (words.length <= 2) return words.join(' and ');
+  return `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
+}
+
+function hasAllergenWarning(warnings: readonly Warning[]): boolean {
+  return warnings.some((warning) => warning.kind === 'allergen');
+}
+
+/**
+ * One sentence for each warning. No sentence says that a product is safe.
+ * At the detailed level an allergen warning names each allergen of the product, not only those of the profile.
+ */
+function warningText(warnings: readonly Warning[], product: Product, profile: Profile): string {
+  return sentences(...warnings.map((warning) => {
+    switch (warning.kind) {
+      case 'allergen': {
+        const own = profile.detail === 'detailed' ? product.allergens ?? [] : [];
+        return `Warning: contains ${warningList(own.length > 0 ? own : warning.allergens)}.`;
+      }
+      case 'diet':
+        return `Warning: not ${warning.diet}.`;
+      case 'allergenDataMissing':
+        return 'Allergen data is missing for this product.';
+    }
+  }));
+}
+
 function total(totalCents: number, profile: Profile): string {
   return `Total ${spokenPrice(totalCents, profile.lang, 'short')}.`;
 }
@@ -56,19 +85,22 @@ function glanceNew(line: Extract<Line, { key: 'glance.new' }>, profile: Profile)
   const { lang } = profile;
   const name = nameAtStart(product, profile);
   const hint = line.hint ? yesPhrases(profile).add : '';
+  const warning = warningText(line.warnings, product, profile);
 
   if (profile.detail === 'brief') {
-    return sentences(`${name}, ${spokenPrice(product.priceCents, lang, 'short')}.`, hint);
+    return sentences(`${name}, ${spokenPrice(product.priceCents, lang, 'short')}.`, warning, hint);
   }
   if (profile.detail === 'detailed') {
     const fullName = startsWithBrand(name, product) ? name : `${product.brand} ${nameInside(product, profile)}`;
     const pack = localize(product.spokenPackDetailed, lang);
     // A product with no allergen data gets no sentence. The voice never says that a product is safe.
-    const contains = product.allergens && product.allergens.length > 0 ? `Contains ${wordList(product.allergens)}.` : '';
-    return sentences(`${fullName}, ${pack}, ${spokenPrice(product.priceCents, lang, 'full')}.`, contains, hint);
+    // An allergen warning names each allergen of the product, so the Contains sentence would say it two times.
+    const own = hasAllergenWarning(line.warnings) ? [] : product.allergens ?? [];
+    const contains = own.length > 0 ? `Contains ${wordList(own)}.` : '';
+    return sentences(`${fullName}, ${pack}, ${spokenPrice(product.priceCents, lang, 'full')}.`, contains, warning, hint);
   }
   const pack = localize(product.spokenPack, lang);
-  return sentences(`${name}, ${pack}, ${spokenPrice(product.priceCents, lang, 'short')}.`, hint);
+  return sentences(`${name}, ${pack}, ${spokenPrice(product.priceCents, lang, 'short')}.`, warning, hint);
 }
 
 /** The table "Spoken lines" of Plan 1, with its text rules. */
@@ -79,7 +111,8 @@ export const LINES_EN: LineTemplates = {
   'glance.inCart': (line, profile) => {
     const phrases = yesPhrases(profile);
     const count = `${capitalize(numberToWords(line.qty, profile.lang))} ${line.qty === 1 ? 'is' : 'are'} in your cart.`;
-    return sentences(`${nameAtStart(line.product, profile)}.`, count, phrases.addAnother, phrases.remove);
+    const warning = warningText(line.warnings, line.product, profile);
+    return sentences(`${nameAtStart(line.product, profile)}.`, count, warning, phrases.addAnother, phrases.remove);
   },
   'glance.unknown': () => 'I do not know this product.',
   'glance.partial': (line) => `I can see part of it. ${AIM[line.aimHint]}`,

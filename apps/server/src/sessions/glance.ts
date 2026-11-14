@@ -4,6 +4,7 @@ import { say } from './say';
 import { type Turn, emit, nextPromptId, promptProductInView, qtyInCart, speak } from './turn';
 import type { RuleInput } from './types';
 import { inView } from './view';
+import { warningsFor } from './warnings';
 
 /** Spec section 6.1: the first three glance prompts of a session name the yes input. */
 const YES_HINT_GLANCES = 3;
@@ -57,18 +58,21 @@ function openProductPrompt(turn: Turn, product: Product): void {
   const id = nextPromptId(s);
   const qty = qtyInCart(s, product.id);
   const mode = qty > 0 ? 'inCart' : 'new';
+  const warnings = warningsFor(product, s.profile);
+  // A sound never carries information alone: the line names each warning.
+  const over = { promptId: id, ...(warnings.length > 0 ? { sound: 'warning' as const } : {}) };
   s.prompt = { id, kind: 'product', mode, productId: product.id, doneAt: null };
   emit(turn, {
-    type: 'glance.pending', promptId: id, kind: mode, product: toProductRef(product, s.profile.lang), warnings: [], qtyInCart: qty,
+    type: 'glance.pending', promptId: id, kind: mode, product: toProductRef(product, s.profile.lang), warnings, qtyInCart: qty,
   });
 
   if (mode === 'inCart') {
-    speak(turn, say({ key: 'glance.inCart', product, qty, warnings: [] }, { promptId: id }));
+    speak(turn, say({ key: 'glance.inCart', product, qty, warnings }, over));
     return;
   }
   const hint = s.glanceCount < YES_HINT_GLANCES;
   s.glanceCount += 1;
-  speak(turn, say({ key: 'glance.new', product, hint, warnings: [] }, { promptId: id }));
+  speak(turn, say({ key: 'glance.new', product, hint, warnings }, over));
 }
 
 // R13. The time moves with each unknown result, so one appearance gives one line.

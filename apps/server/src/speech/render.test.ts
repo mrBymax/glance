@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
-import { DEFAULT_PROFILE, type ProfilePatch } from '@glance/shared';
+import { DEFAULT_PROFILE, type ProfilePatch, type Warning } from '@glance/shared';
 import { indexCatalog, readCatalogFile } from '../catalog/catalog';
 import { LINE_DEFAULTS } from '../sessions/say';
 import type { Line } from '../sessions/types';
@@ -119,4 +119,36 @@ it('reads the cart and the total', () => {
 });
 it('gives the English text for Italian until the Italian lines exist', () => {
   expect(text({ key: 'glance.unknown' }, { lang: 'it' })).toBe('I do not know this product.');
+});
+
+const warned = (warnings: Warning[], hint = false): Line => ({ key: 'glance.new', product: oat, hint, warnings });
+const gluten: Warning = { kind: 'allergen', allergens: ['gluten'] };
+
+it('speaks the warnings', () => {
+  expect(text(warned([gluten]))).toBe('Oat drink, one litre, one eighty-nine. Warning: contains gluten.');
+  expect(text(warned([gluten], true))).toBe('Oat drink, one litre, one eighty-nine. Warning: contains gluten. Nod to add.');
+  expect(text(warned([gluten]), { detail: 'brief' })).toBe('Oat drink, one eighty-nine. Warning: contains gluten.');
+  expect(text(warned([{ kind: 'allergen', allergens: ['gluten', 'milk'] }])))
+    .toBe('Oat drink, one litre, one eighty-nine. Warning: contains gluten and milk.');
+  expect(text(warned([{ kind: 'allergen', allergens: ['gluten', 'milk', 'nuts'] }])))
+    .toBe('Oat drink, one litre, one eighty-nine. Warning: contains gluten, milk and nuts.');
+  expect(text(warned([{ kind: 'diet', diet: 'vegan' }]))).toBe('Oat drink, one litre, one eighty-nine. Warning: not vegan.');
+  expect(text(warned([{ kind: 'diet', diet: 'vegetarian' }]))).toBe('Oat drink, one litre, one eighty-nine. Warning: not vegetarian.');
+  expect(text({ key: 'glance.new', product: crisps, hint: false, warnings: [{ kind: 'allergenDataMissing' }] }))
+    .toBe('Potato crisps, one hundred fifty grams, one ninety. Allergen data is missing for this product.');
+});
+it('speaks each warning of a line, in the order of the list', () => {
+  expect(text(warned([gluten, { kind: 'diet', diet: 'vegan' }], true)))
+    .toBe('Oat drink, one litre, one eighty-nine. Warning: contains gluten. Warning: not vegan. Nod to add.');
+});
+it('lists each allergen of the product in a warning at the detailed level, in place of the Contains sentence', () => {
+  const mix = { ...oat, allergens: ['gluten' as const, 'soy' as const] };
+  expect(text({ key: 'glance.new', product: mix, hint: true, warnings: [gluten] }, { detail: 'detailed' }))
+    .toBe('Oatly oat drink, one litre carton, one euro eighty-nine. Warning: contains gluten and soy. Nod to add.');
+  expect(text({ key: 'glance.new', product: mix, hint: false, warnings: [{ kind: 'diet', diet: 'vegan' }] }, { detail: 'detailed' }))
+    .toBe('Oatly oat drink, one litre carton, one euro eighty-nine. Contains gluten and soy. Warning: not vegan.');
+});
+it('speaks the warning of a product in the cart before the yes phrase', () => {
+  expect(text({ key: 'glance.inCart', product: oat, qty: 1, warnings: [gluten] }))
+    .toBe('Oat drink. One is in your cart. Warning: contains gluten. Nod to add another. Shake to remove.');
 });
