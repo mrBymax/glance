@@ -27,7 +27,7 @@ The same protocol powers glance-to-pay at transit turnstiles and coffee shops: g
 - **Slide Title:** The Future Horizon: Social Hands-Free Commerce
 - **Visual Composition:** Three-Tier Multi-Device Diagram:
   - *Tier 1 (Proximity Layer):* BLE beacon field intersecting between two individuals at less than 1 meter distance.
-  - *Tier 2 (Intent & Display Layer):* In-lens optical HUD view on Meta Ray-Ban Display (`apps/display-pow`), rendering a clean contact badge: `Alex Rivera • 20.00 EUR`.
+  - *Tier 2 (Intent & Display Layer):* In-lens optical HUD view on Meta Ray-Ban Display (`apps/display-pow`), rendering a clean contact badge: `Alex Rivera - 20.00 EUR`.
   - *Tier 3 (Verification Layer):* Close-up technical visualization of the Meta Display neural wristband mapping forearm sEMG muscle activation signals during a physical handshake clasp.
 - **Caption:** Seamless convergence: spatial vision, BLE proximity, and neural interface gesture confirmation.
 
@@ -39,7 +39,7 @@ The same protocol powers glance-to-pay at transit turnstiles and coffee shops: g
 - **Time Window:** `01:55 - 02:35`
 - **Camera Style:** First-person POV shifting smoothly between optical in-lens perspective and close-up third-person gesture framing.
 - **Visual Description:**
-  First-person POV walking up to a friend in an outdoor cafe plaza. A subtle, elegant contact pill smoothly anchors above the friend's shoulder in the optical in-lens display: "Alex • Split Bill 20 EUR". The user reaches out their right hand wearing the sleek Meta Display neural wristband. Cut to a sharp medium close-up of the two hands clasping in a natural, warm handshake. The neural band pulses with a subtle soft blue LED glow. Both friends smile as a gentle spatial chime plays. The in-lens HUD displays "Sent 20.00 EUR".
+  First-person POV walking up to a friend in an outdoor cafe plaza. A subtle, elegant contact pill smoothly anchors above the friend's shoulder in the optical in-lens display: "Alex - Split Bill 20 EUR". The user reaches out their right hand wearing the sleek Meta Display neural wristband. Cut to a sharp medium close-up of the two hands clasping in a natural, warm handshake. The neural band pulses with a subtle soft blue LED glow. Both friends smile as a gentle spatial chime plays. The in-lens HUD displays "Sent 20.00 EUR".
 - **Raylight Prompt:**
   `Cinematic modern scene of two friends meeting outdoors in sunlight, smart glasses in-lens HUD overlay showing clean minimalist payment pill saying Alex Rivera 20 EUR, wearer reaches out wearing Meta neural wristband on wrist, smooth handshake clasp gesture between friends, glowing subtle blue ring on wristband confirming transfer, warm spatial tech aesthetic, 4k 60fps, photorealistic.`
 

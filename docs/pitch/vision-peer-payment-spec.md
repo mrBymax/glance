@@ -24,7 +24,7 @@ This document defines the technical architecture for hands-free peer-to-peer mon
                |<-- 2. BLE Proximity Handshake (RSSI > -65dBm)-|
                |                                               |
    [ Gaze Vector Locks on Peer ]                               |
-   [ In-Lens HUD: "Alex • 20 EUR" ]                            |
+   [ In-Lens HUD: "Alex - 20 EUR" ]                            |
                |                                               |
    [ Physical Handshake Clasp Occurs between Sender & Recipient ]
                |                                               |

@@ -35,7 +35,7 @@
 
 ### Scene Direction (`scene_02_grocery_poc`)
 - **Camera:** Smooth first-person POV wearing Ray-Ban Meta glasses.
-- **Visual:** The user reaches out and picks up an oat milk carton. The camera locks on the packaging. A discreet visual pill in the bottom corner shows: "Audience Visualization: Oatly Oat Milk • 2.45 EUR". The camera dips slightly in a natural, positive head nod. A soft earcon chime plays. A digital cart badge rolls from 0 to 1 item. The user walks up to a self-checkout monitor displaying a crisp dynamic QR code. The user looks at the QR code and executes a crisp nod. The screen flashes soft green with "Payment Approved".
+- **Visual:** The user reaches out and picks up an oat milk carton. The camera locks on the packaging. A discreet visual pill in the bottom corner shows: "Audience Visualization: Oatly Oat Milk - 2.45 EUR". The camera dips slightly in a natural, positive head nod. A soft earcon chime plays. A digital cart badge rolls from 0 to 1 item. The user walks up to a self-checkout monitor displaying a crisp dynamic QR code. The user looks at the QR code and executes a crisp nod. The screen flashes soft green with "Payment Approved".
 - **Audio Cues:** Clear, low-latency synthetic whisper in open-ear audio: *"Oatly Oat Milk, 2.45 EUR"*. Crisp confirmation earcon on head nod. Terminal chime on kiosk payment.
 
 ### Spoken Voiceover (00:30 - 01:15 | 99 words)
@@ -47,7 +47,7 @@
 
 ### Scene Direction (`scene_03_speed_advantage`)
 - **Camera:** Dynamic 3D motion graphic visualization.
-- **Visual:** Left frame displays a realistic cutaway of an Amazon Fresh store ceiling covered in hundreds of expensive, wired cameras with red maintenance indicators. Right frame dissolves into a bright, clean supermarket where a 3D model of Ray-Ban Meta glasses links via a golden software beam directly to a standard NCR self-checkout monitor. A badge illuminates: "Zero Hardware Retrofit • Live in Days".
+- **Visual:** Left frame displays a realistic cutaway of an Amazon Fresh store ceiling covered in hundreds of expensive, wired cameras with red maintenance indicators. Right frame dissolves into a bright, clean supermarket where a 3D model of Ray-Ban Meta glasses links via a golden software beam directly to a standard NCR self-checkout monitor. A badge illuminates: "Zero Hardware Retrofit - Live in Days".
 - **Audio Cues:** Modern tech riser, low bass impact when the deployment badge locks in.
 
 ### Spoken Voiceover (01:15 - 01:55 | 90 words)
@@ -59,7 +59,7 @@
 
 ### Scene Direction (`scene_04_future_vision`)
 - **Camera:** First-person optical in-lens perspective (Meta Ray-Ban Display), transitioning to a third-person medium close-up of a handshake gesture.
-- **Visual:** User walks toward a friend on a sunlit terrace. An encrypted BLE beacon rings outward. A minimalist contact badge anchors in the optical in-lens HUD above the friend: "Alex Rivera • 20.00 EUR". The user reaches out their right wrist, which wears the sleek Meta Display neural wristband. As their hands clasp in a warm physical handshake, the wristband pulses with a soft blue confirmation ring. A haptic chime sounds, and the in-lens display updates to "Sent 20.00 EUR".
+- **Visual:** User walks toward a friend on a sunlit terrace. An encrypted BLE beacon rings outward. A minimalist contact badge anchors in the optical in-lens HUD above the friend: "Alex Rivera - 20.00 EUR". The user reaches out their right wrist, which wears the sleek Meta Display neural wristband. As their hands clasp in a warm physical handshake, the wristband pulses with a soft blue confirmation ring. A haptic chime sounds, and the in-lens display updates to "Sent 20.00 EUR".
 - **Audio Cues:** Subtle proximity tone, gentle handshake confirmation earcon.
 
 ### Spoken Voiceover (01:55 - 02:35 | 90 words)

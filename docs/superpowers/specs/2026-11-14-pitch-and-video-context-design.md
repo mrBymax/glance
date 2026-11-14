@@ -113,7 +113,7 @@ docs/
 
 ### Beat 2: Meta Glance PoC - Grocery Shopping (0:30 - 1:15 | 45s | ~105 words)
 - **Core Mechanism:** "Glance tells, nod buys." The shopper holds an item and looks at it. Spatial audio announces the item name and price privately. A natural nod adds it to the digital cart. At checkout, the shopper glances at the kiosk QR code and nods to finalize payment.
-- **Technical Architecture:** Thin Android client connecting via Meta DAT SDK, streaming frames to FastAPI/Gemini vision service, with instant audio synthesized via ElevenLabs and cart synchronization on MongoDB Atlas.
+- **Technical Architecture:** Thin Android client connecting via Meta DAT SDK, streaming frames to Fastify/Gemini vision service, with instant audio synthesized via ElevenLabs and cart synchronization on MongoDB Atlas.
 - **Slide 2 Layout:** Product loop diagram showing the 3-step interaction cycle (Glance -> Hear -> Nod) alongside phone mirror and kiosk screens.
 - **Visual Sourcing:** Dual guidance:
   - Raylight generative prompt: First-person POV looking at an apple, hearing clean audio cue "Honeycrisp Apple, 1.20 EUR", camera dips slightly in a natural nod, "+1 Added to Cart" indicator, walking to kiosk screen, glancing at QR, nodding to complete.

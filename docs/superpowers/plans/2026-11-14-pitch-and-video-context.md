@@ -285,8 +285,8 @@
 - Verify all created files under `docs/pitch/` and updated `docs/README.md`.
 
 - [ ] **Step 1: Anti-slop and style check**
-  Run grep checks across `docs/pitch/` for forbidden unicode, em dashes, and emojis:
-  `grep -rnE "—|–|[^\x00-\x7F]" docs/pitch/ || echo "Clean"`
+  Run non-ASCII and style check across `docs/pitch/`:
+  `python3 -c "import glob; [print(f, l.strip()) for f in glob.glob('docs/pitch/*.md') for l in open(f) if any(ord(c)>127 and c not in 'äöüéè' for c in l)]" || echo "Clean"`
 
 - [ ] **Step 2: Link and path integrity check**
   Verify that all internal cross-links between `docs/pitch/` files and repository resources are valid relative paths.

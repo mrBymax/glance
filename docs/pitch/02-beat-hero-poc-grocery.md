@@ -75,4 +75,4 @@ If splicing real footage from the hackathon testbed (`apps/server`, `apps/mobile
 - **PoC target:** Grocery retail checkout.
 - **Hardware:** Ray-Ban Meta Gen 2 (audio-first) with Android DAT SDK.
 - **Display disclaimer:** Any visual graphic is an audience visualization or phone companion mirror.
-- **Backend services:** FastAPI vision pipeline, Gemini recognition, ElevenLabs low-latency voice, MongoDB Atlas live cart sync.
+- **Backend services:** Fastify vision pipeline, Gemini recognition, ElevenLabs low-latency voice, MongoDB Atlas live cart sync.
