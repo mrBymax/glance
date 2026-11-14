@@ -1,6 +1,7 @@
 import { EMPTY_CART, type Profile, TIMING } from '@glance/shared';
 import { onAnswer, onCartEdit, onPromptDone, onUndo } from './answers';
 import { expireCheckout, onKioskSeen, onPaymentResult } from './checkout';
+import { onDeviceState, onGeneralIntent, onProfileSet, restWhenIdle } from './general';
 import { onRecognition } from './glance';
 import { type Turn, emit } from './turn';
 import type { Effect, RuleContext, RuleInput, SessionState, SpeakEffect } from './types';
@@ -42,6 +43,12 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
   const turn: Turn = { s: structuredClone(state), now: input.now, ctx, out: [] };
   expire(turn);
 
+  // A session that is paid or ended takes no input that can change its cart or start a prompt.
+  const closed = turn.s.phase === 'paid' || turn.s.phase === 'ended';
+  if (closed && input.type !== 'device.state' && input.type !== 'profile.set') {
+    return { state: turn.s, effects: turn.out };
+  }
+
   switch (input.type) {
     case 'recognition':
       onRecognition(turn, input);
@@ -61,7 +68,13 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
     case 'payment.result':
       onPaymentResult(turn, input);
       break;
-    default:
+    case 'device.state':
+      onDeviceState(turn, input);
+      break;
+    case 'profile.set':
+      onProfileSet(turn, input);
+      break;
+    case 'tick':
       break;
   }
 
@@ -80,6 +93,7 @@ function onIntent(turn: Turn, input: Extract<RuleInput, { type: 'intent' }>): vo
       onUndo(turn);
       break;
     default:
+      onGeneralIntent(turn, input.kind);
       break;
   }
 }
@@ -108,4 +122,5 @@ function expire(turn: Turn): void {
   }
 
   expireCheckout(turn);
+  restWhenIdle(turn);
 }

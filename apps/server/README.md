@@ -93,8 +93,9 @@ flowchart LR
 | `glance.ts` | Recognition results: the glance prompt, the unknown line, and the aim hint |
 | `answers.ts` | The answers: yes, no, undo, the cart edit, and `accepts`, which tells if an answer counts |
 | `checkout.ts` | The kiosk code, the pay prompt, and the result of the payment |
+| `general.ts` | The device state, the profile patch, and the intents stop, repeat, total, cart, and help |
 | `say.ts` | The priority, the sound, and the interrupt value of each line |
-| `view.ts` | `inView`, and `excludeList` for the recognition worker |
+| `view.ts` | `inView`, `excludeList` for the recognition worker, and `toSnapshot` for a client that connects |
 | `turn.ts` | The helpers that the handlers share |
 | `harness.ts` | A test helper that plays inputs with a clock of its own |
 
@@ -105,7 +106,6 @@ The rules that exist:
 - A product prompt ends when its product left the view for 15 seconds (R5).
 - A product in the cart gets the prompt for "add another" (R11).
 - An unknown product gets one line for each appearance (R13). An aim hint plays at most one time each 5 seconds.
-
 - A yes or a no counts only with the ID of the current prompt (R3). From the head it also needs a finished prompt, the product in view, and the head window (R4). From voice, touchpad, key, or camera it needs a finished prompt (R5). From the phone or the HUD it needs the ID alone (R6).
 - An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
 - After an add, a no removes that unit for 8 seconds, and a second yes gets one hint (R10). On the prompt for "add another", a no removes one unit (R11).
@@ -135,6 +135,32 @@ stateDiagram-v2
 
 A paid checkout sets the phase `paid`, empties the cart, and ends the session. A failed payment keeps the cart, and the shopper looks at the code again.
 
+The session rules:
+
+- The camera counts as on when the phone reports the stream state `streaming`. The voice then says the start line.
+- When the phone reports `stopped`, an open checkout ends and the cart stays (R24). The line is "Camera off. Please use a regular checkout." when the battery is at 5 percent or less, or the thermal level is 6 or more. `DeviceState` has no stream error, so `general.ts` holds these two limits. In each other case the line is "Camera off."
+- After 3 minutes with no product and no kiosk in view, the camera rests and the cart stays (R22). The effect `session.rest` tells the phone.
+- The intent `stop` ends the session. The intent `repeat` speaks the last line again.
+- The intents `total` and `cart` speak the cart. The cart by voice has at most five lines (R23).
+- In the phase `paid` or `ended`, the session takes only the device state and a profile patch.
+
+The phases of a session:
+
+```mermaid
+stateDiagram-v2
+  [*] --> shopping
+  shopping --> checkout: kiosk code in view, cart has items
+  checkout --> shopping: checkout ends with no payment
+  checkout --> paid: payment succeeds
+  shopping --> resting: 3 minutes with no target in view
+  resting --> shopping: the phone restarts the camera
+  shopping --> ended: stop intent
+  checkout --> ended: stop intent
+  resting --> ended: stop intent
+  paid --> [*]
+  ended --> [*]
+```
+
 Only the server computes a total, and each price comes from the catalog. Each timing number comes from `TIMING` of `@glance/shared`.
 
 ## Checks
@@ -147,3 +173,5 @@ npm run lint                                         # at the repository root, f
 ```
 
 No test calls a vendor, and no test needs a key.
+
+Each rule R1 to R24 has a test with its number in the name, in `src/sessions/*.test.ts`. `replays.test.ts` replays result sequences with gaps and changes, because live results flicker.
