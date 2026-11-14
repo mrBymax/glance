@@ -15,6 +15,8 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/main.ts` | Starts the server and closes it on `SIGTERM` and `SIGINT`. |
 | `src/catalog/catalog.ts` | `readCatalogFile` reads a catalog file, and `indexCatalog` finds a product by its ID. |
 | `catalog/catalog.dev.json` | The dev catalog with four products. The tests use its IDs and prices. |
+| `src/recognition/result.ts` | `RecognitionResult`: what one frame shows. |
+| `src/sessions/` | The cart rules as the pure function `step`. See "Rules". |
 
 The server has no session path and no device socket yet.
 
@@ -71,6 +73,38 @@ A catalog file is a JSON array. Each entry is a `Product` of `@glance/shared`. P
 - `readCatalogFile` stops at the first entry that fails the schema. Its message names the file, the index of the entry, and the ID.
 - `indexCatalog` rejects a catalog that holds one ID two times.
 - In `allergens`, `null` means "no data", and an empty list means "no allergen". The potato crisps of the dev catalog have no data.
+
+## Rules
+
+`step(state, input, ctx)` in `src/sessions/step.ts` holds the interaction rules of spec section 6.2. It returns the new state and a list of effects. It reads no clock and does no I/O: each input carries its time as `now`. No runtime calls it yet.
+
+```mermaid
+flowchart LR
+  input["RuleInput with now"] --> step
+  state["SessionState"] --> step
+  step --> next["new SessionState"]
+  step --> effects["Effect list: event, speak, session.rest, session.end, payment.start"]
+```
+
+| File in `src/sessions` | Content |
+|---|---|
+| `types.ts` | `SessionState`, `RuleInput`, `Effect`, and `Line`, a spoken line before it has a text |
+| `step.ts` | `createSessionState`, `step`, and the rules that depend on time alone |
+| `glance.ts` | Recognition results: the glance prompt, the unknown line, and the aim hint |
+| `say.ts` | The priority, the sound, and the interrupt value of each line |
+| `view.ts` | `inView`, and `excludeList` for the recognition worker |
+| `turn.ts` | The helpers that the handlers share |
+| `harness.ts` | A test helper that plays inputs with a clock of its own |
+
+The rules that exist:
+
+- A recognized product gets a glance prompt with a new ID (R1). A new product replaces the pending product (R2).
+- Results inside the view time belong to one appearance. A product that comes back after it left the view gets a new prompt.
+- A product prompt ends when its product left the view for 15 seconds (R5).
+- A product in the cart gets the prompt for "add another" (R11).
+- An unknown product gets one line for each appearance (R13). An aim hint plays at most one time each 5 seconds.
+
+No input adds a product to the cart yet. Each timing number comes from `TIMING` of `@glance/shared`.
 
 ## Checks
 
