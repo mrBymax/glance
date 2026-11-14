@@ -61,6 +61,8 @@ export function createLabelHandler(deps: {
     let gtin: string | null = null;
     try {
       const answer: LabelAnswer = await Promise.race([reader.read(jpeg, { signal: abort.signal }), late]);
+      // What the model read, so that a person can see why a still gave no product.
+      deps.log.info(`label answer seq=${seq} digits=${JSON.stringify(answer.digits)} brand=${JSON.stringify(answer.brand)} name=${JSON.stringify(answer.name)} confidence=${answer.confidence} session=${session.id}`);
       gtin = matchLabel(answer, await deps.storeList.all(), deps.minConfidence);
     } catch (error) {
       const { name, message } = error instanceof Error ? error : { name: 'Error', message: String(error) };
