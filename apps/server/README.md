@@ -9,25 +9,29 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | Path | Content |
 |---|---|
 | `src/config.ts` | `loadConfig` reads the settings from the environment and the command line. |
-| `src/app.ts` | `buildApp` makes the Fastify app: the CORS headers, the JSON error bodies, `GET /healthz`, the paths, and the device socket. |
+| `src/app.ts` | `buildApp` makes the Fastify app: the CORS headers, the JSON error bodies, the request log with no query string, `GET /healthz`, the paths, and the device socket. |
 | `src/bus.ts` | `EventBus` delivers messages inside the process, by topic. |
 | `src/clock.ts` | The time source of the runtime. |
 | `src/main.ts` | Opens the store, starts the server, and closes it on `SIGTERM` and `SIGINT`. |
 | `src/catalog/catalog.ts` | `readCatalogFile` reads a catalog file, and `indexCatalog` finds a product by its ID. |
+| `src/catalog/check.ts` | `checkCatalog` finds the errors of a catalog file. See "Catalog". |
+| `scripts/catalog-check.ts`, `scripts/catalog-seed.ts` | `npm run catalog:check` and `npm run catalog:seed`. See "Catalog". |
 | `catalog/catalog.dev.json` | The dev catalog with four products. The tests use its IDs and prices. |
 | `src/recognition/` | The recognition of a frame, and the script player that stands in for it. See "Recognition" and "Fake mode". |
 | `agents/recognition.md` (repository root) | The instruction for the recognition model, with the placeholder `{{catalog}}`. |
 | `fixtures/fake-script.json` | The default script of fake recognition. |
 | `scripts/check-model.ts` | `npm run model:check`: a check of the model ID with the real service. |
+| `scripts/replay.ts` | `npm run replay`: the accuracy of the real service on a folder of frames. See "Replay a test set". |
+| `scripts/smoke.ts` | `npm run smoke`: a check of a running server through its REST paths, its device socket, and its events stream. See "Checks". |
 | `src/sessions/` | The cart rules as the pure function `step`, the session runtime, and the registry. See "Rules" and "Session runtime". |
 | `src/speech/` | The text of each spoken line, and the speech clips. See "Spoken text" and "Speech clips". |
 | `src/kiosk/` | The kiosks and the mock payment. See "Kiosk and payment". |
 | `src/db/` | The `Store` interface with a memory store and a MongoDB store. See "Storage". |
-| `src/http/` | The session paths, the kiosk paths, the speech path, and the events streams. See "REST paths". |
+| `src/http/` | The session paths, the kiosk paths, the speech path, the demo path, the events streams, and the token check. See "REST paths". |
 | `src/ws/device.ts` | The socket of the phone. See "Device socket". |
 | `src/testing.ts` | Test helpers: an app on a free port, a reader for an events stream, and a phone on the device socket. |
 
-Parts that do not exist yet: the token check, the catalog seed, the `SAVE_FRAMES` switch, the spot check, and the fingerprint check. The lines for a paused stream, the battery, and slow recognition have a text, and no rule speaks them yet.
+Parts that do not exist yet: the spot check and the fingerprint check.
 
 ## Run it
 
@@ -44,7 +48,7 @@ Check it:
 
 ```bash
 curl http://localhost:8080/healthz
-# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"store":"memory"}
+# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"store":"memory","saveFrames":false}
 curl -X POST http://localhost:8080/api/sessions
 # {"sessionId":"...","token":"...","wsUrl":"ws://localhost:8080/ws/device?session=...&token=..."}
 ```
@@ -75,14 +79,15 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `ELEVENLABS_VOICE_EN` | not set | Needed when `FAKE_SPEECH` is off. |
 | `ELEVENLABS_VOICE_IT` | not set | The voice for Italian. |
 | `SPEECH_CACHE_DIR` | `.cache/speech` | The folder for speech clips. |
-| `SAVE_FRAMES` | not set | A directory for frames. The config reads it, and no code uses it yet: the server stores no frame. |
+| `SAVE_FRAMES` | not set | A directory for frames. When it is set, the server writes each frame there. See "Stored frames". Keep it not set for the demo and on the deployed server. |
 | `PAYMENT_DELAY_MS` | `1500` | The length of the mock payment. |
+| `DEMO_KEY` | not set | The key of `GET /api/demo/latest`. With no key, that path answers 404. |
 
 - An empty value counts as not set.
 - The flag `--fake` turns both fake switches on. A variable that is set wins over the flag.
 - Each path is relative to the working directory, which is `apps/server`. The server also reads `../../agents/recognition.md` from there when recognition is real.
 - With a missing key the server prints `config: <message>` and exits with code 1. The message names the variable and the switch that removes the need.
-- With `MONGODB_URI` the products come from the database, and `CATALOG_PATH` has no effect. If the database holds no product, the server prints `products is empty. Run npm run catalog:seed.` and exits with code 1. The seed command does not exist yet.
+- With `MONGODB_URI` the products come from the database, and `CATALOG_PATH` has no effect. If the database holds no product, the server prints `products is empty. Run npm run catalog:seed.` and exits with code 1. See "Catalog" for the seed.
 
 ## Fake mode
 
@@ -93,9 +98,9 @@ Two switches let the other apps work with no key. `npm run dev:fake` turns both 
 - The server makes no Gemini call and does not read `GEMINI_API_KEY`.
 - One script player runs for each session. It starts when the phone opens the device socket, or when the first client opens the events stream of the session, whichever comes first.
 - Each 500 ms the player gives the rules the result that the script holds for the time since its start. Outside each step the result is `none`.
-- A session that starts from the events stream, with no phone, first gets the state of glasses that stream. A browser client then gets the "Camera on" caption.
+- A session that starts from the events stream, with no phone, first gets the state of glasses that stream. A browser client then gets the "Camera on" caption. A phone that opens its socket to this session later hears "Back online.", because the session already has a device state.
 - In a `kiosk` step the session sees the kiosk one time each second. `"newest"` names the kiosk that registered last. Each other value is a kiosk code.
-- The device socket still decodes each frame. It logs `frame seq=<n> w=<w> h=<h> blurred=<b> kind=<k> bytes=<n>` at `info` level and drops the frame.
+- The device socket still decodes each frame. It logs `frame seq=<n> w=<w> h=<h> blurred=<b> kind=<k> bytes=<n>` at `info` level and drops the frame. With `SAVE_FRAMES` it saves the frame first.
 - The server has one kiosk from the start: `Checkout 3` at `Demo Market` with the code `K3X7`. A printed `GL1 K3X7` code starts a checkout.
 
 A script file, as `fixtures/fake-script.json`:
@@ -163,7 +168,9 @@ sequenceDiagram
 | `gemini.ts` | `createGeminiRecognizer`: one `generateContent` call of `@google/genai` for each frame |
 | `worker.ts` | `RecognitionWorker`: the calls of one session |
 | `intake.ts` | `createFrameHandler`: one worker for each session, between the device socket and the rules |
+| `save.ts` | `createFrameSaver`: the writer of the `SAVE_FRAMES` switch |
 | `fake.ts` | The script file and `ScriptPlayer` of fake recognition |
+| `replay.ts` | `listFrames`, `replayFrames`, `summarize`, and `formatTable` of the replay tool |
 
 The request:
 
@@ -184,10 +191,54 @@ The worker:
 - One call runs at a time for each session. While it runs, one frame waits, and a newer frame takes its place. A stream frame does not replace a waiting still.
 - A call that takes 4 seconds is dropped: the worker aborts it and ignores a late answer.
 - A call that fails gets one log line with the name of the error and at most 200 characters of its message.
-- After 3 failed calls in a row the server logs `recognition is slow for the session <id>`. No spoken line follows yet.
-- The worker holds a frame only for the time of its call. The server writes no frame to disk, to the store, or to a log.
+- After 3 failed calls in a row the server logs `recognition is slow for the session <id>` and gives the rules the input `recognition.slow`. The voice says "Recognition is slow right now.", and the clients get the event `error` with the code `recognition.slow`. A good call starts the count again.
+- The worker holds a frame only for the time of its call.
 - The worker stops when its session stops and when the app closes.
 - Each result gets the log line `recognition session=<id> seq=<n> status=<status> ms=<n>`. It gives the server share of the time from glance to voice.
+
+### Stored frames
+
+Without `SAVE_FRAMES` the server stores no frame. A frame lives in memory from its socket message to the end of its recognition call. The server writes no frame to disk, to the store, or to a log.
+
+- A log line about a frame holds its sequence number, its width and height, the `blurred` value, its kind, and its byte count. It holds no bytes of the image. With real recognition this line has the `debug` level.
+- `SAVE_FRAMES=<directory>` is for the test set of the recognition model. The server then writes each frame that it accepts to `<directory>/<sessionId>/<seq>.jpg`. A frame with a sequence number that the folder already holds replaces the older file.
+- With `REQUIRE_BLUR=1`, the server writes no frame with `blurred: false`, with real and with fake recognition.
+- The switch also works with fake recognition, which makes no recognition call. So the team can collect frames with no cost.
+- A write that fails gets the log line `frame not saved. seq=<n> <message> session=<id>`, and the recognition call goes on.
+- At its start the server logs `SAVE_FRAMES is on. The server writes each frame to <directory>.` at `warn` level.
+- `GET /healthz` answers `"saveFrames": true` while the switch is on. Check for `false` before the demo (spec section 11.1).
+- `src/recognition/save.ts` is the only file on the frame path that imports the file system. A test checks this.
+
+### Replay a test set
+
+`npm run replay` sends a folder of frames to the real recognition service and prints how many answers are correct. Each frame is one paid Gemini call, so set `--limit` for a first run.
+
+```bash
+npm run replay --workspace @glance/server -- --frames testdata/frames
+npm run replay --workspace @glance/server -- --frames testdata/frames --media-resolution low --limit 20
+```
+
+- The frames lie in `<dir>/<label>/<name>.jpg`. A label is a product ID of the catalog, `unknown` for a product outside the catalog, or `none` for a frame with no product. Each other folder name stops the command. Git ignores `testdata/`.
+- `SAVE_FRAMES` collects frames as `<dir>/<sessionId>/<seq>.jpg`. A person moves each one to the folder of its label.
+- `--media-resolution default|low` and `--min-confidence <n>` take the place of `GEMINI_MEDIA_RESOLUTION` and `RECOGNITION_MIN_CONFIDENCE`. `--limit <n>` sends at most n frames, taken from each label in turn.
+- The command reads `apps/server/.env` for the key, the model, and `CATALOG_PATH`. The fake switches have no effect on it.
+- It sends one frame at a time, with the time limit of 4 seconds and the request of the live path. So the times match those of a shop.
+
+The output is one line for each frame, then a table with one row for each label, then three lines:
+
+```text
+label         frames  correct  wrong  ambiguous  unsure  unknown  none  failed
+oat-drink-1l      10        9      0          0       1        0     0       0
+none               5        5      0          0       0        0     0       0
+accuracy: 93.3% (14 of 15)
+wrong identified: 0
+latency: median 1340 ms, p95 2210 ms
+```
+
+- `correct`: for a product label, `identified` with that ID. For `unknown` and `none`, the status with that name.
+- `wrong`: `identified` with another ID, and each `identified` for the labels `unknown` and `none`. Spec section 15 wants 0. With 1 or more, the exit code is 1: raise `--min-confidence` and replay again.
+- `failed`: the call failed or took more than 4 seconds. The latency counts these calls too.
+- The numbers of the table above are an example of the format. No replay with the real service has run yet.
 
 Frames with `blurred: false` did not go through face detection on the phone. Without `REQUIRE_BLUR` they still go to Gemini, and the server logs `frame not blurred: the phone did not run face detection` one time for each session. With `REQUIRE_BLUR=1` the server drops them and logs `frame dropped: not blurred` one time for each session.
 
@@ -247,6 +298,59 @@ A catalog file is a JSON array. Each entry is a `Product` of `@glance/shared`. P
 - `indexCatalog` rejects a catalog that holds one ID two times.
 - In `allergens`, `null` means "no data", and an empty list means "no allergen". The potato crisps of the dev catalog have no data.
 
+### Check a catalog
+
+```bash
+npm run catalog:check --workspace @glance/server                              # the file of CATALOG_PATH
+npm run catalog:check --workspace @glance/server -- catalog/catalog.json
+npm run catalog:check --workspace @glance/server -- catalog/catalog.json --lang it
+# warning: potato-crisps: no allergen data
+# warning: catalog: 4 products, the demo needs 12
+# catalog: 4 products, 0 errors, 2 warnings
+```
+
+The command prints one line for each finding and then the counts. Its exit code is 1 with one error or more. Each message starts with the product ID, with `entry <index>` for an entry with no ID, or with `catalog`.
+
+Errors:
+
+- The file holds no JSON array, or an entry fails `ProductSchema`. The message names the field.
+- Two entries have one ID. The check keeps the first one.
+- A price is 0.
+- A look-alike does not exist, is the product itself, or does not list the product back.
+- No look-alike pair differs in price or in allergens (spec section 11.3). A product with no allergen data differs from its look-alike only by its price.
+- A GTIN has another length than 8, 12, 13, or 14 digits, or a wrong GS1 check digit.
+- With `--lang it`: `name`, `spokenName`, `spokenPack`, or `spokenPackDetailed` has no Italian text.
+
+Warnings:
+
+- A product has no allergen data.
+- A `visual` text has fewer than 20 characters, a line break, or a vertical bar. The recognition prompt prints each product on one line, with bars between its fields.
+- The catalog has fewer than 12 products.
+
+### Seed
+
+```bash
+npm run catalog:seed --workspace @glance/server -- catalog/catalog.dev.json --no-clips
+# seed: no MONGODB_URI, products not stored
+# seed: --no-clips is set, no clip made
+# seed: 4 products, 0 clips, 0 failed
+```
+
+`catalog:seed` reads `apps/server/.env`. It does these steps:
+
+1. It runs the check, prints its lines, and stops on an error.
+2. With `MONGODB_URI` it replaces the products of the database. Without it, it stores nothing: the memory store reads `CATALOG_PATH` at each start of the server.
+3. It makes the speech clips of the lines that each shop needs, one at a time, in `SPEECH_CACHE_DIR`. With `--no-clips` or `FAKE_SPEECH=1` it makes no clip.
+4. It prints the counts. Its exit code is 1 if a clip failed.
+
+The clips:
+
+- `seedLines` in `src/speech/seed.ts` lists the texts: 3 for each product (the glance line with and with no hint, and the "in your cart" line) and 27 lines that have no product. That is 39 texts for the dev catalog and 63 for 12 products.
+- The texts are in English, for the default profile. A line with a total, the pay prompt, and each line for another input than the nod get their clips during the shop.
+- Each text with no clip in the cache is one paid ElevenLabs call. Before the calls, the command prints the number of lines and characters. A second run makes no call for the clips that exist.
+- A clip belongs to one voice. A new `ELEVENLABS_VOICE_EN` makes each clip again.
+- The seed needs no Gemini key. With `--no-clips` it needs no ElevenLabs key.
+
 ## Rules
 
 `step(state, input, ctx)` in `src/sessions/step.ts` holds the interaction rules of spec section 6.2. It returns the new state and a list of effects. It reads no clock and does no I/O: each input carries its time as `now`. The session runtime calls it for each input.
@@ -287,7 +391,7 @@ The rules that exist:
 - After an add, a no removes that unit for 8 seconds, and a second yes gets one hint (R10). On the prompt for "add another", a no removes one unit (R11).
 - An undo removes the last added unit that the cart still holds (R12). A cart edit sets the quantity of a cart line from 0 to 99.
 - A yes or a no with no valid target gets one hint, if a prompt finished in the last 15 seconds (R20). Silence adds nothing (R21).
-- A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code.
+- A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code. With its line, a busy kiosk also gives the event `error` with the code `kiosk.busy`.
 - A yes pays only as an answer to the pay prompt (R16). The effect `payment.start` asks the runtime for the payment, and the input `payment.result` brings its result.
 - A product held up during a checkout suspends it. The pay prompt returns with the new total when the product has left the view and the code is in view (R17).
 - A no on the pay prompt cancels the checkout, and the kiosk is muted until its code has left the view (R18).
@@ -316,6 +420,9 @@ The session rules:
 
 - The camera counts as on when the phone reports the stream state `streaming`. The voice then says the start line.
 - When the phone reports `stopped`, an open checkout ends and the cart stays (R24). The line is "Camera off. Please use a regular checkout." when the battery is at 5 percent or less, or the thermal level is 6 or more. `DeviceState` has no stream error, so `general.ts` holds these two limits. In each other case the line is "Camera off."
+- When the phone reports `paused`, and the state before was not `paused`, the line is "Paused. Tap the side of your glasses to resume." The camera still counts as on, so the stream that returns gets no "Camera on" line.
+- The voice reports the battery of the glasses one time at 20 percent and one time at 10 percent. A level above 20 percent starts the two warnings again. A state with a stopped stream gives no battery line.
+- The input `socket.open` gives "Back online." when the session already has a device state. The stored session holds that state, so the line also comes after a restart of the server. The first socket of a new session gets no line.
 - After 3 minutes with no product and no kiosk in view, the camera rests and the cart stays (R22). The effect `session.rest` tells the phone.
 - The intent `stop` ends the session. The intent `repeat` speaks the last line again.
 - The intents `total` and `cart` speak the cart. The cart by voice has at most five lines (R23).
@@ -422,12 +529,17 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 | `POST /api/kiosks` | `CreateKioskRequest` | 201, `CreateKioskResponse` |
 | `GET /api/kiosks/:id/events` | | a stream of `KioskEvent`. The first message is the current view. |
 | `GET /api/speech/<hash>.mp3` | | 200, the MP3 of a clip |
-| `GET /healthz` | | 200, the state of the switches |
+| `GET /api/demo/latest?key=<DEMO_KEY>` | | 200, `LatestSessionResponse` |
+| `GET /healthz` | | 200, the state of the switches: `fakeRecognition`, `fakeSpeech`, `store` (`memory` or `mongo`), and `saveFrames` |
 
 - `wsUrl` of a new session is `PUBLIC_BASE_URL` with `ws` in place of `http`, plus `/ws/device?session=<id>&token=<token>`.
 - A body that fails its schema gets 400 with `{ "error": "bad_request" }`. An unknown session gets 404 with `{ "error": "not_found" }`. An unknown key in a profile patch is dropped.
 - A 204 says only that the server took the input. The outcome arrives as events.
-- No path checks the token yet. A client still sends `?token=` with each call.
+- Each path with a session ID needs `?token=<token>` with the token of that session. `GET /api/kiosks/:id/events` needs the token of the kiosk. `POST /api/sessions`, `POST /api/kiosks`, the speech path, and `GET /healthz` need no token.
+- A missing or wrong token gets 401 with `{ "error": "unauthorized" }`. So does a query string with two `token` keys. The server checks the ID first and the token second, and reads the body last: an unknown ID gets 404, and a wrong token with a bad body gets 401, also when the body is no JSON. Two cases get 400 before the check: a body above the size limit of Fastify, and a body with a content type that is not JSON.
+- `tokenMatches` in `src/http/auth.ts` compares a token in constant time.
+- The request log holds the method and the path with no query string, because the query string holds the token.
+- `GET /api/demo/latest` gives the ID and the token of the newest session that has not stopped. The mirror page follows the session of the phone with it. The path answers 404 with `{ "error": "not_found" }` when `DEMO_KEY` is not set, when the key is wrong, and when no session is live. The key opens each session, so use a long random value.
 - The events stream sends `data: <json>` for each event, and the comment `: ping` at the start and then each 15 seconds. A web client opens the stream first and then gets the snapshot, so it loses no event.
 - `DELETE` sends `session.end` to the phone, closes its socket, ends each events stream of the session, frees its kiosk, and deletes the session with its orders.
 - An unknown kiosk gets 404.
@@ -438,8 +550,8 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 
 The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2. The messages are `DeviceToServer` and `ServerToDevice` of `@glance/shared`.
 
-- An upgrade for another path or for an unknown session gets `404 Not Found`. The server writes the answer and lets the client close the connection, with a limit of 5 seconds. If the server closes first, a client under load can get a connection reset in place of the status.
-- On open, the server sends a `snapshot`. Then it sends each event of the session as `event`, and each line as `speak`.
+- An upgrade for another path or for an unknown session gets `404 Not Found`. An upgrade with a missing or wrong token gets `401 Unauthorized`. The server writes the answer and lets the client close the connection, with a limit of 5 seconds. If the server closes first, a client under load can get a connection reset in place of the status.
+- On open, the server sends a `snapshot`. Then it sends each event of the session as `event`, and each line as `speak`. A phone that comes back hears "Back online." after the snapshot.
 - One phone holds a session. A second socket for the same session takes over, and the server closes the older one. No message goes to both.
 - `intent`, `prompt.done`, `device.state`, `cart.edit`, and `profile.set` go to the rules. After `profile.set` the phone gets a new `snapshot`.
 - `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished.
@@ -492,5 +604,28 @@ npm run model:check --workspace @glance/server -- <frame.jpg>
 ```
 
 `model:check` reads `apps/server/.env`. To read another file, run `npx tsx --env-file=<file> scripts/check-model.ts <frame.jpg>` in `apps/server`. The fake switches have no effect on this command.
+
+### Smoke check of a running server
+
+```bash
+npm run smoke --workspace @glance/server -- http://127.0.0.1:8080
+```
+
+`runSmoke` in `scripts/smoke.ts` plays a phone and a web client against the address. It does seven steps and stops at the first one that fails:
+
+1. `health`: `GET /healthz` answers 200.
+2. `session`: `POST /api/sessions` answers 201.
+3. `socket`: the `wsUrl` of the answer opens, and a `snapshot` arrives.
+4. `events`: the events stream of the session answers 200.
+5. `line`: after a `device.state` with a running stream, the `speak` message of the "Camera on" line arrives.
+6. `caption`: the events stream gets the caption of that line.
+7. `delete`: `DELETE` of the session answers 204.
+
+- The command prints `ok <name>` or `FAIL <name>: <detail>` for each step, then `smoke: OK` or `smoke: FAIL`. Its exit code is 1 on a failure.
+- Each step has 5 seconds.
+- The socket step uses the address that the server gives. So a wrong `PUBLIC_BASE_URL` fails at `socket`.
+- After a failure the command still deletes its session. A session that stays would be the newest live session of `GET /api/demo/latest`.
+- The server needs no fake switch for it. With real speech, the "Camera on" line is one ElevenLabs call if its clip does not exist yet. The command sends no frame, so it makes no Gemini call.
+- `infra/README.md` shows the command against the Docker image and through the proxy.
 
 Each rule R1 to R24 has a test with its number in the name, in `src/sessions/*.test.ts`. `replays.test.ts` replays result sequences with gaps and changes, because live results flicker.

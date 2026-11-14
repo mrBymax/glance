@@ -29,6 +29,7 @@ export function onKioskSeen(turn: Turn, input: Extract<RuleInput, { type: 'kiosk
   if (input.busy || s.cart.items.length === 0) {
     if (!s.kioskSeen.said) {
       s.kioskSeen.said = true;
+      if (input.busy) emit(turn, { type: 'error', code: 'kiosk.busy', message: 'This checkout is busy.' });
       speak(turn, say({ key: input.busy ? 'checkout.busy' : 'checkout.empty' }));
     }
     return;

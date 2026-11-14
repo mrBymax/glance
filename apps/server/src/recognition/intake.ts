@@ -2,11 +2,25 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { Clock } from '../clock';
 import type { SessionRuntime } from '../sessions/runtime';
 import { excludeList } from '../sessions/view';
-import type { FrameHandler } from '../ws/device';
+import { type FrameHandler, frameLogLine } from '../ws/device';
 import type { Recognizer } from './gemini';
-import { RecognitionWorker } from './worker';
+import type { FrameSaver } from './save';
+import { type Frame, RecognitionWorker } from './worker';
 
 type Intake = { worker: RecognitionWorker | null; warnedAboutBlur: boolean };
+
+/** Saves a frame when a saver exists. A write that fails is logged, and the caller goes on. */
+export function saveFrameWith(saveFrame: FrameSaver | null, log: Pick<FastifyBaseLogger, 'warn'>, sessionId: string, frame: Frame): void {
+  if (!saveFrame) return;
+  const failed = (error: unknown): void => {
+    log.warn(`frame not saved. seq=${frame.header.seq} ${error instanceof Error ? error.message : String(error)} session=${sessionId}`);
+  };
+  try {
+    saveFrame(sessionId, frame).catch(failed);
+  } catch (error) {
+    failed(error);
+  }
+}
 
 /**
  * Gives the frames of each phone to the recognition worker of its session, and the results to the rules.
@@ -18,6 +32,8 @@ export function createFrameHandler(deps: {
   onSlow: (session: SessionRuntime) => void;
   /** Drop each frame that did not go through face detection on the phone. */
   requireBlur: boolean;
+  /** Writes each accepted frame to disk. null without SAVE_FRAMES: the frame then lives in memory only, until its call ends. */
+  saveFrame: FrameSaver | null;
 }): FrameHandler & { stopAll(): void } {
   const intakes = new Map<string, Intake>();
 
@@ -63,7 +79,10 @@ export function createFrameHandler(deps: {
 
     intake.worker ??= makeWorker(session);
     // The JPEG is a view on the socket message. The worker keeps the frame for the time of a call, so it gets a copy.
-    intake.worker.submit({ header: frame.header, jpeg: new Uint8Array(frame.jpeg) });
+    const copy: Frame = { header: frame.header, jpeg: new Uint8Array(frame.jpeg) };
+    deps.log.debug(`${frameLogLine(copy.header, copy.jpeg.length)} session=${session.id}`);
+    saveFrameWith(deps.saveFrame, deps.log, session.id, copy);
+    intake.worker.submit(copy);
   };
 
   return Object.assign(onFrame, {

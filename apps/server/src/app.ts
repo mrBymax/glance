@@ -5,6 +5,8 @@ import type { CatalogIndex } from './catalog/catalog';
 import type { Clock } from './clock';
 import type { Config } from './config';
 import type { Store } from './db/store';
+import { pathOnly } from './http/auth';
+import { registerDemoRoutes } from './http/demo';
 import { registerKioskRoutes } from './http/kiosks';
 import { registerSessionRoutes } from './http/sessions';
 import { registerSpeechRoutes } from './http/speech';
@@ -12,12 +14,13 @@ import { KioskService } from './kiosk/kiosks';
 import { createPayments } from './kiosk/payment';
 import { ScriptPlayer, readFakeScript } from './recognition/fake';
 import type { Recognizer } from './recognition/gemini';
-import { createFrameHandler } from './recognition/intake';
+import { createFrameHandler, saveFrameWith } from './recognition/intake';
+import type { FrameSaver } from './recognition/save';
 import { SessionRegistry } from './sessions/registry';
 import { ClipCache } from './speech/clips';
 import type { Synthesize } from './speech/elevenlabs';
 import { createClipUrl } from './speech/service';
-import { type FrameHandler, registerDeviceSocket } from './ws/device';
+import { type FrameHandler, frameLogLine, registerDeviceSocket } from './ws/device';
 
 export type AppDeps = {
   config: Config; clock: Clock; store: Store; catalog: CatalogIndex;
@@ -29,6 +32,8 @@ export type AppDeps = {
   synthesize?: Synthesize;
   /** Gets each frame of each phone, in place of the recognizer. With neither, the server drops the frames. */
   onFrame?: FrameHandler;
+  /** Writes each frame to disk. Only main.ts makes one, and only with SAVE_FRAMES. Without it the server stores no frame. */
+  saveFrame?: FrameSaver;
 };
 
 type Closer = () => void | Promise<void>;
@@ -50,13 +55,23 @@ declare module 'fastify' {
 /** The kiosk that the fake server has from its start. A printed "GL1 K3X7" code then starts a checkout. */
 const FAKE_KIOSK = { name: 'Checkout 3', store: 'Demo Market', code: 'K3X7' };
 
+/** The body of a request with the JSON content type and a text that is no JSON. */
+const NOT_JSON = Symbol('not JSON');
+
 const ERROR_NAMES: Record<number, string> = { 400: 'bad_request', 401: 'unauthorized', 404: 'not_found' };
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { config } = deps;
   // A script that the server cannot use stops the start, before a timer or a socket exists.
   const fakeScript = config.fakeRecognition === null ? null : readFakeScript(config.fakeRecognition, deps.catalog);
-  const app = Fastify({ logger: deps.log ?? true });
+  const log = deps.log ?? true;
+  const app = Fastify({
+    logger: log === false ? false : {
+      ...(log === true ? {} : log),
+      // The query string holds the token or the demo key, so the request log gets the method and the path only.
+      serializers: { req: (request: { method: string; url: string }) => ({ method: request.method, url: pathOnly(request.url) }) },
+    },
+  });
 
   app.decorate('closers', new Set<Closer>());
   app.addHook('preClose', async () => {
@@ -85,11 +100,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     try {
       done(null, JSON.parse(body as string));
     } catch {
-      done(Object.assign(new Error('The body is not valid JSON.'), { statusCode: 400 }));
+      // No error here: an error would answer 400 before the handler checks the token.
+      // This value fails each body schema, so the handler answers 400 after its token check.
+      done(null, NOT_JSON);
     }
   });
 
-  app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'not_found' }));
+  // A body that is no JSON gets 400 on an unknown path too, as before the parser gave it to the handlers.
+  app.setNotFoundHandler((request, reply) => (request.body === NOT_JSON
+    ? reply.code(400).send({ error: 'bad_request' })
+    : reply.code(404).send({ error: 'not_found' })));
   app.setErrorHandler((error: { statusCode?: number }, request, reply) => {
     const status = error.statusCode ?? 500;
     if (status >= 500) {
@@ -101,6 +121,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return name ? reply.code(status).send({ error: name }) : reply.code(400).send({ error: 'bad_request' });
   });
 
+  const saveFrame = deps.saveFrame ?? null;
   const bus = new EventBus();
   const clips = new ClipCache(config.speechCacheDir, deps.store);
   const kiosks = new KioskService({ store: deps.store, bus, clock: deps.clock });
@@ -137,7 +158,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ok: true,
     fakeRecognition: config.fakeRecognition !== null,
     fakeSpeech: config.fakeSpeech,
-    store: config.mongodbUri === null ? 'memory' : 'mongodb',
+    store: config.mongodbUri === null ? 'memory' : 'mongo',
+    // The team checks this before the demo: the server must store no frame then.
+    saveFrames: saveFrame !== null,
   }));
 
   // With fake recognition, one script player stands for the frames and the recognition calls of each session.
@@ -150,18 +173,26 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     },
   });
   if (player) app.closers.add(() => player.stopAll());
-  const logFrame: FrameHandler = (_session, { header, jpeg }) => {
-    app.log.info(
-      `frame seq=${header.seq} w=${header.w} h=${header.h} blurred=${header.blurred} kind=${header.kind ?? 'frame'} bytes=${jpeg.length}`,
-    );
+  // Fake recognition drops each frame after this line. With SAVE_FRAMES it saves the frame first,
+  // so the team can collect frames for the test set with no recognition call.
+  const logFrame: FrameHandler = (session, { header, jpeg }) => {
+    app.log.info(frameLogLine(header, jpeg.length));
+    // As with real recognition, REQUIRE_BLUR keeps a frame with no face detection off the disk.
+    if (config.requireBlur && !header.blurred) return;
+    // The JPEG is a view on the socket message, and the write ends later, so the saver gets a copy.
+    if (saveFrame) saveFrameWith(saveFrame, app.log, session.id, { header, jpeg: new Uint8Array(jpeg) });
   };
 
   const recognize = player || deps.onFrame || !deps.recognizer ? null : createFrameHandler({
     recognizer: deps.recognizer,
     clock: deps.clock,
     log: app.log,
-    onSlow: (session) => app.log.warn(`recognition is slow for the session ${session.id}: 3 calls failed in a row`),
+    onSlow: (session) => {
+      app.log.warn(`recognition is slow for the session ${session.id}: 3 calls failed in a row`);
+      session.dispatch({ type: 'recognition.slow' });
+    },
     requireBlur: config.requireBlur,
+    saveFrame,
   });
   if (recognize) app.closers.add(() => recognize.stopAll());
 
@@ -173,6 +204,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   registerKioskRoutes(app, { kiosks });
   registerSpeechRoutes(app, { cache: clips, fake: config.fakeSpeech });
+  registerDemoRoutes(app, { demoKey: config.demoKey });
   registerDeviceSocket(app, {
     onFrame: player ? logFrame : deps.onFrame ?? recognize ?? (() => undefined),
     onOpen: (session) => player?.start(session, { fakeDevice: false }),

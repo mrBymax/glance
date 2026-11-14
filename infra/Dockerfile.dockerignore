@@ -1,0 +1,14 @@
+.git
+**/node_modules
+**/dist
+**/.cache
+**/testdata
+**/.env
+**/.env.*
+**/*.env
+!**/.env.example
+docs
+skills
+.claude
+.agents
+apps/mobile/android
