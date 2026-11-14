@@ -88,3 +88,11 @@ it('an answer that arrives after the session ended says nothing', () => {
   h.send({ type: 'answer', text: 'Late.' });
   expect(h.effects).toEqual([]);
 });
+it('does not ask about a product that has left the view', () => {
+  const h = harness();
+  h.see(OAT); h.done(); h.no('head');
+  h.advance(5000);   // the oat drink has left the view, and the cart got no product
+  h.yes('touch');
+  h.send({ type: 'question', text: 'Does it contain nuts?' });
+  expect(h.lines()).toEqual(['ask.noProduct']);
+});

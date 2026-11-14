@@ -138,3 +138,14 @@ it('with SECOND_LOOK_WAIT_MS the look-alike line waits, and a sure still gives t
   await waiting.phone.next((m) => m.t === 'speak');
   expect(waiting.phone.messages.flatMap((m) => (m.t === 'speak' ? [m.text] : []))).toEqual(['Oat drink, one litre, one eighty-nine. Nod to add.']);
 });
+it('with SECOND_LOOK_WAIT_MS a still that is not sure speaks the look-alike line at once', async () => {
+  const ambiguous: RecognitionResult = { ...NO_RESULT, status: 'ambiguous', candidates: ['oat-drink-1l', 'oat-drink-barista-1l'] };
+  recognize.mockResolvedValue(ambiguous);
+  const waiting = await appWithPhone({ SECOND_LOOK_WAIT_MS: '10000' });
+  waiting.phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  await waiting.phone.next((m) => m.t === 'event' && m.event.type === 'glance.ambiguous');
+  // The same result for a stream frame would say nothing for 10 seconds.
+  waiting.phone.sendFrame({ seq: 2, ts: 2, w: 1440, h: 1080, blurred: true, kind: 'still' }, JPEG);
+  await waiting.phone.next((m) => m.t === 'speak');
+  expect(waiting.phone.messages.flatMap((m) => (m.t === 'speak' ? [m.text] : []))).toEqual(['I cannot tell which oat drink this is. Turn the front to me.']);
+});
