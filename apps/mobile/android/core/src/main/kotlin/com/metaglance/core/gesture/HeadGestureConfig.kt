@@ -6,16 +6,25 @@ enum class Sensitivity { GENTLE, NORMAL, FIRM }
 
 /**
  * The limits of the head gesture detector. Angles are in rad, rates are in rad/s.
- * `pitchDownSign` is 1 or -1: the sign of the rate on `pitchAxis` when the head moves down.
+ *
+ * `pitchAxis` and `yawAxis` are the gyroscope axes of a nod and of a shake. `pitchDownSign` is 1 or -1: the sign
+ * of the rate on `pitchAxis` when the head moves down. A sample with an accelerometer reading needs the yaw axis
+ * and the sign not at all, and the pitch axis only as the axis from ear to ear: see `HeadAxes`.
  *
  * - `minStrokeRad`, `minPeakRadS`: the smallest stroke and the smallest top rate of a gesture.
- * - `maxNodRad`, `maxNodMs`: a larger or a longer movement down and back is not a nod.
- * - `maxShakeMs`: the longest time for the two strokes of a shake.
- * - `holdMs`, `settleRadS`: a stroke ends when the rate stays below `settleRadS` for `holdMs`.
+ * - `maxNodRad`: a nod has no stroke larger than this.
+ * - `maxNodMs`: the longest time from the start of the first stroke of a nod to the report.
+ * - `maxShakeMs`: the longest time from the start of a shake to the start of its third stroke.
+ * - `holdMs`, `settleRadS`: a stroke ends when the rate stays below `settleRadS` for `holdMs`. A turn between two
+ *   strokes that takes longer splits the pair, so these two values set the slowest gesture.
  * - `restRadS`: below this rate the head is at rest, and the start of the next stroke follows it.
  * - `dominance`: the gesture axis must move this many times more than the other axis.
- * - `refractoryMs`: the time after a gesture with no new gesture.
- * - `gapResetMs`: a longer time between two samples resets the detector.
+ * - `refractoryMs`: the time after a gesture with no new gesture. The head must also be quiet before the next one.
+ * - `gapResetMs`: a longer step between the times of two samples resets the detector.
+ *
+ * The head studies give these values for a person who answers: a nod of 17 degrees (0.30 rad) at 59 degrees each
+ * second, and a shake of 26 degrees (0.45 rad) at 84 degrees each second. A person who walks moves the head at
+ * 17 degrees each second (0.30 rad/s) at most, in a bob of 2 Hz. Nobody measured them with these glasses.
  */
 data class HeadGestureConfig(
     val pitchAxis: Axis,
@@ -24,10 +33,10 @@ data class HeadGestureConfig(
     val minStrokeRad: Float,
     val minPeakRadS: Float,
     val maxNodRad: Float = 0.6f,
-    val maxNodMs: Long = 1200,
-    val maxShakeMs: Long = 1500,
-    val holdMs: Long = 150,
-    val settleRadS: Float = 0.5f,
+    val maxNodMs: Long = 1500,
+    val maxShakeMs: Long = 2500,
+    val holdMs: Long = 250,
+    val settleRadS: Float = 0.3f,
     val restRadS: Float = 0.15f,
     val dominance: Float = 2.0f,
     val refractoryMs: Long = 600,

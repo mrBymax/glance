@@ -35,8 +35,19 @@ class LabelPolicy(
      * Returns true when the phone must take a still now. Call it for each frame. `requested` is true for the
      * first frame after a `still.request`. A request that this call refuses is dropped. `canUpload` is false
      * while the phone sends no image, for example with the socket down: a still has no use then.
+     *
+     * `hold` is true while a prompt waits for a head answer: a still stalls the motion samples, so none starts.
+     * The region keeps its time in view in a hold, and the hold uses no still gap and no still of the region.
+     * The caller keeps a request for the first frame after the hold.
      */
-    fun onFrame(nowMs: Long, regionInView: Boolean, codeAccepted: Boolean, requested: Boolean = false, canUpload: Boolean = true): Boolean {
+    fun onFrame(
+        nowMs: Long,
+        regionInView: Boolean,
+        codeAccepted: Boolean,
+        requested: Boolean = false,
+        canUpload: Boolean = true,
+        hold: Boolean = false
+    ): Boolean {
         // The region left the view when no frame showed it for longer than the gap.
         if (regionLastMs?.let { nowMs - it > gapMs } != false) {
             regionSinceMs = null
@@ -49,7 +60,7 @@ class LabelPolicy(
             return false
         }
         if (regionInView && regionSinceMs == null) regionSinceMs = nowMs
-        if (!canUpload) return false
+        if (!canUpload || hold) return false
         val waited = regionSinceMs?.let { regionInView && !regionRead && regionStills < maxRegionStills && nowMs - it >= dwellMs } ?: false
         if (!requested && !waited) return false
         val last = lastStillMs

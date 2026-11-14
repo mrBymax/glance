@@ -240,7 +240,7 @@ class MockMenuTest {
             "Battery 100", "Battery 20", "Battery 10", "Battery 3", "Thermal none", "Thermal severe", "Thermal critical",
             "Tap", "Tap and hold", "Double tap", "Swipe",
             "Next registration fails", "Next registration works", "Camera: deny", "Camera: allow",
-            "Replay nod", "Replay shake", "Replay CSV file",
+            "Replay nod", "Replay shake", "Replay CSV file", "Record motion in sessions",
             "Say add", "Say skip",
             "Meta AI missing", "Update required", "Stream error BATTERY_LOW", "Stream error THERMAL_HOT",
             "Save server URL", "Drop server link 10 s", "Sensitivity: gentle", "Sensitivity: normal", "Sensitivity: firm",

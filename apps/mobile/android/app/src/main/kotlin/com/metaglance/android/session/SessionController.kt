@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.WindowManager
 import com.metaglance.android.MainActivity
+import com.metaglance.android.audio.AnswerSound
 import com.metaglance.android.audio.ExoLinePlayer
 import com.metaglance.android.audio.PhoneVoice
 import com.metaglance.android.dat.DatLink
@@ -43,9 +44,13 @@ import com.metaglance.core.frame.FrameHeader
 import com.metaglance.core.frame.FrameKind
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
+import com.metaglance.core.gesture.HeadSample
 import com.metaglance.core.image.StillPolicy
 import com.metaglance.core.image.UploadGate
+import com.metaglance.core.image.WaitingStill
+import com.metaglance.core.image.WaitingStills
 import com.metaglance.core.input.HeadInput
+import com.metaglance.core.input.HeadWindowListener
 import com.metaglance.core.input.KeyInput
 import com.metaglance.core.input.MainYesResolver
 import com.metaglance.core.input.PaymentConfirm
@@ -65,12 +70,14 @@ import com.metaglance.core.state.DatSession
 import com.metaglance.core.state.DatSnapshot
 import com.metaglance.core.state.DatStream
 import com.metaglance.core.state.HapticPatterns
+import com.metaglance.core.state.MotionFlow
 import com.metaglance.core.state.NativeError
 import com.metaglance.core.state.NativeErrors
 import com.metaglance.core.state.StateMapper
 import com.metaglance.core.state.StopCause
 import com.metaglance.core.state.StopCauses
 import com.metaglance.core.state.StopFacts
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -98,6 +105,9 @@ import okhttp3.OkHttpClient
  *
  * Call each function on the main thread. `scope` must use the main dispatcher. The controller holds no cart
  * logic and no prices: it moves messages, and it decides when the camera runs.
+ *
+ * The motion samples arrive on the motion thread of `DatLink`. `HeadInput` takes them there, and its answer goes
+ * to the main thread.
  */
 class SessionController(
     private val app: Application,
@@ -117,6 +127,8 @@ class SessionController(
         return@Scheduler { main.removeCallbacks(task) }
     }
 
+    // The motion thread and the frame thread read the profile.
+    @Volatile
     private var profile: Profile = store.profile
     private var serverSession: StoredSession? = store.serverSession
 
@@ -144,9 +156,16 @@ class SessionController(
     private val announcer = ConnectionAnnouncer()
     private val paymentConfirm = PaymentConfirm()
     private var stillPolicy = StillPolicy()
+    private var waitingStills = WaitingStills()
+    private val answerSound = AnswerSound(app)
+    private val motionRecorder = MotionRecorder(File(app.getExternalFilesDir("probe") ?: File(app.filesDir, "probe"), "motion"), scope, ::log)
+    private val headTrace = HeadTrace()
 
     /** The number of the last upload. The frames of the stream and the stills share it, on two threads. */
     private val uploadSeq = AtomicInteger()
+
+    // The motion thread and the frame thread read it.
+    @Volatile
     private var headInput = newHeadInput()
 
     private var page: ((NativeToPage) -> Unit)? = null
@@ -204,9 +223,14 @@ class SessionController(
         watchPhoneNetwork()
         scope.launch { dat.snapshot.collect { onDatSnapshot(it) } }
         scope.launch { dat.faults.collect { onDatFault(it) } }
+        // Runs on the motion thread, for each sample. The answer goes to the main thread.
+        dat.headSink = { sample: HeadSample, arrivalMs: Long ->
+            headInput.onSample(sample, arrivalMs, profile)?.let { intent -> main.post { onHeadAnswer(intent) } }
+        }
         scope.launch {
-            dat.gyro.collect { sample ->
-                headInput.onSample(sample, SystemClock.elapsedRealtime(), profile)?.let { send(it) }
+            while (true) {
+                delay(HEAD_TICK_MS)
+                onHeadTick()
             }
         }
         // The answer of the touchpad carries the last finished prompt, and the server decides if it counts.
@@ -292,8 +316,9 @@ class SessionController(
     /** Stops the camera stream, as `session.rest` of the server does. The server session and the socket stay. */
     fun stopCamera() = stopDat()
 
-    /** Makes the detector read the stored sensitivity again. A prompt that is open keeps its head window. */
+    /** Makes the detector read the stored sensitivity again. The head window of an open prompt starts again. */
     fun applySensitivity() {
+        headInput.close()
         headInput = newHeadInput()
     }
 
@@ -493,7 +518,7 @@ class SessionController(
         tap?.onFromServer(message)
         when (message) {
             is ServerToDevice.Speak -> {
-                message.promptId?.let(prompts::onPromptSpoken)
+                message.promptId?.let { prompts.onPromptSpoken(it, SystemClock.elapsedRealtime()) }
                 speech.onSpeak(message)
             }
             is ServerToDevice.Event -> {
@@ -502,7 +527,7 @@ class SessionController(
                 event?.let(prompts::onEvent)
                 // The checkout ended on the server, for example after 30 seconds with no kiosk code in view.
                 if (event is ServerEvent.CheckoutCancelled) closePaymentPrompt()
-                if (event is ServerEvent.GlanceAmbiguous) takeStill()
+                if (event is ServerEvent.GlanceAmbiguous) wantStill(WaitingStill.SECOND_LOOK)
             }
             is ServerToDevice.Snapshot -> {
                 toPage(NativeToPage.Snapshot(message.session))
@@ -515,7 +540,7 @@ class SessionController(
             is ServerToDevice.StillRequest -> when (message.purpose) {
                 // The frame path owns the limit for label stills, so the request goes through it.
                 StillPurpose.LABEL -> framePipeline?.requestLabelStill() ?: log("still.request: no stream")
-                StillPurpose.REFERENCE -> takeReferenceStill()
+                StillPurpose.REFERENCE -> wantStill(WaitingStill.REFERENCE)
             }
         }
     }
@@ -652,7 +677,9 @@ class SessionController(
         stopCalled = false
         sawStreaming = false
         mainYesResolved = false
+        headInput.close()
         headInput = newHeadInput()
+        waitingStills = WaitingStills()
         // The mock menu can change the two times. Each camera start reads them again.
         val labelTiming = store.labelTiming
         stillPolicy = StillPolicy(labelTiming.stillEveryMs)
@@ -707,6 +734,7 @@ class SessionController(
                 crop = true,
                 nextSeq = uploadSeq::incrementAndGet,
                 label = labelTiming.labelPolicy(),
+                holdStills = { holdsStills(SystemClock.elapsedRealtime()) },
                 log = ::log
             )
             framePipeline = pipeline
@@ -720,6 +748,50 @@ class SessionController(
             }
         }
     }
+
+    /** A nod or a shake that the detector took as the answer to a prompt. The sound tells the shopper at once. */
+    private fun onHeadAnswer(intent: DeviceToServer.Intent) {
+        val yes = intent.kind == IntentKind.YES
+        log("head answer ${if (yes) "yes" else "no"}: prompt ${intent.promptId}")
+        if (send(intent)) answerSound.play(yes)
+    }
+
+    /**
+     * Tells the head input when no motion sample can arrive: in a stall of the link, and while the glasses take
+     * a still. The time of a head window does not run then. It also starts a still that waited for a prompt.
+     */
+    private fun onHeadTick() {
+        if (!datRunning) return
+        val nowMs = SystemClock.elapsedRealtime()
+        val health = dat.motionHealth
+        val stalledSinceMs = health.stalledSinceMs.takeIf { health.flow == MotionFlow.STALLED }
+        val input = headInput
+        input.setBlocked(stalledSinceMs != null || dat.stillRunning, stalledSinceMs ?: nowMs, profile)
+        input.onTick(nowMs, profile)
+        if (dat.stillRunning || holdsStills(nowMs)) return
+        waitingStills.next(nowMs) { log("${it.label} still dropped: it waited too long for a prompt") }?.let(::startStill)
+    }
+
+    /** True while a prompt waits for a head answer. A still stalls the motion samples, so none starts then. */
+    private fun holdsStills(nowMs: Long): Boolean = headInput.holdsStills(nowMs, profile)
+
+    /** Starts a still now, or keeps it until the prompt that waits for a head answer has its answer. */
+    private fun wantStill(still: WaitingStill) {
+        val nowMs = SystemClock.elapsedRealtime()
+        if (datRunning && holdsStills(nowMs)) {
+            waitingStills.add(still, nowMs)
+            log("${still.label} still waits: a prompt waits for its answer")
+            return
+        }
+        startStill(still)
+    }
+
+    private fun startStill(still: WaitingStill) = when (still) {
+        WaitingStill.SECOND_LOOK -> takeStill()
+        WaitingStill.REFERENCE -> takeReferenceStill()
+    }
+
+    private val WaitingStill.label: String get() = if (this == WaitingStill.REFERENCE) "reference" else "second look"
 
     /**
      * The sharp second look: the server cannot tell look-alike products apart in a frame of the stream, so the
@@ -766,6 +838,12 @@ class SessionController(
      */
     private fun takeLabelStill() {
         val startMs = SystemClock.elapsedRealtime()
+        if (datRunning && holdsStills(startMs)) {
+            // A prompt started after the frame path asked. The request stays for the first frame after the answer.
+            log("label still waits: a prompt waits for its answer")
+            framePipeline?.requestLabelStill()
+            return
+        }
         val policy = stillPolicy
         if (!datRunning || !policy.tryStart(startMs)) {
             log(if (datRunning) "label still dropped: the last still is too new" else "label still dropped: no stream")
@@ -913,6 +991,7 @@ class SessionController(
 
     private fun onDatStopped(snapshot: DatSnapshot) {
         datRunning = false
+        headInput.close()
         refreshScreen()
         pipelineJob?.cancel()
         pipelineJob = null
@@ -963,10 +1042,12 @@ class SessionController(
         startDat()
     }
 
-    private fun send(message: DeviceToServer) {
+    /** Returns false when the socket is down, so the message went nowhere. */
+    private fun send(message: DeviceToServer): Boolean {
         val sent = socket?.send(message) == true
         tap?.onToServer(message, sent)
         if (!sent) log("not sent, the socket is down: ${Codec.encode(message).take(MAX_LOGGED_CHARS)}")
+        return sent
     }
 
     private fun sendError(error: NativeError) {
@@ -1021,10 +1102,37 @@ class SessionController(
         })
     }
 
-    private fun newHeadInput() = HeadInput(
-        HeadGestureDetector(HeadGestureConfig.of(store.sensitivity, ProbeDecisions.PITCH_AXIS, ProbeDecisions.PITCH_DOWN_SIGN, ProbeDecisions.YAW_AXIS)),
-        prompts
-    )
+    private fun newHeadInput(): HeadInput {
+        val config = HeadGestureConfig.of(store.sensitivity, ProbeDecisions.PITCH_AXIS, ProbeDecisions.PITCH_DOWN_SIGN, ProbeDecisions.YAW_AXIS)
+        // The detector gets samples only in a head window. So each line of it is about the answer to a prompt.
+        return HeadInput(HeadGestureDetector(config) { log(it.line()) }, prompts, headTrace)
+    }
+
+    /**
+     * Logs each head window. With "Record motion in sessions" of the mock menu, it also gives the samples of the
+     * window to the recorder. `HeadInput` calls it, one call at a time.
+     */
+    private inner class HeadTrace : HeadWindowListener {
+        private var samples = 0
+        private var recording = false
+
+        override fun onOpen(promptId: String, doneMs: Long) {
+            samples = 0
+            recording = store.recordMotion
+            log("head window open: prompt $promptId")
+            if (recording) motionRecorder.onOpen(promptId, doneMs)
+        }
+
+        override fun onSample(sample: HeadSample, arrivalMs: Long) {
+            samples += 1
+            if (recording) motionRecorder.onSample(sample, arrivalMs)
+        }
+
+        override fun onClose(promptId: String) {
+            log("head window closed: prompt $promptId, $samples samples")
+            if (recording) motionRecorder.onClose(promptId)
+        }
+    }
 
     // The server address is a setting, so each call reads it again.
     private fun api() = GlanceApi(client, store.serverUrl)
@@ -1037,6 +1145,7 @@ class SessionController(
         const val TAG = "Glance"
         const val PING_SECONDS = 10L
         const val TICK_MS = 1000L
+        const val HEAD_TICK_MS = 100L
         const val CLOSE_AFTER_END_MS = 5000L
         const val MAIN_YES_DELAY_MS = 5000L
         const val RESTART_DELAY_MS = 2000L

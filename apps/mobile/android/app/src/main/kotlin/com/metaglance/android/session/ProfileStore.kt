@@ -85,6 +85,11 @@ class ProfileStore(context: Context) {
         get() = prefs.getBoolean(KEY_USE_PLACEHOLDER, false)
         set(value) = prefs.edit().putBoolean(KEY_USE_PLACEHOLDER, value).apply()
 
+    /** True makes each session write the motion samples of each head window to the motion folder of the probe. */
+    var recordMotion: Boolean
+        get() = prefs.getBoolean(KEY_RECORD_MOTION, false)
+        set(value) = prefs.edit().putBoolean(KEY_RECORD_MOTION, value).apply()
+
     /** Sets `profile`, `wantedMainYes`, and `serverSession` back to their defaults. The settings of the app stay. */
     fun clear() {
         val edit = prefs.edit().remove(KEY_PROFILE).remove(KEY_WANTED_MAIN_YES)
@@ -114,6 +119,7 @@ class ProfileStore(context: Context) {
         const val KEY_USE_PLACEHOLDER = "usePlaceholder"
         const val KEY_LABEL_WAIT_MS = "labelWaitMs"
         const val KEY_LABEL_GAP_MS = "labelGapMs"
+        const val KEY_RECORD_MOTION = "recordMotion"
         val SESSION_KEYS = listOf(KEY_SESSION_ID, KEY_SESSION_TOKEN, KEY_SESSION_WS_URL, KEY_SESSION_LIVE)
     }
 }

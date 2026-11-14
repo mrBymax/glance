@@ -140,4 +140,13 @@ class LabelPolicyTest {
         assertTrue(policy.onFrame(0, regionInView = true, codeAccepted = false, requested = true))
         assertEquals(listOf(6000, 12000, 18000), policy.stills(100..60000 step 100))
     }
+
+    @Test fun `a still that must wait for a prompt uses no still gap and no still of the region`() {
+        val policy = LabelPolicy(dwellMs = 2500)
+        val held = (0..9000 step 100).filter { policy.onFrame(it.toLong(), regionInView = true, codeAccepted = false, hold = true) }
+        assertEquals(emptyList<Int>(), held)
+        // The region waited long enough, so its still starts with the first frame after the prompt.
+        assertTrue(policy.onFrame(9100, regionInView = true, codeAccepted = false))
+        assertEquals(listOf(15_100, 21_100), (9200..40_000 step 100).filter { policy.onFrame(it.toLong(), regionInView = true, codeAccepted = false) })
+    }
 }

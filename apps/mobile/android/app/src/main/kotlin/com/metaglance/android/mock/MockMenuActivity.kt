@@ -137,6 +137,13 @@ class MockMenuActivity : AppCompatActivity() {
             }
         }
         item("Replay CSV file") { motionPicker.launch("*/*") }
+        lateinit var record: Button
+        fun recordLabel() = "Record motion in sessions: " + if (glance.profileStore.recordMotion) "on" else "off"
+        record = item(recordLabel()) {
+            glance.profileStore.recordMotion = !glance.profileStore.recordMotion
+            record.text = recordLabel()
+            status(if (glance.profileStore.recordMotion) "Each head window writes a file to probe/motion, from the next prompt." else "Sessions record no motion.")
+        }
 
         group("Speech")
         item("Say add") { status(if (mock.say("add")) "Said: add" else NO_GLASSES) }

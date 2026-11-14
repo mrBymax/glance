@@ -50,7 +50,9 @@ import com.meta.wearable.dat.speech.Speech
 import com.meta.wearable.dat.speech.addSpeech
 import com.meta.wearable.dat.speech.types.SpeechState
 import com.meta.wearable.dat.speech.types.TranscriptionResult
+import com.metaglance.core.gesture.AccelSample
 import com.metaglance.core.gesture.GyroSample
+import com.metaglance.core.gesture.HeadSample
 import com.metaglance.core.gesture.MotionRow
 import com.metaglance.core.image.I420
 import com.metaglance.core.image.RawFrame
@@ -66,6 +68,9 @@ import com.metaglance.core.state.DatRegistration
 import com.metaglance.core.state.DatSession
 import com.metaglance.core.state.DatSnapshot
 import com.metaglance.core.state.DatStream
+import com.metaglance.core.state.MotionFlow
+import com.metaglance.core.state.MotionStats
+import com.metaglance.core.state.MotionWatchdog
 import com.metaglance.core.state.Revival
 import java.io.ByteArrayInputStream
 import java.nio.ByteBuffer
@@ -77,6 +82,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -91,11 +97,14 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** The flow of the motion samples. `stalledSinceMs` is the phone time of the last sample before a stall. */
+class MotionHealth(val flow: MotionFlow, val stalledSinceMs: Long?)
+
 /**
  * The one connection of the app to the DAT SDK: registration, permissions, the device, the session, and the stream.
  *
- * Call each function on the main thread. `scope` must use the main dispatcher. The frame collector is the one part
- * that runs on another thread.
+ * Call each function on the main thread. `scope` must use the main dispatcher. The frame collector and the
+ * collector of the motion samples each run on a thread of their own.
  */
 class DatLink(
     private val app: Application,
@@ -139,15 +148,41 @@ class DatLink(
     var frameSize: String = ""
         private set
 
-    private val _gyro = MutableSharedFlow<GyroSample>(extraBufferCapacity = MOTION_BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    // These two flows never drop the oldest sample. A reader that is MOTION_BUFFER samples behind misses the newest
+    // one, and the log line of the motion samples counts it as dropped.
+    private val _gyro = MutableSharedFlow<GyroSample>(extraBufferCapacity = MOTION_BUFFER)
 
-    /** The motion samples that carry a gyroscope reading, in rad/s. */
+    /** The motion samples that carry a gyroscope reading, in rad/s. For the probe. */
     val gyro: SharedFlow<GyroSample> = _gyro.asSharedFlow()
 
-    private val _motionRows = MutableSharedFlow<MotionRow>(extraBufferCapacity = MOTION_BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val _motionRows = MutableSharedFlow<MotionRow>(extraBufferCapacity = MOTION_BUFFER)
 
     /** Each motion sample, for a recorder. A missing reading is 0. A missing orientation is 1, 0, 0, 0. */
     val motionRows: SharedFlow<MotionRow> = _motionRows.asSharedFlow()
+
+    /**
+     * Gets each motion sample with a gyroscope reading, and the phone time at which it arrived. It runs on the
+     * motion thread, in the order of the SDK.
+     */
+    @Volatile
+    var headSink: ((HeadSample, Long) -> Unit)? = null
+
+    /** Each read gives the flow of the motion samples at that time. */
+    @Volatile
+    var motionHealth: MotionHealth = MOTION_IDLE
+        private set
+
+    /** True while the glasses take a still photo. The link gives no motion sample in that time. */
+    @Volatile
+    var stillRunning: Boolean = false
+        private set
+    private var stillCaptures = 0
+
+    // One thread, so the samples keep their order.
+    private val motionThread = Dispatchers.Default.limitedParallelism(1)
+
+    @Volatile
+    private var lastFrameAtMs = 0L
 
     private val _touches = MutableSharedFlow<TouchEvent>(extraBufferCapacity = EVENT_BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val touches: SharedFlow<TouchEvent> = _touches.asSharedFlow()
@@ -155,7 +190,8 @@ class DatLink(
     private val _transcripts = MutableSharedFlow<Transcript>(extraBufferCapacity = EVENT_BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val transcripts: SharedFlow<Transcript> = _transcripts.asSharedFlow()
 
-    /** The number of motion samples since Motion was attached to the current session. */
+    /** The number of motion samples since Motion was attached to the current session. The motion thread counts. */
+    @Volatile
     var motionSampleCount: Long = 0
         private set
 
@@ -365,7 +401,14 @@ class DatLink(
             return null
         }
         val startMs = SystemClock.elapsedRealtime()
-        val result = stream.capturePhoto()
+        stillCaptures += 1
+        stillRunning = true
+        val result = try {
+            stream.capturePhoto()
+        } finally {
+            stillCaptures -= 1
+            stillRunning = stillCaptures > 0
+        }
         val photo = result.getOrNull()
         if (photo == null) {
             result.onFailure { error, _ -> fault(DatFault.Area.CAPTURE, error) }
@@ -517,6 +560,9 @@ class DatLink(
         _faults.tryEmit(DatFault(area, name))
     }
 
+    /** A motion sample with the phone time at which the collector got it. */
+    private class ArrivedSample(val sample: MotionSample, val arrivalMs: Long)
+
     private fun MotionSample.toRow(): MotionRow {
         val a = accelerometer
         val g = gyroscope
@@ -571,6 +617,21 @@ class DatLink(
 
         private var motion: Motion? = null
         private val motionRevival = Revival()
+
+        /** Guards the two objects below it: the motion thread gives them the samples, and the main thread the ticks. */
+        private val motionLock = Any()
+        private val motionStats = MotionStats()
+        private val motionWatch = MotionWatchdog()
+
+        /** True from a restart of the watchdog until Motion reports `STARTED` again. */
+        private var motionRestarting = false
+
+        /**
+         * The samples between the collector and the motion thread, with no limit. The SDK keeps 256 samples and
+         * drops the oldest one when its reader is behind, and after a stall it gives more than 256 at once. So
+         * the collector only moves a sample into this queue, and the work for a sample comes after it.
+         */
+        private val arrived = Channel<ArrivedSample>(Channel.UNLIMITED)
 
         private var inputs: Inputs? = null
         private var inputsScope: CoroutineScope? = null
@@ -654,6 +715,7 @@ class DatLink(
                 _snapshot.update {
                     it.copy(stream = endStream(DatStream.STOPPED), motionStarted = false, inputsActive = false, speechStarted = false)
                 }
+                motionHealth = MOTION_IDLE
                 // During the run, the snapshot followed deviceInfo of the session, and that flow is closed now.
                 // The metadata of the SDK can hold a newer state, for example a lost link.
                 selectDevice()
@@ -720,14 +782,26 @@ class DatLink(
                 onSuccess = { added ->
                     motion = added
                     motionSampleCount = 0
-                    // The samples flow has no replay, so its collector comes first.
-                    runScope.subscribe { added.samples.collect { onMotionSample(it) } }
+                    // The samples flow has no replay, so its collector comes first. It subscribes on this thread,
+                    // and then it runs on a background thread.
+                    runScope.launch(Dispatchers.Default, CoroutineStart.UNDISPATCHED) {
+                        added.samples.collect { sample ->
+                            val queued = arrived.trySend(ArrivedSample(sample, SystemClock.elapsedRealtime()))
+                            if (queued.isFailure) synchronized(motionLock) { motionStats.onDropped() }
+                        }
+                    }
+                    runScope.launch(motionThread) { for (item in arrived) onMotionSample(item.sample, item.arrivalMs) }
                     runScope.subscribe { added.state.collect { onMotionState(added, it) } }
                     runScope.subscribe { added.errors.collect { error -> error?.let { fault(DatFault.Area.MOTION, it) } } }
                     runScope.launch {
+                        var statsAtMs = SystemClock.elapsedRealtime() + MOTION_COUNT_LOG_MS
                         while (true) {
-                            delay(MOTION_COUNT_LOG_MS)
-                            if (_snapshot.value.motionStarted) log("motion samples=$motionSampleCount")
+                            delay(MOTION_TICK_MS)
+                            val nowMs = SystemClock.elapsedRealtime()
+                            onMotionTick(added, nowMs)
+                            if (nowMs < statsAtMs) continue
+                            statsAtMs = nowMs + MOTION_COUNT_LOG_MS
+                            if (_snapshot.value.motionStarted) log(synchronized(motionLock) { motionStats.take(nowMs) })
                         }
                     }
                     added.start()
@@ -736,16 +810,62 @@ class DatLink(
             )
         }
 
-        private fun onMotionSample(sample: MotionSample) {
+        // Runs on the motion thread.
+        private fun onMotionSample(sample: MotionSample, arrivalMs: Long) {
             motionSampleCount += 1
-            _motionRows.tryEmit(sample.toRow())
-            val g = sample.gyroscope ?: return
-            _gyro.tryEmit(GyroSample(sample.timestampNs, g.x, g.y, g.z))
+            val gyro = sample.gyroscope?.let { GyroSample(sample.timestampNs, it.x, it.y, it.z) }
+            val rowTaken = _motionRows.tryEmit(sample.toRow())
+            val gyroTaken = gyro == null || _gyro.tryEmit(gyro)
+            val line = synchronized(motionLock) {
+                motionStats.onSample(sample.timestampNs, arrivalMs)
+                if (!rowTaken || !gyroTaken) motionStats.onDropped()
+                motionWatch.onSample(arrivalMs).also { publishMotionHealth() }
+            }
+            line?.let(log)
+            if (gyro != null) headSink?.invoke(HeadSample(gyro, sample.accelerometer?.let { AccelSample(it.x, it.y, it.z) }), arrivalMs)
+        }
+
+        private fun onMotionTick(motion: Motion, nowMs: Long) {
+            // Mock glasses send samples only while a motion feed plays, so a time with no sample is no stall there.
+            // A restart would also play the feed again, and the app would take that for a second nod.
+            if (_snapshot.value.mock) return
+            val framesFlow = nowMs - lastFrameAtMs < FRAMES_FLOW_MS
+            val tick = synchronized(motionLock) { motionWatch.onTick(nowMs, framesFlow, stillRunning).also { publishMotionHealth() } }
+            tick.lines.forEach(log)
+            if (!tick.restart || !canRevive) return
+            // Motion.start does nothing unless the state is STOPPED, and Motion.stop sets STOPPED before it returns
+            // (DAT 1.0.1, read in the classes of the SDK).
+            motionRestarting = true
+            motion.stop()
+            motion.start()
+            runScope.launch {
+                delay(MOTION_RESTART_SETTLE_MS)
+                // The start did not work. The state is STOPPED, and the revival takes it from here.
+                if (motionRestarting && motion.state.value != MotionState.STARTED) {
+                    motionRestarting = false
+                    onMotionState(motion, motion.state.value)
+                }
+            }
+        }
+
+        /** Call it with `motionLock`. */
+        private fun publishMotionHealth() {
+            val health = motionHealth
+            if (health.flow != motionWatch.flow || health.stalledSinceMs != motionWatch.stalledSinceMs) {
+                motionHealth = MotionHealth(motionWatch.flow, motionWatch.stalledSinceMs)
+            }
         }
 
         private fun onMotionState(motion: Motion, state: MotionState) {
             log("motion $state")
+            if (state == MotionState.STARTED) motionRestarting = false
+            // The stop and the start of a restart are not a stop of the capability.
+            if (motionRestarting) return
             if (isCurrent) _snapshot.update { it.copy(motionStarted = state == MotionState.STARTED) }
+            synchronized(motionLock) {
+                if (state == MotionState.STARTED) motionWatch.onStarted(SystemClock.elapsedRealtime()) else motionWatch.onNotStarted()
+                publishMotionHealth()
+            }
             when (state) {
                 MotionState.STARTED -> motionRevival.onStarted()
                 MotionState.STOPPED -> if (motionRevival.onStopped(byApp = !canRevive)) {
@@ -891,6 +1011,7 @@ class DatLink(
             if (bytes.size < expected) return
         }
         frameCount += 1
+        lastFrameAtMs = SystemClock.elapsedRealtime()
         frameSize = "${frame.width}x${frame.height}"
         _frames.tryEmit(RawFrame(bytes, frame.width, frame.height, frame.presentationTimeUs))
         meter.count(frame.width, frame.height)
@@ -936,7 +1057,15 @@ class DatLink(
         const val STOP_AFTER_STREAM_START_MS = 1000L
         const val MAX_STOP_WAIT_MS = 3000L
         const val MOTION_COUNT_LOG_MS = 3000L
+        const val MOTION_TICK_MS = 100L
+        const val MOTION_RESTART_SETTLE_MS = 3000L
+
+        /** Video frames flow when one arrived in this time. The stream has 7 frames each second. */
+        const val FRAMES_FLOW_MS = 1000L
         const val EVENT_BUFFER = 16
-        const val MOTION_BUFFER = 64
+
+        /** 68 seconds of samples at 30 Hz. */
+        const val MOTION_BUFFER = 2048
+        val MOTION_IDLE = MotionHealth(MotionFlow.IDLE, null)
     }
 }

@@ -36,7 +36,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * `gate` returns the reason to skip an upload, or null. `onKioskText` gets the full code text, for example
  * `GL1 K3X7`, when the dwell rule reports it. `onBarcode` gets a product code when the vote reports it.
  * `onLabelStill` says that the caller must take one still now. `onUpload` gets a JPEG with its header.
- * Each callback runs on the frame thread.
+ * `holdStills` returns true while a prompt waits for a head answer: no label still starts then, and a
+ * `still.request` waits for the first frame after it. Each callback runs on the frame thread.
  */
 class FramePipeline(
     private val gate: () -> UploadSkip?,
@@ -49,6 +50,7 @@ class FramePipeline(
     /** Gives the number of the next upload. Without it, this pipeline counts its uploads from 1. */
     private val nextSeq: (() -> Int)? = null,
     private val label: LabelPolicy = LabelPolicy(),
+    private val holdStills: () -> Boolean = { false },
     private val log: (String) -> Unit
 ) {
     private val scanner = CodeScanner()
@@ -120,8 +122,9 @@ class FramePipeline(
         if (stillGaveCode.getAndSet(false)) label.onStillCode()
         // A frame that waits in the socket is no reason to drop a still.
         val canUpload = gate().let { it == null || it == UploadSkip.STILL_SENDING }
-        val requested = labelRequested.getAndSet(false)
-        if (label.onFrame(nowMs, decoded != null || region != null, vote.accepted, requested, canUpload)) {
+        val hold = holdStills()
+        val requested = !hold && labelRequested.getAndSet(false)
+        if (label.onFrame(nowMs, decoded != null || region != null, vote.accepted, requested, canUpload, hold)) {
             // Why the still: a person who reads the log must see if the scanner or the server asked.
             log("label still asked: " + if (requested) "server request" else "region $region in ${frame.width}x${frame.height}")
             onLabelStill()

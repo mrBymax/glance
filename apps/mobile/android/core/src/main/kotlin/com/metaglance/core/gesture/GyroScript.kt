@@ -24,12 +24,23 @@ class GyroScript(private val config: HeadGestureConfig) {
         return this
     }
 
-    fun pitch(angleRad: Double, ms: Int): GyroScript = move(angleRad, ms, pitch = true, yaw = false)
+    fun pitch(angleRad: Double, ms: Int): GyroScript = both(angleRad, 0.0, ms)
 
-    fun yaw(angleRad: Double, ms: Int): GyroScript = move(angleRad, ms, pitch = false, yaw = true)
+    fun yaw(angleRad: Double, ms: Int): GyroScript = both(0.0, angleRad, ms)
 
     /** The same movement on both axes. */
-    fun diagonal(angleRad: Double, ms: Int): GyroScript = move(angleRad, ms, pitch = true, yaw = true)
+    fun diagonal(angleRad: Double, ms: Int): GyroScript = both(angleRad, angleRad, ms)
+
+    /** One movement with an angle of its own on each axis, for example a shake that also moves the pitch. */
+    fun both(pitchRad: Double, yawRad: Double, ms: Int): GyroScript {
+        val count = (ms / STEP_MS).roundToInt()
+        for (i in 0 until count) {
+            val shape = PI / (2 * ms / 1000.0) * sin(PI * (i + 0.5) * STEP_MS / ms)
+            rates.add(Rates(pitchRad * shape, yawRad * shape))
+        }
+        if (count > 0) lastMoveIndex = rates.size - 1
+        return this
+    }
 
     /** Adds the head movement of a walk to each sample: a sway on both axes and a step impact each 500 ms. */
     fun withWalk(): GyroScript {
@@ -54,17 +65,6 @@ class GyroScript(private val config: HeadGestureConfig) {
     /** The samples as rows of a motion file: the gyroscope values, gravity on the y axis, and no rotation. */
     fun rows(): List<MotionRow> = samples().map {
         MotionRow(it.tNs, 0f, 9.81f, 0f, it.x, it.y, it.z, 0f, 0f, 0f, 1f, 0f, 0f, 0f)
-    }
-
-    private fun move(angleRad: Double, ms: Int, pitch: Boolean, yaw: Boolean): GyroScript {
-        val count = (ms / STEP_MS).roundToInt()
-        val top = PI * angleRad / (2 * ms / 1000.0)
-        for (i in 0 until count) {
-            val rate = top * sin(PI * (i + 0.5) * STEP_MS / ms)
-            rates.add(Rates(if (pitch) rate else 0.0, if (yaw) rate else 0.0))
-        }
-        if (count > 0) lastMoveIndex = rates.size - 1
-        return this
     }
 
     private fun sample(tNs: Long, pitchRate: Double, yawRate: Double): GyroSample {
