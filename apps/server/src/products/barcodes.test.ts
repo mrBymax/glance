@@ -76,3 +76,28 @@ it('drops a result that arrives after the session stopped', async () => {
   expect(await reports()(session, NUTELLA, 'barcode')).toBe('dropped');
   expect(resolve).toHaveBeenCalledTimes(1);
 });
+it('drops the late result of a code when a later report of another code already reached the rules', async () => {
+  let answer!: (value: Product | null) => void;
+  resolve.mockImplementationOnce(() => new Promise((done) => { answer = done; }));
+  const report = reports();
+  const slow = report(session, NUTELLA, 'barcode');
+  expect(await report(session, '4006381333931', 'barcode')).toBe('notInStore');
+  answer(nutella);
+  expect(await slow).toBe('dropped');
+  expect(inputs).toEqual([{ type: 'barcode', outcome: { kind: 'notInStore', gtin: '4006381333931' } }]);
+  expect(info.join('\n')).toMatch(/source=barcode gtin=3017624010701 outcome=dropped/);
+  // The next report of the first code counts again.
+  expect(await report(session, NUTELLA, 'barcode')).toBe('product');
+});
+it('keeps the late result of a code when the later report had the same code, or reached no rule', async () => {
+  let answer!: (value: Product | null) => void;
+  resolve.mockImplementationOnce(() => new Promise((done) => { answer = done; }));
+  const report = reports();
+  const slow = report(session, NUTELLA, 'barcode');
+  expect(await report(session, NUTELLA, 'barcode')).toBe('product');
+  // Digits of the model that the store does not sell give the rules nothing.
+  expect(await report(session, '4006381333931', 'model')).toBe('notInStore');
+  answer(nutella);
+  expect(await slow).toBe('product');
+  expect(inputs).toHaveLength(2);
+});
