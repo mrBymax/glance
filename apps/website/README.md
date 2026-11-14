@@ -2,7 +2,7 @@
 
 The website of Meta Glance: a Vite app with React 19, Astryx, and `react-router`. It holds the landing page, the privacy page, the kiosk page, and the mirror page.
 
-The kiosk page and the mirror page work. The landing page and the privacy page are placeholders with one heading. Plan 4 fills them.
+The landing page and the privacy page render typed copy from `src/content/`. A test rejects a forbidden claim in that copy.
 
 ## Routes
 
@@ -36,6 +36,41 @@ The host of the build must answer an unknown path with `index.html`, because the
 | `GLANCE_SERVER_ORIGIN` (environment) | `http://localhost:8080` | The dev server sends each `/api` request to this origin. |
 
 The dev server uses port 5174 only. If the port is in use, the dev server stops with an error.
+
+## Landing and privacy pages
+
+`/` is the landing page and `/privacy` is the privacy page. Both render copy modules, so a person can fill a late value in one data file.
+
+```mermaid
+flowchart LR
+  probe["content/probe.ts: PROBE"] --> landing["content/landing.ts: landingCopy"]
+  probe --> privacy["content/privacy.ts: privacyCopy"]
+  numbersJson["content/numbers.json"] --> numbers["content/numbers.ts: NUMBERS"]
+  landing --> landingPage["pages/Landing.tsx"]
+  numbers --> landingPage
+  privacy --> privacyPage["pages/Privacy.tsx"]
+  rules["content/copyRules.ts: copyProblems"] -. "checks in the tests" .-> landing
+  rules -.-> privacy
+  rules -.-> numbers
+```
+
+Values that a person fills. Each one has a default that the page can show.
+
+| File | Value | Default | Effect |
+|---|---|---|---|
+| `content/probe.ts` | `PROBE` | Motion, Inputs, and Speech start, with Developer Mode | The probe results of spec section 16. They select the headline, the step texts, the list of yes inputs, the audio lines, and the release channel step. |
+| `content/numbers.json` | `value` of each item, and `context` | `null` | A `null` value shows as "Not measured yet". A value of 0 shows with its unit. A value needs the test conditions in `context`, or `parseNumbers` throws. |
+| `content/landing.ts` | `LINKS.videoId`, `LINKS.apkUrl` | `null` | With `null`, the page shows one plain line and no player or link. |
+| `content/landing.ts` | `TEAM` | `[]` | One line for each member, in the form `<name>, <role>`. |
+| `content/landing.ts` | `CATALOG_SIZE` | `12` | The number of entries in `apps/server/catalog/catalog.json`. |
+| `content/privacy.ts` | `PRIVACY_FACTS` | no training claim, no email, `30 November 2026` | `geminiNoTrainingConfirmed` adds the line about Google and training. `contactEmail` replaces the GitHub issue link with a mail link. `deleteBy` is the date in the deletion lines. |
+
+- A claim with a source shows the link `Source: <name>`. Each source names its file in `docs/research/`.
+- `copyProblems` in `content/copyRules.ts` is the copy guard. It reports a banned character, a marketing word, a sentence of more than 25 words, and four forbidden claims: the store installs nothing, the store lends glasses, the payment is real, and a blind shopper tested Glance.
+- `content/landing.test.ts`, `content/privacy.test.ts`, and `content/numbers.test.ts` run the copy guard on each string of the copy, for each probe result. Run `npm test --workspace @glance/website` after each edit of a content file.
+- The link to `/privacy` is a plain link, so the browser loads the page again.
+- The logo files `public/logo-light.svg` and `public/logo-dark.svg` are copies of `assets/Glance.svg` and `assets/Glance Dark.svg`. The logo holds the Meta mark. Ask the Meta mentors before the page goes public.
+- The video player loads from `youtube-nocookie.com` only when `LINKS.videoId` is set.
 
 ## Kiosk page
 
