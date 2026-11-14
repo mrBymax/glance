@@ -5,7 +5,7 @@
 export const TIMING = {
   // Terms of section 6.2: a target is in view when it was reported within this time.
   viewMs: 3000,
-  // R4: a nod or a shake counts for this time after the prompt finished.
+  // R4: the head window of the phone. A nod or a shake counts when the glasses took it in this time after the prompt finished.
   headWindowMs: 8000,
   // R5: a product prompt stays current for this time after its target left the view.
   promptTtlAfterLeftMs: 15000,
