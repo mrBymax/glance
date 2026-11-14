@@ -65,6 +65,13 @@ it('R2: a scanned product replaces the pending product, and a product in sight r
   h.see(RYE);
   expect(h.state.prompt).toMatchObject({ productId: RYE });
 });
+it('R2: a barcode brings back the product that a prompt just replaced, because a barcode is sure', () => {
+  const h = scanned();
+  h.barcode(found(NUTELLA)); h.see(OAT);
+  expect(h.state.prompt).toMatchObject({ productId: OAT });
+  h.advance(150); h.barcode(found(NUTELLA));
+  expect(h.state.prompt).toMatchObject({ productId: NUTELLA });
+});
 it('a product ID that no index holds gives nothing', () => {
   const h = harness();
   h.barcode(found(NUTELLA));

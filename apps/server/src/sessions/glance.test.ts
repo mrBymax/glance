@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { EMPTY_CART, TIMING as T } from '@glance/shared';
 import { NO_RESULT, type RecognitionResult, RecognitionResultSchema } from '../recognition/result';
+import { GO_BACK_AFTER_MS } from './glance';
 import { SAME_TEXT_MS, UNSOLICITED_GAP_MS } from './guard';
 import { BARISTA, CRISPS, type Harness, KIOSK, OAT, RYE, harness } from './harness';
 import { LINE_DEFAULTS, say } from './say';
@@ -39,6 +40,41 @@ it('R2: a new product in view replaces the pending product', () => {
   expect(h.events()).toEqual(['glance.cleared', 'glance.pending']);
   expect(h.event('glance.cleared')).toEqual({ type: 'glance.cleared', promptId: 'p-0001' });
   expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: RYE });
+});
+it('R2: results that change between two products give two prompts, and do not go back and forth', () => {
+  const h = harness();
+  h.see(OAT); h.advance(150); h.see(RYE);
+  // 9 seconds of frames, 150 ms apart.
+  for (let frame = 0; frame < 30; frame += 1) {
+    h.advance(150); h.see(OAT);
+    expect(h.effects).toEqual([]);
+    h.advance(150); h.see(RYE);
+    expect(h.effects).toEqual([]);
+  }
+  expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: RYE });
+});
+it('R2: the product that a prompt replaced gets its prompt again when sight did not name the other one for 1 second', () => {
+  const h = harness();
+  h.see(OAT); h.advance(150); h.see(RYE);
+  h.advance(GO_BACK_AFTER_MS - 1); h.see(OAT);
+  expect(h.effects).toEqual([]);
+  h.advance(1); h.see(OAT);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0003', productId: OAT });
+  // The same holds the other way now.
+  h.advance(150); h.see(RYE);
+  expect(h.effects).toEqual([]);
+});
+it('R2: a third product replaces the prompt at once', () => {
+  const h = harness();
+  h.see(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(CRISPS);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0003', productId: CRISPS });
+});
+it('R2: the product that a prompt replaced gets its prompt again at once when the shopper answered the other one', () => {
+  const h = harness();
+  h.see(OAT); h.advance(150); h.see(RYE);
+  h.done(); h.no();
+  h.advance(150); h.see(OAT);
+  expect(h.state.prompt).toMatchObject({ productId: OAT });
 });
 it('R5: a product prompt ends when its product left the view for 15 seconds', () => {
   const h = harness();

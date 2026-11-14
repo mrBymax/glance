@@ -123,6 +123,8 @@ export type SessionState = {
   adds: string[];
   /** The last prompt that finished. A voice answer names it, and R20 gives its hint after a pay prompt. */
   lastDone: { promptId: string; kind: 'product' | 'pay'; at: number; hinted: boolean } | null;
+  /** The product whose prompt the prompt of `by` replaced (R2). See `goesBack` in glance.ts. */
+  replaced: { productId: string; by: string } | null;
   /** R13. */
   unknownAt: number | null;
   aimHintAt: number | null;

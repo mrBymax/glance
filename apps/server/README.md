@@ -978,6 +978,7 @@ flowchart LR
 The rules that exist:
 
 - A recognized product gets a glance prompt with a new ID (R1). A new product replaces the pending product (R2).
+- The product that a prompt replaced gets no prompt by sight while sight named the product of that prompt in the last second (`GO_BACK_AFTER_MS` in `src/sessions/glance.ts`). Two store items that look alike can get their names in turn, frame by frame. They then get two prompts, and the second one stays. A barcode and a label match are sure, so they bring the first product back at once.
 - Results inside the view time belong to one appearance. A product that comes back after it left the view gets a new prompt.
 - A product prompt ends when its product left the view for 15 seconds (R5).
 - A product in the cart gets the prompt for "add another" (R11).
@@ -1106,7 +1107,7 @@ The audit of 2026-11-14: each line that the server speaks with no action of the 
 
 - A warning has no line of its own. The allergen and diet warnings are part of the product prompt, and the budget warning is part of `cart.added`, which answers a yes.
 - The lines `cart.added`, `cart.removed`, `glance.skipped`, `undo.nothing`, `hint.lookAtCode`, `info.total`, `info.cart`, `info.help`, the four `ask` lines, and `checkout.biometric` answer an action. The guard never drops them.
-- Not limited: results that change between two products give a new prompt line for each change (R2). The guard lets each prompt play, because a prompt with no line cannot take a nod.
+- Results that change between two products give two prompt lines, and no line for the changes after them: see R2 in "Rules". A third product gets its prompt line at once. The guard lets each prompt play, because a prompt with no line cannot take a nod.
 - Not limited: a connection that drops again and again gives "Connection lost" on the phone and "Back online." for each drop of 3 seconds or more.
 
 What the phone plays by itself. The Android app and the phone UI were read for this audit on 2026-11-14:

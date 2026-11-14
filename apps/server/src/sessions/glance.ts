@@ -13,6 +13,12 @@ import { warningsFor } from './warnings';
  */
 const YES_HINT_GLANCES = 2;
 
+/**
+ * The product that a prompt replaced gets no prompt while sight named the product of that prompt in this time.
+ * Two store items that look alike can get their names in turn, frame by frame, and each change would be a new prompt.
+ */
+export const GO_BACK_AFTER_MS = 1000;
+
 type RecognitionInput = Extract<RuleInput, { type: 'recognition' }>;
 
 export function onRecognition(turn: Turn, input: RecognitionInput): void {
@@ -38,7 +44,7 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
 
   switch (result.status) {
     case 'identified':
-      if (result.productId !== null) onIdentified(turn, result.productId);
+      if (result.productId !== null && !goesBack(turn, result.productId)) onIdentified(turn, result.productId);
       return;
     case 'ambiguous':
       onAmbiguous(turn, result.candidates);
@@ -52,6 +58,17 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
   }
   // The still of the second look is a still already, so only a stream frame counts.
   if (!input.still) onUnnamedProduct(turn);
+}
+
+/**
+ * True for a result of sight that would give the prompt back to the product that the current prompt replaced, while
+ * sight still names the product of the current prompt. A barcode is sure, so it does not go through this test.
+ */
+function goesBack(turn: Turn, productId: string): boolean {
+  const { s, now } = turn;
+  if (s.prompt?.kind !== 'product' || s.replaced?.productId !== productId || s.replaced.by !== s.prompt.productId) return false;
+  const lastSeen = s.seen[s.prompt.productId];
+  return lastSeen !== undefined && now - lastSeen < GO_BACK_AFTER_MS;
 }
 
 /** For a product that recognition named, and for the product of a barcode. */
@@ -76,7 +93,10 @@ export function onIdentified(turn: Turn, productId: string): void {
 
 function openProductPrompt(turn: Turn, product: Product): void {
   const { s } = turn;
-  if (s.prompt?.kind === 'product') emit(turn, { type: 'glance.cleared', promptId: s.prompt.id });
+  if (s.prompt?.kind === 'product') {
+    emit(turn, { type: 'glance.cleared', promptId: s.prompt.id });
+    if (s.prompt.productId !== product.id) s.replaced = { productId: s.prompt.productId, by: product.id };
+  }
 
   suspendCheckoutFor(turn, product.id);
 
