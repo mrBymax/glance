@@ -1,0 +1,62 @@
+[
+  {
+    "id": "oat-drink-1l",
+    "name": { "en": "Oat drink", "it": "Bevanda di avena" },
+    "spokenName": { "en": "Oat drink", "it": "Bevanda di avena" },
+    "brand": "Oatly",
+    "packSize": "1 L",
+    "spokenPack": { "en": "one litre", "it": "un litro" },
+    "spokenPackDetailed": { "en": "one litre carton", "it": "cartone da un litro" },
+    "priceCents": 189,
+    "allergens": ["gluten"],
+    "vegan": true,
+    "vegetarian": true,
+    "visual": "Tall carton, light blue and white, the word OATLY in large black letters.",
+    "lookAlikes": ["oat-drink-barista-1l"]
+  },
+  {
+    "id": "oat-drink-barista-1l",
+    "name": { "en": "Barista oat drink" },
+    "spokenName": { "en": "Barista oat drink" },
+    "brand": "Oatly",
+    "packSize": "1 L",
+    "spokenPack": { "en": "one litre" },
+    "spokenPackDetailed": { "en": "one litre carton" },
+    "priceCents": 229,
+    "allergens": ["gluten"],
+    "vegan": true,
+    "vegetarian": true,
+    "visual": "Tall carton, grey and white, the word OATLY in large black letters and the words BARISTA EDITION below it.",
+    "lookAlikes": ["oat-drink-1l"]
+  },
+  {
+    "id": "rye-bread",
+    "name": { "en": "Rye bread" },
+    "spokenName": { "en": "Rye bread" },
+    "brand": "Demo Bakery",
+    "packSize": "500 g",
+    "spokenPack": { "en": "five hundred grams" },
+    "spokenPackDetailed": { "en": "five hundred gram bag" },
+    "priceCents": 260,
+    "allergens": ["gluten"],
+    "vegan": true,
+    "vegetarian": true,
+    "visual": "Clear plastic bag with a brown label, dark sliced bread inside.",
+    "lookAlikes": []
+  },
+  {
+    "id": "potato-crisps",
+    "name": { "en": "Potato crisps" },
+    "spokenName": { "en": "Potato crisps" },
+    "brand": "Demo Snacks",
+    "packSize": "150 g",
+    "spokenPack": { "en": "one hundred fifty grams" },
+    "spokenPackDetailed": { "en": "one hundred fifty gram bag" },
+    "priceCents": 190,
+    "allergens": null,
+    "vegan": null,
+    "vegetarian": null,
+    "visual": "Glossy yellow foil bag with a picture of golden crisps on the front.",
+    "lookAlikes": []
+  }
+]
