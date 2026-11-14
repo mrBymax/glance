@@ -63,18 +63,16 @@ it('asks about the product of the current prompt first, then the product in view
   const added = harness();
   added.see(OAT); added.done(); added.yes('head');
   added.advance(5000);   // the oat drink has left the view
-  added.yes('touch');   // R10 gives its hint one time
-  expect(added.lines()).toEqual(['hint.holdAgainForAnother']);
   added.yes('touch');
   expect(added.lines()).toEqual(['ask.listening']);
   added.send({ type: 'question', text: 'q' });
   expect(added.effects).toMatchObject([{ type: 'ask', product: { id: OAT } }]);
 });
-it('a double tap after an add keeps the hint of R10 and opens no window', () => {
+it('a double tap after an add means "listen"', () => {
   const h = harness();
   h.see(OAT); h.done(); h.yes('touch'); h.yes('touch');
-  expect(h.lines()).toEqual(['hint.holdAgainForAnother']);
-  expect(h.state.askUntil).toBeNull();
+  expect(h.lines()).toEqual(['ask.listening']);
+  expect(h.verdict).toMatchObject({ accepted: true, reason: null });
 });
 it('a double tap while a prompt plays opens no window', () => {
   const h = harness();

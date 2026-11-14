@@ -6,15 +6,15 @@ const dev = readCatalogFile('catalog/catalog.dev.json');
 
 it('lists the lines to make in advance, with no duplicate', () => {
   const lines = seedLines(dev);
-  expect(lines).toHaveLength(34 + 3 * dev.length);
+  expect(lines).toHaveLength(32 + 3 * dev.length);
   expect(new Set(lines).size).toBe(lines.length);
   for (const line of ['Oat drink, one litre, one eighty-nine. Nod to add.', 'Oat drink, one litre, one eighty-nine.',
     'Oat drink. One is in your cart. Nod to add another. Shake to remove.', 'Skipped.',
     'Glasses battery at ten percent.', 'I can see part of it. Turn the front to me.', 'Listening.',
     'This product is not in this store.', 'I cannot read this code. Hold it closer.']) expect(lines).toContain(line);
 });
-it('lists 34 lines for a catalog with no product', () => {
-  expect(seedLines([])).toHaveLength(34);
+it('lists 32 lines for a catalog with no product', () => {
+  expect(seedLines([])).toHaveLength(32);
 });
 it('makes one clip at a time and counts each clip that failed', async () => {
   let running = 0;
@@ -32,7 +32,7 @@ it('makes one clip at a time and counts each clip that failed', async () => {
 });
 it('lists the Italian lines for the language it', () => {
   const lines = seedLines(dev, 'it');
-  expect(lines).toHaveLength(34 + 3 * dev.length);
+  expect(lines).toHaveLength(32 + 3 * dev.length);
   expect(lines).toContain('Bevanda di avena, un litro, uno e ottantanove. Annuisci per aggiungere.');
   expect(lines).toContain('Saltato.');
   expect(lines).not.toContain('Skipped.');

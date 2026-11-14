@@ -13,7 +13,7 @@ export const TIMING = {
   undoWindowMs: 8000,
   // R9: recognition excludes a skipped product for this time after the no.
   excludeAfterNoMs: 10000,
-  // R20: a yes or no with no valid target gets a hint, if a prompt finished within this time.
+  // R20: a yes or no with the kiosk code out of view gets a hint, if a pay prompt finished within this time.
   hintAfterPromptMs: 15000,
   // R14: the phone reports a kiosk code after this time in view.
   kioskDwellMs: 1500,

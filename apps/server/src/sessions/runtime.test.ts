@@ -84,6 +84,17 @@ it('runs the rules with the clock time and publishes the events', () => {
   expect(busEvents.map((e) => e.type)).toEqual(['glance.pending']);
   expect(session.state.seen['oat-drink-1l']).toBe(time);
 });
+it('logs each intent with the verdict of the rules', () => {
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'voice', promptId: 'p-0001' });
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'head', promptId: 'p-0001' });
+  session.dispatch(help);
+  expect(logLines.filter((line) => line.startsWith('intent '))).toEqual([
+    `intent session=${session.id} kind=yes source=voice prompt=p-0001 accepted=false reason=line-plays`,
+    `intent session=${session.id} kind=yes source=head prompt=p-0001 accepted=true reason=none`,
+    `intent session=${session.id} kind=help source=phone prompt=none accepted=true reason=none`,
+  ]);
+});
 it('sends a line to the phone and a caption to the bus', async () => {
   session.attach(sink); session.dispatch(seeOat); await session.settled();
   expect(sink.sent).toEqual([{
@@ -355,7 +366,7 @@ it('logs for each product prompt the time from the frame to the result, of the p
   expect(match).not.toBeNull();
   expect(Number(match![1])).toBeGreaterThanOrEqual(35);
   // The line follows the speak line of its prompt.
-  expect(logLines.indexOf(timing[0]!)).toBe(1);
+  expect(logLines[logLines.indexOf(timing[0]!) - 1]).toMatch(/^speak .* prompt=p-0001$/);
 });
 it('a product prompt of an input with no measured times logs none for them', async () => {
   session.attach(sink);

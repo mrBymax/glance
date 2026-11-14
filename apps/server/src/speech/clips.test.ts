@@ -92,7 +92,7 @@ it('uses a clip that an earlier process put in the directory', async () => {
   expect(synthesize).toHaveBeenCalledTimes(1);
 });
 it('shares one request between two calls at the same time', async () => {
-  await Promise.all([clipUrl('Hold it up again.', 'en'), clipUrl('Hold it up again.', 'en')]);
+  await Promise.all([clipUrl('Thank you.', 'en'), clipUrl('Thank you.', 'en')]);
   expect(synthesize).toHaveBeenCalledTimes(1);
 });
 it('uses the English voice when the language has none', async () => {

@@ -45,8 +45,6 @@ export const LINE_KIND: Record<Line['key'], LineKind> = {
   'cart.added': 'other',
   'cart.removed': 'other',
   'undo.nothing': 'other',
-  'hint.holdAgain': 'other',
-  'hint.holdAgainForAnother': 'other',
   'hint.lookAtCode': 'other',
   'checkout.offer': 'checkout',
   // The line of a kiosk code that starts no checkout. It names no payment, so it is no checkout line for the guard.

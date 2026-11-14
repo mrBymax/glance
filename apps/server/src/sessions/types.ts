@@ -16,7 +16,7 @@ export type Line =
   | { key: 'cart.added'; product: Product; totalCents: number; budgetCents: number | null }
   | { key: 'cart.removed'; product: Product; totalCents: number }
   | { key: 'undo.nothing' }
-  | { key: 'hint.holdAgain' } | { key: 'hint.holdAgainForAnother' } | { key: 'hint.lookAtCode' }
+  | { key: 'hint.lookAtCode' }
   | { key: 'checkout.offer'; kiosk: KioskRef; itemCount: number; totalCents: number }
   | { key: 'checkout.empty' } | { key: 'checkout.busy' } | { key: 'checkout.cancelled' } | { key: 'checkout.failed' }
   | { key: 'checkout.paid'; totalCents: number }
@@ -118,10 +118,10 @@ export type SessionState = {
   /** R9. */
   excluded: { productId: string; until: number }[];
   /** R10. */
-  lastAdd: { productId: string; promptId: string; at: number; hinted: boolean } | null;
+  lastAdd: { productId: string; promptId: string; at: number } | null;
   /** Product IDs in the order of the adds (R12). */
   adds: string[];
-  /** R20. */
+  /** The last prompt that finished. A voice answer names it, and R20 gives its hint after a pay prompt. */
   lastDone: { promptId: string; kind: 'product' | 'pay'; at: number; hinted: boolean } | null;
   /** R13. */
   unknownAt: number | null;
@@ -204,6 +204,24 @@ export type Effect =
   | { type: 'still.request' }
   /** The guard of guard.ts dropped this line. The runtime writes it to the log, and the phone gets nothing. */
   | { type: 'speak.dropped'; line: Line; reason: DropReason };
+
+/**
+ * Why a yes or a no does not count for the current prompt, or why the rules took no intent.
+ * no-prompt-id: the answer names no prompt. no-prompt: no prompt waits. other-prompt: the answer names a prompt that
+ * ended or that another prompt replaced. line-plays: the source needs a finished prompt. head-off: the profile has
+ * the head gestures off. code-not-in-view: a nod on the pay prompt with no report of the kiosk code in the view time.
+ * late: a head answer after its last time. payment-confirmed: the payment runs. session-closed: the session is paid or ended.
+ */
+export type IntentFault =
+  | 'no-prompt-id' | 'no-prompt' | 'other-prompt' | 'line-plays' | 'head-off' | 'code-not-in-view' | 'late'
+  | 'payment-confirmed' | 'session-closed';
+
+/**
+ * What the rules did with one intent, for the log. `accepted` is true when the intent had its effect: a yes or a no
+ * that answered the current prompt, a no that took back the last add (R10), a double tap that opened the question
+ * window, and each command. `reason` is null for an accepted intent.
+ */
+export type Verdict = { kind: IntentKind; source: IntentSource; promptId: string | null; accepted: boolean; reason: IntentFault | null };
 
 /** Why the guard dropped a line: its text is that of a line of the last 20 seconds, it came less than 3 seconds after another unsolicited line, or its appearance already had a line about a failed read. */
 export type DropReason = 'same text' | 'gap' | 'appearance';

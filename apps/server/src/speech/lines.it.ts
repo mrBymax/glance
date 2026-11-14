@@ -131,8 +131,6 @@ export const LINES_IT: LineTemplates = {
     profile.detail === 'brief' ? '' : total(line.totalCents, profile),
   ),
   'undo.nothing': () => 'Niente da annullare.',
-  'hint.holdAgain': () => 'Sollevalo di nuovo.',
-  'hint.holdAgainForAnother': () => 'Sollevalo di nuovo per aggiungerne ancora.',
   'hint.lookAtCode': (_line, profile) => `Guarda il codice della cassa, ${yesPhrases(profile).thenYes}.`,
   'checkout.offer': (line, profile) => sentences(
     `${line.kiosk.name}, ${line.kiosk.store}.`,

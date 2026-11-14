@@ -202,25 +202,19 @@ it('R9: recognition excludes a skipped product for 10 seconds, and another produ
   h.see(BARISTA);
   expect(h.state.prompt).toMatchObject({ productId: BARISTA, mode: 'new' });
 });
-it('R10: after an add the product is muted, a second yes gets a hint, and a no removes the unit', () => {
+it('R10: after an add the product is muted, a second yes does nothing, and a no removes the unit', () => {
   const h = harness();
   h.see(OAT); h.done(); h.yes('head');
   h.hold(OAT, 2000);
   expect(h.state.prompt).toBeNull();
   h.yes('head');
-  expect(h.lines()).toEqual(['hint.holdAgainForAnother']);
+  expect(h.effects).toEqual([]);
+  expect(h.verdict).toMatchObject({ accepted: false, reason: 'no-prompt' });
   expect(h.state.cart.totalCents).toBe(189);
   h.no('head');
   expect(h.lines()).toEqual(['cart.removed']);
+  expect(h.verdict).toMatchObject({ accepted: true, reason: null });
   expect(h.state.cart).toEqual(EMPTY_CART);
-});
-it('R10: the hint for a second yes plays one time for each add', () => {
-  const h = harness();
-  h.see(OAT); h.done(); h.yes('head');
-  h.yes('head');
-  expect(h.lines()).toEqual(['hint.holdAgainForAnother']);
-  h.yes('head');
-  expect(h.effects).toEqual([]);
 });
 it('R10: a no later than 8 seconds after the add removes nothing', () => {
   const h = harness();
@@ -259,22 +253,37 @@ it('R12: an undo after the unit left the cart by another way removes the unit be
   expect(h.speak()!.line).toMatchObject({ key: 'cart.removed', product: { id: RYE }, totalCents: 0 });
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
-it('R20: a late yes gets one hint, then silence', () => {
-  const h = harness();
-  h.see(OAT); h.done();
-  h.yes('head', 'p-9999');
-  expect(h.lines()).toEqual(['hint.holdAgain']);
-  h.yes('head', 'p-9999');
-  expect(h.effects).toEqual([]);
-});
-it('R20: a yes more than 15 seconds after the last finished prompt does nothing', () => {
-  const h = harness();
-  h.see(OAT); h.done(); h.away(T.hintAfterPromptMs);
-  h.yes('head', 'p-9999');
-  expect(h.effects).toEqual([]);
+it('a yes with no product prompt to answer says nothing', () => {
+  const ended = harness();
+  ended.see(OAT); ended.done(); const old = ended.state.prompt!.id;
+  ended.see(RYE); ended.done();
+  ended.yes('head', old);
+  expect(ended.effects).toEqual([]);
+  expect(ended.verdict).toEqual({ kind: 'yes', source: 'head', promptId: old, accepted: false, reason: 'other-prompt' });
   const fresh = harness();
   fresh.yes('head', 'p-9999');
   expect(fresh.effects).toEqual([]);
+  expect(fresh.verdict).toMatchObject({ accepted: false, reason: 'no-prompt' });
+});
+it('gives a verdict for each intent, with the reason for an answer that does not count', () => {
+  const h = harness();
+  h.send({ type: 'tick' });
+  expect(h.verdict).toBeNull();
+  h.intent('help', 'phone');
+  expect(h.verdict).toEqual({ kind: 'help', source: 'phone', promptId: null, accepted: true, reason: null });
+  h.see(OAT); const id = h.state.prompt!.id;
+  h.send({ type: 'intent', kind: 'yes', source: 'phone' });
+  expect(h.verdict).toMatchObject({ promptId: null, accepted: false, reason: 'no-prompt-id' });
+  h.yes('voice', id);
+  expect(h.verdict).toMatchObject({ accepted: false, reason: 'line-plays' });
+  h.done(); h.hold(OAT, HEAD_BOUND_MS);
+  h.yes('head');
+  expect(h.verdict).toMatchObject({ accepted: false, reason: 'late' });
+  h.yes('voice');
+  expect(h.verdict).toEqual({ kind: 'yes', source: 'voice', promptId: id, accepted: true, reason: null });
+  const off = harness({ profile: { headGestures: false } });
+  off.see(OAT); off.done(); off.yes('head');
+  expect(off.verdict).toMatchObject({ accepted: false, reason: 'head-off' });
 });
 it('R21: silence never adds', () => {
   const h = harness();

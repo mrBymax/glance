@@ -31,7 +31,7 @@ export type RuntimeDeps = {
   restoreProducts?: (productIds: string[]) => Promise<void>;
   /** Runs after each step, with the state from before the step. */
   afterStep: (session: SessionRuntime, before: SessionState) => void;
-  /** Gets one line for each spoken line and for each line that the guard dropped. Without it the runtime logs neither. */
+  /** Gets one line for each intent, for each spoken line, and for each line that the guard dropped. Without it the runtime logs none. */
   log?: (line: string) => void;
 };
 
@@ -89,6 +89,12 @@ export class SessionRuntime {
     const before = this.state;
     const next = step(before, { ...input, now: this.deps.clock.now() }, this.ruleContext());
     this.state = next.state;
+    if (next.verdict) {
+      const { kind, source, promptId, accepted, reason } = next.verdict;
+      this.deps.log?.(
+        `intent session=${this.id} kind=${kind} source=${source} prompt=${promptId ?? 'none'} accepted=${accepted} reason=${reason ?? 'none'}`,
+      );
+    }
 
     let changed = input.type === 'profile.set';
     for (const effect of next.effects) {

@@ -7,7 +7,7 @@ import {
 import { indexCatalog, readCatalogFile } from '../catalog/catalog';
 import { NO_RESULT, type RecognitionResult } from '../recognition/result';
 import { createSessionState, step } from './step';
-import type { BarcodeOutcome, Effect, RuleContext, RuleInputBody, SessionState, SpeakEffect } from './types';
+import type { BarcodeOutcome, Effect, RuleContext, RuleInputBody, SessionState, SpeakEffect, Verdict } from './types';
 
 export const OAT = 'oat-drink-1l', BARISTA = 'oat-drink-barista-1l', RYE = 'rye-bread', CRISPS = 'potato-crisps';
 export const KIOSK: KioskRef = { id: 'kiosk-1', name: 'Checkout 3', store: 'Demo Market' };
@@ -46,6 +46,8 @@ export type Harness = {
   effects: Effect[];
   /** Since the start. */
   all: Effect[];
+  /** Of the last input: null for an input that is no intent. */
+  verdict: Verdict | null;
   /** Adds `now`, runs `step`, keeps the state and the effects. */
   send(input: RuleInputBody): void;
   /** Moves the clock, then sends one tick. */
@@ -108,10 +110,12 @@ export function harness(
     now: START,
     effects: [],
     all: [],
+    verdict: null,
     send(input) {
       const next = step(h.state, { ...input, now: h.now }, h.ctx);
       h.state = next.state;
       h.effects = next.effects;
+      h.verdict = next.verdict;
       h.all.push(...next.effects);
     },
     advance(ms) {

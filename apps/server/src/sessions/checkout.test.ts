@@ -95,11 +95,13 @@ it('R16: a nod does not pay with no report of the code for 3 seconds', () => {
   h.advance(T.viewMs);
   h.yes('head');
   expect(payments(h)).toEqual([]);
+  expect(h.verdict).toMatchObject({ accepted: false, reason: 'code-not-in-view' });
 });
 it('R16: a nod does not pay while the line of the pay prompt plays', () => {
   const h = full();
   h.yes('head', h.state.prompt!.id);
   expect(payments(h)).toEqual([]);
+  expect(h.verdict).toMatchObject({ accepted: false, reason: 'line-plays' });
   expect(h.state.prompt).toMatchObject({ kind: 'pay', doneAt: null });
 });
 it('R16: a late nod does not pay for a pay prompt that a cart change replaced', () => {

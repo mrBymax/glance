@@ -880,11 +880,12 @@ The rules that exist:
 - The phone is the judge of the head window. It reads the window in the time of the motion samples of the glasses. After a stall of the link it sends the answer seconds late. So the server has no head window of its own. It keeps one last time: the answer must arrive less than the head window of the profile plus 21 seconds after `prompt.done`. With no `prompt.done`, the time counts from the start of the prompt. `answers.ts` has the 21 seconds as two values. `HEAD_MAX_EXTRA_MS` is 15 seconds: the longest time that a stall or a still adds to a window. `HEAD_LATE_MS` is 6 seconds: the longest wait for a late sample. They repeat `MAX_EXTRA_MS` and `LATE_MS` of `HeadInput` in the Android app. A profile with no head window has no last time.
 - A head answer to the pay prompt keeps each condition: a finished prompt, the longer time, and a report of the kiosk code in the last 3 seconds. A movement during the line never pays. Each other rule of the checkout stays (R16 to R19, the spot check, the fingerprint).
 - An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
-- After an add, a no removes that unit for 8 seconds, and a second yes gets one hint (R10). On the prompt for "add another", a no removes one unit (R11).
+- After an add, a no removes that unit for 8 seconds (R10). A second yes does nothing: the shopper holds the product up again for another unit. On the prompt for "add another", a no removes one unit (R11).
 - An undo removes the last added unit that the cart still holds (R12). A cart edit sets the quantity of a cart line from 0 to 99.
 - An add that crosses the budget of the profile warns one time. See "Budget guard".
-- A yes or a no with no valid target gets one hint, if a prompt finished in the last 15 seconds (R20). Silence adds nothing (R21).
-- A double tap with no current prompt opens the question window in place of that hint. See "Questions about a product".
+- A yes or a no with no prompt to answer says nothing. The lines "Hold it up again." and "Hold it up again to add another." do not exist any more: in the test of 2026-11-14 the shopper heard one for a nod that must add. The log line `intent` names the reason. See "Session runtime".
+- One hint stays (R20): a yes or a no less than 15 seconds after a pay prompt finished, with the kiosk code out of view, gets "Look at the checkout code, then nod." one time. Silence adds nothing (R21).
+- A double tap with no current prompt opens the question window. See "Questions about a product".
 - A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code, and at most one each 20 seconds. With its line, a busy kiosk also gives the event `error` with the code `kiosk.busy`.
 - A yes pays only as an answer to the pay prompt (R16). The effect `payment.start` asks the runtime for the payment, and the input `payment.result` brings its result.
 - A product held up during a checkout suspends it. The pay prompt returns with the new total when the product has left the view and the code is in view (R17).
@@ -986,7 +987,7 @@ The audit of 2026-11-14: each line that the server speaks with no action of the 
 | `recognition.slow` | 3 failed recognition calls in a row | One each 60 seconds, with its `error` event (`SLOW_REPORT_EVERY_MS`). Before: one for each 3 failed calls, about each 12 seconds | 20 s, 3 s |
 
 - A warning has no line of its own. The allergen and diet warnings are part of the product prompt, and the budget warning is part of `cart.added`, which answers a yes.
-- The lines `cart.added`, `cart.removed`, `glance.skipped`, `undo.nothing`, the three hints, `info.total`, `info.cart`, `info.help`, the four `ask` lines, and `checkout.biometric` answer an action. The guard never drops them.
+- The lines `cart.added`, `cart.removed`, `glance.skipped`, `undo.nothing`, `hint.lookAtCode`, `info.total`, `info.cart`, `info.help`, the four `ask` lines, and `checkout.biometric` answer an action. The guard never drops them.
 - Not limited: results that change between two products give a new prompt line for each change (R2). The guard lets each prompt play, because a prompt with no line cannot take a nod.
 - Not limited: a connection that drops again and again gives "Connection lost" on the phone and "Back online." for each drop of 3 seconds or more.
 
@@ -1107,7 +1108,7 @@ sequenceDiagram
 
 - The question window opens for 10 seconds (`ASK_WINDOW_MS`) with the line "Listening." Two inputs open it: the intent `ask` from each source, and a yes from the touchpad while no prompt is current.
 - The intent `ask` needs no prompt ID, and a current prompt stays current. The microphone button of the phone UI sends it.
-- A double tap still answers a current prompt. After an add, the first double tap gets the hint of R10, and a later one opens the window.
+- A double tap still answers a current prompt. After an add, with no current prompt, a double tap opens the window.
 - The device socket turns a `speech.final` that is no command, with a confidence of 0.5 or more, into the input `question`. A command word stays a command, also inside the window.
 - A question outside the window has no effect. A question inside it closes the window.
 - The question is about the product of the current prompt. With no product prompt it is about the product in view that was seen last. With no product in view it is about the product of the last add. With no such product the voice says "Hold a product up, then ask."
@@ -1234,6 +1235,7 @@ Only the server computes a total, and each price comes from the catalog or from 
 `SessionRuntime` holds one session. `dispatch(input)` adds the clock time, runs `step`, and runs the effects in their order.
 
 - An event goes to the bus at once, on the topic of the session. The events stream and the device socket listen there.
+- Each intent gets the log line `intent session=<id> kind=<kind> source=<source> prompt=<id|none> accepted=<true|false> reason=<reason|none>`, at `info` level. `step` returns the verdict with the state and the effects. `accepted` is true for a yes or a no that answered the current prompt, for a no that took back the last add, for a double tap that opened the question window, and for each command. See the reasons below.
 - The effect `speak.dropped` is a line that the guard for the voice dropped. The runtime logs `speak dropped session=<id> key=<key> reason=<reason>`, and the phone gets nothing.
 - Each line that goes to the phone gets the log line `speak session=<id> key=<key> text=<first 80 characters> prompt=<id|none>`.
 - Each product prompt gets the log line `glance timing session=<id> product=<id> frameToResultMs=<n|none> resolveMs=<n|none> clipMs=<n>`. The caller of `dispatch` gives the first two numbers, and the rules hold no state for them. See "A guard for the voice".
@@ -1247,6 +1249,20 @@ Only the server computes a total, and each price comes from the catalog or from 
 - With no phone attached, the runtime drops the device messages. Events and captions still go to the bus.
 - After a step with an event, and after a profile patch, the runtime writes the session to the store. `dispatch` does not wait for the write. A sighting alone writes nothing.
 - After `session.end` the runtime stops: its stop listeners run one time. A stopped session still answers a snapshot, for the receipt.
+
+The reasons of an intent with `accepted=false`:
+
+| Reason | Meaning |
+|---|---|
+| `no-prompt-id` | The yes or the no names no prompt |
+| `no-prompt` | No prompt waits for an answer |
+| `other-prompt` | The answer names a prompt that ended, or that another prompt replaced |
+| `line-plays` | No `prompt.done` arrived yet. Voice, touchpad, key, and camera need it, and a nod on the pay prompt |
+| `head-off` | The profile has the head gestures off |
+| `code-not-in-view` | A nod on the pay prompt, with no report of the kiosk code in the last 3 seconds |
+| `late` | A head answer after its last time (R4) |
+| `payment-confirmed` | The payment runs |
+| `session-closed` | The session is paid or ended |
 
 ```mermaid
 sequenceDiagram

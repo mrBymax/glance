@@ -17,8 +17,6 @@ export const LINE_DEFAULTS: Record<Line['key'], LineDefault> = {
   'cart.added': line('normal', true, 'added'),
   'cart.removed': line('normal', true, 'removed'),
   'undo.nothing': line('normal', false),
-  'hint.holdAgain': line('normal', false),
-  'hint.holdAgainForAnother': line('normal', false),
   'hint.lookAtCode': line('high', false),
   'checkout.offer': line('high', true, 'found'),
   'checkout.empty': line('normal', false),

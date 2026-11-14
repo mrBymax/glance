@@ -4,7 +4,7 @@ import { afterCartChange, cancelCheckout, isConfirmed, startPayment } from './ch
 import { noteAnswer } from './code';
 import { say } from './say';
 import { type Turn, emit, speak } from './turn';
-import type { RuleInput, SessionState } from './types';
+import type { IntentFault, RuleInput, SessionState } from './types';
 import { inView } from './view';
 
 const MAX_LINE_QTY = 99;
@@ -26,29 +26,39 @@ export const HEAD_MAX_EXTRA_MS = 15_000;
 
 /** True when a yes or a no from this source counts for the current prompt (R3 to R6). */
 export function accepts(state: SessionState, intent: { source: IntentSource; promptId?: string }, now: number): boolean {
+  return answerFault(state, intent, now) === null;
+}
+
+/** Why a yes or a no from this source does not count for the current prompt, or null when it counts (R3 to R6). */
+export function answerFault(state: SessionState, intent: { source: IntentSource; promptId?: string }, now: number): IntentFault | null {
   const prompt = state.prompt;
-  if (!prompt || intent.promptId !== prompt.id) return false;
+  if (intent.promptId === undefined) return 'no-prompt-id';
+  if (!prompt) return 'no-prompt';
+  if (intent.promptId !== prompt.id) return 'other-prompt';
 
   switch (intent.source) {
     // R6: the phone and the HUD name the prompt on their card.
     case 'phone':
     case 'hud':
-      return true;
+      return null;
     // R4. The phone is the judge of the head window. The server keeps the last time at which the phone can send the answer.
     case 'head': {
-      if (!state.profile.headGestures) return false;
-      if (prompt.kind === 'pay' && (prompt.doneAt === null || !kioskInView(state, prompt.kioskId, now))) return false;
+      if (!state.profile.headGestures) return 'head-off';
+      if (prompt.kind === 'pay') {
+        if (prompt.doneAt === null) return 'line-plays';
+        if (!kioskInView(state, prompt.kioskId, now)) return 'code-not-in-view';
+      }
       const windowMs = state.profile.headWindowMs;
       // A prompt that an older server stored has no start time. Its time starts now.
       const from = prompt.doneAt ?? (prompt as { startedAt?: number }).startedAt ?? now;
-      return windowMs === null || now - from < windowMs + HEAD_MAX_EXTRA_MS + HEAD_LATE_MS;
+      return windowMs === null || now - from < windowMs + HEAD_MAX_EXTRA_MS + HEAD_LATE_MS ? null : 'late';
     }
     // R5.
     case 'voice':
     case 'touch':
     case 'key':
     case 'camera':
-      return prompt.doneAt !== null;
+      return prompt.doneAt === null ? 'line-plays' : null;
   }
 }
 
@@ -64,42 +74,39 @@ export function onPromptDone(turn: Turn, input: Extract<RuleInput, { type: 'prom
   s.lastDone = { promptId: s.prompt.id, kind: s.prompt.kind, at: now, hinted: false };
 }
 
-export function onAnswer(turn: Turn, kind: 'yes' | 'no', source: IntentSource, promptId: string | undefined): void {
+/**
+ * Returns null when the answer had its effect, or the reason why it had none.
+ * An answer with no prompt to answer says nothing. Only the pay prompt keeps a hint (R20).
+ */
+export function onAnswer(turn: Turn, kind: 'yes' | 'no', source: IntentSource, promptId: string | undefined): IntentFault | null {
   const { s, now } = turn;
-  if (isConfirmed(s)) return;
+  if (isConfirmed(s)) return 'payment-confirmed';
 
-  if (promptId !== undefined && accepts(s, { source, promptId }, now)) {
+  const fault = answerFault(s, { source, promptId }, now);
+  if (fault === null) {
     if (s.prompt?.kind === 'product') answerProductPrompt(turn, kind, s.prompt);
     else if (kind === 'yes') startPayment(turn);
     else cancelCheckout(turn);
-    return;
+    return null;
   }
 
-  // R10: the prompt of the last add is over, and its ID still names that unit.
-  if (promptId !== undefined && s.lastAdd?.promptId === promptId) {
-    if (kind === 'no') {
-      if (now - s.lastAdd.at < TIMING.undoWindowMs) changeQty(turn, s.lastAdd.productId, -1);
-    } else if (!s.lastAdd.hinted) {
-      s.lastAdd.hinted = true;
-      speak(turn, say({ key: 'hint.holdAgainForAnother' }));
-    } else if (source === 'touch' && s.prompt === null) {
-      // R10 gave its hint for this add, so a later double tap means "listen".
-      openAskWindow(turn);
-    }
-    return;
+  // R10: the prompt of the last add is over, and its ID still names that unit. A no takes the unit back.
+  if (kind === 'no' && promptId !== undefined && s.lastAdd?.promptId === promptId) {
+    return now - s.lastAdd.at < TIMING.undoWindowMs && changeQty(turn, s.lastAdd.productId, -1) ? null : fault;
   }
 
-  // Spec section 16: a double tap means "listen" when no prompt waits. This replaces the hint of R20 for that case.
+  // Spec section 16: a double tap means "listen" when no prompt waits.
   if (kind === 'yes' && source === 'touch' && s.prompt === null) {
     openAskWindow(turn);
-    return;
+    return null;
   }
 
-  // R20.
-  if (s.lastDone && !s.lastDone.hinted && now - s.lastDone.at < TIMING.hintAfterPromptMs) {
+  // R20, for the pay prompt only: the shopper answered with the kiosk code out of view.
+  if (s.lastDone?.kind === 'pay' && !s.lastDone.hinted && now - s.lastDone.at < TIMING.hintAfterPromptMs) {
     s.lastDone.hinted = true;
-    speak(turn, say({ key: s.lastDone.kind === 'pay' ? 'hint.lookAtCode' : 'hint.holdAgain' }));
+    speak(turn, say({ key: 'hint.lookAtCode' }));
   }
+  return fault;
 }
 
 function answerProductPrompt(turn: Turn, kind: 'yes' | 'no', prompt: Extract<SessionState['prompt'], { kind: 'product' }>): void {
@@ -115,7 +122,7 @@ function answerProductPrompt(turn: Turn, kind: 'yes' | 'no', prompt: Extract<Ses
 
   if (kind === 'yes') {
     // R7.
-    if (changeQty(turn, productId, 1)) s.lastAdd = { productId, promptId: prompt.id, at: now, hinted: false };
+    if (changeQty(turn, productId, 1)) s.lastAdd = { productId, promptId: prompt.id, at: now };
   } else if (prompt.mode === 'new') {
     // R8 and R9.
     s.excluded = s.excluded.filter((entry) => entry.productId !== productId);

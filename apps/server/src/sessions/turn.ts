@@ -1,14 +1,15 @@
 import type { ServerEvent } from '@glance/shared';
 import { admitLine } from './guard';
-import type { DropReason, Effect, RuleContext, SessionState, SpeakEffect } from './types';
+import type { DropReason, Effect, RuleContext, SessionState, SpeakEffect, Verdict } from './types';
 import { inView } from './view';
 
 /**
  * The work of one input. `s` is a private copy of the session state, so a handler can change it in place.
  * `out` collects the effects in the order in which the runtime must run them.
  * `solicited` is true while the handler of an action of the shopper runs. The guard of guard.ts reads it.
+ * `verdict` is what the rules did with the intent of this input, or null for each other input.
  */
-export type Turn = { s: SessionState; now: number; ctx: RuleContext; out: Effect[]; solicited: boolean };
+export type Turn = { s: SessionState; now: number; ctx: RuleContext; out: Effect[]; solicited: boolean; verdict: Verdict | null };
 
 export function emit(turn: Turn, event: ServerEvent): void {
   turn.out.push({ type: 'event', event });

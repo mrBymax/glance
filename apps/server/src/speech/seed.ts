@@ -8,7 +8,7 @@ type FixedKey = { [K in Line['key']]: { key: K } extends Extract<Line, { key: K 
 /** An extra that adds a line with no parameter adds its key here. */
 const FIXED_KEYS: readonly FixedKey[] = [
   'session.start', 'session.rest', 'glance.unknown', 'glance.skipped', 'undo.nothing',
-  'hint.holdAgain', 'hint.holdAgainForAnother', 'hint.lookAtCode',
+  'hint.lookAtCode',
   'checkout.empty', 'checkout.busy', 'checkout.cancelled', 'checkout.failed', 'checkout.biometric',
   'info.help', 'device.cameraOff', 'device.regularCheckout', 'device.paused',
   'net.backOnline', 'recognition.slow',

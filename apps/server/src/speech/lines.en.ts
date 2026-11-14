@@ -158,8 +158,6 @@ export const LINES_EN: LineTemplates = {
     profile.detail === 'brief' ? '' : total(line.totalCents, profile),
   ),
   'undo.nothing': () => 'Nothing to undo.',
-  'hint.holdAgain': () => 'Hold it up again.',
-  'hint.holdAgainForAnother': () => 'Hold it up again to add another.',
   'hint.lookAtCode': (_line, profile) => `Look at the checkout code, ${yesPhrases(profile).thenYes}.`,
   'checkout.offer': (line, profile) => sentences(
     `${line.kiosk.name} at ${line.kiosk.store}.`,

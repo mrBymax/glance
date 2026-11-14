@@ -43,8 +43,6 @@ it('speaks each fixed line of the table', () => {
     'glance.unknown': 'I do not know this product.',
     'glance.skipped': 'Skipped.',
     'undo.nothing': 'Nothing to undo.',
-    'hint.holdAgain': 'Hold it up again.',
-    'hint.holdAgainForAnother': 'Hold it up again to add another.',
     'checkout.empty': 'Your cart is empty.',
     'checkout.busy': 'This checkout is busy.',
     'checkout.cancelled': 'Checkout cancelled. Your cart is safe.',
@@ -139,7 +137,7 @@ it('has one Italian template for each line key', () => {
 it('gives an Italian text that differs from the English text for each line with no parameter', () => {
   const fixed: Line[] = [
     { key: 'session.start' }, { key: 'session.rest' }, { key: 'glance.unknown' }, { key: 'glance.skipped' }, { key: 'undo.nothing' },
-    { key: 'hint.holdAgain' }, { key: 'hint.holdAgainForAnother' }, { key: 'hint.lookAtCode' }, { key: 'checkout.empty' },
+    { key: 'hint.lookAtCode' }, { key: 'checkout.empty' },
     { key: 'checkout.busy' }, { key: 'checkout.cancelled' }, { key: 'checkout.failed' }, { key: 'checkout.biometric' },
     { key: 'info.help' }, { key: 'device.cameraOff' }, { key: 'device.regularCheckout' }, { key: 'device.paused' },
     { key: 'net.backOnline' }, { key: 'recognition.slow' }, { key: 'ask.listening' }, { key: 'ask.noProduct' }, { key: 'ask.failed' },
