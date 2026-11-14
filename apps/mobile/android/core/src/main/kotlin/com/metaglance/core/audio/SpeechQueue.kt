@@ -30,6 +30,7 @@ interface LinePlayer {
 
 /**
  * Plays the lines of the server one at a time, and reports each prompt that ended.
+ * `onPromptStart` gets a prompt when its line starts to play. A line that waits for another line starts later.
  * `soundOff` is true when the shopper cannot hear a line, for example with the media volume at 0.
  * Call each function, and each `onEnd` of the player, on one thread.
  */
@@ -38,7 +39,8 @@ class SpeechQueue(
     private val soundOff: () -> Boolean,
     private val rate: () -> Double,
     private val nowMs: () -> Long,
-    private val onPromptDone: (String) -> Unit
+    private val onPromptDone: (String) -> Unit,
+    private val onPromptStart: (String) -> Unit = {}
 ) {
     private class Line(val playable: PlayableLine, val priority: Priority, val promptId: String?)
 
@@ -63,6 +65,17 @@ class SpeechQueue(
     fun clear() {
         stopCurrent()
         waiting.clear()
+    }
+
+    /**
+     * Stops the line of this prompt at once, if it plays now, and starts the next line. It reports no prompt:
+     * the shopper answered the prompt before its line ended. Returns true when it stopped a line.
+     */
+    fun stopPrompt(promptId: String): Boolean {
+        if (current?.promptId != promptId) return false
+        stopCurrent()
+        startNext()
+        return true
     }
 
     /**
@@ -98,6 +111,7 @@ class SpeechQueue(
                 continue
             }
             current = next
+            next.promptId?.let(onPromptStart)
             player.play(next.playable) { onLineEnd(next) }
         }
     }

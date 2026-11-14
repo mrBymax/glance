@@ -1,6 +1,8 @@
 package com.metaglance.core.input
 
 import com.metaglance.core.contract.KioskRef
+import com.metaglance.core.contract.PendingKind
+import com.metaglance.core.contract.ProductRef
 import com.metaglance.core.contract.ServerEvent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,6 +12,81 @@ import org.junit.Test
 
 class PromptTrackerTest {
     private val cleared = { id: String -> ServerEvent.GlanceCleared(id) }
+    private val kiosk = KioskRef("kiosk-1", "Checkout 3", "Demo Market")
+
+    private fun pending(id: String) = ServerEvent.GlancePending(id, PendingKind.NEW, ProductRef("oat-drink-1l", "Oat drink", "1 l", 149), emptyList(), 0)
+
+    /** A product prompt whose line arrived and started to play at `startMs`. */
+    private fun productPrompt(id: String, startMs: Long) = PromptTracker().also {
+        it.onEvent(pending(id))
+        it.onPromptSpoken(id, startMs)
+        it.onLineStart(id, startMs)
+    }
+
+    @Test fun `a product prompt is the head prompt from the start of its line, and opens 1200 ms later`() {
+        val t = productPrompt("p-0001", 1000)
+        assertEquals("p-0001", t.headPrompt()?.promptId)
+        assertEquals(2200L, t.headPrompt()?.openMs)
+        // The line ends 20 seconds after its start at the latest.
+        assertEquals(21_000L, t.headPrompt()?.doneMs)
+        assertNull(t.currentPromptId())
+        t.onPromptDone("p-0001", 7000)
+        assertEquals(2200L, t.headPrompt()?.openMs)
+        assertEquals(7000L, t.headPrompt()?.doneMs)
+        assertEquals(1000L, t.lineStartMs("p-0001"))
+        assertNull(t.lineStartMs("p-0002"))
+    }
+
+    @Test fun `a product prompt with a line shorter than 1200 ms opens at the end of the line`() {
+        val t = productPrompt("p-0001", 1000)
+        t.onPromptDone("p-0001", 1800)
+        assertEquals(1800L, t.headPrompt()?.openMs)
+    }
+
+    @Test fun `a product prompt whose line waits for another line opens nothing`() {
+        val t = PromptTracker()
+        t.onEvent(pending("p-0001"))
+        t.onPromptSpoken("p-0001", 1000)
+        assertNull(t.headPrompt())
+        t.onLineStart("p-0002", 1500)
+        assertNull(t.headPrompt())
+    }
+
+    // With the sound off no line plays, and the queue reports the prompt at once.
+    @Test fun `a product prompt with no line opens when it is finished`() {
+        val t = PromptTracker()
+        t.onEvent(pending("p-0001"))
+        t.onPromptSpoken("p-0001", 1000)
+        t.onPromptDone("p-0001", 1000)
+        assertEquals(1000L, t.headPrompt()?.openMs)
+    }
+
+    // A movement during the line must not confirm a payment.
+    @Test fun `a pay prompt opens only when its line ended`() {
+        val t = PromptTracker()
+        t.onEvent(ServerEvent.CheckoutOffered("p-0002", kiosk, 449, 3, false))
+        t.onPromptSpoken("p-0002", 1000)
+        t.onLineStart("p-0002", 1000)
+        assertNull(t.headPrompt())
+        t.onPromptDone("p-0002", 6000)
+        assertEquals(6000L, t.headPrompt()?.openMs)
+        assertEquals(6000L, t.headPrompt()?.doneMs)
+    }
+
+    @Test fun `a repeat of a product prompt opens again 1200 ms after the new start of its line`() {
+        val t = productPrompt("p-0001", 1000)
+        t.onPromptDone("p-0001", 7000)
+        t.onPromptSpoken("p-0001", 9000)
+        assertNull(t.headPrompt())
+        t.onLineStart("p-0001", 9100)
+        assertEquals(10_300L, t.headPrompt()?.openMs)
+    }
+
+    @Test fun `a cleared product prompt opens nothing while its line plays`() {
+        val t = productPrompt("p-0001", 1000)
+        t.onEvent(cleared("p-0001"))
+        assertNull(t.headPrompt())
+    }
 
     @Test fun `a prompt that still plays opens nothing`() {
         val t = PromptTracker()
@@ -82,7 +159,7 @@ class PromptTrackerTest {
     }
 
     @Test fun `the end of a checkout ends the prompt`() {
-        val paid = ServerEvent.CheckoutPaid("ord-0001", 449, "2026-11-14T12:00:00.000Z", emptyList(), KioskRef("kiosk-1", "Checkout 3", "Demo Market"))
+        val paid = ServerEvent.CheckoutPaid("ord-0001", 449, "2026-11-14T12:00:00.000Z", emptyList(), kiosk)
         for (event in listOf(ServerEvent.CheckoutCancelled, ServerEvent.CheckoutFailed("declined"), paid)) {
             val t = PromptTracker()
             t.onPromptSpoken("p-0001")

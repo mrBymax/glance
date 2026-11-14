@@ -134,6 +134,7 @@ sequenceDiagram
     Glasses-->>App: motion samples with a nod
     App->>Server: intent yes, source head
     Note over App: the sound "added" plays at once
+    Note over App: a nod during the line of a product prompt stops the line, and no prompt.done goes out
     App->>Server: barcode.seen, when frames agree on the barcode of a product
     App->>Server: kiosk.seen, when a kiosk code stays in view
     Server-->>App: session.end
@@ -173,7 +174,7 @@ Rules of `SessionController`:
 - On a phone with no screen lock and no biometric, the app shows no prompt. It sends `ok: false` and the `error` event `native.biometric_unavailable`.
 - The app closes an open payment prompt when the server sends `checkout.cancelled` or `session.end`, and at `data.delete`. The closed prompt sends `ok: false`. A second `biometric.request` while the prompt is open shows no second prompt. A request while the activity is in the background sends `ok: false`, because the biometric library shows no prompt then.
 - In pocket mode the screen has the brightness of the phone while the payment prompt shows, and it is dim again after the result.
-- A nod or a shake in the head window of a prompt sends `intent yes` or `intent no` with the source `head` and the ID of the prompt. See "Head gestures".
+- A nod or a shake in the head window of a prompt sends `intent yes` or `intent no` with the source `head` and the ID of the prompt. For a product prompt the window opens while the line still plays, and the answer stops the line. See "Head gestures".
 - The event `glance.ambiguous` of the server makes the app take one still photo with `DatLink.captureStill`: the sharp second look. While a prompt waits for a head answer, this still waits, for 5 seconds at most. See "No still while a prompt waits". `StillPolicy` in `core` allows one capture at a time and one start each 5 seconds in a DAT session. `StillPhoto` crops the photo as a frame of the stream, scales its long side to 1440 pixels at most, pixelates each face, and makes a JPEG of quality 85. The header has `kind: still` and `blurred: true`. If face detection fails, the still is dropped. A still does not pass the upload gate, but it needs an open socket. The log line `still seq=...` has the milliseconds from the event to the upload.
 - The frames of the stream and the stills share one upload number, `seq`, which counts up for the life of the app process.
 - With the socket down for 3 seconds, the phone voice says "Connection lost. Your cart is safe. Glances are paused."
@@ -319,7 +320,7 @@ flowchart TD
     Thread --> Flows[gyro and motionRows for the probe: 2048 samples each]
     Thread --> Head[HeadInput]
     Head --> Clock[GlassesClock: the time of the sample on the phone clock]
-    Clock --> Window{Taken after the line of the prompt ended, and inside the head window?}
+    Clock --> Window{Taken inside the head window of the prompt?}
     Window -- no --> Ignored[Ignored]
     Window -- yes --> Axes[HeadAxes: pitch rate and yaw rate from gravity]
     Axes --> Detector[HeadGestureDetector]
@@ -342,16 +343,22 @@ flowchart TD
 
 ### The head window
 
-A head gesture counts only in the head window of a prompt. The window starts when the line of the prompt ended, and it lasts `headWindowMs` of the profile: 8 seconds, 15 seconds, or no limit.
+A head gesture counts only in the head window of a prompt. The window ends `headWindowMs` of the profile after the end of the line of the prompt: 8 seconds, 15 seconds, or no limit.
 
+- The window of a product prompt opens 1200 ms after its line starts to play on the phone (`PromptTracker.EARLY_OPEN_MS`). The shopper of the test of 2026-11-14 nodded at the name of the product, seconds before the line ended, and those nods did not count. In the first 1200 ms the head still moves with the hand that lifts the product.
+- The start of a line is the moment `SpeechQueue` gives it to the player. The clip then loads, so the voice starts some time later. Nobody measured that time.
+- The window of a pay prompt opens when its line ended. A movement during the line must not confirm a payment.
+- With the sound off no line plays. Each window then opens when the prompt is finished, which is at once.
+- When a head gesture answers a prompt whose line still plays, the app stops the line at once: `SpeechQueue.stopPrompt` stops the player with no fade. The answer sound plays, and the line of the server that answers the gesture is the next line. The app sends no `prompt.done` for the stopped line, because the server already has the answer.
+- A line that an interrupt removed never reports its end. Its window ends 20 seconds plus the head window after the start of the line.
 - The window is in the time of the samples. `timestampNs` of a sample is on the clock of the glasses. `GlassesClock` keeps the offset to the clock of the phone: the smallest value of arrival time minus sample time in the DAT session.
-- A sample counts when the glasses took it after the line ended and before the window ended. A sample that the glasses took before the end of the line never counts, also when it arrives after it.
+- A sample counts when the glasses took it after the window opened and before the window ended. A sample that the glasses took before the window opened never counts, also when it arrives after that time.
 - A sample of the window that arrives late still counts, up to 6 seconds after the end of the window (`HeadInput.LATE_MS`). The stalls of 2026-11-14 took 3 to 12 seconds, so a nod in a long stall can still arrive too late.
-- The time of the window does not run while it is blocked: while the watchdog says `STALLED`, and while the glasses take a still. A block adds 15 seconds to one window at most (`HeadInput.MAX_EXTRA_MS`). A block that starts after the end of a window does not open it again.
+- The time of the window does not run while it is blocked: while the watchdog says `STALLED`, and while the glasses take a still. A block adds 15 seconds to one window at most (`HeadInput.MAX_EXTRA_MS`). Blocked time before the end of the line adds nothing, because the length of the window counts from that end. A block that starts after the end of a window does not open it again.
 - So a prompt whose line ends during a still gets its full head window after the still.
 - A new window starts the detector from rest. A movement that started in the window of another prompt is no answer.
 - The window stays open after an answer, until the server ends the prompt or a new prompt replaces it. The server decides if an answer counts.
-- The server has no head window of its own (rule R4 in `apps/server`). It takes a head answer while the prompt is current, up to the head window plus `MAX_EXTRA_MS` plus `LATE_MS` after `prompt.done` on its clock: the last time at which this class can send the answer. `HEAD_MAX_EXTRA_MS` and `HEAD_LATE_MS` in `apps/server/src/sessions/answers.ts` repeat the two values, so change them together.
+- The server has no head window of its own (rule R4 in `apps/server`). It takes a head answer while the prompt is current, up to the head window plus `MAX_EXTRA_MS` plus `LATE_MS` after `prompt.done` on its clock: the last time at which this class can send the answer. For a product prompt with no `prompt.done` yet, it counts that time from the start of the prompt. `HEAD_MAX_EXTRA_MS` and `HEAD_LATE_MS` in `apps/server/src/sessions/answers.ts` repeat the two values, so change them together.
 
 ### The pitch and the yaw of the head
 
@@ -473,7 +480,7 @@ A still photo stalls the motion samples: in the log of 2026-11-14 a still took 2
 
 `HeadInput.holdsStills` is true while a prompt waits for a head answer:
 
-- From the start of the line of a prompt to its end. A line that never reports its end counts for 20 seconds.
+- From the start of the line of a prompt to its end. A line that never reports its end counts for 20 seconds. The head window of a product prompt opens in that time.
 - Then to the first head answer, to the event that ends the prompt, or to the end of the head window. With no head window in the profile, it is 30 seconds after the line.
 - It is false when `headGestures` of the profile is false.
 
@@ -510,11 +517,12 @@ Each line has the tag `Glance`. Read them with `adb logcat -s Glance`.
 | `motion stalled: no sample for <ms> ms` | The flow becomes `STALLED` | |
 | `motion stall <ms> ms, burst <n>` | The first samples after a stall arrived | The time with no sample, and the samples that then arrived together |
 | `motion restart <n> of 3: no sample for <ms> ms` | The watchdog starts Motion again | |
-| `head window open: prompt <id>` | The line of a prompt ended | |
+| `head window open: prompt <id>, in <ms> ms` | The line of a product prompt started, or the line of a pay prompt ended | `<ms>`: the time until the samples count. 1200 for a product prompt, and 0 for a pay prompt. |
 | `head window closed: prompt <id>, <n> samples` | The prompt ended, or 6 seconds after the end of the window | `<n>`: the samples that the detector got |
 | `nod accepted: strokes <a> and <b> rad, peaks <p> and <q> rad/s, <ms> ms, net <n> rad, other axis <o> rad and <r> rad/s` | The detector reports a gesture in a head window | The two strokes, their top rates, the time from the start, the angle between the start and the head now, and the range and the top rate of the other axis |
 | `nod rejected (<reason>): ...`, `shake rejected (<reason>): ...` | A pair of opposite strokes ended and was no gesture | The same numbers, and the first rule that failed |
-| `head answer yes: prompt <id>`, `head answer no: prompt <id>` | The app sends the intent | |
+| `head answer yes: prompt <id>, <ms> ms after the start of its line, <ms> ms after the first candidate`, `head answer no: ...` | The app sends the intent | The first candidate is the first stroke pair of the head window, accepted or rejected. A long time after it is an answer that needed many nods. `no time`: the line did not play, or the head window has no pair. |
+| `prompt line stopped: prompt <id>` | A head gesture answered a prompt whose line still played | |
 | `<label, second look, reference> still waits: a prompt waits for its answer` | A still must wait | |
 | `<second look, reference> still dropped: it waited too long for a prompt` | The wait took longer than its limit | |
 | `motion recorded: motion/<file> rows=<n>` | A head window ended with "Record motion in sessions" on | |
@@ -556,7 +564,8 @@ A stroke with no opposite stroke after it gives no line. So a nod that is too sm
 - How the glasses group the samples of a flow with no stall. If more than 500 ms pass between two groups, the watchdog says `STALLED` in a normal flow. `arrivalGapMs` and `burst` show it.
 - Whether a restart of Motion ends a stall.
 - The delay of the answer sound on the glasses.
-- The server takes a late head answer now (rule R4 in `apps/server/README.md`). Only tests of the rules cover that. Three cases still reject an answer that the phone accepted: the product prompt ended on the server, 18 seconds after the last result with its product. The frames showed no product for 3 seconds. A nod on the pay prompt came with no report of the kiosk code in the last 3 seconds.
+- The server takes a head answer for a product prompt by the ID of the prompt alone, also before `prompt.done` (rule R4 in `apps/server/README.md`). Only tests of the rules cover that. Two cases still reject an answer that the phone accepted: the product prompt ended on the server, 18 seconds after the last result with its product. A nod on the pay prompt came with no report of the kiosk code in the last 3 seconds.
+- The head window that opens 1200 ms after the start of the line, and the stop of the line at a head answer. Only tests with synthetic samples and a fake player cover them. The time between the start of a line in `SpeechQueue` and the first sound is not known.
 - The instrumented tests did not run after these changes: they need the test phone.
 
 ### Checks of the head gestures with the glasses
@@ -567,12 +576,12 @@ Do them in this order. Each step needs the log of the phone: `adb logcat -s Glan
 2. Open "Glance Probe". Start a session, tap `Motion`, and keep the head at rest for 30 seconds. Read the `motion samples=` lines: `new` near 90, `arrivalGapMs` below 500, and `timeGapMs` near 33 are a good flow. Write down `burst`: it is the number of samples that the glasses send together.
 3. Tap `Axis test` and nod for 4 seconds. Then tap it again and shake the head. The strongest axis of the nod must be the pitch axis of `ProbeDecisions`, and the strongest axis of the shake its yaw axis. If not, write the measured axes into `ProbeDecisions`.
 4. Tap `Gesture test`. Make 10 nods and 10 shakes with a rest between them. Then look to the sides, look down at a product, and walk for 2 minutes. Write down the counts and each `rejected` line of a gesture that did not count.
-5. Start a session in "Glance" against a server. Answer 10 prompts with one nod each, after the line ended. Each one must give the sound `added` at once and one time, `head answer yes` in the log, and the "Added" line of the server with no second sound.
+5. Start a session in "Glance" against a server. Answer 5 prompts with one nod each after the line ended, and 5 with one nod at the name of the product. Each one must give the sound `added` at once and one time, `head answer yes` in the log, and the "Added" line of the server with no second sound. A nod during the line must stop the line: the log has `prompt line stopped`. Write down the two times of each `head answer` line.
 6. Answer 10 prompts with a shake. Each one must give the sound `removed` and `head answer no`.
 7. Let 5 prompts pass with no answer while the head looks around and at the product. The log must have no `head answer` line.
 8. Hold a barcode in view while a prompt waits. The log must have `label still waits`, and no `still` line between `head window open` and the answer.
 9. Read the `motion stall` lines of the session. For a nod with no effect, read the lines of its head window: no line of the detector means a movement below the level, and a `rejected` line names the rule.
-10. Read the log of the server for a head answer that it rejected. The list above has the three causes for a late answer.
+10. Read the `intent` lines in the log of the server. A line with `accepted=false` names the reason.
 11. Pull the recordings and replay them. See "Record and replay real motion".
 
 ## The core module
@@ -606,7 +615,7 @@ flowchart LR
 | `barcode` | `Gtin` holds the rules of `gtin.ts` in `packages/shared` for the digits of a product barcode: the GS1 check digit, the UPC-A form of a UPC-E code, the 13-digit form, and the codes of one store. `Gtin.digitRuns` finds each code of 8, 12, or 13 digits with a right check digit in an OCR text, also when the text has the digits in groups such as `8 076809 513753` or in neighbouring text elements. It reads 8 digits as EAN-8, never as UPC-E. `Gtin.fromDecoder` gives the code of a decoder as the phone sends it. `BarcodeVote` reports a code when frames agree on it, then one time each second. `LabelPolicy` says when a still must read a barcode. `LabelTiming` holds the two times of that policy that a person can set, with their limits, and reads the text of a settings field. `BarcodeRegion` gives the crops around a region that did not decode, and says if a box has the form of a product barcode. `TextRows` puts the words of an OCR result into rows and finds the codes in them. |
 | `image` | `Sharpness` and `SharpestFramePicker` select the sharpest frame of each 300 ms. `UploadGate` gives the reason to skip an upload. `FrameGeometry` and `FramePrep` crop and scale a frame to a long side of 768 pixels at most. `FrameGeometry.mapBox` maps a face box into the output and never makes it smaller. `Pixelate` covers a box that is 20 percent larger on each side with blocks of one color. A block has one sixth of the box width, and 8 pixels at least. `I420.cropScaleToArgb` converts with BT.709 limited range. `I420.cropLumaToArgb` gives a crop of the Y plane as gray pixels in a larger scale. `StillPolicy` limits the still photos: one at a time, and one start each 5 seconds. `WaitingStills` keeps a still that waits for the answer to a prompt. `Pace` limits a slow step, for example OCR, to one run in a given time. |
 | `gesture` | `HeadGestureDetector` finds a nod and a shake in motion samples. `HeadAxes` gives it the pitch rate and the yaw rate of the head, from gravity. `GestureReport` is its decision about one pair of strokes, with a log line. `HeadGestureConfig.of` gives the limits of the levels `GENTLE`, `NORMAL`, and `FIRM`. `GyroScript` builds samples of head movements for tests and for mock glasses. `MotionCsv` reads and writes a motion file. See "Head gestures". |
-| `audio` | `SpeechQueue` plays one line at a time through a `LinePlayer`, with interrupt and priority. It reports each prompt whose line ended. A line with no clip uses the phone voice. |
+| `audio` | `SpeechQueue` plays one line at a time through a `LinePlayer`, with interrupt and priority. It reports each prompt whose line started and each prompt whose line ended, and it stops the line of a prompt that a head gesture answered. A line with no clip uses the phone voice. |
 | `input` | `PromptTracker` follows the prompts of the server. `HeadInput` turns a gesture into a yes or a no while the head window of a prompt is open, in the time of the samples, and says when a prompt waits for a head answer. `GlassesClock` puts the time of a sample on the clock of the phone. `MainYesResolver` selects the yes input that works. `KeyInput`, `TouchInput`, and `VoiceInput` hold the rules of the volume keys, the touchpad, and the voice. `PaymentConfirm` gives one `biometric.result` for each payment prompt. |
 | `state` | `StateMapper` maps the state of the DAT SDK to `NativeState` and `DeviceState`. `StopCauses` names the cause of a stopped session, and says if a new session starts by itself. `NativeErrors` holds the `error` events of the phone, with codes that start with `native.`. `ConnectionAnnouncer` gives the "Connection lost" line after 3 seconds without the socket. `Revival` limits the restarts of a capability. `MotionWatchdog` finds a stall of the motion samples and asks for a restart of Motion. `MotionStats` makes the log line of the motion samples. `HapticPatterns` holds the vibration timings of the 8 haptic patterns. |
 | `net` | `GlanceApi` makes the REST calls. It puts the socket address and each clip address of the server on the server address of the app. A server address that is not an HTTP address fails each call with an `IOException`, like a server that does not answer. `DeviceSocket` sends messages and frames, and connects again after 500, 1000, 2000, 4000, and 8000 ms. A message never waits for a later connection. |

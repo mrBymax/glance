@@ -37,7 +37,8 @@ class SpeechQueueTest {
     private var speechRate = 1.0
     private var clock = 0L
     private val done = ArrayList<String>()
-    private val q = SpeechQueue(player, { soundOff }, { speechRate }, { clock }, { done.add(it) })
+    private val started = ArrayList<String>()
+    private val q = SpeechQueue(player, { soundOff }, { speechRate }, { clock }, { done.add(it) }, { started.add(it) })
 
     private fun speak(
         id: String,
@@ -151,6 +152,41 @@ class SpeechQueueTest {
         speechRate = 1.5
         q.onSpeak(speak("a"))
         assertEquals(1.5, player.lines.single().rate, 0.0)
+    }
+
+    @Test fun `reports the start of a prompt line when the line starts to play, not when it arrives`() {
+        q.onSpeak(speak("a"))
+        q.onSpeak(speak("p", promptId = "p-0001"))
+        assertEquals(emptyList<String>(), started)
+        player.finish()
+        assertEquals(listOf("p-0001"), started)
+    }
+
+    @Test fun `with sound off no prompt line starts`() {
+        soundOff = true
+        q.onSpeak(speak("p", promptId = "p-0001"))
+        assertEquals(emptyList<String>(), started)
+    }
+
+    @Test fun `stopPrompt stops the line of the prompt at once, reports no prompt, and plays the next line`() {
+        q.onSpeak(speak("p", promptId = "p-0001"))
+        q.onSpeak(speak("added"))
+        clock = 1500
+        assertTrue(q.stopPrompt("p-0001"))
+        assertEquals(1, player.stopCount)
+        assertEquals(listOf("p", "added"), played)
+        assertEquals(emptyList<String>(), done)
+    }
+
+    @Test fun `stopPrompt does nothing for a line of another prompt and for a line that waits`() {
+        q.onSpeak(speak("a"))
+        q.onSpeak(speak("p", promptId = "p-0001"))
+        assertFalse(q.stopPrompt("p-0001"))
+        assertFalse(q.stopPrompt("p-0002"))
+        assertEquals(0, player.stopCount)
+        player.finish()
+        player.finish()
+        assertEquals(listOf("p-0001"), done)
     }
 
     @Test fun `clear stops the line, drops each waiting line, and reports no prompt`() {

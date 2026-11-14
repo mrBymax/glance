@@ -44,6 +44,7 @@ import com.metaglance.core.contract.SoundName
 import com.metaglance.core.contract.StillPurpose
 import com.metaglance.core.frame.FrameHeader
 import com.metaglance.core.frame.FrameKind
+import com.metaglance.core.gesture.GestureReport
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.gesture.HeadSample
@@ -153,7 +154,8 @@ class SessionController(
         soundOff = { audio.getStreamVolume(AudioManager.STREAM_MUSIC) == 0 },
         rate = { profile.speechRate },
         nowMs = SystemClock::elapsedRealtime,
-        onPromptDone = ::onPromptDone
+        onPromptDone = ::onPromptDone,
+        onPromptStart = { prompts.onLineStart(it, SystemClock.elapsedRealtime()) }
     )
     private val announcer = ConnectionAnnouncer()
     private val paymentConfirm = PaymentConfirm()
@@ -753,12 +755,24 @@ class SessionController(
         }
     }
 
-    /** A nod or a shake that the detector took as the answer to a prompt. The sound tells the shopper at once. */
+    /**
+     * A nod or a shake that the detector took as the answer to a prompt. The sound tells the shopper at once.
+     * A line of the prompt that still plays stops, so the line of the server that answers the gesture is next.
+     */
     private fun onHeadAnswer(intent: DeviceToServer.Intent) {
         val yes = intent.kind == IntentKind.YES
-        log("head answer ${if (yes) "yes" else "no"}: prompt ${intent.promptId}")
+        val nowMs = SystemClock.elapsedRealtime()
+        val promptId = intent.promptId
+        val sinceLine = promptId?.let(prompts::lineStartMs)?.let { "${nowMs - it} ms" } ?: "no time"
+        val sinceCandidate = headTrace.firstCandidateMs?.let { "${nowMs - it} ms" } ?: "no time"
+        log("head answer ${if (yes) "yes" else "no"}: prompt $promptId, $sinceLine after the start of its line, $sinceCandidate after the first candidate")
         if (send(intent) && answerSound.play(yes)) {
-            answerSoundOnce.onAnswerSound(if (yes) SoundName.ADDED else SoundName.REMOVED, SystemClock.elapsedRealtime())
+            answerSoundOnce.onAnswerSound(if (yes) SoundName.ADDED else SoundName.REMOVED, nowMs)
+        }
+        if (promptId != null && speech.stopPrompt(promptId)) {
+            // The prompt is finished for the phone. The server gets no `prompt.done`: it already has the answer.
+            prompts.onPromptDone(promptId, nowMs)
+            log("prompt line stopped: prompt $promptId")
         }
     }
 
@@ -1111,22 +1125,33 @@ class SessionController(
     private fun newHeadInput(): HeadInput {
         val config = HeadGestureConfig.of(store.sensitivity, ProbeDecisions.PITCH_AXIS, ProbeDecisions.PITCH_DOWN_SIGN, ProbeDecisions.YAW_AXIS)
         // The detector gets samples only in a head window. So each line of it is about the answer to a prompt.
-        return HeadInput(HeadGestureDetector(config) { log(it.line()) }, prompts, headTrace)
+        return HeadInput(HeadGestureDetector(config, headTrace::onCandidate), prompts, headTrace)
     }
 
     /**
-     * Logs each head window. With "Record motion in sessions" of the mock menu, it also gives the samples of the
-     * window to the recorder. `HeadInput` calls it, one call at a time.
+     * Logs each head window and each stroke pair of the detector. With "Record motion in sessions" of the mock
+     * menu, it also gives the samples of the window to the recorder. `HeadInput` calls it, one call at a time.
      */
     private inner class HeadTrace : HeadWindowListener {
         private var samples = 0
         private var recording = false
 
-        override fun onOpen(promptId: String, doneMs: Long) {
+        /** The phone time of the first stroke pair of the head window, accepted or rejected. The main thread reads it. */
+        @Volatile
+        var firstCandidateMs: Long? = null
+            private set
+
+        override fun onOpen(promptId: String, openMs: Long) {
             samples = 0
+            firstCandidateMs = null
             recording = store.recordMotion
-            log("head window open: prompt $promptId")
-            if (recording) motionRecorder.onOpen(promptId, doneMs)
+            log("head window open: prompt $promptId, in ${(openMs - SystemClock.elapsedRealtime()).coerceAtLeast(0)} ms")
+            if (recording) motionRecorder.onOpen(promptId, openMs)
+        }
+
+        fun onCandidate(report: GestureReport) {
+            if (firstCandidateMs == null) firstCandidateMs = SystemClock.elapsedRealtime()
+            log(report.line())
         }
 
         override fun onSample(sample: HeadSample, arrivalMs: Long) {

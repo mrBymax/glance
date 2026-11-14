@@ -14,8 +14,8 @@ import kotlin.math.min
 
 /** Sees the head windows and their samples, for the log and for a recorder. Each call runs inside a call of [HeadInput]. */
 interface HeadWindowListener {
-    /** The head window of a prompt started. The line of the prompt ended at `doneMs`. */
-    fun onOpen(promptId: String, doneMs: Long)
+    /** The head window of a prompt started. Its samples count from `openMs`, which can be later than this call. */
+    fun onOpen(promptId: String, openMs: Long)
 
     /** The detector got this sample. `arrivalMs` is the phone time at which the sample arrived. */
     fun onSample(sample: HeadSample, arrivalMs: Long)
@@ -27,12 +27,16 @@ interface HeadWindowListener {
 /**
  * Turns a nod or a shake into a yes or a no, while a prompt has its head window open.
  *
- * The head window is in the time of the samples: a sample counts when the glasses took it after the line of the
- * prompt ended and before the window ended. So a nod whose samples arrive seconds late still counts, up to
- * [LATE_MS] after the window, and a movement before the end of the line never counts.
+ * The head window is in the time of the samples: a sample counts when the glasses took it after the window opened
+ * and before the window ended. So a nod whose samples arrive seconds late still counts, up to [LATE_MS] after the
+ * window, and a movement before the window never counts.
+ *
+ * `PromptTracker.headPrompt` gives the time at which the window opens: for a product prompt while its line still
+ * plays, and for a pay prompt at the end of its line. The length of the window counts from the end of the line.
  *
  * The time of the window does not run while it is blocked: while the motion samples are stalled, and while a
- * still photo is taken, which stalls them. A block adds [MAX_EXTRA_MS] to a window at most.
+ * still photo is taken, which stalls them. A block adds [MAX_EXTRA_MS] to a window at most. Blocked time before
+ * the end of the line adds nothing, because the length of the window does not run then.
  *
  * Each function can run on each thread.
  */
@@ -41,8 +45,11 @@ class HeadInput(
     private val prompts: PromptTracker,
     private val listener: HeadWindowListener? = null
 ) {
-    /** `lengthMs` is null for a window with no end. `extraMs` is the blocked time that ended. */
-    private class Window(val promptId: String, val doneMs: Long, val lengthMs: Long?) {
+    /**
+     * `doneMs` is the end of the line of the prompt, as [HeadPrompt] gives it. `lengthMs` is null for a window with
+     * no end. `extraMs` is the blocked time that ended.
+     */
+    private class Window(val promptId: String, val openMs: Long, var doneMs: Long, val lengthMs: Long?) {
         var extraMs = 0L
         var answered = false
         var closed = false
@@ -62,7 +69,7 @@ class HeadInput(
     fun onSample(sample: HeadSample, arrivalMs: Long, profile: Profile): DeviceToServer.Intent? {
         val takenMs = clock.phoneMs(sample.gyro.tNs, arrivalMs)
         val w = follow(profile) ?: return null
-        if (w.closed || takenMs < w.doneMs) return null
+        if (w.closed || takenMs < w.openMs) return null
         val end = endMs(w, arrivalMs)
         if (end != null && (takenMs >= end || arrivalMs >= end + LATE_MS)) return null
         listener?.onSample(sample, arrivalMs)
@@ -127,14 +134,18 @@ class HeadInput(
         if (closed) return null
         val prompt = if (profile.headGestures) prompts.headPrompt() else null
         val w = window
-        val same = if (prompt == null) w == null else w != null && w.promptId == prompt.promptId && w.doneMs == prompt.doneMs && w.lengthMs == profile.headWindowMs
-        if (same) return w
+        val same = if (prompt == null) w == null else w != null && w.promptId == prompt.promptId && w.openMs == prompt.openMs && w.lengthMs == profile.headWindowMs
+        if (same) {
+            // The line of a window that is open can end.
+            if (w != null && prompt != null) w.doneMs = prompt.doneMs
+            return w
+        }
         if (w != null && !w.closed) close(w)
         // A movement that started before the window, or in the window of another prompt, is no answer.
         detector.reset()
-        return prompt?.let { Window(it.promptId, it.doneMs, profile.headWindowMs) }.also {
+        return prompt?.let { Window(it.promptId, it.openMs, it.doneMs, profile.headWindowMs) }.also {
             window = it
-            if (it != null) listener?.onOpen(it.promptId, it.doneMs)
+            if (it != null) listener?.onOpen(it.promptId, it.openMs)
         }
     }
 

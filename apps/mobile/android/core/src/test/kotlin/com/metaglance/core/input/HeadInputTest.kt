@@ -3,6 +3,9 @@ package com.metaglance.core.input
 import com.metaglance.core.contract.DeviceToServer
 import com.metaglance.core.contract.IntentKind
 import com.metaglance.core.contract.IntentSource
+import com.metaglance.core.contract.KioskRef
+import com.metaglance.core.contract.PendingKind
+import com.metaglance.core.contract.ProductRef
 import com.metaglance.core.contract.Profile
 import com.metaglance.core.contract.Profiles
 import com.metaglance.core.contract.ServerEvent
@@ -24,8 +27,8 @@ class HeadInputTest {
     private val prompts = PromptTracker()
     private val seen = ArrayList<String>()
     private val listener = object : HeadWindowListener {
-        override fun onOpen(promptId: String, doneMs: Long) {
-            seen.add("open $promptId $doneMs")
+        override fun onOpen(promptId: String, openMs: Long) {
+            seen.add("open $promptId $openMs")
         }
 
         override fun onSample(sample: HeadSample, arrivalMs: Long) {
@@ -50,6 +53,13 @@ class HeadInputTest {
     private fun finishedPrompt(doneMs: Long) {
         prompts.onPromptSpoken("p-0001")
         prompts.onPromptDone("p-0001", doneMs)
+    }
+
+    /** A product prompt whose line starts to play at `startMs`. */
+    private fun productLine(startMs: Long) {
+        prompts.onEvent(ServerEvent.GlancePending("p-0001", PendingKind.NEW, ProductRef("oat-drink-1l", "Oat drink", "1 l", 149), emptyList(), 0))
+        prompts.onPromptSpoken("p-0001", startMs)
+        prompts.onLineStart("p-0001", startMs)
     }
 
     /**
@@ -92,6 +102,70 @@ class HeadInputTest {
     @Test fun `a nod that starts before the prompt ends sends nothing`() {
         prompts.onPromptSpoken("p-0001")
         assertEquals(nothing, feed(nod(), startMs = 0, beforeSampleAt = 300) { prompts.onPromptDone("p-0001", 300) })
+    }
+
+    // The shopper of the test of 2026-11-14 nodded at the name of the product, seconds before the line ended.
+    @Test fun `a nod while the line of a product prompt plays is a yes, from 1200 ms after the start of the line`() {
+        productLine(0)
+        assertEquals(yes, feed(nodAt(1500), startMs = 0))
+    }
+
+    // The shopper still lifts the product in that time.
+    @Test fun `a nod in the first 1200 ms of the line of a product prompt sends nothing`() {
+        productLine(0)
+        assertEquals(nothing, feed(nodAt(300), startMs = 0))
+    }
+
+    @Test fun `a nod while the line of a pay prompt plays sends nothing`() {
+        prompts.onEvent(ServerEvent.CheckoutOffered("p-0001", KioskRef("kiosk-1", "Checkout 3", "Demo Market"), 449, 3, false))
+        prompts.onPromptSpoken("p-0001", 0)
+        prompts.onLineStart("p-0001", 0)
+        assertEquals(nothing, feed(nodAt(1500), startMs = 0))
+    }
+
+    @Test fun `a nod that the end of the line of a product prompt cuts is a yes`() {
+        productLine(0)
+        assertEquals(yes, feed(nodAt(2000), startMs = 0, beforeSampleAt = 2300) { prompts.onPromptDone("p-0001", 2300) })
+    }
+
+    @Test fun `the length of the head window of a product prompt counts from the end of its line`() {
+        productLine(0)
+        prompts.onPromptDone("p-0001", 6000)
+        assertEquals(yes, feed(nodAt(13_000), startMs = 0))
+    }
+
+    @Test fun `a nod after the head window of a product prompt sends nothing`() {
+        productLine(0)
+        prompts.onPromptDone("p-0001", 6000)
+        assertEquals(nothing, feed(nodAt(14_100), startMs = 0))
+    }
+
+    // An interrupt removes a line with no report of its end.
+    @Test fun `the head window of a product prompt whose line never ends closes 28 seconds after the start of the line`() {
+        productLine(0)
+        assertEquals(nothing, feed(nodAt(28_100), startMs = 0))
+    }
+
+    @Test fun `a stall that ends while the line plays adds nothing to the head window`() {
+        productLine(0)
+        input.setBlocked(true, 2000, Profiles.DEFAULT)
+        input.setBlocked(false, 5000, Profiles.DEFAULT)
+        prompts.onPromptDone("p-0001", 6000)
+        assertEquals(nothing, feed(nodAt(14_100), startMs = 0))
+    }
+
+    @Test fun `a stall that runs when the line ends adds its time after that end to the head window`() {
+        productLine(0)
+        input.setBlocked(true, 5000, Profiles.DEFAULT)
+        prompts.onPromptDone("p-0001", 6000)
+        input.setBlocked(false, 9000, Profiles.DEFAULT)
+        assertEquals(yes, feed(nodAt(16_000), startMs = 0, arrival = { if (it in 5000..9000) null else it }))
+    }
+
+    @Test fun `the listener gets the head window of a product prompt with the time from which samples count`() {
+        productLine(0)
+        input.onTick(100, Profiles.DEFAULT)
+        assertEquals(listOf("open p-0001 1200"), seen)
     }
 
     @Test fun `a nod after the head window sends nothing`() {

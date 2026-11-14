@@ -23,9 +23,9 @@ class MotionRecorder(private val dir: File, private val scope: CoroutineScope, p
     private var lines: ArrayList<String>? = null
     private var rows = 0
 
-    override fun onOpen(promptId: String, doneMs: Long) {
+    override fun onOpen(promptId: String, openMs: Long) {
         rows = 0
-        lines = arrayListOf("# The head window of the prompt $promptId. Its line ended at $doneMs ms on the clock of the phone.")
+        lines = arrayListOf("# The head window of the prompt $promptId. It opened at $openMs ms on the clock of the phone.")
     }
 
     override fun onSample(sample: HeadSample, arrivalMs: Long) {
