@@ -162,6 +162,7 @@ flowchart LR
 - The page never changes the cart. `reduce` stores the cart and the total that the server sends, and `CartList` shows that total.
 - `glance.cleared` clears the prompt only if the IDs are equal. An event that ends a checkout clears only a pay prompt. So a newer product prompt stays when an older event arrives late.
 - `PromptCard` sends one answer for each prompt ID, and then it disables both buttons. A second answer can undo an add on the server.
+- `PromptCard` shows one warning banner for each entry of `prompt.warnings`. `warningText` in `src/text/format.ts` writes the sentence that the voice speaks: "Warning: contains gluten and milk.", "Warning: not vegan.", or "Allergen data is missing for this product.". With no warning the card shows nothing, and it never says that a product is safe.
 - A snapshot replaces the session data, and it clears the error, the budget warning, and the look-alike list.
 - An error stays until a sign of recovery: a stream that starts, a new prompt, a snapshot, a payment, or `local.attempt`. `send` runs `local.attempt` before `setup.register`, `setup.requestCamera`, and `session.start`.
 - The list of captions holds the last 20, and the screen shows the last 4. A caption with a known ID replaces the old one.
@@ -291,6 +292,8 @@ The Settings button of the session screen opens `SettingsSheet`. `useUi().setPro
 | Gesture meaning | 2 segments | `{ yesGesture }` |
 | Head window | 3 segments | `{ headWindowMs }`: 8000, 15000, or `null` for "While in view" |
 | Main yes input | 5 segments | `{ mainYes }` |
+| Allergens | 14 checkboxes, one for each value of `EU_ALLERGENS` | `{ allergens }`: the full new list, in the order of `EU_ALLERGENS` |
+| Diet | 2 checkboxes: Vegan, Vegetarian | `{ vegan }` or `{ vegetarian }`: only the key that changed |
 
 - A speech rate that is not in `SPEECH_RATES` marks the nearest value.
 - Play sample sends `intent` with the kind `help`. The bridge has no message for a speech sample, so the voice speaks the help line at the new speed.

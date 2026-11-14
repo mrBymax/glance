@@ -81,6 +81,19 @@ export const EN = {
   deleteConfirm: 'Delete',
   deleteCancel: 'Keep',
 
+  allergens: 'Allergens',
+  diet: 'Diet',
+  vegan: 'Vegan',
+  vegetarian: 'Vegetarian',
+  allergenNames: {
+    gluten: 'Gluten', crustaceans: 'Crustaceans', eggs: 'Eggs', fish: 'Fish', peanuts: 'Peanuts', soy: 'Soy', milk: 'Milk',
+    nuts: 'Nuts', celery: 'Celery', mustard: 'Mustard', sesame: 'Sesame', sulphites: 'Sulphites', lupin: 'Lupin', molluscs: 'Molluscs',
+  },
+  and: 'and',
+  warningAllergen: (list: string) => `Warning: contains ${list}.`,
+  warningDiet: (diet: string) => `Warning: not ${diet}.`,
+  allergenDataMissing: 'Allergen data is missing for this product.',
+
   undo: 'Undo',
   end: 'End',
   repeat: 'Repeat',

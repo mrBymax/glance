@@ -119,3 +119,15 @@ it('has no control below 48 px on the session screen', () => {
   const { container } = renderWithUi(<SessionScreen />, { messages: [pending(), eventMessage('cart.updated')] });
   expect(uncoveredTouchTargets(container)).toEqual([]);
 });
+it('shows each warning on the card, and never says that a product is safe', () => {
+  const { deliver } = renderWithUi(<SessionScreen />, { messages: [pending({ warnings: [{ kind: 'allergen', allergens: ['gluten'] }, { kind: 'diet', diet: 'vegan' }] })] });
+  expect(screen.getByText('Warning: contains gluten.')).toBeInTheDocument();
+  expect(screen.getByText('Warning: not vegan.')).toBeInTheDocument();
+  deliver(pending({ promptId: 'p-0002', warnings: [] }));
+  expect(screen.queryByText(/warning/i)).toBeNull();
+  expect(screen.queryByText(/safe/i)).toBeNull();
+});
+it('says when allergen data is missing', () => {
+  renderWithUi(<SessionScreen />, { messages: [pending({ warnings: [{ kind: 'allergenDataMissing' }] })] });
+  expect(screen.getByText('Allergen data is missing for this product.')).toBeInTheDocument();
+});

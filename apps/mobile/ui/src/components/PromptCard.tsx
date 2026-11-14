@@ -1,3 +1,4 @@
+import { Banner } from '@astryxdesign/core/Banner';
 import { Button } from '@astryxdesign/core/Button';
 import { Card } from '@astryxdesign/core/Card';
 import { Heading } from '@astryxdesign/core/Heading';
@@ -6,7 +7,7 @@ import { VStack } from '@astryxdesign/core/VStack';
 import type { CurrentPrompt } from '@glance/shared';
 import { useRef, useState } from 'react';
 import { useUi } from '../bridge/BridgeContext';
-import { eur } from '../text/format';
+import { eur, warningText } from '../text/format';
 
 export function PromptCard(props: { prompt: Extract<CurrentPrompt, { kind: 'product' }> }) {
   const { prompt } = props;
@@ -32,6 +33,10 @@ export function PromptCard(props: { prompt: Extract<CurrentPrompt, { kind: 'prod
         <Text>{prompt.product.packSize}</Text>
         <Text type="display-1">{eur(prompt.product.priceCents)}</Text>
         {inCart ? <Text>{strings.inCart(prompt.qtyInCart)}</Text> : null}
+        {prompt.warnings.map((warning) => {
+          const text = warningText(warning, strings);
+          return <Banner key={text} status="warning" title={text} />;
+        })}
         <Button
           label={inCart ? strings.addAnother : strings.add}
           variant="primary"

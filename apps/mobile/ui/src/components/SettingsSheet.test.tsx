@@ -70,3 +70,24 @@ it('has no control below 48 px in the settings sheet', async () => {
   const { baseElement } = await open();
   expect(uncoveredTouchTargets(baseElement)).toEqual([]);
 });
+it('lists the 14 EU allergens and two diets, and sends each change', async () => {
+  const { bridge, user, sheet } = await open();
+  const allergens = within(sheet.getByRole('group', { name: 'Allergens' }));
+  expect(allergens.getAllByRole('checkbox')).toHaveLength(14);
+  await user.click(allergens.getByRole('checkbox', { name: 'Gluten' }));
+  await user.click(allergens.getByRole('checkbox', { name: 'Milk' }));
+  await user.click(sheet.getByRole('checkbox', { name: 'Vegan' }));
+  expect(patches(bridge)).toEqual([{ allergens: ['gluten'] }, { allergens: ['gluten', 'milk'] }, { vegan: true }]);
+});
+it('keeps the allergens in the order of the EU list, and removes one', async () => {
+  const { bridge, user, sheet } = await open();
+  await user.click(sheet.getByRole('checkbox', { name: 'Milk' }));
+  await user.click(sheet.getByRole('checkbox', { name: 'Gluten' }));
+  expect(sheet.getByRole('checkbox', { name: 'Milk' })).toBeChecked();
+  await user.click(sheet.getByRole('checkbox', { name: 'Milk' }));
+  await user.click(sheet.getByRole('checkbox', { name: 'Vegetarian' }));
+  await user.click(sheet.getByRole('checkbox', { name: 'Vegetarian' }));
+  expect(patches(bridge)).toEqual([
+    { allergens: ['milk'] }, { allergens: ['gluten', 'milk'] }, { allergens: ['gluten'] }, { vegetarian: true }, { vegetarian: false },
+  ]);
+});
