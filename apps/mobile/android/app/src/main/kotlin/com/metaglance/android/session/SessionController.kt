@@ -23,6 +23,7 @@ import com.metaglance.android.pipeline.FramePipeline
 import com.metaglance.android.pipeline.LabelOutcome
 import com.metaglance.android.pipeline.LabelStill
 import com.metaglance.android.pipeline.StillPhoto
+import com.metaglance.core.audio.AnswerSoundOnce
 import com.metaglance.core.audio.SpeechQueue
 import com.metaglance.core.barcode.LabelTiming
 import com.metaglance.core.contract.Codec
@@ -39,6 +40,7 @@ import com.metaglance.core.contract.Profile
 import com.metaglance.core.contract.Profiles
 import com.metaglance.core.contract.ServerEvent
 import com.metaglance.core.contract.ServerToDevice
+import com.metaglance.core.contract.SoundName
 import com.metaglance.core.contract.StillPurpose
 import com.metaglance.core.frame.FrameHeader
 import com.metaglance.core.frame.FrameKind
@@ -158,6 +160,7 @@ class SessionController(
     private var stillPolicy = StillPolicy()
     private var waitingStills = WaitingStills()
     private val answerSound = AnswerSound(app)
+    private val answerSoundOnce = AnswerSoundOnce()
     private val motionRecorder = MotionRecorder(File(app.getExternalFilesDir("probe") ?: File(app.filesDir, "probe"), "motion"), scope, ::log)
     private val headTrace = HeadTrace()
 
@@ -519,7 +522,8 @@ class SessionController(
         when (message) {
             is ServerToDevice.Speak -> {
                 message.promptId?.let { prompts.onPromptSpoken(it, SystemClock.elapsedRealtime()) }
-                speech.onSpeak(message)
+                // The answer sound of a head gesture already played, so the line that answers it plays its clip alone.
+                speech.onSpeak(message.copy(sound = answerSoundOnce.lineSound(message.sound, SystemClock.elapsedRealtime())))
             }
             is ServerToDevice.Event -> {
                 toPage(NativeToPage.Event(message.event))
@@ -753,7 +757,9 @@ class SessionController(
     private fun onHeadAnswer(intent: DeviceToServer.Intent) {
         val yes = intent.kind == IntentKind.YES
         log("head answer ${if (yes) "yes" else "no"}: prompt ${intent.promptId}")
-        if (send(intent)) answerSound.play(yes)
+        if (send(intent) && answerSound.play(yes)) {
+            answerSoundOnce.onAnswerSound(if (yes) SoundName.ADDED else SoundName.REMOVED, SystemClock.elapsedRealtime())
+        }
     }
 
     /**

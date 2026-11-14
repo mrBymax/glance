@@ -26,8 +26,6 @@ class AnswerSound(context: Context) {
     private val yesId = pool.load(context.applicationContext, R.raw.added, 1)
     private val noId = pool.load(context.applicationContext, R.raw.removed, 1)
 
-    /** Plays the sound one time. A sound that the pool did not load yet does not play. */
-    fun play(yes: Boolean) {
-        pool.play(if (yes) yesId else noId, 1f, 1f, 1, 0, 1f)
-    }
+    /** Plays the sound one time. Returns false for a sound that the pool did not load yet: it does not play. */
+    fun play(yes: Boolean): Boolean = pool.play(if (yes) yesId else noId, 1f, 1f, 1, 0, 1f) != 0
 }

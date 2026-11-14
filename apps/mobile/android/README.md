@@ -179,7 +179,7 @@ Rules of `SessionController`:
 - With the socket down for 3 seconds, the phone voice says "Connection lost. Your cart is safe. Glances are paused."
 - With the media volume at 0, no line plays, and each prompt is reported at once.
 - `FramePipeline` scans each frame for a kiosk code and for the barcode of a product, and selects the sharpest frame of each 300 ms. See "The barcode of a product". `FaceFinder` looks for faces in that frame with ML Kit, on the phone. The upload is the center of the frame (80 percent of the width, 70 percent of the height) with each face pixelated, as a JPEG of quality 80 with a long side of 768 pixels at most: 494 x 768 for the stream of 720 x 1280. Its header has `blurred: true`. If face detection fails, the frame is dropped. The app writes no frame to storage.
-- The app plays each line of the server one time, with the sound of the line. It plays one sound by itself: the answer sound of a head gesture, `added` for a yes and `removed` for a no, at the moment the app sends the answer. See "Head gestures". A still, a label upload, and a barcode report play no sound. `apps/server/README.md` lists each sound and each vibration of a line with its trigger, in "A guard for the voice".
+- The app plays each line of the server one time, with the sound of the line. It plays one sound by itself: the answer sound of a head gesture, `added` for a yes and `removed` for a no, at the moment the app sends the answer. The line that answers the gesture then plays with no sound, so one answer gives one sound. See "Head gestures". A still, a label upload, and a barcode report play no sound. `apps/server/README.md` lists each sound and each vibration of a line with its trigger, in "A guard for the voice".
 - `ExoLinePlayer` plays the sound of a line, then its clip. A clip that does not load, that does not start in 3 seconds, or whose address is not an address, is replaced by the phone voice. The speech rate of the profile changes the clip, not the sound.
 
 ## The barcode of a product
@@ -472,9 +472,11 @@ In that time no still starts:
 
 ### The answer sound
 
-Before this change, nothing told the shopper that a nod counted until the line of the server arrived. Now the app plays one sound at the moment it sends a head answer: `added` for a yes, and `removed` for a no. Both are sounds of the app that the lines of the server also use, so a yes that adds a product gives the sound two times: one for the gesture, and one with the line "Added".
+Before this change, nothing told the shopper that a nod counted until the line of the server arrived. Now the app plays one sound at the moment it sends a head answer: `added` for a yes, and `removed` for a no. Both are sounds of the app that the lines of the server also use: the line "Added" has the sound `added`, and the line "Removed" has the sound `removed`.
 
 - One answer gives one sound. A rejected stroke pair gives none.
+- The line that answers the gesture plays its clip with no sound. `AnswerSoundOnce` in `core` holds the rule: the next line of the server after an answer sound loses its sound when the sound is the same and the line arrives less than 3 seconds later. Another sound stays, for example `warning` for the add that crosses the budget. A line after that one keeps its sound.
+- An answer that the server rejects still gave its answer sound. The shopper then hears the sound and no "Added" line.
 - The sound plays only when the socket took the answer.
 - `AnswerSound` plays it with a `SoundPool` as media. It goes to the glasses when they are the media output, it is silent with a media volume of 0, and it does not stop a line that plays.
 
@@ -567,7 +569,7 @@ flowchart LR
     Image[image: Sharpness, SharpestFramePicker, UploadGate, FrameGeometry, Pixelate, FramePrep, I420, StillPolicy, WaitingStills, Pace] --> Contract
     Barcode --> Image
     Gesture[gesture: HeadGestureDetector, HeadAxes, GestureReport, GyroScript, MotionCsv]
-    Audio[audio: SpeechQueue] --> Contract
+    Audio[audio: SpeechQueue, AnswerSoundOnce] --> Contract
     Input[input: PromptTracker, HeadInput, GlassesClock, MainYesResolver, KeyInput, TouchInput, VoiceInput, PaymentConfirm] --> Contract
     Input --> Gesture
     State[state: StateMapper, StopCauses, NativeErrors, ConnectionAnnouncer, Revival, MotionWatchdog, MotionStats, HapticPatterns] --> Contract
