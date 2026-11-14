@@ -1,0 +1,12 @@
+{
+  "type": "checkout.offered",
+  "promptId": "p-0001",
+  "kiosk": {
+    "id": "kiosk-1",
+    "name": "Checkout 3",
+    "store": "Demo Market"
+  },
+  "totalCents": 449,
+  "itemCount": 2,
+  "needsBiometric": false
+}

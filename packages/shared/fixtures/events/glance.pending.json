@@ -1,0 +1,20 @@
+{
+  "type": "glance.pending",
+  "promptId": "p-0001",
+  "kind": "new",
+  "product": {
+    "id": "oat-drink-1l",
+    "name": "Oat drink",
+    "packSize": "1 L",
+    "priceCents": 189
+  },
+  "warnings": [
+    {
+      "kind": "allergen",
+      "allergens": [
+        "gluten"
+      ]
+    }
+  ],
+  "qtyInCart": 0
+}

@@ -1,0 +1,73 @@
+{
+  "t": "snapshot",
+  "session": {
+    "sessionId": "s-1",
+    "phase": "shopping",
+    "cameraOn": true,
+    "prompt": {
+      "promptId": "p-0001",
+      "kind": "product",
+      "mode": "new",
+      "product": {
+        "id": "oat-drink-1l",
+        "name": "Oat drink",
+        "packSize": "1 L",
+        "priceCents": 189
+      },
+      "warnings": [
+        {
+          "kind": "allergen",
+          "allergens": [
+            "gluten"
+          ]
+        }
+      ],
+      "qtyInCart": 0
+    },
+    "cart": {
+      "items": [
+        {
+          "productId": "rye-bread",
+          "name": "Rye bread",
+          "packSize": "500 g",
+          "qty": 1,
+          "unitPriceCents": 260
+        }
+      ],
+      "totalCents": 260
+    },
+    "profile": {
+      "lang": "en",
+      "detail": "standard",
+      "speechRate": 1,
+      "speakPrices": true,
+      "headGestures": true,
+      "yesGesture": "nod",
+      "headWindowMs": 8000,
+      "haptics": true,
+      "mainYes": "head",
+      "allergens": [],
+      "vegan": false,
+      "vegetarian": false,
+      "budgetCents": null
+    },
+    "kiosk": null,
+    "lastReceipt": null,
+    "captions": [
+      {
+        "id": "c-0001",
+        "text": "Camera on. Hold a product up to hear its price.",
+        "lang": "en",
+        "priority": "normal",
+        "url": null
+      },
+      {
+        "id": "c-0002",
+        "text": "Oat drink, one litre, one eighty-nine. Nod to add.",
+        "lang": "en",
+        "priority": "normal",
+        "url": "/api/speech/3f2a9c1e.mp3"
+      }
+    ]
+  }
+}

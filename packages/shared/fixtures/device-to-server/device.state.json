@@ -1,0 +1,11 @@
+{
+  "t": "device.state",
+  "state": {
+    "link": "connected",
+    "battery": 80,
+    "worn": true,
+    "hingeOpen": true,
+    "thermal": 0,
+    "stream": "streaming"
+  }
+}

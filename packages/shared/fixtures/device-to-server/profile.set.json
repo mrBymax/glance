@@ -1,0 +1,7 @@
+{
+  "t": "profile.set",
+  "patch": {
+    "speechRate": 1.5,
+    "headWindowMs": null
+  }
+}

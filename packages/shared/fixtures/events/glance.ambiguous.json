@@ -1,0 +1,17 @@
+{
+  "type": "glance.ambiguous",
+  "candidates": [
+    {
+      "id": "oat-drink-1l",
+      "name": "Oat drink",
+      "packSize": "1 L",
+      "priceCents": 189
+    },
+    {
+      "id": "oat-drink-barista-1l",
+      "name": "Barista oat drink",
+      "packSize": "1 L",
+      "priceCents": 229
+    }
+  ]
+}
