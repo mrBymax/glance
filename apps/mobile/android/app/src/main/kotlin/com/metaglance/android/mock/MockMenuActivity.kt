@@ -25,6 +25,8 @@ import com.metaglance.android.GlanceApp
 import com.metaglance.android.dat.DatLink
 import com.metaglance.android.dat.ProbeDecisions
 import com.metaglance.android.session.SessionController
+import com.metaglance.core.barcode.LabelTiming
+import com.metaglance.core.barcode.MsField
 import com.metaglance.core.contract.DeviceState
 import com.metaglance.core.contract.GlanceJson
 import com.metaglance.core.contract.NativeState
@@ -173,6 +175,9 @@ class MockMenuActivity : AppCompatActivity() {
             placeholder.text = placeholderLabel()
             status("Close Glance and open it again.")
         }
+
+        group("Barcode")
+        addBarcodeFields()
     }
 
     /** Each change of mode stops a running session first, and waits for its end. */
@@ -289,6 +294,43 @@ class MockMenuActivity : AppCompatActivity() {
             serverField.setText(glance.profileStore.serverUrl)
             status("Server URL: ${glance.profileStore.serverUrl}")
         }
+    }
+
+    /**
+     * The two times of the label still. They count for mock glasses and for real glasses, from the next camera start.
+     * An empty field gives the value of the build again, and a number outside the limits becomes the nearest limit.
+     */
+    private fun addBarcodeFields() {
+        val store = glance.profileStore
+        val waitField = msField("Barcode wait (ms)", store.labelTiming.waitMs)
+        val gapField = msField("Still gap (ms)", store.labelTiming.gapMs)
+        item("Save barcode waits") {
+            val wait = LabelTiming.readField(waitField.text.toString(), LabelTiming.WAIT_LIMITS_MS)
+            val gap = LabelTiming.readField(gapField.text.toString(), LabelTiming.GAP_LIMITS_MS)
+            if (wait is MsField.NotANumber || gap is MsField.NotANumber) {
+                status("Type a whole number of milliseconds, or leave the field empty.")
+                return@item
+            }
+            store.labelWaitMs = (wait as? MsField.Value)?.ms
+            store.labelGapMs = (gap as? MsField.Value)?.ms
+            val saved = store.labelTiming
+            waitField.setText(saved.waitMs.toString())
+            gapField.setText(saved.gapMs.toString())
+            status("Barcode wait: ${saved.waitMs} ms. Still gap: ${saved.gapMs} ms. The next camera start uses them.")
+        }
+    }
+
+    private fun msField(label: String, valueMs: Long): EditText {
+        val caption = TextView(this)
+        caption.text = label
+        items.addView(caption, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        val field = EditText(this)
+        field.hint = label
+        field.inputType = InputType.TYPE_CLASS_NUMBER
+        field.isSingleLine = true
+        field.setText(valueMs.toString())
+        items.addView(field, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        return field
     }
 
     private fun buildLayout() {

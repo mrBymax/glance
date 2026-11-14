@@ -195,9 +195,9 @@ flowchart TD
     U -- not decoded --> O[DigitReader: OCR of the region and the digits under it, 3 times each second at most]
     O -- exactly one code with a right check digit --> V
     V -- 2 equal reads of the decoder, or 3 equal reads --> M[barcode.seen, then one time each second]
-    R -- in view for 2.5 s with no accepted code --> L[LabelPolicy]
+    R -- in view for the barcode wait, 2.5 s, with no accepted code --> L[LabelPolicy]
     SR[still.request of the server] --> L
-    L -- one each 6 s --> SP[StillPolicy, then one still photo]
+    L -- one each still gap, 6 s --> SP[StillPolicy, then one still photo]
     SP --> P[LabelStill: scanner and OCR on the full still, on the phone]
     P -- code --> M
     P -- no code --> LF[Face detection and pixelation, then a frame of the kind label]
@@ -219,15 +219,39 @@ Rules that keep a wrong product out:
 
 The still photo:
 
-- `LabelPolicy` asks for a still when a region was in view for 2500 ms with no accepted code, and when the server sends `still.request`. Both share one limit: one still each 6 seconds. A request inside that time is dropped.
+- `LabelPolicy` asks for a still when a region was in view for the barcode wait (2500 ms) with no accepted code, and when the server sends `still.request`. Both share one limit, the still gap: one still each 6 seconds. A request inside that time is dropped.
+- A person can change both times on the phone with no new build. See "The two times of the label still".
 - A region that stays in view asks for 3 stills at most. The scanner can report a region where no barcode is, and each still can stop Motion and can cost one model call of the server. The region asks again after it left the view for more than 600 ms. A `still.request` does not count for this limit.
 - After a still gave a code, its region asks for no other still while it stays in view: the frames cannot read that code, so each still would give the same report again.
 - `LabelPolicy` asks for no still while the upload gate is closed, for example with the socket down or with the glasses off the face. A `still.request` in that time is dropped.
-- The still also needs `StillPolicy`, which it shares with the sharp second look: one capture at a time, and one start each 5 seconds.
+- The still also needs `StillPolicy`, which it shares with the sharp second look: one capture at a time, and one start each 5 seconds. With a still gap below 5000 ms, the limit of `StillPolicy` is the still gap.
 - `LabelStill` reads the still on the phone first, with the scanner and with OCR. A code of the decoder counts with its check digit, because one still has no second image that can agree. It does not count when the digits under its bars give another code: ML Kit read blurred bars as a wrong code with a right check digit in one test image. Such a still goes to the server. With no decoded code, the digits count when the still holds exactly one code. With no region in the still, only 12 or 13 digits count, because 8 digits in a photo can be a date.
 - A still with a code gives `barcode.seen`, and the still stays on the phone.
 - A still with no code goes to the server as a frame with `kind: label` and `blurred: true`: the full photo with no crop, each face pixelated, a long side of 1600 pixels at most, and JPEG quality 85. If face detection fails, the still is dropped.
 - The log line `label still <w>x<h>: ...` has the size of the photo and the milliseconds from the trigger to the result. `DatLink` logs `still <w>x<h> <variant> <ms> ms` for the capture alone.
+
+### The two times of the label still
+
+Nobody knows yet if 2.5 seconds feel long with a product in the hand. So the two times are settings of the app, for mock glasses and for real glasses.
+
+| Time | Field of "Glance Mock" | Key of `local.properties` | Default | Limits |
+|---|---|---|---|---|
+| Barcode wait: a barcode region is in view with no accepted code for this time, then the phone takes the still | `Barcode wait (ms)` | `glance.labelWaitMs` | 2500 | 300 to 10000 |
+| Still gap: the shortest time between two label stills | `Still gap (ms)` | `glance.labelGapMs` | 6000 | 2000 to 60000 |
+
+1. Open "Glance Mock" and go to the group `Barcode`, at the end of the list.
+2. Type the milliseconds in one field or in both.
+3. Tap `Save barcode waits`. The line below the top line shows the two values that the app stored.
+4. If a session runs in "Glance", stop it and start it again. A pause does not start the camera again.
+
+- The app reads the two values each time the camera of a session starts, and logs `label still: wait <n> ms, gap <n> ms` with the tag `Glance`. A running camera keeps its values.
+- The app keeps the values over a restart. An empty field gives the value of the build again.
+- A number outside the limits becomes the nearest limit. A text that is no whole number changes nothing.
+- The keys of `local.properties` set the values of the build. A value of the menu wins over them until a person empties the field.
+- A short barcode wait takes the still before the scanner and OCR had their time. Each still can stop Motion for a moment, so a nod can fail after it.
+- The server starts at most one label call each 5 seconds for a session. With a still gap below 5000 ms it drops some label frames, and the phone still reads each still for a code.
+- With real recognition, each label frame that the server accepts is one paid model call. A shorter still gap can cost more calls.
+- `LabelTiming` in `core` holds the limits and reads a field. The probe screen always uses 2500 ms and 6000 ms.
 
 Measured on the test phone on 2026-11-14, with images of an EAN-13 code with 5 pixels for each narrow bar and a Gaussian blur:
 
@@ -261,7 +285,7 @@ flowchart LR
     Contract[contract: types, GlanceJson, Codec, Profiles]
     Frame[frame: FrameCodec] --> Contract
     Kiosk[kiosk: KioskCode, KioskDwell] --> Contract
-    Barcode[barcode: Gtin, BarcodeVote, LabelPolicy, BarcodeRegion, TextRows] --> Contract
+    Barcode[barcode: Gtin, BarcodeVote, LabelPolicy, LabelTiming, BarcodeRegion, TextRows] --> Contract
     Image[image: Sharpness, SharpestFramePicker, UploadGate, FrameGeometry, Pixelate, FramePrep, I420, StillPolicy, Pace] --> Contract
     Barcode --> Image
     Gesture[gesture: HeadGestureDetector, GyroScript, MotionCsv]
@@ -279,7 +303,7 @@ flowchart LR
 | `contract` | The Kotlin mirror of `packages/shared`: one file for each TypeScript file, with the same type names and field names. `GlanceJson` is the one JSON format. `Codec` encodes and decodes the messages, and returns null for a message that it does not know. `Profiles.applyPatch` sets the keys of a profile patch, and changes nothing for a patch that does not decode or that leaves the limits of `ProfileSchema`. |
 | `frame` | `FrameCodec` builds and reads the binary frame message: a 4-byte header length, the JSON header, the JPEG. |
 | `kiosk` | `KioskCode` parses the QR text `GL1 <code>`. `KioskDwell` reports a kiosk code after 1500 ms in view, then one time each second. |
-| `barcode` | `Gtin` holds the rules of `gtin.ts` in `packages/shared` for the digits of a product barcode: the GS1 check digit, the UPC-A form of a UPC-E code, the 13-digit form, and the codes of one store. `Gtin.digitRuns` finds each code of 8, 12, or 13 digits with a right check digit in an OCR text, also when the text has the digits in groups such as `8 076809 513753` or in neighbouring text elements. It reads 8 digits as EAN-8, never as UPC-E. `Gtin.fromDecoder` gives the code of a decoder as the phone sends it. `BarcodeVote` reports a code when frames agree on it, then one time each second. `LabelPolicy` says when a still must read a barcode. `BarcodeRegion` gives the crops around a region that did not decode, and says if a box has the form of a product barcode. `TextRows` puts the words of an OCR result into rows and finds the codes in them. |
+| `barcode` | `Gtin` holds the rules of `gtin.ts` in `packages/shared` for the digits of a product barcode: the GS1 check digit, the UPC-A form of a UPC-E code, the 13-digit form, and the codes of one store. `Gtin.digitRuns` finds each code of 8, 12, or 13 digits with a right check digit in an OCR text, also when the text has the digits in groups such as `8 076809 513753` or in neighbouring text elements. It reads 8 digits as EAN-8, never as UPC-E. `Gtin.fromDecoder` gives the code of a decoder as the phone sends it. `BarcodeVote` reports a code when frames agree on it, then one time each second. `LabelPolicy` says when a still must read a barcode. `LabelTiming` holds the two times of that policy that a person can set, with their limits, and reads the text of a settings field. `BarcodeRegion` gives the crops around a region that did not decode, and says if a box has the form of a product barcode. `TextRows` puts the words of an OCR result into rows and finds the codes in them. |
 | `image` | `Sharpness` and `SharpestFramePicker` select the sharpest frame of each 500 ms. `UploadGate` gives the reason to skip an upload. `FrameGeometry` and `FramePrep` crop and scale a frame to a long side of 768 pixels at most. `FrameGeometry.mapBox` maps a face box into the output and never makes it smaller. `Pixelate` covers a box that is 20 percent larger on each side with blocks of one color. A block has one sixth of the box width, and 8 pixels at least. `I420.cropScaleToArgb` converts with BT.709 limited range. `I420.cropLumaToArgb` gives a crop of the Y plane as gray pixels in a larger scale. `StillPolicy` limits the still photos: one at a time, and one start each 5 seconds. `Pace` limits a slow step, for example OCR, to one run in a given time. |
 | `gesture` | `HeadGestureDetector` finds a nod and a shake in gyroscope samples. `HeadGestureConfig.of` gives the limits of the levels `GENTLE`, `NORMAL`, and `FIRM`. `GyroScript` builds samples of head movements for tests and for mock glasses. |
 | `audio` | `SpeechQueue` plays one line at a time through a `LinePlayer`, with interrupt and priority. It reports each prompt whose line ended. A line with no clip uses the phone voice. |
@@ -363,6 +387,7 @@ The top line of the menu shows `NativeState` and `DeviceState` as JSON, live. Th
 | Speech | `Say add`, `Say skip`: a final transcript. A mock session always has Speech, so the app sends each one as `speech.final`. |
 | Force | `Meta AI missing`, `Update required`, `Stream error BATTERY_LOW`, `Stream error THERMAL_HOT`. MockDeviceKit has no call for these states, so the debug hooks of `DatLink` make them. |
 | App | `Server URL`. `Drop server link 10 s`: the socket closes and connects again after 10 seconds. `Sensitivity: gentle, normal, firm` for the head gestures. `Use placeholder page`. |
+| Barcode | `Barcode wait (ms)`, `Still gap (ms)`, and `Save barcode waits`: the two times of the label still, from the next camera start. They also count for real glasses. See "The two times of the label still". |
 
 The states of the app, and the items that make each one:
 
@@ -441,7 +466,7 @@ flowchart LR
 | `BarcodeScanTest` | The barcode of a product, with the clips of `make-clips.mjs` and the fake server of the app. The sharp code gives `barcode.seen` with the source `barcode`, then 3 to 5 reports in 3.3 seconds. The digits with no bars, and the sharp digits under blurred bars, never give another code than their own. The kiosk clip gives `kiosk.seen`, no `barcode.seen`, and no still. The blurred bars give one frame with `kind: label`, and no code. With blurred bars in the stream and the sharp code as the still, the phone sends one `barcode.seen` and takes no other still. The command `label` gives a label frame, or `barcode.seen` when the still holds a code that the phone reads. Two commands within one second give one still, and a `label` right after `amb` gives none. |
 | `LabelStillTest` | `LabelStill.read` with no glasses and no server. ML Kit reads the code of `barcode.png`, the blurred bars of `barcode-blurred.png` are one region with no text and the still goes to the server, and `scene.png` becomes a frame of 720 x 1280 pixels. With hits and words that the test gives: a photo of 3000 x 4000 pixels becomes 1200 x 1600 with no crop, a failed face detection drops the still, the digits under a region count and the digits of another product do not, and with no region only 12 or 13 digits count. |
 | `StillPhotoPrepareTest` | `StillPhoto.prepare` with no glasses and no server: a photo of 3000 x 4000 pixels becomes a JPEG of 1234 x 1440 pixels, the face box that the test gives is pixelated, and the stripes outside it stay. A photo with no result of face detection is dropped. |
-| `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items change the stored settings. |
+| `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items and the Barcode fields change the stored settings. |
 | `HapticsPocketTest` | The 8 haptic buttons of the placeholder page give the 8 patterns, `haptics: false` gives none, and pocket mode dims the screen, hides the bars, and keeps the screen on. |
 | `VolumeKeysTest` | The volume keys with `mainYes: key`: volume up on a product prompt sends `intent yes` with the source `key` and adds the product, volume down sends `intent no`, and the media volume stays at 0. A key that stays down in pocket mode sends one yes. Before the first prompt, after the prompt ended, and with the head as the main yes, the app does not take the key. |
 | `TouchpadInputTest` | The touchpad of the mock glasses: a double tap after a product prompt sends `intent yes` with the source `touch` and the prompt ID, and the server adds the product. A double tap before the first prompt carries no ID and adds nothing. A swipe sends `intent repeat`, and the server sends the line of the prompt again. |
@@ -534,7 +559,7 @@ No test of the night covers these checks of Plan 2 Tasks 17 and 21 to 25. Each o
 | The same session with the code in view. Tap `Barcode log` off and `Pipeline test` on. | `barcode <code> barcode` one time each second. Write down the frame rate of the log line `frame ... fps=` with and without `Pipeline test`: it shows what the scan costs. |
 | On the glasses, with a session of "Glance" against `tools/fake-server`: hold a barcode at a distance where `Barcode log` showed a region and no code, for 3 seconds. | The log of the app has `still <w>x<h> <variant> <ms> ms` and `label still <w>x<h>: ...`. Write down the size, the variant, and both times. The fake server logs `barcode.seen`, or one frame with `kind=label blurred=true`. |
 | On the glasses: type `label` in the fake server while no barcode is in view. | The same two log lines, and one frame with `kind=label`. |
-| On the glasses, after a label still: type `badclip`, wait for the prompt, and nod. | `intent yes` with the source `head`. The log shows `revive motion` if the still stopped Motion. If the nod has no effect after a still, raise the 2500 ms of `LabelPolicy`, or cut the label still. |
+| On the glasses, after a label still: type `badclip`, wait for the prompt, and nod. | `intent yes` with the source `head`. The log shows `revive motion` if the still stopped Motion. If the nod has no effect after a still, raise `Barcode wait (ms)` in "Glance Mock", or cut the label still. |
 | On the glasses: look at a kiosk QR code from 2 meters for 5 seconds. | No `label still` line in the log. A line means that ML Kit reports the far QR code as a region that is not square. |
 | On the glasses, after that still: wait for the next prompt, and nod. | `intent yes` with the source `head`. The log shows `revive motion` if the still stopped Motion. If the nod has no effect, cut the sharp second look: a dead nod costs more than a sharper frame. |
 
@@ -602,6 +627,8 @@ Git ignores `local.properties`. Each key is optional, and each one is also a Gra
 | `mwdat_client_token` | `0` | DAT client token. `0` is Developer Mode. |
 | `glance.serverUrl` | `http://10.0.2.2:8080` | Address of the Glance server, as `BuildConfig.SERVER_URL` |
 | `glance.uiDevUrl` | empty | Address of the dev server of the phone UI, as `BuildConfig.UI_DEV_URL` |
+| `glance.labelWaitMs` | `2500` | The time in milliseconds that a barcode region is in view before the label still, as `BuildConfig.LABEL_WAIT_MS`. The app keeps it from 300 to 10000. A value that is no whole number stops the build. |
+| `glance.labelGapMs` | `6000` | The shortest time in milliseconds between two label stills, as `BuildConfig.LABEL_GAP_MS`. The app keeps it from 2000 to 60000. |
 | `glance.demoStoreFile` | `glance-demo.jks` | The keystore of the demo build, as a path from the folder `app` |
 | `glance.demoStorePassword` | empty | The password of the keystore |
 | `glance.demoKeyAlias` | `glance-demo` | The name of the key in the keystore |

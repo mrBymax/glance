@@ -48,13 +48,13 @@ class FramePipeline(
     private val crop: Boolean = false,
     /** Gives the number of the next upload. Without it, this pipeline counts its uploads from 1. */
     private val nextSeq: (() -> Int)? = null,
+    private val label: LabelPolicy = LabelPolicy(),
     private val log: (String) -> Unit
 ) {
     private val scanner = CodeScanner()
     private val digits = DigitReader()
     private val dwell = KioskDwell()
     private val vote = BarcodeVote()
-    private val label = LabelPolicy()
     private val ocrPace = Pace(OCR_EVERY_MS)
     private val labelRequested = AtomicBoolean()
     private val stillGaveCode = AtomicBoolean()

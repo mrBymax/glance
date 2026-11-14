@@ -13,6 +13,12 @@ val localProps = Properties().apply {
 // A Gradle property wins over local.properties: ./gradlew :app:assembleDebug -Pglance.serverUrl=http://127.0.0.1:8080
 fun local(key: String, default: String): String = providers.gradleProperty(key).orNull ?: localProps.getProperty(key, default)
 
+// A time in milliseconds, as a Long of BuildConfig. The app brings it into the limits of LabelTiming in :core.
+fun localMs(key: String, default: Long): String {
+    val text = local(key, default.toString()).trim()
+    return "${text.toLongOrNull() ?: error("$key must be a whole number of milliseconds. Got \"$text\".")}L"
+}
+
 android {
     namespace = "com.metaglance.android"
     compileSdk = 36
@@ -27,6 +33,8 @@ android {
         manifestPlaceholders["mwdat_client_token"] = local("mwdat_client_token", "0")
         buildConfigField("String", "SERVER_URL", "\"${local("glance.serverUrl", "http://10.0.2.2:8080")}\"")
         buildConfigField("String", "UI_DEV_URL", "\"${local("glance.uiDevUrl", "")}\"")
+        buildConfigField("long", "LABEL_WAIT_MS", localMs("glance.labelWaitMs", 2500))
+        buildConfigField("long", "LABEL_GAP_MS", localMs("glance.labelGapMs", 6000))
         testInstrumentationRunner = "com.metaglance.android.support.GlanceTestRunner"
     }
     // The demo build is the APK for the testers: not debuggable, with no probe screen and no cleartext traffic,

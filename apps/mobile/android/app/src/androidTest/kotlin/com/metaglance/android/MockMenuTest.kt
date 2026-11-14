@@ -13,6 +13,7 @@ import com.metaglance.android.mock.MockMenuActivity
 import com.metaglance.android.support.onMainSync
 import com.metaglance.android.support.requireSilentPhone
 import com.metaglance.android.support.waitUntil
+import com.metaglance.core.barcode.LabelTiming
 import com.metaglance.core.gesture.Sensitivity
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -36,6 +37,8 @@ class MockMenuTest {
     private lateinit var sensitivityBefore: Sensitivity
     private lateinit var serverUrlBefore: String
     private var placeholderBefore = false
+    private var labelWaitBefore: Long? = null
+    private var labelGapBefore: Long? = null
 
     private val glance: GlanceApp get() = targetContext.applicationContext as GlanceApp
 
@@ -46,6 +49,8 @@ class MockMenuTest {
         sensitivityBefore = glance.profileStore.sensitivity
         serverUrlBefore = glance.profileStore.serverUrl
         placeholderBefore = glance.profileStore.usePlaceholder
+        labelWaitBefore = glance.profileStore.labelWaitMs
+        labelGapBefore = glance.profileStore.labelGapMs
     }
 
     @After
@@ -56,6 +61,8 @@ class MockMenuTest {
             glance.profileStore.sensitivity = sensitivityBefore
             glance.profileStore.serverUrl = if (serverUrlBefore == BuildConfig.SERVER_URL) "" else serverUrlBefore
             glance.profileStore.usePlaceholder = placeholderBefore
+            glance.profileStore.labelWaitMs = labelWaitBefore
+            glance.profileStore.labelGapMs = labelGapBefore
             glance.session.applySensitivity()
         }
     }
@@ -155,6 +162,37 @@ class MockMenuTest {
         assertTrue(buttons().any { it.text.toString() == if (before) "Use placeholder page: off" else "Use placeholder page: on" })
     }
 
+    @Test
+    fun theBarcodeFieldsChangeTheStoredWaits() {
+        type("Barcode wait (ms)", "1200")
+        type("Still gap (ms)", "8000")
+        tap("Save barcode waits")
+        awaitStatus("Barcode wait: 1200 ms. Still gap: 8000 ms. The next camera start uses them.")
+        assertEquals(LabelTiming(waitMs = 1200, gapMs = 8000), glance.profileStore.labelTiming)
+
+        // A number outside the limits becomes the nearest limit.
+        type("Barcode wait (ms)", "5")
+        type("Still gap (ms)", "999999")
+        tap("Save barcode waits")
+        awaitStatus("Barcode wait: 300 ms. Still gap: 60000 ms. The next camera start uses them.")
+        assertEquals(LabelTiming(waitMs = 300, gapMs = 60_000), glance.profileStore.labelTiming)
+
+        // An empty field gives the value of the build again.
+        type("Barcode wait (ms)", "")
+        type("Still gap (ms)", " ")
+        tap("Save barcode waits")
+        assertEquals(null, glance.profileStore.labelWaitMs)
+        assertEquals(null, glance.profileStore.labelGapMs)
+        assertEquals(LabelTiming.within(BuildConfig.LABEL_WAIT_MS, BuildConfig.LABEL_GAP_MS), glance.profileStore.labelTiming)
+    }
+
+    private fun type(hint: String, text: String) {
+        scenarioRule.scenario.onActivity { activity ->
+            val field = views<EditText>(activity).firstOrNull { it.hint?.toString() == hint }
+            checkNotNull(field) { "The menu has no field \"$hint\"." }.setText(text)
+        }
+    }
+
     private fun tap(label: String) {
         scenarioRule.scenario.onActivity { activity ->
             val button = views<Button>(activity).firstOrNull { it.text.toString() == label }
@@ -206,7 +244,7 @@ class MockMenuTest {
             "Say add", "Say skip",
             "Meta AI missing", "Update required", "Stream error BATTERY_LOW", "Stream error THERMAL_HOT",
             "Save server URL", "Drop server link 10 s", "Sensitivity: gentle", "Sensitivity: normal", "Sensitivity: firm",
-            "Use placeholder page"
+            "Use placeholder page", "Save barcode waits"
         )
     }
 }

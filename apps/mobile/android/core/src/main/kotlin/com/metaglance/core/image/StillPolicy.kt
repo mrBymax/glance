@@ -4,7 +4,7 @@ package com.metaglance.core.image
  * Decides when the app takes a still photo for look-alike products: one capture at a time, and one start each
  * `everyMs` at most. A still can stop Motion, Inputs, and Speech for a moment, so the app takes few of them.
  */
-class StillPolicy(private val everyMs: Long = 5000) {
+class StillPolicy(private val everyMs: Long = DEFAULT_EVERY_MS) {
     private var running = false
     private var lastStartMs: Long? = null
 
@@ -19,5 +19,9 @@ class StillPolicy(private val everyMs: Long = 5000) {
 
     fun onEnd() {
         running = false
+    }
+
+    companion object {
+        const val DEFAULT_EVERY_MS = 5000L
     }
 }

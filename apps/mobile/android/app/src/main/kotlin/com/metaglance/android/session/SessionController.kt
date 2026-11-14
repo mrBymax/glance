@@ -23,6 +23,7 @@ import com.metaglance.android.pipeline.LabelOutcome
 import com.metaglance.android.pipeline.LabelStill
 import com.metaglance.android.pipeline.StillPhoto
 import com.metaglance.core.audio.SpeechQueue
+import com.metaglance.core.barcode.LabelTiming
 import com.metaglance.core.contract.Codec
 import com.metaglance.core.contract.DeviceState
 import com.metaglance.core.contract.DeviceToServer
@@ -648,7 +649,10 @@ class SessionController(
         sawStreaming = false
         mainYesResolved = false
         headInput = newHeadInput()
-        stillPolicy = StillPolicy()
+        // The mock menu can change the two times. Each camera start reads them again.
+        val labelTiming = store.labelTiming
+        stillPolicy = StillPolicy(labelTiming.stillEveryMs)
+        log("label still: wait ${labelTiming.waitMs} ms, gap ${labelTiming.gapMs} ms")
         if (!dat.startSession(withCamera = true, autoAttach = true)) {
             // The SDK error of a failed start arrives through dat.faults, after this call returns.
             scope.launch { sendError(if (INSUFFICIENT_SDK in sessionErrors) NativeErrors.SDK_TOO_OLD else NativeErrors.SESSION_FAILED) }
@@ -656,7 +660,7 @@ class SessionController(
         }
         datRunning = true
         refreshScreen()
-        startPipeline()
+        startPipeline(labelTiming)
     }
 
     /** Stops the DAT session because the app, the page, or the server asked for it. No error event follows. */
@@ -669,7 +673,7 @@ class SessionController(
         dat.stopSession()
     }
 
-    private fun startPipeline() {
+    private fun startPipeline(labelTiming: LabelTiming) {
         pipelineJob?.cancel()
         // The frame work runs on one background thread. dat.frames keeps only the newest frame, so nothing queues.
         pipelineJob = scope.launch(Dispatchers.Default.limitedParallelism(1)) {
@@ -698,6 +702,7 @@ class SessionController(
                 findFaces = { faces.find(it) },
                 crop = true,
                 nextSeq = uploadSeq::incrementAndGet,
+                label = labelTiming.labelPolicy(),
                 log = ::log
             )
             framePipeline = pipeline
