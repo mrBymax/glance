@@ -34,7 +34,7 @@ export function DebugPanel() {
   useEffect(() => () => stopRun.current?.(), []);
 
   const browser = bridge instanceof BrowserBridge ? bridge : null;
-  // A message through the browser bridge takes the path of a message of the app, so it also gives its haptic message.
+  // A message through the browser bridge takes the path of a message of the app.
   const deliver = (message: NativeToPage) => {
     if (browser) browser.inject(message);
     else dispatch(message);

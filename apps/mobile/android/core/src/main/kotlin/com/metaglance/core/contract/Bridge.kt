@@ -15,33 +15,6 @@ import kotlinx.serialization.json.JsonObject
 // The phone reports its own failures to the page as error events with a code that starts with "native.".
 
 @Serializable
-enum class HapticPattern {
-    @SerialName("prompt")
-    PROMPT,
-
-    @SerialName("added")
-    ADDED,
-
-    @SerialName("removed")
-    REMOVED,
-
-    @SerialName("warning")
-    WARNING,
-
-    @SerialName("paid")
-    PAID,
-
-    @SerialName("error")
-    ERROR,
-
-    @SerialName("cameraPaused")
-    CAMERA_PAUSED,
-
-    @SerialName("cameraOff")
-    CAMERA_OFF
-}
-
-@Serializable
 enum class Registration {
     @SerialName("unavailable")
     UNAVAILABLE,
@@ -171,10 +144,6 @@ sealed interface PageToNative {
     @Serializable
     @SerialName("pocket.set")
     data class PocketSet(val on: Boolean) : PageToNative
-
-    @Serializable
-    @SerialName("haptic")
-    data class Haptic(val pattern: HapticPattern) : PageToNative
 
     @Serializable
     @SerialName("data.delete")

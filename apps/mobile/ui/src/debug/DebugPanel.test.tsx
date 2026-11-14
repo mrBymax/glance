@@ -37,10 +37,8 @@ it('stays open after a tap, and resets the page', async () => {
   expect(screen.getByRole('dialog', { name: 'Debug' })).toBeInTheDocument();
 });
 it('lists the messages that the page sent', async () => {
-  const { user, panel } = await open();
+  const { panel } = await open();
   expect(panel.getByText('{"t":"ui.ready"}')).toBeInTheDocument();
-  await user.click(panel.getByRole('button', { name: 'checkout.paid' }));
-  expect(panel.getByText('{"t":"haptic","pattern":"paid"}')).toBeInTheDocument();
   expect(panel.queryByText(/^Session query:/)).toBeNull();
 });
 it('has no control below 48 px', async () => {

@@ -3,7 +3,6 @@
 //   App to page: window.__glanceReceive(json)
 const MAX_LOG_LINES = 20;
 const MAX_CAPTIONS = 5;
-const HAPTIC_PATTERNS = ['prompt', 'added', 'removed', 'warning', 'paid', 'error', 'cameraPaused', 'cameraOff'];
 
 const element = (id) => document.getElementById(id);
 const logLines = [];
@@ -84,7 +83,6 @@ const BUTTONS = [
   ['profile.set mainYes voice', { t: 'profile.set', patch: { mainYes: 'voice' } }],
   ['pocket.set on', { t: 'pocket.set', on: true }],
   ['pocket.set off', { t: 'pocket.set', on: false }],
-  ...HAPTIC_PATTERNS.map((pattern) => [`haptic ${pattern}`, { t: 'haptic', pattern }]),
   ['data.delete', { t: 'data.delete' }],
 ];
 

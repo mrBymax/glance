@@ -26,6 +26,7 @@ import com.metaglance.core.audio.AnswerSoundOnce
 import com.metaglance.core.audio.SpeechQueue
 import com.metaglance.core.barcode.LabelPolicy
 import com.metaglance.core.barcode.LabelTiming
+import com.metaglance.core.contract.Cart
 import com.metaglance.core.contract.Codec
 import com.metaglance.core.contract.DeviceState
 import com.metaglance.core.contract.DeviceToServer
@@ -73,7 +74,9 @@ import com.metaglance.core.state.DatPermission
 import com.metaglance.core.state.DatSession
 import com.metaglance.core.state.DatSnapshot
 import com.metaglance.core.state.DatStream
+import com.metaglance.core.state.HapticPattern
 import com.metaglance.core.state.HapticPatterns
+import com.metaglance.core.state.HapticRules
 import com.metaglance.core.state.MotionFlow
 import com.metaglance.core.state.NativeError
 import com.metaglance.core.state.NativeErrors
@@ -108,7 +111,10 @@ import okhttp3.OkHttpClient
  * of them: after a rest, a closed hinge, or a lost link.
  *
  * Call each function on the main thread. `scope` must use the main dispatcher. The controller holds no cart
- * logic and no prices: it moves messages, and it decides when the camera runs.
+ * logic: it moves messages, and it decides when the camera runs. It keeps the last cart of the server only to
+ * select a vibration.
+ *
+ * A session continues with the screen off. So nothing that a session needs goes through the page or the activity.
  *
  * The motion samples arrive on the motion thread of `DatLink`. `HeadInput` takes them there, and its answer goes
  * to the main thread.
@@ -135,6 +141,9 @@ class SessionController(
     @Volatile
     private var profile: Profile = store.profile
     private var serverSession: StoredSession? = store.serverSession
+
+    /** The last cart of the server, or null before the first one. */
+    private var cart: Cart? = null
 
     // The frame thread reads the socket.
     @Volatile
@@ -325,8 +334,6 @@ class SessionController(
                 pocketOn = message.on
                 activity?.setPocket(message.on)
             }
-            // Kotlin never vibrates by itself: the page selects each pattern.
-            is PageToNative.Haptic -> if (profile.haptics) vibrate(HapticPatterns.timings(message.pattern))
         }
     }
 
@@ -415,6 +422,7 @@ class SessionController(
                 log("snapshot failed: ${e.message}")
                 return@launch
             }
+            cartOf(snapshot)?.let { cart = it }
             toPage(NativeToPage.Snapshot(snapshot))
         }
     }
@@ -471,6 +479,7 @@ class SessionController(
             // The socket of an ended session can still be open, because it closes with a delay.
             closeSocket()
             prompts.reset()
+            cart = null
             saveServerSession(StoredSession(created.sessionId, created.token, created.wsUrl, live = true))
             log("server session ${created.sessionId}")
         }
@@ -559,6 +568,8 @@ class SessionController(
                 toPage(NativeToPage.Event(message.event))
                 val event = Codec.decodeServerEvent(message.event)
                 event?.let(prompts::onEvent)
+                event?.let { haptic(HapticRules.forEvent(it, cart?.totalCents ?: 0, profile.budgetCents)) }
+                if (event is ServerEvent.CartUpdated) cart = event.cart
                 // The checkout ended on the server, for example after 30 seconds with no kiosk code in view.
                 if (event is ServerEvent.CheckoutCancelled) closePaymentPrompt()
                 if (event is ServerEvent.GlanceAmbiguous) wantStill(WaitingStill.SECOND_LOOK)
@@ -566,6 +577,7 @@ class SessionController(
             is ServerToDevice.Snapshot -> {
                 toPage(NativeToPage.Snapshot(message.session))
                 profileOf(message.session)?.let { setProfile(it) }
+                cartOf(message.session)?.let { cart = it }
             }
             // The cart stays on the server, and the socket stays open. The next start makes a new DAT session.
             is ServerToDevice.SessionRest -> stopDat()
@@ -677,6 +689,17 @@ class SessionController(
         }
     }
 
+    private fun cartOf(session: JsonObject): Cart? {
+        val json = session["cart"] ?: return null
+        return try {
+            GlanceJson.decodeFromJsonElement(Cart.serializer(), json)
+        } catch (_: SerializationException) {
+            null
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+    }
+
     private fun deleteData() {
         stopTicket += 1
         waitingForGlasses = false
@@ -688,6 +711,7 @@ class SessionController(
         prompts.reset()
         store.clear()
         serverSession = null
+        cart = null
         profile = store.profile
         toPage(NativeToPage.ProfileChanged(profile))
         refreshNativeState()
@@ -1108,7 +1132,12 @@ class SessionController(
     private fun sendError(error: NativeError) {
         log("error ${error.code}")
         tap?.onNativeError(error)
+        haptic(HapticPattern.ERROR)
         toPage(NativeToPage.Event(NativeErrors.toEvent(error)))
+    }
+
+    private fun haptic(pattern: HapticPattern?) {
+        if (pattern != null && profile.haptics) vibrate(HapticPatterns.timings(pattern))
     }
 
     private fun toPage(message: NativeToPage) {
@@ -1117,8 +1146,10 @@ class SessionController(
 
     private fun refreshNativeState() {
         val state = mapNativeState(dat.snapshot.value)
-        if (state == _nativeState.value) return
+        val before = _nativeState.value
+        if (state == before) return
         _nativeState.value = state
+        haptic(HapticRules.forStream(before.stream, state.stream))
         toPage(NativeToPage.NativeStateChanged(state))
     }
 

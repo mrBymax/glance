@@ -1,4 +1,3 @@
-import { DEFAULT_PROFILE } from '@glance/shared';
 import { screen, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import type { BrowserBridge } from '../bridge/browserBridge';
@@ -6,9 +5,7 @@ import { eventFixture, eventMessage } from '../debug/fixtures';
 import { renderWithUi } from '../test/render';
 import { SessionScreen } from './SessionScreen';
 
-const actions = (bridge: BrowserBridge) => bridge.sent.filter((message) => message.t !== 'ui.ready' && message.t !== 'haptic');
-const haptics = (bridge: BrowserBridge) => bridge.sent.filter((message) => message.t === 'haptic');
-const added = { kind: 'add', productId: 'oat-drink-1l', name: 'Oat drink' } as const;
+const actions = (bridge: BrowserBridge) => bridge.sent.filter((message) => message.t !== 'ui.ready');
 
 it('has a phone button for undo, repeat, and remove', async () => {
   const { bridge, user } = renderWithUi(<SessionScreen />, { messages: [eventMessage('cart.updated'), eventMessage('caption')] });
@@ -43,13 +40,4 @@ it('asks before it ends the shop', async () => {
   await user.click(within(screen.getByRole('alertdialog', { name: 'End this shop?' })).getByRole('button', { name: 'End' }));
   expect(actions(bridge)).toEqual([{ t: 'session.end' }]);
   expect(screen.queryByRole('alertdialog')).toBeNull();
-});
-it('sends one haptic pattern for a message', () => {
-  const { bridge } = renderWithUi(<SessionScreen />, { messages: [eventMessage('cart.updated', { change: added })] });
-  expect(haptics(bridge)).toEqual([{ t: 'haptic', pattern: 'added' }]);
-});
-it('sends no haptic pattern after the shopper turns haptics off', () => {
-  const { bridge, deliver } = renderWithUi(<SessionScreen />);
-  deliver({ t: 'profile', profile: { ...DEFAULT_PROFILE, haptics: false } }, eventMessage('cart.updated', { change: added }));
-  expect(haptics(bridge)).toEqual([]);
 });

@@ -1,6 +1,5 @@
 package com.metaglance.core.state
 
-import com.metaglance.core.contract.HapticPattern
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

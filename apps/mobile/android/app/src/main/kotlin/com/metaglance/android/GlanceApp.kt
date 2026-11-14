@@ -30,8 +30,8 @@ class GlanceApp : Application() {
     var bluetoothAsked = false
 
     /**
-     * Plays one vibration. The argument holds the timings of `HapticPatterns`. The instrumented tests replace it,
-     * because the test phone must stay quiet.
+     * Plays one vibration. The argument holds the timings of `HapticPatterns`, and `SessionController` selects
+     * each one. The instrumented tests replace it, because the test phone must stay quiet.
      */
     @Volatile
     var vibrate: (LongArray) -> Unit = { timings ->

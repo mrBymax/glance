@@ -1,7 +1,6 @@
 import type { GlanceBridge, PageToNative, ProfilePatch } from '@glance/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { snapshotCaptionsOf, useSpokenText, type SnapshotCaptions } from '../components/useSpokenText';
-import { hapticFor } from '../state/haptics';
 import { initialUiState, reduce, type UiAction, type UiState } from '../state/uiState';
 import { EN, stringsFor, type Strings } from '../text/strings';
 
@@ -23,7 +22,7 @@ const ATTEMPTS: ReadonlySet<PageToNative['t']> = new Set(['setup.register', 'set
 export function BridgeProvider(props: { bridge: GlanceBridge; children: ReactNode }) {
   const { bridge, children } = props;
   const [state, setState] = useState(initialUiState);
-  // The newest state. Two messages can arrive before the next render, and the haptic pattern needs the state before each one.
+  // The newest state. Two messages can arrive before the next render, and the second one needs the state after the first.
   const newest = useRef(initialUiState);
   const dispatch = useCallback((action: UiAction) => {
     newest.current = reduce(newest.current, action);
@@ -42,10 +41,7 @@ export function BridgeProvider(props: { bridge: GlanceBridge; children: ReactNod
     // The host answers ui.ready at once, so the page must listen first.
     const unsubscribe = bridge.subscribe((message) => {
       if (message.t === 'snapshot') snapshotCaptions.current = snapshotCaptionsOf(message.session.captions);
-      const before = newest.current;
       dispatch(message);
-      const pattern = hapticFor(before, message, newest.current);
-      if (pattern) bridge.send({ t: 'haptic', pattern });
     });
     bridge.send({ t: 'ui.ready' });
     return unsubscribe;

@@ -11,11 +11,6 @@ import { SessionSnapshotSchema } from './snapshot';
 // The page sends ui.ready after it sets window.__glanceReceive. Kotlin answers with native.state and profile.
 // The phone reports its own failures to the page as error events with a code that starts with "native.".
 
-export const HapticPatternSchema = z.enum([
-  'prompt', 'added', 'removed', 'warning', 'paid', 'error', 'cameraPaused', 'cameraOff',
-]);
-export type HapticPattern = z.infer<typeof HapticPatternSchema>;
-
 export const NativeStateSchema = z.object({
   metaAiInstalled: z.boolean(),
   registration: z.enum(['unavailable', 'available', 'registering', 'registered']),
@@ -50,7 +45,6 @@ export const PageToNativeSchema = z.discriminatedUnion('t', [
   CartEditSchema.extend({ t: z.literal('cart.edit') }),
   z.object({ t: z.literal('profile.set'), patch: ProfilePatchSchema }),
   z.object({ t: z.literal('pocket.set'), on: z.boolean() }),
-  z.object({ t: z.literal('haptic'), pattern: HapticPatternSchema }),
   z.object({ t: z.literal('data.delete') }),
 ]);
 export type PageToNative = z.infer<typeof PageToNativeSchema>;

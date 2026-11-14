@@ -77,7 +77,7 @@ class FixturesTest {
                 "events" to 16,
                 "device-to-server" to 9,
                 "server-to-device" to 7,
-                "bridge-page-to-native" to 12,
+                "bridge-page-to-native" to 11,
                 "bridge-native-to-page" to 4,
                 "rest" to 8
             ),

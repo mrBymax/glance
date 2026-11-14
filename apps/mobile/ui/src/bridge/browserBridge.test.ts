@@ -222,8 +222,8 @@ it('logs one line for an answer with an error status, with no token in it', asyn
 });
 it('keeps each sent message and delivers an injected one', () => {
   const { bridge, seen } = offline();
-  bridge.send({ t: 'haptic', pattern: 'added' });
+  bridge.send({ t: 'setup.openUpdate' });
   bridge.inject({ t: 'profile', profile: DEFAULT_PROFILE });
-  expect(bridge.sent).toEqual([{ t: 'haptic', pattern: 'added' }]);
+  expect(bridge.sent).toEqual([{ t: 'setup.openUpdate' }]);
   expect(seen).toEqual([{ t: 'profile', profile: DEFAULT_PROFILE }]);
 });

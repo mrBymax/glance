@@ -122,7 +122,6 @@ export class BrowserBridge implements GlanceBridge {
         return;
       case 'setup.openUpdate':
       case 'pocket.set':
-      case 'haptic':
         return;
       case 'session.start':
         this.startSession();
