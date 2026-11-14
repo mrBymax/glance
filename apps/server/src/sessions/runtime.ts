@@ -91,6 +91,10 @@ export class SessionRuntime {
         case 'payment.start':
           this.deps.startPayment(this, effect.kiosk, effect.totalCents);
           break;
+        case 'biometric.request':
+          // The outbox keeps the order, so the phone gets the fingerprint line first.
+          this.enqueue(async () => this.sink?.send({ t: 'biometric.request' }));
+          break;
         case 'ask':
           this.ask(effect.question, effect.product);
           break;

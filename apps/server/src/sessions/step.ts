@@ -1,7 +1,7 @@
 import { EMPTY_CART, type Profile, TIMING } from '@glance/shared';
 import { onAnswer, onCartEdit, onPromptDone, onUndo } from './answers';
 import { expireAskWindow, onAnswerText, onQuestion } from './ask';
-import { expireCheckout, onKioskSeen, onPaymentResult } from './checkout';
+import { expireCheckout, onBiometricResult, onKioskSeen, onPaymentResult } from './checkout';
 import { onDeviceState, onGeneralIntent, onProfileSet, onRecognitionSlow, onSocketOpen, restWhenIdle } from './general';
 import { onRecognition } from './glance';
 import { type Turn, emit } from './turn';
@@ -84,6 +84,9 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
       break;
     case 'socket.open':
       onSocketOpen(turn);
+      break;
+    case 'biometric.result':
+      onBiometricResult(turn, input);
       break;
     case 'question':
       onQuestion(turn, input);

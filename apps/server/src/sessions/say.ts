@@ -26,6 +26,7 @@ export const LINE_DEFAULTS: Record<Line['key'], LineDefault> = {
   'checkout.cancelled': line('high', true),
   'checkout.paid': line('high', true, 'paid'),
   'checkout.failed': line('high', true),
+  'checkout.biometric': line('high', true),
   'info.total': line('low', false),
   'info.cart': line('low', false),
   'info.help': line('low', false),

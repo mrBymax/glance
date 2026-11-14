@@ -184,6 +184,22 @@ it('starts the payment and calls afterStep', () => {
   expect(afterStep).toHaveBeenCalled();
   expect(afterStep.mock.calls[0]![1].cart.items).toEqual([]);
 });
+it('asks the phone for the fingerprint after the line, and starts the payment after the result', async () => {
+  session.attach(sink);
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
+  session.dispatch({ type: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
+  session.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
+  await session.settled();
+  expect(sink.sent.slice(-2)).toMatchObject([
+    { t: 'speak', text: 'Over fifty euros. Confirm with your fingerprint on the phone.', promptId: null },
+    { t: 'biometric.request' },
+  ]);
+  expect(startPayment).not.toHaveBeenCalled();
+  session.dispatch({ type: 'biometric.result', ok: true });
+  expect(startPayment).toHaveBeenCalledWith(session, KIOSK, 5670);
+});
 const askOat = (): void => {
   session.dispatch(seeOat);
   session.dispatch({ type: 'intent', kind: 'ask', source: 'phone' });

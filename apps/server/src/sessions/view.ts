@@ -1,4 +1,5 @@
 import { type Caption, type CurrentPrompt, type SessionSnapshot, TIMING, toProductRef } from '@glance/shared';
+import { needsBiometric } from './checkout';
 import type { RuleContext, SessionState } from './types';
 import { warningsFor } from './warnings';
 
@@ -41,7 +42,7 @@ function currentPrompt(state: SessionState, ctx: RuleContext): CurrentPrompt | n
       kiosk: state.checkout.kiosk,
       totalCents: state.cart.totalCents,
       itemCount: state.cart.items.reduce((count, item) => count + item.qty, 0),
-      needsBiometric: false,
+      needsBiometric: needsBiometric(state.cart.totalCents),
     };
   }
 

@@ -46,14 +46,14 @@ flowchart LR
   recognition -- "one JPEG for each call" --> gemini
   recognition -- "recognition result" --> runtime
   runtime -- "a question with the data of one product" --> gemini
-  socket -- "intent, prompt.done, device.state, cart.edit, profile.set, question" --> runtime
+  socket -- "intent, prompt.done, device.state, cart.edit, profile.set, question, biometric.result" --> runtime
   rest -- "intent, cart.edit, profile.set" --> runtime
   socket -- "kiosk.seen" --> kiosks
   kiosks -- "kiosk.seen with the kiosk, payment.result" --> runtime
   runtime -- "payment.start" --> kiosks
   runtime -- "text of a line" --> speech
   speech -- "text of a new line" --> eleven
-  runtime -- "speak, session.rest, session.end" --> socket
+  runtime -- "speak, session.rest, session.end, biometric.request" --> socket
   runtime -- "ServerEvent, caption" --> bus
   kiosks -- "KioskEvent" --> bus
   bus --> socket
@@ -227,7 +227,7 @@ The Android app has two sessions. The server session holds the cart and has the 
 
 ## Steps of a checkout
 
-A checkout exists while `SessionState.checkout` is not null. Its `step` is `offered`, `suspended`, or `paying`. The phase of the session is `checkout` for that time.
+A checkout exists while `SessionState.checkout` is not null. Its `step` is `offered`, `suspended`, `biometric`, or `paying`. The phase of the session is `checkout` for that time.
 
 ```mermaid
 stateDiagram-v2
@@ -235,7 +235,10 @@ stateDiagram-v2
   offered --> suspended: a product gets a prompt
   suspended --> offered: the product left the view and the code is in view
   offered --> offered: cart change, or the code comes back after the head window
-  offered --> paying: accepted yes on the pay prompt
+  offered --> paying: accepted yes on the pay prompt, total of 50 EUR or less
+  offered --> biometric: accepted yes on the pay prompt, total above 50 EUR
+  biometric --> paying: biometric.result with ok true
+  biometric --> [*]: biometric.result with ok false, code out of view for 30 seconds, or stop intent
   offered --> [*]: no on the pay prompt
   offered --> [*]: empty cart, code out of view for 30 seconds, camera stopped, or stop intent
   suspended --> [*]: empty cart, code out of view for 30 seconds, camera stopped, or stop intent
@@ -247,6 +250,7 @@ stateDiagram-v2
 | A checkout starts | `session.state` with the phase `checkout`, then `checkout.offered` with a new prompt ID | `connected`, with the cart and the total |
 | `offered` again | `checkout.offered` with a new prompt ID and the new total | `connected` |
 | `suspended` | `checkout.suspended`, then `glance.pending` for the product | `connected` |
+| `biometric` | none. The phone gets the line "Over fifty euros. Confirm with your fingerprint on the phone." and then the message `biometric.request` | `connected` |
 | `paying` | none | `connected` |
 | The payment succeeds | `checkout.paid` with the receipt, `cart.updated` with an empty cart, `session.state` with the phase `paid` | `paid` with the receipt for 10 seconds, then `idle` |
 | The payment fails | `checkout.failed`, `session.state` with the phase `shopping` | `failed` for 10 seconds, then `idle` |
@@ -257,6 +261,8 @@ stateDiagram-v2
 - One session holds a kiosk from the start of its checkout to its end.
 - Each pay prompt has a new ID. An answer with the ID of an older pay prompt cannot pay.
 - The yes on the pay prompt gives the effect `payment.start`. The mock payment waits `PAYMENT_DELAY_MS`, writes an order to the store, and dispatches `payment.result`. No money moves.
+- `checkout.offered` has `needsBiometric: true` for a total above 50 EUR. The yes on that pay prompt starts no payment: the server sends `biometric.request`, and the phone answers with `biometric.result`. A result with `ok: false` ends the checkout as a no does. A result with no request has no effect.
+- While the step is `biometric`, no answer, no undo, no cart edit, and no recognition result has an effect. The checkout still ends when the code was out of view for 30 seconds, so a browser client, which has no fingerprint check, loses its checkout above 50 EUR after that time.
 - While the step is `paying`, no answer, no undo, no cart edit, and no stop intent has an effect.
 - After a no on the pay prompt, and after a failed payment, the kiosk is muted until its code has left the view. So the shopper looks away and back to start again.
 - A failed payment keeps the cart. A kiosk that registered with `failPayment: true` declines each payment.
@@ -266,7 +272,7 @@ stateDiagram-v2
 - No path of the server checks the token of a session or of a kiosk.
 - The server never sends the event `checkout.spotcheck`.
 - The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
-- `biometric.request` and `biometric.result` have no effect.
+- The Android app has no handler for `biometric.request` and sends no `biometric.result`. So a checkout above 50 EUR ends after 30 seconds with no payment.
 - The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
 - The phone UI has the session screen only. No screen shows the pay prompt or the receipt.
 - The server has English lines only.

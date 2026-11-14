@@ -34,7 +34,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/ws/device.ts` | The socket of the phone. See "Device socket". |
 | `src/testing.ts` | Test helpers: an app on a free port, a reader for an events stream, and a phone on the device socket. |
 
-Parts that do not exist yet: the spot check and the fingerprint check.
+Parts that do not exist yet: the spot check.
 
 ## Run it
 
@@ -365,7 +365,7 @@ flowchart LR
   input["RuleInput with now"] --> step
   state["SessionState"] --> step
   step --> next["new SessionState"]
-  step --> effects["Effect list: event, speak, session.rest, session.end, payment.start, ask"]
+  step --> effects["Effect list: event, speak, session.rest, session.end, payment.start, biometric.request, ask"]
 ```
 
 | File in `src/sessions` | Content |
@@ -410,6 +410,7 @@ The rules that exist:
 - A cart change during a pay prompt gives a new pay prompt with the new total. The old prompt cannot pay.
 - A checkout needs items in the cart. When the cart gets empty, the checkout ends, also while a product suspends it. So an empty cart never gets a pay prompt.
 - While the payment runs, no answer, no undo, and no cart edit has an effect.
+- A total above 50 EUR needs a fingerprint check on the phone before the payment. See "Fingerprint above 50 EUR".
 
 ### Allergen guard
 
@@ -495,6 +496,19 @@ The profile holds `budgetCents`, or `null` for no budget. The rule is in `change
 - When a removal brings the total back to the budget or under it, the next add that crosses the budget warns again.
 - A profile patch that lowers the budget under the total gives no event. The phone UI compares the two numbers by itself.
 
+### Fingerprint above 50 EUR
+
+A nod is consent, not authentication. So a total above `BIOMETRIC_ABOVE_CENTS` (5000 cents) needs a fingerprint check on the phone. The rules are in `src/sessions/checkout.ts`.
+
+- `needsBiometric` in `checkout.offered` and in the pay prompt of the snapshot is true for a total above 50 EUR. A total of exactly 50 EUR needs no fingerprint.
+- An accepted yes on such a pay prompt starts no payment. The checkout gets the step `biometric`, and the pay prompt ends. The voice says "Over fifty euros. Confirm with your fingerprint on the phone." Then the phone gets the message `biometric.request`.
+- The phone answers with `biometric.result`. With `ok: true` the payment starts. With `ok: false` the checkout ends as for a no: the line is "Checkout cancelled. Your cart is safe.", and the kiosk is muted until its code has left the view.
+- A `biometric.result` counts only in the step `biometric`. Each other one has no effect, so a result alone never pays.
+- In the step `biometric`, a yes, a no, an undo, a cart edit, and a recognition result have no effect. A stopped camera stream does not end the checkout, because the shopper looks at the phone.
+- The checkout still ends when its code was out of view for 30 seconds (R19), and with a stop intent. A result that arrives later has no effect.
+- A browser client has no fingerprint check. Its checkout above 50 EUR ends after those 30 seconds.
+- After a restart of the server, a session that waited for the fingerprint loads with no checkout.
+
 The steps of a checkout:
 
 ```mermaid
@@ -503,7 +517,10 @@ stateDiagram-v2
   offered --> suspended: product held up
   suspended --> offered: product left the view, code in view
   offered --> offered: cart change, or the code comes back after the head window
-  offered --> paying: accepted yes on the pay prompt
+  offered --> paying: accepted yes on the pay prompt, total of 50 EUR or less
+  offered --> biometric: accepted yes on the pay prompt, total above 50 EUR
+  biometric --> paying: biometric.result with ok true
+  biometric --> [*]: biometric.result with ok false, or code out of view for 30 seconds
   offered --> [*]: no, empty cart, or code out of view for 30 seconds
   suspended --> [*]: empty cart, or code out of view for 30 seconds
   paying --> [*]: payment result
@@ -550,6 +567,7 @@ Only the server computes a total, and each price comes from the catalog. Each ti
 - A line gets its text at once. Then it waits in the outbox of the session for its clip. The outbox sends one message at a time, so the phone gets the lines in the order of the rules, also when an early clip is slow.
 - Each line goes to the phone as `speak` and to the bus as a `caption` event with the same ID (`s-1`, `s-2`). If the clip fails, the line goes out with `url: null`.
 - The effect `payment.start` starts the mock payment. After each step, the kiosk service reads the checkout of the session and updates the kiosk.
+- The effect `biometric.request` goes to the phone as the message `biometric.request`, through the outbox, so it follows the fingerprint line.
 - The effect `ask` starts the text call for a question. The runtime dispatches the input `answer` with the text, or with `null` after a failure or after 4 seconds. A stopped session gets no answer.
 - The runtime keeps the last 20 captions for the snapshot.
 - With no phone attached, the runtime drops the device messages. Events and captions still go to the bus.
@@ -657,7 +675,7 @@ The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2.
 - `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished. Each other text becomes the input `question`.
 - A binary message is a frame. A frame that decodes goes to the recognition worker of the session, or to the log line of fake recognition. The server logs a frame that does not decode and drops it.
 - The server logs and drops a text message that is no `DeviceToServer`. The socket stays open.
-- `kiosk.seen` goes to the kiosk service. `biometric.result` has no effect yet.
+- `kiosk.seen` goes to the kiosk service. `biometric.result` goes to the rules.
 - A message can have at most 2 MB. A larger one closes the socket.
 - The server sends a ping each 20 seconds, and ends a socket that sent no pong since the last ping.
 - When the phone leaves, the session stays.

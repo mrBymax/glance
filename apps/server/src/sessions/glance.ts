@@ -1,5 +1,5 @@
 import { type Product, TIMING, toProductRef } from '@glance/shared';
-import { isPaying, suspendCheckoutFor } from './checkout';
+import { isConfirmed, suspendCheckoutFor } from './checkout';
 import { say } from './say';
 import { type Turn, emit, nextPromptId, promptProductInView, qtyInCart, speak } from './turn';
 import type { RuleInput } from './types';
@@ -17,7 +17,8 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
   const { result } = input;
   if (result.status === 'none') return;
   s.lastTargetAt = now;
-  if (isPaying(s)) return;
+  // A prompt would suspend the checkout, and the result of the fingerprint check would then have no checkout to pay.
+  if (isConfirmed(s)) return;
 
   switch (result.status) {
     case 'identified':

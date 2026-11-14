@@ -144,7 +144,39 @@ it('the word pay never adds a product', async () => {
   await serverReadAll();
   expect(session.state.cart.items).toEqual([]);
 });
-it('drops kiosk.seen for a code that no kiosk has, and biometric.result', async () => {
+it('a payment above 50 EUR waits for the fingerprint result of the phone', async () => {
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
+  phone.send({ t: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
+  const kiosk = await t.app.kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
+  phone.send({ t: 'kiosk.seen', text: formatKioskCode(kiosk.code) });
+  const offered = await phone.next((m) => m.t === 'event' && m.event.type === 'checkout.offered');
+  expect(offered).toMatchObject({ event: { totalCents: 5670, needsBiometric: true } });
+  phone.send({ t: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
+  await phone.next((m) => m.t === 'biometric.request');
+  const texts = phone.messages.flatMap((m) => (m.t === 'speak' ? [m.text] : []));
+  expect(texts.at(-1)).toBe('Over fifty euros. Confirm with your fingerprint on the phone.');
+  // The mock payment of a test takes 10 ms, so a payment that started would be over now.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(session.state.checkout!.step).toBe('biometric');
+  phone.send({ t: 'biometric.result', ok: true });
+  await vi.waitFor(() => expect(session.state.phase).toBe('paid'));
+  expect(session.state.lastReceipt).toMatchObject({ totalCents: 5670 });
+});
+it('a failed fingerprint check cancels the checkout, and the cart stays', async () => {
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
+  session.dispatch({ type: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
+  const kiosk = await t.app.kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
+  phone.send({ t: 'kiosk.seen', text: formatKioskCode(kiosk.code) });
+  await phone.next((m) => m.t === 'event' && m.event.type === 'checkout.offered');
+  phone.send({ t: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
+  await phone.next((m) => m.t === 'biometric.request');
+  phone.send({ t: 'biometric.result', ok: false });
+  await phone.next((m) => m.t === 'speak' && m.text === 'Checkout cancelled. Your cart is safe.');
+  expect(session.state).toMatchObject({ phase: 'shopping', checkout: null, cart: { totalCents: 5670 } });
+});
+it('drops kiosk.seen for a code that no kiosk has, and biometric.result with no request', async () => {
   phone.send({ t: 'kiosk.seen', text: 'GL1 K3X7' });
   phone.send({ t: 'biometric.result', ok: true });
   await serverReadAll();

@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { EMPTY_CART, TIMING as T } from '@glance/shared';
-import { BARISTA, CRISPS, type Harness, KIOSK, OAT, RYE, harness } from './harness';
+import { BARISTA, CRISPS, type Harness, KIOSK, OAT, RYE, STREAMING, harness, product } from './harness';
+import { toSnapshot } from './view';
 
 const full = () => { const h = harness({ cart: [RYE, OAT, CRISPS] }); h.kiosk(); return h; };   // total 639, pay prompt current
 const payments = (h: Harness) => h.all.filter((e) => e.type === 'payment.start');
@@ -248,4 +249,85 @@ it('R15: a suspended checkout ends when the cart gets empty, so an empty cart ne
   expect(h.lines()).toEqual(['checkout.empty']);
   expect(h.state.phase).toBe('shopping');
   expect(payments(h)).toEqual([]);
+});
+
+const costly = () => { const h = harness({ products: [product('tv', 5001)], cart: ['tv'] }); h.kiosk(); return h; };
+
+it('asks for a fingerprint above 50 EUR, and pays only after it', () => {
+  const h = costly();
+  expect(h.event('checkout.offered')!.needsBiometric).toBe(true);
+  h.done(); h.yes('head');
+  expect(h.lines()).toEqual(['checkout.biometric']);
+  expect(h.effects.at(-1)).toEqual({ type: 'biometric.request' });
+  expect(payments(h)).toEqual([]);
+  h.send({ type: 'biometric.result', ok: true });
+  expect(h.effects).toEqual([{ type: 'payment.start', kiosk: KIOSK, totalCents: 5001 }]);
+});
+it('needs no fingerprint at exactly 50 EUR', () => {
+  const h = harness({ products: [product('radio', 5000)], cart: ['radio'] });
+  h.kiosk();
+  expect(h.event('checkout.offered')!.needsBiometric).toBe(false);
+  h.done(); h.yes('head');
+  expect(payments(h)).toHaveLength(1);
+});
+it('a failed fingerprint cancels the checkout', () => {
+  const h = costly(); h.done(); h.yes('head');
+  h.send({ type: 'biometric.result', ok: false });
+  expect(h.lines()).toEqual(['checkout.cancelled']);
+  expect(payments(h)).toEqual([]);
+  expect(h.state).toMatchObject({ phase: 'shopping', checkout: null });
+});
+it('a fingerprint result with no request starts no payment', () => {
+  const h = harness({ cart: [RYE] }); h.kiosk(); h.done();
+  h.send({ type: 'biometric.result', ok: true });
+  expect(h.effects).toEqual([]);
+});
+it('the fingerprint line has a high priority, interrupts, and is no prompt', () => {
+  const h = costly(); h.done(); h.yes('head');
+  expect(h.speak()).toMatchObject({ priority: 'high', interrupt: true, promptId: null });
+  expect(h.state).toMatchObject({ prompt: null, checkout: { step: 'biometric' }, phase: 'checkout' });
+});
+it('while the fingerprint check runs, no answer, no undo, no cart edit, and no product changes the checkout', () => {
+  const h = costly(); h.done(); const pay = h.state.prompt!.id; h.yes('head');
+  h.yes('phone', pay); expect(h.effects).toEqual([]);
+  h.no('phone', pay); expect(h.effects).toEqual([]);
+  h.intent('undo', 'phone'); expect(h.effects).toEqual([]);
+  h.send({ type: 'cart.edit', productId: 'tv', qty: 0 }); expect(h.effects).toEqual([]);
+  h.see(OAT); expect(h.effects).toEqual([]);
+  h.send({ type: 'device.state', state: { ...STREAMING, stream: 'streaming' } });
+  h.send({ type: 'device.state', state: { ...STREAMING, stream: 'stopped' } });
+  expect(h.state.checkout).toMatchObject({ step: 'biometric' });
+  h.send({ type: 'biometric.result', ok: true });
+  expect(payments(h)).toEqual([{ type: 'payment.start', kiosk: KIOSK, totalCents: 5001 }]);
+});
+it('R19 also ends a checkout that waits for the fingerprint, and a late result starts no payment', () => {
+  const h = costly(); h.done(); h.yes('head');
+  h.advance(T.kioskIdleMs);
+  expect(h.lines()).toEqual(['checkout.cancelled']);
+  expect(h.state).toMatchObject({ phase: 'shopping', checkout: null });
+  h.send({ type: 'biometric.result', ok: true });
+  expect(h.effects).toEqual([]);
+  expect(payments(h)).toEqual([]);
+});
+it('a second fingerprint result starts no second payment', () => {
+  const h = costly(); h.done(); h.yes('head');
+  h.send({ type: 'biometric.result', ok: true });
+  h.send({ type: 'biometric.result', ok: true });
+  expect(payments(h)).toHaveLength(1);
+});
+it('the snapshot says that the pay prompt needs a fingerprint', () => {
+  const h = costly();
+  expect(toSnapshot('s-1', h.state, [], h.ctx).prompt).toMatchObject({ kind: 'pay', totalCents: 5001, needsBiometric: true });
+  const cheap = harness({ cart: [RYE] }); cheap.kiosk();
+  expect(toSnapshot('s-1', cheap.state, [], cheap.ctx).prompt).toMatchObject({ kind: 'pay', needsBiometric: false });
+});
+it('a cart change gives a pay prompt with the fingerprint value of the new total', () => {
+  const h = harness({ products: [product('radio', 5000)], cart: ['radio'] }); h.kiosk();
+  h.send({ type: 'cart.edit', productId: 'radio', qty: 2 });
+  expect(h.event('checkout.offered')).toMatchObject({ totalCents: 10000, needsBiometric: true });
+});
+it('a stop intent ends a checkout that waits for the fingerprint', () => {
+  const h = costly(); h.done(); h.yes('head');
+  h.intent('stop', 'phone');
+  expect(h.state).toMatchObject({ phase: 'ended', checkout: null });
 });

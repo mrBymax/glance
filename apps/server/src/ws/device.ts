@@ -185,8 +185,8 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
       case 'kiosk.seen':
         deps.onKioskSeen(session, message.text);
         return;
-      // No fingerprint check exists yet.
       case 'biometric.result':
+        session.dispatch({ type: 'biometric.result', ok: message.ok });
         return;
     }
   };

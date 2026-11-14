@@ -20,6 +20,7 @@ export type Line =
   | { key: 'checkout.offer'; kiosk: KioskRef; itemCount: number; totalCents: number }
   | { key: 'checkout.empty' } | { key: 'checkout.busy' } | { key: 'checkout.cancelled' } | { key: 'checkout.failed' }
   | { key: 'checkout.paid'; totalCents: number }
+  | { key: 'checkout.biometric' }
   | { key: 'info.total'; itemCount: number; totalCents: number }
   | { key: 'info.cart'; items: { product: Product; qty: number }[]; more: boolean; totalCents: number }
   | { key: 'info.help' }
@@ -33,7 +34,10 @@ export type PromptState =
   | { id: string; kind: 'product'; mode: 'new' | 'inCart'; productId: string; doneAt: number | null }
   | { id: string; kind: 'pay'; kioskId: string; doneAt: number | null };
 
-export type CheckoutState = { kiosk: KioskRef; step: 'offered' | 'suspended' | 'paying'; suspendedBy: string | null };
+/** biometric: the shopper said yes to a total above the limit, and the phone checks the fingerprint. */
+export type CheckoutState = {
+  kiosk: KioskRef; step: 'offered' | 'suspended' | 'biometric' | 'paying'; suspendedBy: string | null;
+};
 
 /** The rule numbers in the comments are those of spec section 6.2. Each time is a clock value in milliseconds. */
 export type SessionState = {
@@ -96,6 +100,8 @@ export type RuleInputBody =
   | { type: 'recognition.slow' }
   /** The device socket of the session opened. */
   | { type: 'socket.open' }
+  /** The result of the fingerprint check on the phone. */
+  | { type: 'biometric.result'; ok: boolean }
   /** Speech of the shopper that is no command. */
   | { type: 'question'; text: string }
   /** The answer to the last `ask` effect, or null when no answer came. */
@@ -112,6 +118,8 @@ export type Effect =
   | { type: 'session.rest' }
   | { type: 'session.end' }
   | { type: 'payment.start'; kiosk: KioskRef; totalCents: number }
+  /** The runtime asks the phone for a fingerprint check. The phone answers with `biometric.result`. */
+  | { type: 'biometric.request' }
   /** The runtime asks the model and answers with an `answer` input. */
   | { type: 'ask'; question: string; product: Product };
 

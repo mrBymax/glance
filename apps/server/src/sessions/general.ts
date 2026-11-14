@@ -1,6 +1,6 @@
 import { type DeviceState, type IntentKind, TIMING } from '@glance/shared';
 import { openAskWindow } from './ask';
-import { closeCheckout, isPaying } from './checkout';
+import { closeCheckout, isConfirmed, isPaying } from './checkout';
 import { say } from './say';
 import { type Turn, emit, emitSessionState, itemCount, speak } from './turn';
 import type { RuleInput } from './types';
@@ -42,7 +42,8 @@ export function onDeviceState(turn: Turn, input: Extract<RuleInput, { type: 'dev
   } else if (stream === 'stopped' && s.cameraOn) {
     s.cameraOn = false;
     // R24: with no camera the shopper cannot look at the code. A payment that runs still ends by itself.
-    if (s.checkout && !isPaying(s)) {
+    // A shopper who confirms with the fingerprint looks at the phone, so that checkout stays, and R19 limits its time.
+    if (s.checkout && !isConfirmed(s)) {
       closeCheckout(s);
       emit(turn, { type: 'checkout.cancelled' });
     }
