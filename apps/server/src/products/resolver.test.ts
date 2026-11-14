@@ -4,7 +4,7 @@ import { ProductSchema } from '@glance/shared';
 import { indexCatalog, readCatalogFile } from '../catalog/catalog';
 import { createFakeProductInfo } from './fakeProductInfo';
 import type { ProductDetails, ProductInfo } from './productInfo';
-import { ProductResolver } from './resolver';
+import { ProductResolver, priceConflicts } from './resolver';
 import { ScannedProducts, gtinOfScannedId, scannedProduct, scannedProductId, spokenPack, withScanned } from './scanned';
 import { DEFAULT_STORE_LIST_PATH, type StoreItem, type StoreList, readStoreListFile } from './storeList';
 
@@ -148,4 +148,11 @@ it('builds each scanned product of the dev store list as a valid product', async
     expect(ProductSchema.safeParse(product).success).toBe(true);
     expect(product!.priceCents).toBe(item.priceCents);
   }
+});
+it('names each code with one price in the catalog and another in the store list', async () => {
+  expect(priceConflicts(catalog.products, await storeList.all())).toEqual([]);
+  const other = [{ gtin: BARISTA, priceCents: 249, name: 'Barista oat drink' }, nutella];
+  expect(priceConflicts(catalog.products, other)).toEqual([
+    'store list: the item 7394376616037 costs 249 cents, and the catalog product oat-drink-barista-1l costs 229. A barcode gives the catalog price.',
+  ]);
 });

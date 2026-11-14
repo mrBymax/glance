@@ -2,12 +2,29 @@ import { type Product, normalizeGtin } from '@glance/shared';
 import type { CatalogIndex } from '../catalog/catalog';
 import type { ProductDetails, ProductInfo } from './productInfo';
 import { type ScannedProducts, scannedProduct } from './scanned';
-import type { StoreList } from './storeList';
+import type { StoreItem, StoreList } from './storeList';
 
 /** One lookup has this time: the store list first, then the database with what is left. */
 export const BARCODE_LOOKUP_MS = 2500;
 
 const LATE = Symbol('late');
+
+/**
+ * One line for each code that the catalog and the store list both hold with two prices.
+ * A barcode gives the catalog product, so the price of the store list has no effect for that code.
+ */
+export function priceConflicts(products: readonly Product[], items: readonly StoreItem[]): string[] {
+  const priceByGtin = new Map(items.map((item) => [item.gtin, item.priceCents]));
+  return products.flatMap((product) => {
+    const gtin = product.gtin === undefined ? null : normalizeGtin(product.gtin);
+    const storeCents = gtin === null ? undefined : priceByGtin.get(gtin);
+    if (storeCents === undefined || storeCents === product.priceCents) return [];
+    return [
+      `store list: the item ${gtin} costs ${storeCents} cents, and the catalog product ${product.id} costs ${product.priceCents}.`
+      + ' A barcode gives the catalog price.',
+    ];
+  });
+}
 
 /** Finds the product of a barcode: in the catalog, else in the store list with the details of the product database. */
 export class ProductResolver {
@@ -28,11 +45,6 @@ export class ProductResolver {
       const gtin = product.gtin === undefined ? null : normalizeGtin(product.gtin);
       if (gtin !== null) this.catalogByGtin.set(gtin, product);
     }
-  }
-
-  /** The catalog product with this code, if one exists. It has its own price and spoken texts. */
-  catalogProduct(gtin13: string): Product | undefined {
-    return this.catalogByGtin.get(gtin13);
   }
 
   /**
