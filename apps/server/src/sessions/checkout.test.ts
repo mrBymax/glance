@@ -1,11 +1,15 @@
 import { expect, it } from 'vitest';
 import { EMPTY_CART, TIMING as T } from '@glance/shared';
+import { HEAD_LATE_MS, HEAD_MAX_EXTRA_MS } from './answers';
 import { SAME_TEXT_MS } from './guard';
 import { BARISTA, CRISPS, type Harness, KIOSK, OAT, RYE, STREAMING, harness, product } from './harness';
 import { toSnapshot } from './view';
 
 const full = () => { const h = harness({ cart: [RYE, OAT, CRISPS] }); h.kiosk(); return h; };   // total 639, pay prompt current
 const payments = (h: Harness) => h.all.filter((e) => e.type === 'payment.start');
+/** The code stays in view: one report each second, as the phone sends it. */
+const holdKiosk = (h: Harness, ms: number) => { for (let t = 1000; t <= ms; t += 1000) { h.advance(1000); h.kiosk(); } };
+const HEAD_BOUND_MS = T.headWindowMs + HEAD_MAX_EXTRA_MS + HEAD_LATE_MS;
 
 it('R14: the first report of a kiosk code starts checkout, with no second wait on the server', () => {
   expect(full().state.phase).toBe('checkout');
@@ -74,6 +78,31 @@ it('R16: a nod with the code out of view does not pay', () => {
   h.yes('head');
   expect(payments(h)).toEqual([]);
   expect(h.lines()).toEqual(['hint.lookAtCode']);
+});
+it('R16: a late nod pays up to 21 seconds after the head window, with the code in view', () => {
+  const h = full(); h.done(); holdKiosk(h, HEAD_BOUND_MS - 1000);
+  h.yes('head');
+  expect(h.effects).toEqual([{ type: 'payment.start', kiosk: KIOSK, totalCents: 639 }]);
+});
+it('R16: a nod 21 seconds after the head window does not pay', () => {
+  const h = full(); h.done(); holdKiosk(h, HEAD_BOUND_MS);
+  h.yes('head');
+  expect(payments(h)).toEqual([]);
+});
+it('R16: a stall of the frames does not stand for the code in view', () => {
+  const h = full(); h.done(); holdKiosk(h, 2000);
+  // No frame and no report of the code: for a product prompt this is a stall, and a nod counts. A nod never pays so.
+  h.advance(T.viewMs);
+  h.yes('head');
+  expect(payments(h)).toEqual([]);
+});
+it('R16: a late nod does not pay for a pay prompt that a cart change replaced', () => {
+  const h = full(); h.done(); const old = h.state.prompt!.id;
+  holdKiosk(h, T.headWindowMs);
+  h.send({ type: 'cart.edit', productId: CRISPS, qty: 0 });
+  h.done(); h.kiosk();
+  h.yes('head', old);
+  expect(payments(h)).toEqual([]);
 });
 it('R16: a yes for a product prompt never pays', () => {
   const h = harness({ cart: [RYE] });

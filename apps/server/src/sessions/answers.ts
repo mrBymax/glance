@@ -5,9 +5,19 @@ import { noteAnswer } from './code';
 import { say } from './say';
 import { type Turn, emit, speak } from './turn';
 import type { RuleInput, SessionState } from './types';
-import { inView } from './view';
+import { inView, inViewForHead } from './view';
 
 const MAX_LINE_QTY = 99;
+
+/**
+ * R4: the phone decides if a nod or a shake is inside the head window, in the time of the motion samples of the glasses.
+ * After a stall of the link the samples arrive late, so the answer can arrive after the head window on the clock of
+ * the server. The phone takes a sample of the head window that arrives this long after the window, at most.
+ * The value is `LATE_MS` of `HeadInput` in the Android app.
+ */
+export const HEAD_LATE_MS = 6000;
+/** The longest time that a stall or a still adds to one head window on the phone: `MAX_EXTRA_MS` of `HeadInput`. */
+export const HEAD_MAX_EXTRA_MS = 15_000;
 
 /** True when a yes or a no from this source counts for the current prompt (R3 to R6). */
 export function accepts(state: SessionState, intent: { source: IntentSource; promptId?: string }, now: number): boolean {
@@ -19,11 +29,11 @@ export function accepts(state: SessionState, intent: { source: IntentSource; pro
     case 'phone':
     case 'hud':
       return true;
-    // R4.
+    // R4. The phone is the judge of the head window. The server keeps the last time at which the phone can send the answer.
     case 'head': {
       if (!state.profile.headGestures || prompt.doneAt === null || !targetInView(state, now)) return false;
       const windowMs = state.profile.headWindowMs;
-      return windowMs === null || now - prompt.doneAt < windowMs;
+      return windowMs === null || now - prompt.doneAt < windowMs + HEAD_MAX_EXTRA_MS + HEAD_LATE_MS;
     }
     // R5.
     case 'voice':
@@ -34,10 +44,11 @@ export function accepts(state: SessionState, intent: { source: IntentSource; pro
   }
 }
 
+/** For a head answer. A stall of the frames never stands for a kiosk code in view: a nod that pays needs a report of the code. */
 function targetInView(state: SessionState, now: number): boolean {
   const prompt = state.prompt;
   if (!prompt) return false;
-  if (prompt.kind === 'product') return inView(state.seen[prompt.productId], now);
+  if (prompt.kind === 'product') return inViewForHead(state, prompt.productId, now);
   return state.kioskSeen?.kioskId === prompt.kioskId && inView(state.kioskSeen.at, now);
 }
 

@@ -58,6 +58,8 @@ export type Harness = {
   hold(productId: string, ms: number): void;
   /** NO_RESULT with the given fields. */
   result(part: Partial<RecognitionResult>): void;
+  /** Frames with no product: advance 500 and send an empty result, until ms have passed. */
+  away(ms: number): void;
   /** kiosk.seen for KIOSK. */
   kiosk(opts?: { busy?: boolean; spotCheck?: boolean }): void;
   /** A barcode after its lookup. */
@@ -132,6 +134,12 @@ export function harness(
     },
     result(part) {
       h.send({ type: 'recognition', result: { ...NO_RESULT, ...part }, still: false });
+    },
+    away(ms) {
+      for (let elapsed = HOLD_STEP_MS; elapsed <= ms; elapsed += HOLD_STEP_MS) {
+        h.advance(HOLD_STEP_MS);
+        h.result({});
+      }
     },
     kiosk(kioskOpts = {}) {
       h.send({ type: 'kiosk.seen', kiosk: KIOSK, busy: kioskOpts.busy ?? false, spotCheck: kioskOpts.spotCheck ?? false });

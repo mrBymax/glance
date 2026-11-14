@@ -4,7 +4,7 @@ import { codeOf, codeQuiet, endStillWait, holdUnknownLine, onFrameCode, onUnname
 import { say } from './say';
 import { type Turn, emit, nextPromptId, promptProductInView, qtyInCart, speak } from './turn';
 import type { RuleInput } from './types';
-import { inView } from './view';
+import { inView, noteFrame } from './view';
 import { warningsFor } from './warnings';
 
 /** Spec section 6.1: the first three glance prompts of a session name the yes input. */
@@ -14,6 +14,7 @@ type RecognitionInput = Extract<RuleInput, { type: 'recognition' }>;
 
 export function onRecognition(turn: Turn, input: RecognitionInput): void {
   const { s, now, ctx } = turn;
+  noteFrame(s, now);
   if (s.phase !== 'shopping' && s.phase !== 'checkout') return;
   const { result } = input;
   if (result.status !== 'none') s.lastTargetAt = now;

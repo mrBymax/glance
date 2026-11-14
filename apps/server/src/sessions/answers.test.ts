@@ -1,8 +1,11 @@
 import { expect, it } from 'vitest';
 import { EMPTY_CART, TIMING as T } from '@glance/shared';
-import { accepts } from './answers';
+import { HEAD_LATE_MS, HEAD_MAX_EXTRA_MS, accepts } from './answers';
 import { BARISTA, OAT, RYE, harness, product } from './harness';
-import { excludeList } from './view';
+import { FRAME_STALL_MS, excludeList } from './view';
+
+/** The longest time after `prompt.done` at which the phone can send a head answer. */
+const HEAD_BOUND_MS = T.headWindowMs + HEAD_MAX_EXTRA_MS + HEAD_LATE_MS;
 
 it('R3: a yes with the ID of a replaced prompt adds nothing', () => {
   const h = harness();
@@ -25,10 +28,32 @@ it('R4: a nod counts inside the head window', () => {
   h.yes('head');
   expect(h.state.cart.totalCents).toBe(189);
 });
-it('R4: a nod does not count at the end of the head window', () => {
+it('R4: a nod that the phone sends late counts, up to 21 seconds after the head window', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.hold(OAT, T.headWindowMs);
+  h.see(OAT); h.done(); h.hold(OAT, HEAD_BOUND_MS - 500);
   h.yes('head');
+  expect(h.state.cart.totalCents).toBe(189);
+});
+it('R4: a nod does not count 21 seconds after the head window', () => {
+  const h = harness();
+  h.see(OAT); h.done(); h.hold(OAT, HEAD_BOUND_MS);
+  h.yes('head');
+  expect(h.state.cart).toEqual(EMPTY_CART);
+});
+it('R4: a late nod does not count for a prompt that was replaced', () => {
+  const h = harness();
+  h.see(OAT); h.done(); const old = h.state.prompt!.id;
+  h.hold(OAT, T.headWindowMs);
+  h.see(RYE); h.done();
+  h.yes('head', old);
+  expect(h.state.cart).toEqual(EMPTY_CART);
+});
+it('R4: a late nod does not count for a prompt that ended', () => {
+  const h = harness();
+  h.see(OAT); h.done(); const old = h.state.prompt!.id;
+  h.advance(T.viewMs + T.promptTtlAfterLeftMs);
+  expect(h.state.prompt).toBeNull();
+  h.yes('head', old);
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
 it('R4: a nod does not count before the prompt finished', () => {
@@ -39,10 +64,54 @@ it('R4: a nod does not count before the prompt finished', () => {
 });
 it('R4: a nod does not count when the product left the view', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.advance(T.viewMs);
+  h.see(OAT); h.done(); h.away(T.viewMs);
   h.yes('head');
   expect(h.state.cart).toEqual(EMPTY_CART);
   expect(h.lines()).toEqual(['hint.holdAgain']);
+});
+it('R4: a stall of the frames does not count as "left the view"', () => {
+  const h = harness();
+  h.see(OAT); h.done(); h.advance(12000);
+  h.yes('head');
+  expect(h.state.cart.totalCents).toBe(189);
+});
+it('R4: the time of a stall does not count after the frames came back', () => {
+  const h = harness();
+  h.see(OAT); h.done(); h.advance(12000);
+  h.result({}); h.away(T.viewMs - 500);
+  h.yes('head');
+  expect(h.state.cart.totalCents).toBe(189);
+});
+it('R4: after a stall, 3 seconds of frames with no product are "left the view"', () => {
+  const h = harness();
+  h.see(OAT); h.done(); h.advance(10000);
+  h.result({}); h.away(T.viewMs);
+  h.yes('head');
+  expect(h.state.cart).toEqual(EMPTY_CART);
+});
+it('R4: frames that are 1.5 seconds apart are no stall', () => {
+  const h = harness();
+  h.see(OAT); h.done();
+  h.advance(FRAME_STALL_MS); h.result({});
+  h.advance(FRAME_STALL_MS); h.result({});
+  h.yes('head');
+  expect(h.state.cart).toEqual(EMPTY_CART);
+});
+it('R4: a session that an older server stored, which has no frame state, takes a nod', () => {
+  const h = harness();
+  h.see(OAT); h.done();
+  const { frames: _frames, ...stored } = h.state;
+  h.state = stored as typeof h.state;
+  h.yes('head');
+  expect(h.state.cart.totalCents).toBe(189);
+});
+it('R5, R6: a stall of the frames changes nothing for the other sources', () => {
+  for (const source of ['voice', 'touch', 'key', 'camera', 'phone', 'hud'] as const) {
+    const h = harness();
+    h.see(OAT); h.done(); h.advance(12000);
+    h.yes(source);
+    expect(h.state.cart.totalCents).toBe(189);
+  }
 });
 it('R4: the profile can remove the time limit and can turn head gestures off', () => {
   const open = harness({ profile: { headWindowMs: null } });
@@ -188,7 +257,7 @@ it('R12: an undo after the unit left the cart by another way removes the unit be
 });
 it('R20: a late yes gets one hint, then silence', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.advance(T.headWindowMs);
+  h.see(OAT); h.done(); h.away(T.viewMs);
   h.yes('head');
   expect(h.lines()).toEqual(['hint.holdAgain']);
   h.yes('head');
@@ -196,7 +265,7 @@ it('R20: a late yes gets one hint, then silence', () => {
 });
 it('R20: a yes more than 15 seconds after the last finished prompt does nothing', () => {
   const h = harness();
-  h.see(OAT); h.done(); h.advance(T.hintAfterPromptMs);
+  h.see(OAT); h.done(); h.away(T.hintAfterPromptMs);
   h.yes('head');
   expect(h.effects).toEqual([]);
   const fresh = harness();
@@ -253,8 +322,9 @@ it('accepts tells if an answer counts for the current prompt', () => {
   h.see(OAT); h.done();
   const id = h.state.prompt!.id;
   expect(accepts(h.state, { source: 'head', promptId: id }, h.now)).toBe(true);
-  expect(accepts(h.state, { source: 'head', promptId: id }, h.now + T.headWindowMs)).toBe(false);
-  expect(accepts(h.state, { source: 'hud', promptId: id }, h.now + T.headWindowMs)).toBe(true);
+  expect(accepts(h.state, { source: 'head', promptId: id }, h.now + HEAD_BOUND_MS - 1)).toBe(true);
+  expect(accepts(h.state, { source: 'head', promptId: id }, h.now + HEAD_BOUND_MS)).toBe(false);
+  expect(accepts(h.state, { source: 'hud', promptId: id }, h.now + HEAD_BOUND_MS)).toBe(true);
   expect(accepts(h.state, { source: 'hud' }, h.now)).toBe(false);
   expect(accepts(h.state, { source: 'hud', promptId: 'p-9999' }, h.now)).toBe(false);
 });
