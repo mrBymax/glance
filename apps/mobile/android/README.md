@@ -103,6 +103,7 @@ sequenceDiagram
 - A registration error `FAILED_TO_REGISTER` or `UNKNOWN` sends `native.registration_failed`. The page reads "no internet" from `network`.
 - A camera request that fails sends `native.permission_failed`, but not for a missing Meta AI app: `metaAiInstalled` is false then.
 - Each resume reads the camera permission and the microphone permission of the SDK again. The shopper returns from Meta AI through this path.
+- The app reads both permissions again when the glasses connect. The SDK answers a permission check only with connected glasses (`PermissionError.NO_DEVICE`, `NO_DEVICE_WITH_CONNECTION`), so a check at the start of the app can fail before the link exists.
 - Meta AI opens the app again through the `glance` scheme. `onCreate` and `onNewIntent` give the intent to the SDK, after the SDK started.
 
 ## A session
@@ -330,13 +331,13 @@ flowchart LR
 | `ProbeLinkTest` | `DatLink` with mock glasses: the paired device, the stream, the colors of a frame, the kiosk code in a frame, a stop and a new start, and six stops at the start of a stream. |
 | `ProbeScreenTest` | The probe screen: each test taps the buttons and reads the log, for the stream, the saved frame, `QR log`, `Pipeline test`, Motion, Inputs, Speech, `Speak line`, `Still`, `Record motion`, and `Play bad clip`. |
 | `PlaceholderPageTest` | The placeholder page in the WebView: state and profile, a stored profile patch, a page that loads again, and `Add` and `Skip` on a product prompt. |
-| `SetupFlowTest` | The setup messages with mock glasses: a registration, a registration that fails, a denied and an allowed camera request, and the permissions after a resume. |
+| `SetupFlowTest` | The setup messages with mock glasses: a registration, a registration that fails, a denied and an allowed camera request, the permissions after a resume, and the permissions when the glasses connect after the start. |
 | `BluetoothPromptTest` | The Bluetooth prompt of Android: the test denies it, the app does not stop, and `setup.register` asks again and sends `native.bluetooth_denied`. At its end the test clears the flags of the permission. |
-| `DeviceStatesTest` | The states of the table in "Mock mode for seats without glasses": `NativeState`, the `error` events, and the `device.state` messages for each one. |
+| `DeviceStatesTest` | The states of the table in "Mock mode for seats without glasses": `NativeState`, the `error` events, and the `device.state` messages for each one. One test pays at a kiosk that declines each payment: `checkout.failed` and its line arrive, the cart stays, and the camera stays on. |
 | `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items change the stored settings. |
 | `HapticsPocketTest` | The 8 haptic buttons of the placeholder page give the 8 patterns, `haptics: false` gives none, and pocket mode dims the screen, hides the bars, and keeps the screen on. |
 | `FaceFinderTest` | ML Kit face detection runs on the phone, and an image with no face gives an empty list. |
-| `PhoneUiPageTest` | The phone UI in the WebView: the session screen, the product card of a prompt, and the cart after `Add`. It is skipped for an APK with no build of the phone UI. |
+| `PhoneUiPageTest` | The phone UI in the WebView. The setup test clicks through the three steps: link the glasses, a denied and then an allowed camera, and the start, which opens the session screen. The card test reads the product card of a prompt and the cart after `Add`. Both are skipped for an APK with no build of the phone UI. The setup test is skipped for a phone UI with no setup screen. |
 
 `SpineTest`, `DeviceStatesTest`, `PhoneUiPageTest`, and the prompt tests of `PlaceholderPageTest` need the server of `apps/server` with both fake switches at `BuildConfig.SERVER_URL`. They read `GET /healthz` first, and they fail if recognition or speech is real.
 
@@ -345,8 +346,10 @@ Run them with the script, in `scripts/integration`. It needs `adb`, FFmpeg, and 
 | Command | Result |
 |---|---|
 | `npm install` | Installs `qrcode`, one time |
-| `node android/run-spine.mjs` | Starts the fake server, sets `adb reverse`, builds and installs both APK files, and runs `SpineTest`. Then it removes the reverse and stops the server. |
-| `node android/run-spine.mjs --runs 3` | Runs it three times, each with a new server |
+| `node android/run-spine.mjs` | Starts the fake server, sets `adb reverse`, builds the phone UI, builds and installs both APK files, and runs the suite `spine`. Then it removes the reverse and stops the server. |
+| `node android/run-spine.mjs --integration` | Runs the three suites, each with a new server: `spine` (`SpineTest`), `state` (`DeviceStatesTest`, `SetupFlowTest`), and `page` (`PhoneUiPageTest`) |
+| `node android/run-spine.mjs --suite state` | Runs one suite. A list takes commas: `--suite state,page`. |
+| `node android/run-spine.mjs --runs 3` | Runs each selected suite three times, each time with a new server |
 | `node android/run-spine.mjs --all` | Runs each test class |
 | `node android/run-spine.mjs --class com.metaglance.android.ProbeScreenTest` | Runs one class. `Class#method` runs one test. |
 | `node android/run-spine.mjs --no-build` | Uses the APK files of the last build |
@@ -356,6 +359,9 @@ Rules of the script and of the tests:
 
 - The script uses the phone with the serial `P11262000912` only, and each `adb` call names it. Change `SERIAL` in `run-spine.mjs` for another phone.
 - The script ends with status 2 when the phone is locked or not attached. It does not unlock the phone.
+- The script prints one line for each test: `ok`, `FAIL`, or `skip` with the cause. It ends with status 0 when each test passed, with 1 after a failure, and with 3 when no test failed and a test was skipped.
+- The build step runs `npm run build --workspace @glance/phone-ui` first, because Gradle copies `apps/mobile/ui/dist` into the APK and does not run npm. With `--no-build` the APK keeps the phone UI of its last build.
+- For `DeviceStatesTest`, the script registers a kiosk with `failPayment: true` at each new server. The server gives that kiosk a random code, so the script makes a clip with that code and writes it into the cache folder of the app with `adb exec-in run-as`. The test gets the code and the file name as the instrumentation arguments `failKioskText` and `failKioskClip`. Without them the test of the failed payment is skipped. The script deletes the clip after the run.
 - The script reads the media volume. If it is not 0, it prints the old value and sets 0. Each test class fails at its start when the volume is not 0, because the phone voice speaks each line that has no clip.
 - The server gets no vendor key, and it plays `scripts/integration/android/spine-script.json`: the product `oat-drink-1l` from second 8 to second 10 after the socket of a session opens.
 - The script installs with no `-g`, and no test grants `BLUETOOTH_CONNECT`. Without that permission the app never starts the real SDK, and mock glasses need no Bluetooth. A feed from a video file needs no camera permission.

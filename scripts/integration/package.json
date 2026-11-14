@@ -6,7 +6,10 @@
   "description": "Tools of the integration tests. No app depends on them.",
   "scripts": {
     "android:clips": "node android/make-clips.mjs",
-    "android:spine": "node android/run-spine.mjs"
+    "android:spine": "node android/run-spine.mjs",
+    "android:state": "node android/run-spine.mjs --suite state",
+    "android:page": "node android/run-spine.mjs --suite page",
+    "android:integration": "node android/run-spine.mjs --integration"
   },
   "dependencies": {
     "qrcode": "^1.5.4"

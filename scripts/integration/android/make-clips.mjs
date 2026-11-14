@@ -44,9 +44,9 @@ function makeScene(file) {
   ffmpeg(['-f', 'lavfi', '-i', `color=c=${BACKGROUND}:s=${WIDTH}x${HEIGHT}`, '-vf', boxes.join(','), '-frames:v', '1', file]);
 }
 
-async function makeKioskImage(file, work) {
+async function makeKioskImage(text, file, work) {
   const code = join(work, 'code.png');
-  await QRCode.toFile(code, KIOSK_TEXT, { errorCorrectionLevel: 'M', margin: 4, width: QR_SIZE });
+  await QRCode.toFile(code, text, { errorCorrectionLevel: 'M', margin: 4, width: QR_SIZE });
   ffmpeg(['-i', code, '-vf', `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:white`, '-frames:v', '1', file]);
 }
 
@@ -62,6 +62,18 @@ function makeClip(image, file) {
   ]);
 }
 
+/** Makes one clip with the QR code of `text` on white, for a kiosk that has another code than the fixed clip. */
+export async function makeKioskClip(text, file) {
+  const work = mkdtempSync(join(tmpdir(), 'glance-clips-'));
+  try {
+    const image = join(work, 'kiosk.png');
+    await makeKioskImage(text, image, work);
+    makeClip(image, file);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
 /** Makes the files that are missing. With `force`, makes each file again. Returns the folder of the files. */
 export async function makeClips({ force = false } = {}) {
   if (!force && CLIPS.every((name) => existsSync(join(ASSETS_DIR, name)))) return ASSETS_DIR;
@@ -71,7 +83,7 @@ export async function makeClips({ force = false } = {}) {
     const scene = join(ASSETS_DIR, 'scene.png');
     const kiosk = join(work, 'kiosk.png');
     makeScene(scene);
-    await makeKioskImage(kiosk, work);
+    await makeKioskImage(KIOSK_TEXT, kiosk, work);
     makeClip(scene, join(ASSETS_DIR, 'scene.mp4'));
     makeClip(kiosk, join(ASSETS_DIR, 'kiosk.mp4'));
   } finally {
