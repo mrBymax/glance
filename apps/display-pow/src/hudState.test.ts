@@ -5,6 +5,8 @@ import { INITIAL_HUD_STATE, hudFromSnapshot, hudView, mockAnswer, reduceHud } fr
 
 const oat = { id: 'oat-drink-1l', name: 'Oat drink', packSize: '1 L', priceCents: 189 };
 const rye = { id: 'rye-bread', name: 'Rye bread', packSize: '500 g', priceCents: 260 };
+// A product of a barcode scan: the ID has the form gtin-<13 digits>, and the name of 80 characters comes from Open Food Facts.
+const scanned = { id: 'gtin-3017624010701', name: "Crème fraîche épaisse d'Isigny AOP, entière, 30% de matière grasse, pot en verre", packSize: '50 cl', priceCents: 329 };
 const ryeCart = { items: [{ productId: 'rye-bread', name: 'Rye bread', packSize: '500 g', qty: 1, unitPriceCents: 260 }], totalCents: 260 };
 const cameraOn: ServerEvent = { type: 'session.state', phase: 'shopping', cameraOn: true };
 const pending = (promptId: string, product = oat, extra: object = {}): ServerEvent =>
@@ -29,6 +31,12 @@ describe('hudView', () => {
   it('names missing allergen data and a diet warning', () => {
     const view = hudView(run(cameraOn, pending('p-1', oat, { warnings: [{ kind: 'allergenDataMissing' }, { kind: 'diet', diet: 'vegan' }] })));
     expect(view.warnings).toEqual(['Allergen data is missing for this product.', 'Warning: not vegan.']);
+  });
+  it('shows a scanned product with a name of 80 characters and accents in full', () => {
+    expect(scanned.name).toHaveLength(80);
+    const view = hudView(run(cameraOn, pending('p-1', scanned, { warnings: [{ kind: 'allergenDataMissing' }] })));
+    expect(view).toMatchObject({ title: `${scanned.name}, 50 cl`, price: '3.29 EUR', warnings: ['Allergen data is missing for this product.'],
+      prompt: 'Add to cart?', canAnswer: true });
   });
   it('offers Remove for a product that is in the cart', () => {
     const view = hudView(run(cameraOn, pending('p-1', rye, { kind: 'inCart', qtyInCart: 1 })));
