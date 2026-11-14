@@ -14,7 +14,7 @@ import { createFakeProductInfo } from './products/fakeProductInfo';
 import { createOpenFoodFactsInfo } from './products/openFoodFacts';
 import type { ProductInfo } from './products/productInfo';
 import { priceConflicts } from './products/resolver';
-import { type StoreEntry, readStoreEntries } from './products/storeEntries';
+import { type StoreEntry, notInCatalog, readStoreEntries } from './products/storeEntries';
 import { type StoreList, readStoreListFile } from './products/storeList';
 import { ELEVENLABS_MODEL, createSynthesize } from './speech/elevenlabs';
 import { FakeScriptError } from './recognition/fake';
@@ -35,7 +35,7 @@ async function openStore(config: Config): Promise<Store> {
 }
 
 /** The real recognizer, or undefined with fake recognition. loadConfig has checked that the key exists. */
-function openRecognizer(config: Config, catalog: CatalogIndex): Recognizer | undefined {
+function openRecognizer(config: Config, catalog: CatalogIndex, entries: readonly StoreEntry[]): Recognizer | undefined {
   if (config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
   return createGeminiRecognizer({
     apiKey: config.geminiApiKey,
@@ -43,6 +43,7 @@ function openRecognizer(config: Config, catalog: CatalogIndex): Recognizer | und
     mediaResolution: config.geminiMediaResolution,
     minConfidence: config.minConfidence,
     catalog,
+    storeEntries: notInCatalog(entries, catalog.products),
     template: readFileSync(RECOGNITION_TEMPLATE_PATH, 'utf8'),
   });
 }
@@ -80,18 +81,18 @@ async function main(): Promise<void> {
   const config = loadConfig(process.env, process.argv.slice(2));
   const store = await openStore(config);
   const catalog = indexCatalog(await store.listProducts());
-  const recognizer = openRecognizer(config, catalog);
   const ask = openAsk(config);
   const storeList = openStoreList(config);
   const productInfo = openProductInfo(config);
-  // One read of the store list for the whole run: the label reader builds its instruction from it.
+  // One read of the store list for the whole run: recognition and the label reader build their instructions from it.
   const storeEntries = await readStoreEntries(storeList, productInfo, (line) => console.error(line));
   const storeItems = storeEntries.map((entry) => entry.item);
+  const recognizer = openRecognizer(config, catalog, storeEntries);
   const labelReader = openLabelReader(config, storeEntries);
   // loadConfig has checked that the key exists when FAKE_SPEECH is off.
   const synthesize = config.fakeSpeech || config.elevenlabsApiKey === null ? undefined : createSynthesize(config.elevenlabsApiKey);
   const app = await buildApp({
-    config, clock: systemClock, store, catalog, storeList, productInfo,
+    config, clock: systemClock, store, catalog, storeList, productInfo, storeEntries,
     ...(recognizer ? { recognizer } : {}), ...(labelReader ? { labelReader } : {}), ...(ask ? { ask } : {}), ...(synthesize ? { synthesize } : {}),
     ...(config.saveFramesDir === null ? {} : { saveFrame: createFrameSaver(config.saveFramesDir) }),
   });

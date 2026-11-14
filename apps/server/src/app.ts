@@ -17,7 +17,8 @@ import { type LabelReader, NO_LABEL } from './label/reader';
 import { createBarcodeReports } from './products/barcodes';
 import type { ProductInfo } from './products/productInfo';
 import { ProductResolver } from './products/resolver';
-import { ScannedProducts, gtinOfScannedId, withScanned } from './products/scanned';
+import { ScannedProducts, gtinOfScannedId, scannedProduct, withScanned } from './products/scanned';
+import { type StoreEntry, notInCatalog, readStoreEntries } from './products/storeEntries';
 import type { StoreList } from './products/storeList';
 import { ScriptPlayer, readFakeScript } from './recognition/fake';
 import type { Recognizer } from './recognition/gemini';
@@ -36,6 +37,8 @@ export type AppDeps = {
   storeList: StoreList;
   /** The details of a scanned product. main.ts makes the reader of Open Food Facts, or the fixture reader of FAKE_PRODUCT_INFO. */
   productInfo: ProductInfo;
+  /** The store list as main.ts read it for the recognizer and the label reader. Without it the app reads the list itself. */
+  storeEntries?: readonly StoreEntry[];
   /** false gives no log. An object sends each log line to its stream. */
   log?: boolean | { level: string; stream: { write(line: string): void } };
   /** Names the product of each frame. Fake recognition does not use it. */
@@ -81,8 +84,14 @@ const ERROR_NAMES: Record<number, string> = { 400: 'bad_request', 401: 'unauthor
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { config } = deps;
+  // The rules find each product of the store list by its ID, as they find a catalog product.
+  // Each store item is in the index from the start, so recognition by sight and a fake script can name it.
+  const scanned = new ScannedProducts();
+  const storeEntries = deps.storeEntries ?? await readStoreEntries(deps.storeList, deps.productInfo, (line) => console.error(line));
+  for (const entry of notInCatalog(storeEntries, deps.catalog.products)) scanned.put(scannedProduct(entry.item, entry.details));
+  const products = withScanned(deps.catalog, scanned);
   // A script that the server cannot use stops the start, before a timer or a socket exists.
-  const fakeScript = config.fakeRecognition === null ? null : readFakeScript(config.fakeRecognition, deps.catalog);
+  const fakeScript = config.fakeRecognition === null ? null : readFakeScript(config.fakeRecognition, products);
   const log = deps.log ?? true;
   const app = Fastify({
     logger: log === false ? false : {
@@ -145,8 +154,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const clips = new ClipCache(config.speechCacheDir, deps.store);
   const kiosks = new KioskService({ store: deps.store, bus, clock: deps.clock });
   const payments = createPayments({ store: deps.store, clock: deps.clock, kiosks, delayMs: config.paymentDelayMs });
-  // The rules find a scanned product by its ID as they find a catalog product. Recognition keeps the catalog alone.
-  const scanned = new ScannedProducts();
   const resolver = new ProductResolver({
     catalog: deps.catalog, storeList: deps.storeList, info: deps.productInfo, scanned, log: (line) => app.log.warn(line),
   });
@@ -156,7 +163,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   else ask = deps.ask ?? (async () => { throw new Error('The server has no answer service.'); });
   const sessions = new SessionRegistry({
     clock: deps.clock,
-    catalog: withScanned(deps.catalog, scanned),
+    catalog: products,
     secondLookWaitMs: config.secondLookWaitMs,
     store: deps.store,
     bus,
@@ -228,6 +235,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     clock: deps.clock,
     log: app.log,
     onCode: (session, digits) => void reportBarcode(session, digits, 'model'),
+    resolveProduct: (productId) => {
+      const gtin = gtinOfScannedId(productId);
+      return gtin === null ? null : resolver.resolve(gtin).then((product) => product !== null);
+    },
     onSlow: (session) => {
       app.log.warn(`recognition is slow for the session ${session.id}: 3 calls failed in a row`);
       session.dispatch({ type: 'recognition.slow' });

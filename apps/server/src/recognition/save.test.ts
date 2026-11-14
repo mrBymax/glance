@@ -38,7 +38,7 @@ const fakeSession = (id = 's1'): SessionRuntime => ({
 const handlerWith = (saveFrame: FrameSaver | null) => {
   const write = (line: string): void => { logLines.push(line); };
   const log = { debug: write, info: write, warn: write, error: write } as unknown as FastifyBaseLogger;
-  return createFrameHandler({ recognizer: { recognize }, clock: systemClock, log, onCode: () => undefined, onSlow: () => undefined, requireBlur: false, saveFrame });
+  return createFrameHandler({ recognizer: { recognize }, clock: systemClock, log, onCode: () => undefined, resolveProduct: () => null, onSlow: () => undefined, requireBlur: false, saveFrame });
 };
 
 beforeEach(() => {
@@ -75,7 +75,7 @@ it('a frame that the handler drops is not saved', async () => {
   const write = (line: string): void => { logLines.push(line); };
   const strict = createFrameHandler({
     recognizer: { recognize }, clock: systemClock, log: { debug: write, info: write, warn: write } as unknown as FastifyBaseLogger,
-    onCode: () => undefined, onSlow: () => undefined, requireBlur: true, saveFrame: saver,
+    onCode: () => undefined, resolveProduct: () => null, onSlow: () => undefined, requireBlur: true, saveFrame: saver,
   });
   strict(fakeSession(), { ...frame(1), header: { ...frame(1).header, blurred: false } });
   strict({ ...fakeSession(), stopped: true } as unknown as SessionRuntime, frame(2));

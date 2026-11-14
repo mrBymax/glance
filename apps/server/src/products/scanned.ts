@@ -6,7 +6,7 @@ import type { StoreItem } from './storeList';
 
 const SCANNED_ID = /^gtin-(\d{13})$/;
 
-/** The ID of a product that came from a barcode and that the catalog does not hold. */
+/** The ID of a product of the store list that the catalog does not hold. A barcode, a label, or recognition by sight names it. */
 export function scannedProductId(gtin13: string): string {
   return `gtin-${gtin13}`;
 }
@@ -17,8 +17,8 @@ export function gtinOfScannedId(productId: string): string | null {
 }
 
 /**
- * The scanned products of this process, by ID. Each session shares them: a product is the same for each shopper.
- * A restart loses them, and the registry of the sessions resolves the products of a stored session again.
+ * The products of the store list in this process, by ID. Each session shares them: a product is the same for each shopper.
+ * The start of the server puts each store item here with the details that the cache holds, and each lookup puts a newer one.
  */
 export class ScannedProducts {
   private readonly byId = new Map<string, Product>();
@@ -35,7 +35,7 @@ export class ScannedProducts {
 
 /**
  * The index that the rules use: the catalog, and then the scanned products.
- * `products` stays the catalog alone, so the recognition prompt and the clip seed hold no scanned product.
+ * `products` stays the catalog alone, so the clip seed holds no scanned product.
  */
 export function withScanned(catalog: CatalogIndex, scanned: ScannedProducts): CatalogIndex {
   return { products: catalog.products, get: (id) => catalog.get(id) ?? scanned.get(id) };
@@ -94,8 +94,8 @@ export function scannedProduct(item: StoreItem, details: ProductDetails | null):
     allergens: details?.allergens ?? null,
     vegan: details?.vegan ?? null,
     vegetarian: details?.vegetarian ?? null,
-    // The recognition prompt never lists a scanned product, so this text only fills the field.
-    visual: `Scanned by its barcode ${item.gtin}.`,
+    // The recognition prompt lists a store item with no look, so this text only fills the field.
+    visual: `Store item with the barcode ${item.gtin}.`,
     lookAlikes: [],
   };
 }

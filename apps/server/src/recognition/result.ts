@@ -5,7 +5,7 @@ import type { CatalogIndex } from '../catalog/catalog';
 /** What one frame shows, after the checks of normalizeResult. */
 export type RecognitionResult = {
   status: 'identified' | 'ambiguous' | 'unsure' | 'unknown' | 'none';
-  /** A catalog ID for 'identified', else null. */
+  /** The ID of a catalog product or of a store item for 'identified', else null. */
   productId: string | null;
   /** Catalog IDs for 'ambiguous', else an empty list. */
   candidates: string[];

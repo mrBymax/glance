@@ -24,6 +24,7 @@ async function main(): Promise<void> {
     mediaResolution: config.geminiMediaResolution,
     minConfidence: config.minConfidence,
     catalog: indexCatalog(readCatalogFile(config.catalogPath)),
+    storeEntries: [],
     template: readFileSync(RECOGNITION_TEMPLATE_PATH, 'utf8'),
   });
   const startedAt = Date.now();

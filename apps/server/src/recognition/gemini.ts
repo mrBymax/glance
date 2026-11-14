@@ -1,5 +1,7 @@
 import { GoogleGenAI, MediaResolution } from '@google/genai';
-import type { CatalogIndex } from '../catalog/catalog';
+import { type CatalogIndex, indexCatalog } from '../catalog/catalog';
+import { scannedProduct } from '../products/scanned';
+import type { StoreEntry } from '../products/storeEntries';
 import { buildSystemInstruction, recognitionResponseSchema, userText } from './prompt';
 import { NO_RESULT, type RecognitionResult, normalizeResult } from './result';
 
@@ -18,12 +20,21 @@ export const RECOGNITION_TEMPLATE_PATH = '../../agents/recognition.md';
 export function createGeminiRecognizer(deps: {
   apiKey: string; model: string; mediaResolution: 'default' | 'low'; minConfidence: number;
   catalog: CatalogIndex; template: string;
+  /**
+   * The store items that the catalog does not hold, as they were at the start of the server. The model can name each one
+   * by the ID of a scanned product. A script that tests the catalog alone gives an empty list.
+   */
+  storeEntries: readonly StoreEntry[];
   /** In place of the global fetch, for a test. */
   fetch?: typeof fetch;
 }): Recognizer {
   const ai = new GoogleGenAI({ apiKey: deps.apiKey, ...(deps.fetch ? { httpOptions: { fetch: deps.fetch } } : {}) });
-  const systemInstruction = buildSystemInstruction(deps.template, deps.catalog.products);
-  const responseSchema = recognitionResponseSchema(deps.catalog.products.map((product) => product.id));
+  const systemInstruction = buildSystemInstruction(deps.template, deps.catalog.products, deps.storeEntries);
+  // Each product that the model can name. The check of an answer needs only the IDs.
+  const known = indexCatalog([
+    ...deps.catalog.products, ...deps.storeEntries.map((entry) => scannedProduct(entry.item, entry.details)),
+  ]);
+  const responseSchema = recognitionResponseSchema(known.products.map((product) => product.id));
 
   return {
     async recognize(jpeg, opts) {
@@ -54,7 +65,7 @@ export function createGeminiRecognizer(deps: {
       } catch {
         return NO_RESULT;
       }
-      return normalizeResult(raw, { catalog: deps.catalog, exclude: opts.exclude, minConfidence: deps.minConfidence });
+      return normalizeResult(raw, { catalog: known, exclude: opts.exclude, minConfidence: deps.minConfidence });
     },
   };
 }

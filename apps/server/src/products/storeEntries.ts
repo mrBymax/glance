@@ -1,3 +1,4 @@
+import { type Product, normalizeGtin } from '@glance/shared';
 import type { ProductDetails, ProductInfo } from './productInfo';
 import type { StoreItem, StoreList } from './storeList';
 
@@ -19,4 +20,13 @@ export async function readStoreEntries(storeList: StoreList, info: ProductInfo, 
     });
     return { item, details };
   }));
+}
+
+/**
+ * The entries whose code no catalog product has. A catalog product wins for its code,
+ * so recognition by sight must not get that product a second time, as a store item.
+ */
+export function notInCatalog(entries: readonly StoreEntry[], products: readonly Product[]): StoreEntry[] {
+  const inCatalog = new Set(products.flatMap((product) => (product.gtin === undefined ? [] : normalizeGtin(product.gtin) ?? [])));
+  return entries.filter((entry) => !inCatalog.has(entry.item.gtin));
 }

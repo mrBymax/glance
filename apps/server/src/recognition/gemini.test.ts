@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { indexCatalog, readCatalogFile } from '../catalog/catalog';
+import type { StoreEntry } from '../products/storeEntries';
 import { RECOGNITION_TEMPLATE_PATH, type Recognizer, createGeminiRecognizer } from './gemini';
 import { NO_RESULT } from './result';
 
@@ -30,10 +31,12 @@ const fetchStub = vi.fn<typeof fetch>(async (input, init) => {
   return reply();
 });
 
-function recognizer(over: { mediaResolution?: 'default' | 'low' } = {}): Recognizer {
+const cups: StoreEntry = { item: { gtin: '6438574558384', priceCents: 349, name: 'Paper cups' }, details: null };
+
+function recognizer(over: { mediaResolution?: 'default' | 'low'; storeEntries?: StoreEntry[] } = {}): Recognizer {
   return createGeminiRecognizer({
     apiKey: 'test-key', model: 'gemini-3.5-flash-lite', mediaResolution: over.mediaResolution ?? 'default',
-    minConfidence: 0.6, catalog, template, fetch: fetchStub,
+    minConfidence: 0.6, catalog, storeEntries: over.storeEntries ?? [], template, fetch: fetchStub,
   });
 }
 const opts = (part: { exclude?: string[]; still?: boolean } = {}) =>
@@ -73,6 +76,21 @@ it('sends one frame, the exclude list, the catalog, and the answer schema', asyn
   });
   expect(config).not.toHaveProperty('mediaResolution');
   expect(config).not.toHaveProperty('thinkingConfig');
+});
+it('knows the store items: the instruction lists them, the schema takes their IDs, and an answer with one stays identified', async () => {
+  const storeAnswer = { ...answer, productId: 'gtin-6438574558384' };
+  reply = modelSays(JSON.stringify(storeAnswer));
+  expect(await recognizer().recognize(JPEG, opts())).toMatchObject({ status: 'unknown', productId: null });
+  expect(await recognizer({ storeEntries: [cups] }).recognize(JPEG, opts())).toEqual(storeAnswer);
+
+  const { body } = calls[1]!;
+  expect(JSON.stringify(body.systemInstruction)).toContain('- id: gtin-6438574558384 | name: Paper cups');
+  const config = body.generationConfig as { responseJsonSchema: { properties: { productId: { anyOf: { enum?: string[] }[] } } } };
+  expect(config.responseJsonSchema.properties.productId.anyOf[0]!.enum).toEqual([
+    ...catalog.products.map((product) => product.id), 'gtin-6438574558384',
+  ]);
+  // R9: the exclude list also drops a store item.
+  expect((await recognizer({ storeEntries: [cups] }).recognize(JPEG, opts({ exclude: ['gtin-6438574558384'] }))).status).toBe('none');
 });
 it('asks for the low media resolution for a frame, and not for a still', async () => {
   const low = recognizer({ mediaResolution: 'low' });

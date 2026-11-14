@@ -2,24 +2,49 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { readCatalogFile } from '../catalog/catalog';
+import type { StoreEntry } from '../products/storeEntries';
 import { buildSystemInstruction, recognitionResponseSchema, userText } from './prompt';
 
 const dev = readCatalogFile(fileURLToPath(new URL('../../catalog/catalog.dev.json', import.meta.url)));
-const template = 'Rules.\n{{catalog}}\nEnd.';
+const template = 'Rules.\n{{catalog}}\nStore:\n{{storeItems}}\nEnd.';
+const entries: StoreEntry[] = [
+  { item: { gtin: '3017624010701', priceCents: 399, name: 'Nutella', brand: 'Ferrero', packSize: '400 g' }, details: null },
+  { item: { gtin: '6438574558384', priceCents: 349, name: 'Paper cups' }, details: null },
+  {
+    item: { gtin: '7312220096019', priceCents: 279, name: 'Biscoff' },
+    details: { brand: 'Lotus', quantity: '250 g', allergens: ['gluten', 'soy'], vegan: true, vegetarian: true },
+  },
+];
 type Schema = {
   required: string[];
   properties: Record<string, { enum?: string[]; anyOf?: unknown[]; items?: { enum: string[] }; required?: string[]; properties?: Record<string, unknown> }>;
 };
 
 it('lists each product with ID, name, brand, pack size, and look', () => {
-  const text = buildSystemInstruction(template, dev);
+  const text = buildSystemInstruction(template, dev, []);
   for (const p of dev) for (const part of [p.id, p.name.en, p.brand, p.packSize, p.visual]) expect(text).toContain(part);
   expect(text).toContain('lookAlikes: oat-drink-barista-1l');
   expect(text).not.toContain('{{catalog}}');
 });
+it('lists each store item with the ID of a scanned product, its name, and its brand and pack size when a source has them', () => {
+  const lines = buildSystemInstruction(template, dev, entries).split('\n');
+  expect(lines.slice(dev.length + 1)).toEqual([
+    'Store:',
+    '- id: gtin-3017624010701 | name: Nutella | brand: Ferrero | pack: 400 g',
+    '- id: gtin-6438574558384 | name: Paper cups',
+    '- id: gtin-7312220096019 | name: Biscoff | brand: Lotus | pack: 250 g',
+    'End.',
+  ]);
+  expect(lines.join('\n')).not.toContain('{{storeItems}}');
+});
+it('says so when the catalog or the store list is empty', () => {
+  expect(buildSystemInstruction(template, [], []).split('\n')).toEqual([
+    'Rules.', '(The catalog is empty.)', 'Store:', '(The store has no other items.)', 'End.',
+  ]);
+});
 it('writes one line for each product, between the text of the template', () => {
-  const lines = buildSystemInstruction(template, dev).split('\n');
-  expect(lines).toHaveLength(dev.length + 2);
+  const lines = buildSystemInstruction(template, dev, []).split('\n');
+  expect(lines).toHaveLength(dev.length + 4);
   expect(lines[0]).toBe('Rules.');
   expect(lines[1]).toBe(
     '- id: oat-drink-1l | name: Oat drink | brand: Oatly | pack: 1 L'
@@ -31,11 +56,13 @@ it('writes one line for each product, between the text of the template', () => {
   expect(lines.at(-1)).toBe('End.');
 });
 it('holds no price', () => {
-  const text = buildSystemInstruction(template, dev);
+  const text = buildSystemInstruction(template, dev, entries);
   for (const p of dev) expect(text).not.toContain(String(p.priceCents));
+  for (const entry of entries) expect(text).not.toContain(String(entry.item.priceCents));
 });
 it('rejects a template with no placeholder', () => {
-  expect(() => buildSystemInstruction('Rules.', dev)).toThrow(/\{\{catalog\}\}/);
+  expect(() => buildSystemInstruction('Rules. {{storeItems}}', dev, [])).toThrow(/\{\{catalog\}\}/);
+  expect(() => buildSystemInstruction('Rules. {{catalog}}', dev, [])).toThrow(/\{\{storeItems\}\}/);
 });
 it('limits the answer to the catalog IDs', () => {
   const schema = recognitionResponseSchema(['a', 'b']) as Schema;
@@ -54,8 +81,16 @@ it('writes the exclude list', () => {
   expect(userText([])).toBe('Exclude: none.');
   expect(userText(['a', 'b'])).toBe('Exclude: a, b.');
 });
-it('the instruction file has the catalog placeholder', () => {
-  expect(readFileSync('../../agents/recognition.md', 'utf8')).toContain('{{catalog}}');
+it('the instruction file has the placeholders for the catalog and for the store items', () => {
+  const text = readFileSync('../../agents/recognition.md', 'utf8');
+  expect(text).toContain('{{catalog}}');
+  expect(text).toContain('{{storeItems}}');
+});
+it('the instruction file says that the package of a store item can be in another language, and that a similar product is no match', () => {
+  const text = readFileSync('../../agents/recognition.md', 'utf8');
+  expect(text).toMatch(/another language/);
+  expect(text).toContain('"Kartonkipikari / Pappersmugg" is "Paper cups"');
+  expect(text).toMatch(/similar product is not the item/);
 });
 it('the instruction file names each status, each aim hint, and each gesture of the answer', () => {
   const text = readFileSync('../../agents/recognition.md', 'utf8');

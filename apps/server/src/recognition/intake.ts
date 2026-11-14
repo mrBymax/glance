@@ -30,6 +30,12 @@ export function createFrameHandler(deps: {
   recognizer: Recognizer; clock: Clock; log: FastifyBaseLogger;
   /** Gets the digits of the code of a result, as the model read them. */
   onCode: (session: SessionRuntime, digits: string) => void;
+  /**
+   * For a product that a result names. Returns null for a catalog product: the rules have it.
+   * For a store item it reads the product again, with the details of the product database, and resolves false
+   * when the store no longer sells it. A read that fails rejects.
+   */
+  resolveProduct: (productId: string) => Promise<boolean> | null;
   /** 3 recognition calls of the session failed in a row. */
   onSlow: (session: SessionRuntime) => void;
   /** Drop each frame that did not go through face detection on the phone. */
@@ -59,8 +65,26 @@ export function createFrameHandler(deps: {
     onResult: (result, info) => {
       // These lines give the server share of the time from glance to voice.
       deps.log.info(`recognition session=${session.id} seq=${info.seq} status=${result.status} code=${result.code.digits ?? (result.code.visible ? "visible" : "no")} ms=${info.ms}`);
-      session.dispatch({ type: 'recognition', result, still: info.still });
-      if (result.code.digits !== null) deps.onCode(session, result.code.digits);
+      const give = (): void => {
+        if (session.stopped) return;
+        session.dispatch({ type: 'recognition', result, still: info.still });
+        if (result.code.digits !== null) deps.onCode(session, result.code.digits);
+      };
+      const read = result.productId === null ? null : deps.resolveProduct(result.productId);
+      if (read === null) {
+        give();
+        return;
+      }
+      // The first prompt of a store item needs its allergens, so the result waits for the read. The read has the time of
+      // a barcode lookup, and the next read comes from the cache. A result of a later frame can reach the rules first.
+      read.then((sold) => {
+        if (sold) give();
+        else deps.log.warn(`recognition result dropped: the store does not sell ${result.productId}. seq=${info.seq} session=${session.id}`);
+      }, (error: unknown) => {
+        // The rules still hold the product from the start of the server, with the details of that time.
+        deps.log.warn(`product not read again. id=${result.productId} ${error instanceof Error ? error.message : String(error)} session=${session.id}`);
+        give();
+      });
     },
     onSlow: () => deps.onSlow(session),
     log: (line) => deps.log.warn(`${line} session=${session.id}`),

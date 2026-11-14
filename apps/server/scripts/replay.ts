@@ -45,6 +45,7 @@ async function main(): Promise<void> {
     mediaResolution: config.geminiMediaResolution,
     minConfidence: config.minConfidence,
     catalog,
+    storeEntries: [],
     template: readFileSync(RECOGNITION_TEMPLATE_PATH, 'utf8'),
   });
   const rows = await replayFrames(frames, recognizer, {

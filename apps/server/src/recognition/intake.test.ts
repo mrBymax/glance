@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CreateSessionResponseSchema } from '@glance/shared';
+import { DEFAULT_STORE_LIST_PATH, readStoreListFile } from '../products/storeList';
 import { type TestApp, type TestPhone, connectPhone, testApp } from '../testing';
 import type { Recognizer } from './gemini';
 import { NO_RESULT, type RecognitionResult } from './result';
@@ -148,4 +149,42 @@ it('with SECOND_LOOK_WAIT_MS a still that is not sure speaks the look-alike line
   waiting.phone.sendFrame({ seq: 2, ts: 2, w: 1440, h: 1080, blurred: true, kind: 'still' }, JPEG);
   await waiting.phone.next((m) => m.t === 'speak');
   expect(waiting.phone.messages.flatMap((m) => (m.t === 'speak' ? [m.text] : []))).toEqual(['I cannot tell which oat drink this is. Turn the front to me.']);
+});
+
+it('a store item that sight names gets the normal prompt, with the details that the resolver reads for its first prompt', async () => {
+  const details = { brand: 'Ferrero', quantity: '400 g', allergens: ['milk' as const, 'nuts' as const], vegan: false, vegetarian: true };
+  const info = { byGtin: vi.fn(async () => details), cached: vi.fn(async () => null) };
+  recognize.mockResolvedValue({ ...NO_RESULT, status: 'identified', productId: 'gtin-3017624010701', confidence: 0.9 });
+  const app = await testApp({}, { recognizer: { recognize }, productInfo: info });
+  apps.push(app);
+  // The start reads the whole store list from the cache, and makes no read of the database.
+  expect(info.cached).toHaveBeenCalledTimes(10);
+  expect(info.byGtin).not.toHaveBeenCalled();
+
+  const res = await fetch(`${app.base}/api/sessions`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profile: { allergens: ['nuts'] } }),
+  });
+  const created = CreateSessionResponseSchema.parse(await res.json());
+  const storePhone = await connectPhone(app, created.sessionId, created.token);
+  storePhone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  expect(await storePhone.next((m) => m.t === 'speak')).toMatchObject({
+    text: expect.stringContaining('Nutella, four hundred grams, three ninety-nine. Warning: contains nuts.'), promptId: 'p-0001',
+  });
+  expect(info.byGtin).toHaveBeenCalledWith('3017624010701');
+});
+it('a store item that the store list no longer holds gets no prompt', async () => {
+  const items = await readStoreListFile(DEFAULT_STORE_LIST_PATH).all();
+  let sold = true;
+  const storeList = { all: async () => items, byGtin: async (gtin: string) => (sold ? items.find((item) => item.gtin === gtin) : undefined) };
+  recognize.mockResolvedValue({ ...NO_RESULT, status: 'identified', productId: 'gtin-3017624010701', confidence: 0.9 });
+  const app = await testApp({}, {
+    recognizer: { recognize }, storeList, log: { level: 'info', stream: { write: (line) => { logLines.push(line); } } },
+  });
+  apps.push(app);
+  sold = false;
+  const created = CreateSessionResponseSchema.parse(await (await fetch(`${app.base}/api/sessions`, { method: 'POST' })).json());
+  const storePhone = await connectPhone(app, created.sessionId, created.token);
+  storePhone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  await vi.waitFor(() => expect(logged('recognition result dropped: the store does not sell gtin-3017624010701')).toBe(1));
+  expect(storePhone.messages.some((m) => m.t === 'speak')).toBe(false);
 });

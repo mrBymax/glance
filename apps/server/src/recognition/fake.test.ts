@@ -247,3 +247,10 @@ it('gives the digits of a result to the lookup with each result', async () => {
   expect(onCode.mock.calls).toEqual([[session, '3017624010701'], [session, '3017624010701']]);
   player.stop(session.id);
 });
+it('a script can name a store item by the ID of a scanned product', async () => {
+  const { sessionId, token } = await fakeApp([{ atMs: 0, forMs: 5000, result: { status: 'identified', productId: 'gtin-3017624010701' } }]);
+  const phone = await connectPhone(t!, sessionId, token);
+  const pending = await phone.next((m) => m.t === 'event' && m.event.type === 'glance.pending');
+  expect(pending).toMatchObject({ event: { product: { id: 'gtin-3017624010701', name: 'Nutella', priceCents: 399 } } });
+  phone.close();
+});
