@@ -31,15 +31,15 @@ class SelectionTest {
         Sharpness.of(ByteArray(6), 2, 2)
     }
 
-    @Test fun `picks the sharpest frame of each 500 ms window`() {
+    @Test fun `picks the sharpest frame of each 300 ms window`() {
         val p = SharpestFramePicker<String>()
         assertNull(p.offer(0, "a", 3.0))
         assertNull(p.offer(143, "b", 9.0))
         assertNull(p.offer(286, "c", 5.0))
-        assertNull(p.offer(429, "d", 1.0))
-        assertEquals("b", p.offer(572, "e", 2.0))
-        assertNull(p.offer(715, "f", 1.0))
-        assertEquals("e", p.offer(1072, "g", 0.5))
+        assertEquals("b", p.offer(300, "d", 1.0))
+        assertNull(p.offer(443, "e", 2.0))
+        assertNull(p.offer(599, "f", 1.0))
+        assertEquals("e", p.offer(600, "g", 0.5))
     }
 
     @Test fun `skips an upload for each reason of the spec`() {

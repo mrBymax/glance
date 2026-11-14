@@ -111,8 +111,8 @@ class ProbeScreenTest {
             assertTrue("upload $seq is ${width}x$height", maxOf(width.toInt(), height.toInt()) <= MAX_LONG_SIDE)
             assertTrue("upload $seq has $bytes bytes", bytes.toInt() < MAX_JPEG_BYTES)
         }
-        // The pipeline sends the sharpest frame of each 500 ms, and it reports a code in view one time each second.
-        assertGap("uploads", lines().filter { UPLOAD_LINE.containsMatchIn(it) }, 300, 900)
+        // The pipeline sends the sharpest frame of each 300 ms, and it reports a code in view one time each second.
+        assertGap("uploads", lines().filter { UPLOAD_LINE.containsMatchIn(it) }, 180, 540)
         assertGap("kiosk lines", lines().filter { it.endsWith(" kiosk ${TestClips.KIOSK_TEXT}") }, 700, 1500)
     }
 

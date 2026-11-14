@@ -132,7 +132,7 @@ it('a second start for the same session does nothing', async () => {
   await vi.advanceTimersByTimeAsync(1500);
   expect(session.state.cameraOn).toBe(false);
   expect(session.state.prompt).toMatchObject({ productId: 'oat-drink-1l' });
-  expect(dispatch).toHaveBeenCalledTimes(3500 / TIMING.uploadEveryMs);
+  expect(dispatch).toHaveBeenCalledTimes(Math.floor(3500 / TIMING.uploadEveryMs));
   player.stop(session.id);
 });
 it('reports the kiosk of a kiosk step one time each second', async () => {
@@ -236,9 +236,11 @@ it('reports the code of a barcode step one time each second, as the phone does',
 it('gives the digits of a result to the lookup with each result', async () => {
   vi.useFakeTimers();
   const session = await oneSession();
+  // The player gives one result each tick, so the second step holds 2 results.
+  const tick = TIMING.uploadEveryMs;
   const codeScript: FakeScript = { loop: false, lengthMs: 10000, label: null, steps: [
-    { atMs: 0, forMs: 1000, result: { code: { visible: true, digits: null } } },
-    { atMs: 1000, forMs: 1000, result: { code: { visible: true, digits: '3017624010701' } } },
+    { atMs: 0, forMs: 3 * tick, result: { code: { visible: true, digits: null } } },
+    { atMs: 3 * tick, forMs: 2 * tick, result: { code: { visible: true, digits: '3017624010701' } } },
   ] };
   const onCode = vi.fn();
   const player = new ScriptPlayer({ script: codeScript, clock: systemClock, onKiosk: () => undefined, onBarcode: () => undefined, onCode });

@@ -144,7 +144,7 @@ sequenceDiagram
   participant Clips as Speech clips
 
   Glasses->>App: video frames
-  Note over App: FramePipeline selects the sharpest frame of each 500 ms
+  Note over App: FramePipeline selects the sharpest frame of each 300 ms
   App->>Socket: binary frame with FrameHeader and JPEG
   Socket->>Worker: submit(frame)
   Worker->>Gemini: generateContent with the JPEG and the exclude line
@@ -180,7 +180,7 @@ sequenceDiagram
 
 Rules of this path:
 
-- The phone uploads one frame each 500 ms at most. The JPEG has the quality 80 and a long side of 768 pixels at most. It is the center of the camera frame (80 percent of the width, 70 percent of the height), and the phone pixelates each face in it before the upload.
+- The phone uploads one frame each 300 ms at most. The JPEG has the quality 80 and a long side of 768 pixels at most. It is the center of the camera frame (80 percent of the width, 70 percent of the height), and the phone pixelates each face in it before the upload.
 - The upload stops while the socket is down, while an earlier frame is not sent yet, and while the glasses are off the face.
 - The recognition worker runs up to 3 calls at the same time for each session (`RECOGNITION_CONCURRENCY`). With no free call, the newest frame waits. A call that takes 4 seconds is dropped. The rules get the results in the order of the frames: the worker drops the result of an older frame that arrives after the result of a newer frame.
 - Results for one product inside 3 seconds belong to one appearance, and one appearance gets one prompt.

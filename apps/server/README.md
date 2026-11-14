@@ -65,7 +65,7 @@ curl -X POST http://localhost:8080/api/sessions
 
 At the start the server logs `store: memory` or `store: mongo`, the number of products, `store list: <path>, <n> items`, `reference pictures: <dir>, <n> items, <m> pictures`, `product info: fake` or the address of Open Food Facts, `recognition: fake` or the model, and `speech: fake` or the speech model.
 
-With real recognition and real speech (`npm run dev` with both keys in `.env` and both fake switches empty), each frame is one paid Gemini call, and each new line is one paid ElevenLabs call. A phone sends 2 frames each second, and at most one label still each 6 seconds with the default still gap of the app.
+With real recognition and real speech (`npm run dev` with both keys in `.env` and both fake switches empty), each frame is one paid Gemini call, and each new line is one paid ElevenLabs call. A phone sends one frame each 300 ms, and at most one label still each 6 seconds with the default still gap of the app.
 
 ## Settings
 
@@ -118,7 +118,7 @@ Three switches let the other apps work with no key and no call to another servic
 - The server makes no Gemini call and does not read `GEMINI_API_KEY`.
 - A question about a product gets the answer "I do not have that information.", or "Non ho questa informazione." for the profile language `it`.
 - One script player runs for each session. It starts when the phone opens the device socket, or when the first client opens the events stream of the session, whichever comes first.
-- Each 500 ms the player gives the rules the result that the script holds for the time since its start. Outside each step the result is `none`.
+- Each 300 ms the player gives the rules the result that the script holds for the time since its start. Outside each step the result is `none`.
 - A session that starts from the events stream, with no phone, first gets the state of glasses that stream. A browser client then gets the "Camera on" caption. A phone that opens its socket to this session later hears "Back online.", because the session already has a device state.
 - In a `kiosk` step the session sees the kiosk one time each second. `"newest"` names the kiosk that registered last. Each other value is a kiosk code.
 - In a `barcode` step the session gets the code one time each second, as `barcode.seen` of a phone with the source `barcode`.
@@ -239,7 +239,7 @@ The worker:
 - The answers can arrive in another order than the frames. The rules get the results in the order of the frames. The worker drops the result of a stream frame when a newer frame has its result, with the `debug` line `recognition result dropped: a newer frame has its result. seq=<n> session=<id>`.
 - The result of a still is never dropped for its order. A still answers a request, and the rules read it apart from the stream.
 - Each call has its own time limit. A call that takes 4 seconds is dropped: the worker aborts it and ignores a late answer.
-- With one call at a time and a call of 1.2 to 1.8 seconds, the log of the test of 2026-11-14 showed a result for each second or third frame only. With 3 calls of 1.5 seconds each, a session starts a call each 500 ms.
+- With one call at a time and a call of 1.2 to 1.8 seconds, the log of the test of 2026-11-14 showed a result for each second or third frame only. With 3 calls of 1.5 seconds each, a session starts a call each 500 ms. A phone sends one frame each 300 ms, so the newest frame still waits at times.
 - Each session costs up to `RECOGNITION_CONCURRENCY` calls at the same time. The rate limit of the Gemini key must allow that for each shopper.
 - A call that fails gets one log line with the name of the error and at most 200 characters of its message.
 - The count of failed calls follows the order in which the calls end. After 3 failed calls in a row the server logs `recognition is slow for the session <id>` and gives the rules the input `recognition.slow`. The voice says "Recognition is slow right now.", and the clients get the event `error` with the code `recognition.slow`. A good call starts the count again. The rules pass at most one such report each 60 seconds.
@@ -604,7 +604,7 @@ The label call with pictures:
 - A reference store that fails costs the pictures of that call, with the log line `reference pictures not read. <message> session=<id>`. The call still runs.
 - `agents/label.md` says: a reference picture can show the item from another side or in other light, the background of a reference picture means nothing, and `item` is the product of a reference picture or the match of the store list text. The model reads `digits`, `brand`, and `name` only from the photo to read.
 - `matchLabel` does not change: digits with a right check digit first, then `item` from `LABEL_MIN_CONFIDENCE` on, then the words.
-- Recognition by sight gets no reference picture. It makes 2 calls each second, and each picture costs upload time and tokens in each call.
+- Recognition by sight gets no reference picture. It makes one call for each frame, and each picture costs upload time and tokens in each call.
 - The upload of the pictures is part of the 4 seconds of a label call. With many large pictures on a slow line, a call can fail with `no answer in 4000 ms`. Then remove pictures.
 
 Not measured: no label call with reference pictures has run with the real model. If the API rejects the media resolution of a part for the model of `GEMINI_MODEL`, each label call with pictures fails, and the log shows `label call failed` with the message of the API. Remove the pictures then, and the call works as before.
@@ -656,8 +656,8 @@ For a code that the store does not sell, and for a label frame, write a script o
 }
 ```
 
-- At second 3 the events stream gets the caption "This product is not in this store." The report of second 2 comes less than 3 seconds after "Camera on.", so the guard for the voice drops its line, and the next report speaks it.
-- At second 8.5 a phone on the device socket gets `still.request`. A browser client has no device socket and gets nothing.
+- At second 3.3 the events stream gets the caption "This product is not in this store." The report of second 2.1 comes less than 3 seconds after "Camera on.", so the guard for the voice drops its line, and the next report speaks it.
+- At second 8.4 a phone on the device socket gets `still.request`. A browser client has no device socket and gets nothing.
 - `label` is the answer of the fake label reader for each label frame of a phone. Here a label frame gives `glance.pending` for the Nutella. A script with no `label` reads nothing, and the voice says nothing.
 
 ### A demo with real products

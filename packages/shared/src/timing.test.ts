@@ -13,7 +13,7 @@ describe('timing', () => {
       kioskDwellMs: 1500,
       kioskIdleMs: 30000,
       restAfterIdleMs: 180000,
-      uploadEveryMs: 500,
+      uploadEveryMs: 300,
       recognitionTimeoutMs: 4000,
       aimHintEveryMs: 5000,
       speechMuteAfterClipMs: 500,

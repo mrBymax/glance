@@ -199,7 +199,7 @@ export function landingCopy(probe: Probe): LandingCopy {
       { text: 'Blind and low-vision shoppers have not tested Glance yet. The next step is to ask the Finnish Federation of the Visually Impaired for a test.' },
     ],
     data: [
-      { text: 'The phone picks at most two frames each second.' },
+      { text: 'The phone picks at most four frames each second.' },
       { text: 'The phone pixelates faces and crops each frame before upload.' },
       { text: 'The server holds a frame in memory for one recognition call. It never stores a frame.' },
       { text: 'The Google Gemini API receives the frame for that call.' },
