@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meta Glance runtime QR example</title>
+  <style>
+    body { margin: 0; background: #090a0f; overflow: hidden; font-family: system-ui, sans-serif; color: #f1f4f7; }
+    .hud {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; z-index: 10;
+      background: rgba(22, 24, 34, 0.85); padding: 10px 14px; border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12); max-width: calc(100vw - 24px);
+    }
+    button {
+      background: rgba(255, 255, 255, 0.1); color: #fff; border: 0; border-radius: 999px;
+      padding: 8px 14px; font-weight: 600; cursor: pointer;
+    }
+    button.primary { background: #0866ff; }
+    button.active { outline: 2px solid #0866ff; background: rgba(8, 102, 255, 0.28); }
+  </style>
+  <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="hud">
+    <button class="variant-btn active" data-variant="placeholder">Square Card</button>
+    <button class="variant-btn" data-variant="circle-placeholder">Circle Card</button>
+    <button class="variant-btn" data-variant="frame">Square Frame</button>
+    <button class="variant-btn" data-variant="circle-frame">Circle Frame</button>
+    <button id="btn-swap" class="primary">Swap Random QR</button>
+    <button id="btn-replay">Replay</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { loadMetaGlanceAnimation } from './metaGlancePlayer.js';
+
+    /*
+     * Draws a sample QR canvas with a white margin (10% for the rounded square,
+     * 18% for the circle) so card edges do not clip the corner finders. Replace
+     * this with your QR generator canvas or PNG URL in production.
+     */
+    function makeDemoQrCanvas(seed = 1, isCircle = false) {
+      const size = 1024;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, size, size);
+
+      const grid = 21;
+      const pad = Math.round(size * (isCircle ? 0.18 : 0.10));
+      const cell = (size - pad * 2) / grid;
+      ctx.fillStyle = '#0b1220';
+
+      const drawFinder = (gx, gy) => {
+        ctx.fillRect(pad + gx * cell, pad + gy * cell, 7 * cell, 7 * cell);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(pad + (gx + 1) * cell, pad + (gy + 1) * cell, 5 * cell, 5 * cell);
+        ctx.fillStyle = '#0b1220';
+        ctx.fillRect(pad + (gx + 2) * cell, pad + (gy + 2) * cell, 3 * cell, 3 * cell);
+      };
+      drawFinder(0, 0);
+      drawFinder(grid - 7, 0);
+      drawFinder(0, grid - 7);
+
+      let s = seed * 9301 + 49297;
+      for (let y = 0; y < grid; y++) {
+        for (let x = 0; x < grid; x++) {
+          const inFinder = (x < 8 && y < 8) || (x >= grid - 8 && y < 8) || (x < 8 && y >= grid - 8);
+          if (inFinder) continue;
+          s = (s * 48271) % 2147483647;
+          if (s % 2 === 0) {
+            ctx.fillRect(pad + x * cell, pad + y * cell, Math.ceil(cell), Math.ceil(cell));
+          }
+        }
+      }
+      return canvas;
+    }
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x090a0f);
+
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 13);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.95));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.35);
+    keyLight.position.set(5, 8, 10);
+    scene.add(keyLight);
+    const rimLight = new THREE.DirectionalLight(0x88b8ff, 0.75);
+    rimLight.position.set(-6, -4, 6);
+    scene.add(rimLight);
+
+    let seed = 1;
+    let currentVariant = 'placeholder';
+    let player = null;
+    const swapBtn = document.getElementById('btn-swap');
+
+    async function loadVariant(variant) {
+      currentVariant = variant;
+      const hasCard = variant.includes('placeholder');
+      swapBtn.style.display = hasCard ? '' : 'none';
+
+      if (player) {
+        scene.remove(player.root);
+        player.dispose();
+      }
+      player = await loadMetaGlanceAnimation({
+        variant,
+        qrSource: hasCard ? makeDemoQrCanvas(seed, variant.includes('circle')) : null,
+        loop: false,
+      });
+      scene.add(player.root);
+    }
+
+    document.querySelectorAll('.variant-btn').forEach((btn) => {
+      btn.onclick = () => {
+        document.querySelectorAll('.variant-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        loadVariant(btn.dataset.variant);
+      };
+    });
+
+    swapBtn.onclick = () => {
+      seed += 1;
+      player?.setQr(makeDemoQrCanvas(seed, currentVariant.includes('circle')));
+    };
+    document.getElementById('btn-replay').onclick = () => player?.restart();
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    await loadVariant(currentVariant);
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      player?.update(clock.getDelta());
+      renderer.render(scene, camera);
+    });
+  </script>
+</body>
+</html>
