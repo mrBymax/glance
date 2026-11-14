@@ -18,6 +18,7 @@ docs/
 │   ├── 05-beat-accessibility-impact-ask.md
 │   ├── vision-peer-payment-spec.md
 │   ├── qa-and-objections.md
+│   ├── five-minute-table-pitch.md # 5-minute in-person table pitch runbook and demo script
 │   └── irl-shot-list.md           # Actionable physical video shot list to film IRL
 ├── research/                      # Domain research conducted for the hackathon
 │   ├── 2026-11-13-context-and-prior-art.md
@@ -49,6 +50,7 @@ Quickly locate exact files for specific agent tasks:
 | Query / Topic | Primary File | Supporting File |
 |---|---|---|
 | Pitch presentation slides | [`pitch/00-master-deck.md`](pitch/00-master-deck.md) | [`pitch/README.md`](pitch/README.md) |
+| 5-minute table pitch & live hardware demo script | [`pitch/five-minute-table-pitch.md`](pitch/five-minute-table-pitch.md) | [`pitch/00-master-deck.md`](pitch/00-master-deck.md) |
 | Raylight video script and scene prompts | [`pitch/00-master-script.md`](pitch/00-master-script.md) | Individual beat files in `pitch/` |
 | Physical camera shot list to film IRL | [`pitch/irl-shot-list.md`](pitch/irl-shot-list.md) | [`pitch/02-beat-hero-poc-grocery.md`](pitch/02-beat-hero-poc-grocery.md) |
 | Grocery PoC architecture and user loop | [`pitch/02-beat-hero-poc-grocery.md`](pitch/02-beat-hero-poc-grocery.md) | [`superpowers/specs/2026-11-13-meta-glance-design.md`](superpowers/specs/2026-11-13-meta-glance-design.md) |

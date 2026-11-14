@@ -18,6 +18,7 @@ The presentation runs for strictly 180 seconds (~420 spoken words at 140 words p
 
 - [`00-master-deck.md`](00-master-deck.md): Complete 5-slide presentation deck with visual layouts, key bullet points, and live presenter speaker notes.
 - [`00-master-script.md`](00-master-script.md): Complete 180-second continuous voiceover script with timestamp cues, camera direction, and audio earcons for Raylight.
+- [`five-minute-table-pitch.md`](five-minute-table-pitch.md): 5-minute in-person table judging runbook (staging checklist, live hardware demo choreography, team roles, judge Q&A).
 - [`irl-shot-list.md`](irl-shot-list.md): Actionable physical video shot list to film IRL with a smartphone/camera for intercutting with Raylight AI and screen captures.
 
 ## Technical Appendices
@@ -32,6 +33,7 @@ For agentic LLM workers, video generators, and deck builders:
 | If your agent needs to generate... | Read this primary file: | Read this supporting file: |
 |---|---|---|
 | Full slide deck content or PDF slides | [`00-master-deck.md`](00-master-deck.md) | Targeted beat files (`01` through `05`) |
+| 5-minute table pitch & live hardware demo script | [`five-minute-table-pitch.md`](five-minute-table-pitch.md) | [`00-master-deck.md`](00-master-deck.md) |
 | Raylight video prompts or full voiceover track | [`00-master-script.md`](00-master-script.md) | Targeted beat files (`01` through `05`) |
 | Specific video scene prompts for Beat N | `0<N>-beat-*.md` | [`00-master-script.md`](00-master-script.md) |
 | Physical camera shot list to film IRL | [`irl-shot-list.md`](irl-shot-list.md) | [`02-beat-hero-poc-grocery.md`](02-beat-hero-poc-grocery.md) |
