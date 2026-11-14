@@ -6,6 +6,7 @@ import { type Config, ConfigError, loadConfig } from './config';
 import { MemoryStore } from './db/memory';
 import { MongoStore } from './db/mongo';
 import type { Store } from './db/store';
+import { ELEVENLABS_MODEL, createSynthesize } from './speech/elevenlabs';
 import { FakeScriptError } from './recognition/fake';
 import { RECOGNITION_TEMPLATE_PATH, type Recognizer, createGeminiRecognizer } from './recognition/gemini';
 
@@ -40,13 +41,19 @@ async function main(): Promise<void> {
   const store = await openStore(config);
   const catalog = indexCatalog(await store.listProducts());
   const recognizer = openRecognizer(config, catalog);
-  const app = await buildApp({ config, clock: systemClock, store, catalog, ...(recognizer ? { recognizer } : {}) });
+  // loadConfig has checked that the key exists when FAKE_SPEECH is off.
+  const synthesize = config.fakeSpeech || config.elevenlabsApiKey === null ? undefined : createSynthesize(config.elevenlabsApiKey);
+  const app = await buildApp({
+    config, clock: systemClock, store, catalog, ...(recognizer ? { recognizer } : {}), ...(synthesize ? { synthesize } : {}),
+  });
   app.addHook('onClose', () => store.close());
   app.log.info(`store: ${config.mongodbUri === null ? 'memory' : 'mongo'}`);
   app.log.info(`catalog: ${catalog.products.length} products`);
   app.log.info(config.fakeRecognition === null
     ? `recognition: ${config.geminiModel}, blur ${config.requireBlur ? 'required' : 'not required'}`
     : `recognition: fake, script ${config.fakeRecognition}`);
+
+  app.log.info(config.fakeSpeech ? 'speech: fake' : `speech: ${ELEVENLABS_MODEL}, clips in ${config.speechCacheDir}`);
 
   let closing = false;
   const close = (signal: string): void => {

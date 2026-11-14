@@ -1,5 +1,8 @@
 // Test helpers. No product code imports this file.
+import { mkdtempSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import { WebSocket } from 'ws';
@@ -16,20 +19,32 @@ export type TestApp = { app: FastifyInstance; base: string; wsBase: string; stor
 
 /**
  * Starts the app on a free port of 127.0.0.1, with a memory store and the dev catalog.
- * The config has fake speech and a payment of 10 ms. `env` changes it, and `over` replaces dependencies of the app.
+ * The config has fake speech, a payment of 10 ms, and a speech cache in a new temp directory that close() removes. `env` changes it, and `over` replaces dependencies of the app.
  */
 export async function testApp(env: Record<string, string> = {}, over: Partial<AppDeps> = {}): Promise<TestApp> {
   const products = readCatalogFile(DEV_CATALOG);
   const store = new MemoryStore(products);
-  const config = loadConfig({ FAKE_SPEECH: '1', GEMINI_API_KEY: 'test', PAYMENT_DELAY_MS: '10', ...env }, []);
-  const app = await buildApp({ config, clock: systemClock, store, catalog: indexCatalog(products), log: false, ...over });
-  await app.listen({ host: '127.0.0.1', port: 0 });
+  const cacheDir = mkdtempSync(join(tmpdir(), 'glance-speech-'));
+  const removeCacheDir = (): void => rmSync(cacheDir, { recursive: true, force: true });
+  let app: FastifyInstance;
+  try {
+    const config = loadConfig({ FAKE_SPEECH: '1', GEMINI_API_KEY: 'test', PAYMENT_DELAY_MS: '10', SPEECH_CACHE_DIR: cacheDir, ...env }, []);
+    app = await buildApp({ config, clock: systemClock, store, catalog: indexCatalog(products), log: false, ...over });
+    await app.listen({ host: '127.0.0.1', port: 0 });
+    // The port is known only now, and the session answer builds the socket address from this value.
+    if (env.PUBLIC_BASE_URL === undefined) config.publicBaseUrl = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
+  } catch (error) {
+    removeCacheDir();
+    throw error;
+  }
 
   const { port } = app.server.address() as AddressInfo;
   const base = `http://127.0.0.1:${port}`;
-  // The port is known only now, and the session answer builds the socket address from this value.
-  if (env.PUBLIC_BASE_URL === undefined) config.publicBaseUrl = base;
-  return { app, base, wsBase: `ws://127.0.0.1:${port}`, store, close: () => app.close() };
+  const close = async (): Promise<void> => {
+    await app.close();
+    removeCacheDir();
+  };
+  return { app, base, wsBase: `ws://127.0.0.1:${port}`, store, close };
 }
 
 /** Reads the events stream of a fetch response. `next` gives the JSON of the next `data:` message. */

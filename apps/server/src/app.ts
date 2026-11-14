@@ -5,10 +5,14 @@ import type { Clock } from './clock';
 import type { Config } from './config';
 import type { Store } from './db/store';
 import { registerSessionRoutes } from './http/sessions';
+import { registerSpeechRoutes } from './http/speech';
 import { ScriptPlayer, readFakeScript } from './recognition/fake';
 import type { Recognizer } from './recognition/gemini';
 import { createFrameHandler } from './recognition/intake';
 import { SessionRegistry } from './sessions/registry';
+import { ClipCache } from './speech/clips';
+import type { Synthesize } from './speech/elevenlabs';
+import { createClipUrl } from './speech/service';
 import { type FrameHandler, registerDeviceSocket } from './ws/device';
 
 export type AppDeps = {
@@ -17,6 +21,8 @@ export type AppDeps = {
   log?: boolean | { level: string; stream: { write(line: string): void } };
   /** Names the product of each frame. Fake recognition does not use it. */
   recognizer?: Recognizer;
+  /** Makes the speech clips. Without it, and with FAKE_SPEECH, each line goes out with no clip. */
+  synthesize?: Synthesize;
   /** Gets each frame of each phone, in place of the recognizer. With neither, the server drops the frames. */
   onFrame?: FrameHandler;
 };
@@ -32,6 +38,7 @@ declare module 'fastify' {
     closers: Set<Closer>;
     sessions: SessionRegistry;
     bus: EventBus;
+    clips: ClipCache;
   }
 }
 
@@ -87,18 +94,28 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   const bus = new EventBus();
+  const clips = new ClipCache(config.speechCacheDir, deps.store);
   const sessions = new SessionRegistry({
     clock: deps.clock,
     catalog: deps.catalog,
     store: deps.store,
     bus,
-    // No speech clip and no payment exist yet. A line goes out with its text alone.
-    clipUrl: async () => null,
+    clipUrl: createClipUrl({
+      fake: config.fakeSpeech,
+      cache: clips,
+      synthesize: deps.synthesize ?? null,
+      voiceId: config.voiceId,
+      // The test helper sets the address after the server has its port, so each call reads it.
+      publicBaseUrl: () => config.publicBaseUrl,
+      log: (line) => app.log.warn(line),
+    }),
+    // No payment exists yet.
     startPayment: () => undefined,
     afterStep: () => undefined,
   });
   app.decorate('bus', bus);
   app.decorate('sessions', sessions);
+  app.decorate('clips', clips);
   sessions.startTicks();
   app.closers.add(() => sessions.stop());
 
@@ -128,11 +145,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   if (recognize) app.closers.add(() => recognize.stopAll());
 
   registerSessionRoutes(app, {
-    // The test helper sets the address after the server has its port, so the route reads it for each call.
     publicBaseUrl: () => config.publicBaseUrl,
     // A browser client with no phone gets a fake device, and then hears "Camera on".
     onEventsOpen: (session) => player?.start(session, { fakeDevice: !session.connected }),
   });
+  registerSpeechRoutes(app, { cache: clips, fake: config.fakeSpeech });
   registerDeviceSocket(app, {
     onFrame: player ? logFrame : deps.onFrame ?? recognize ?? (() => undefined),
     onOpen: (session) => player?.start(session, { fakeDevice: false }),
