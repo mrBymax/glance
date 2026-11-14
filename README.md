@@ -30,7 +30,7 @@ One shop runs from the first glance to the mock payment with the fake server. No
 | `apps/mobile/android` | The Android app `com.metaglance.android`: a Gradle project with the modules `core` and `app`, and a fake server in `tools/fake-server`. |
 | `apps/mobile/ui` | `@glance/phone-ui`: the phone UI that the Android app shows in a WebView. |
 | `apps/website` | `@glance/website`: the kiosk page, and placeholders for the landing page, the privacy page, and the mirror page. |
-| `apps/display-pow` | `@glance/display-pow`: the state and the feeds of the Display HUD mockup. It has no screen yet. |
+| `apps/display-pow` | `@glance/display-pow`: the Display HUD mockup, one screen on the Display toolkit. It plays a recording, or it follows a live session. |
 | `agents` | `recognition.md`, the instruction for the recognition model. |
 | `skills` | The agent skills of the project (part "Agent Skills"). |
 | `scripts/hooks` | The pre-commit checks (part "Hooks"). |
