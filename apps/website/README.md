@@ -123,6 +123,7 @@ The server selects each state after `idle`. The page only shows it.
 - The state `spotcheck` shows the heading "Quick check" and the line "Show the product that the voice names to your glasses.". The event does not name the product, so the page does not name it. The code, the total, and the cart stay. That line takes two lines on a 1080p screen, so this state shows 5 cart lines (`KIOSK_SPOT_ROWS`) before `and <n> more items`.
 - The code keeps its place and its size in each state. It is black on white in each color mode, and the page uses the light mode.
 - The page shows the total of the event. It never adds prices. It shows 7 cart lines, and then the line `and <n> more items`.
+- A product name keeps to one line and ends with `...` when it is too long (the class `kiosk-name`). The name of a scanned product comes from Open Food Facts and can have 80 characters, which is four lines at 48 px. Before this rule, 7 such lines made the page 2232 px high on a 1080p screen, and the code moved. The quantity and the price of the line always show in full. The phone shows the full name.
 - The page drops a message that is not JSON and a message that `KioskEventSchema` of `@glance/shared` rejects.
 - When the stream drops, the browser opens it again. The page keeps the code and the cart, and it shows "Connection lost. Reconnecting." The first message of the new stream is the current view.
 - When the server refuses the stream, the browser does not open it again. This occurs after a restart of a server with no `MONGODB_URI`, which keeps its kiosks in memory. The page then registers a new kiosk each 3 seconds until one call succeeds. The new kiosk has a new code.
@@ -180,13 +181,14 @@ sequenceDiagram
 - A snapshot call that fails with no answer or with a status of 500 or more runs again after 3 seconds. The `/api` proxy of the dev server answers 502 for some calls. A status of 4xx stops the calls for that stream.
 - With `latest`, the page shows "Waiting for a session on the phone." while the server names no session. When the answer names another session, the page closes the stream, clears the captions and the cart, and opens the new session. A session that is on the screen stays there while the server names none.
 - The server answers `GET /api/demo/latest` only with `DEMO_KEY` set (Plan 1 Task 17). A server with no such path answers 404, and the page then waits.
+- A long product name wraps in the cart. With two names of 80 characters, Chrome showed no element outside the page at 1280 x 720 px and at 360 x 800 px.
 - The website has no 48 px rule for controls. The Mute button is 36 px high, because the mirror runs on a laptop with a pointer.
 
 Code for the pages that read a stream:
 
 - `src/lib/api.ts`: `createKiosk`, `kioskEventsUrl`, `getSession`, `sessionEventsUrl`, and `getLatestSession`. Each call throws `ApiError` for a status of 400 or more, and for an answer with the wrong shape. `getLatestSession` returns `null` for the status 404. No error message holds a token.
 - `src/lib/events.ts`: `subscribeSse` follows a stream and reports `open`, `lost`, or `closed`. `replay` plays a recorded list of events.
-- `src/test/fakes.ts`: `fakeFetch` and `fakeSources` (a fake `EventSource`) for the tests. `src/test/events.ts` has three event fixtures and the snapshot fixture of `@glance/shared` as typed values.
+- `src/test/fakes.ts`: `fakeFetch` and `fakeSources` (a fake `EventSource`) for the tests. `src/test/events.ts` has three event fixtures and the snapshot fixture of `@glance/shared` as typed values. `src/test/scanned.ts` has two cart lines of a barcode scan: the ID form `gtin-<13 digits>`, and names of 80 characters with accents.
 
 ## Checks
 

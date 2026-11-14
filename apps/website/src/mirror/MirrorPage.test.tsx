@@ -5,6 +5,7 @@ import { expect, it } from 'vitest';
 import { event, SNAPSHOT } from '../test/events';
 import { fakeFetch, fakeSources, type FakeFetch, type FakeSources } from '../test/fakes';
 import { renderWithTheme } from '../test/render';
+import { SCANNED_ITEMS, SCANNED_TOTAL_CENTS } from '../test/scanned';
 import { MirrorPage } from './MirrorPage';
 
 type Answer = { status?: number; json?: unknown };
@@ -124,6 +125,15 @@ it('starts on a button, then shows the captions and the cart of the session', as
   emit(d, event('cart.updated'));
   expect(await screen.findByText('4.49 EUR')).toBeInTheDocument();
   for (const item of event('cart.updated').cart.items) expect(screen.getByText(item.name)).toBeInTheDocument();
+});
+it('shows scanned products with names of 80 characters and accents in the cart', async () => {
+  const d = deps();
+  await start(d);
+  emit(d, { ...event('cart.updated'), cart: { items: SCANNED_ITEMS, totalCents: SCANNED_TOTAL_CENTS }, change: null });
+  expect(await screen.findByText('28.27 EUR')).toBeInTheDocument();
+  for (const item of SCANNED_ITEMS) expect(screen.getByText(item.name)).toHaveClass('mirror-cart-line');
+  expect(screen.getByText('50 cl, 1 x 3.29 EUR')).toBeInTheDocument();
+  expect(screen.getByText('1,5 kg, 2 x 12.49 EUR')).toBeInTheDocument();
 });
 it('shows the newest caption first and as the current one, with its language', async () => {
   const d = deps();

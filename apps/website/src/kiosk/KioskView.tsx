@@ -38,7 +38,7 @@ function Rows(props: { items: CartItem[]; maxRows?: number }) {
         {rows.map((item) => (
           <ListItem
             key={item.productId}
-            label={<Text className="kiosk-row">{item.name}</Text>}
+            label={<Text className="kiosk-row kiosk-name">{item.name}</Text>}
             endContent={<Text className="kiosk-row" textWrap="nowrap">{`${item.qty} x ${eur(item.unitPriceCents)}`}</Text>}
           />
         ))}

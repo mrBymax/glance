@@ -6,6 +6,7 @@ import { screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { eur } from '../lib/format';
 import { renderWithTheme } from '../test/render';
+import { SCANNED_ITEMS, SCANNED_TOTAL_CENTS } from '../test/scanned';
 import { parseKioskEvent } from './kioskModel';
 import { KioskView } from './KioskView';
 
@@ -84,6 +85,21 @@ it('shows the paid amount, the receipt lines, and the demo line', () => {
   expect(screen.getByText(eur(receipt.totalCents))).toHaveClass('kiosk-total');
   for (const item of receipt.items) expect(screen.getByText(item.name)).toBeInTheDocument();
   expect(screen.getByText('Demo payment. No money moved.')).toBeInTheDocument();
+});
+it('shows scanned products with names of 80 characters and accents, in the cart and on the receipt', () => {
+  const scanned = { items: SCANNED_ITEMS, totalCents: SCANNED_TOTAL_CENTS };
+  const cartView = renderWithTheme(<KioskView event={at('connected', { cart: scanned, totalCents: SCANNED_TOTAL_CENTS })} link="open" />);
+  for (const item of SCANNED_ITEMS) {
+    expect(item.name).toHaveLength(80);
+    expect(screen.getByText(item.name)).toHaveClass('kiosk-row', 'kiosk-name');
+  }
+  expect(screen.getByText('2 x 12.49 EUR')).toHaveClass('kiosk-row');
+  expect(screen.getByText('28.27 EUR')).toHaveClass('kiosk-total');
+  expect(screen.getByRole('main').firstElementChild).toBe(code());
+  cartView.unmount();
+  renderWithTheme(<KioskView event={at('paid', { receipt: { ...receipt, ...scanned }, totalCents: SCANNED_TOTAL_CENTS })} link="open" />);
+  for (const item of SCANNED_ITEMS) expect(screen.getByText(item.name)).toHaveClass('kiosk-name');
+  expect(screen.getByText('28.27 EUR')).toHaveClass('kiosk-total');
 });
 it('says how to try again after a failed payment', () => {
   renderWithTheme(<KioskView event={at('failed')} link="open" />);

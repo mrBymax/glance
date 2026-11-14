@@ -11,3 +11,9 @@ it('gives a total of 160 px or more and a row of 48 px or more on a 1080p screen
 it('keeps the code at 15 cm or more, as large as the screen allows', () => {
   expect(css).toContain('--kiosk-code-size: max(15cm, min(50vw, 92vh))');
 });
+it('keeps each product name on one line, so that the cart lines fit and the code keeps its place', () => {
+  const rule = /\.kiosk-name\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  expect(rule).toMatch(/white-space:\s*nowrap/);
+  expect(rule).toMatch(/overflow:\s*hidden/);
+  expect(rule).toMatch(/text-overflow:\s*ellipsis/);
+});
