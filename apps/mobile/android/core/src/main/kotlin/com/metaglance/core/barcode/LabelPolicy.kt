@@ -10,16 +10,21 @@ package com.metaglance.core.barcode
  *
  * A still that gave a code ends the work for its region: the frames cannot read that code, so the region would
  * ask for the same still, and give the same report, each `everyMs`. The region asks again after it left the view.
+ *
+ * A region that stays in view asks for `maxRegionStills` stills at most. The scanner can report a region where
+ * no barcode is, and such a region must not stop Motion and cost a model call each `everyMs` for a full shop.
  */
 class LabelPolicy(
     private val dwellMs: Long = 2500,
     private val everyMs: Long = 6000,
-    private val gapMs: Long = 600
+    private val gapMs: Long = 600,
+    private val maxRegionStills: Int = 3
 ) {
     private var regionSinceMs: Long? = null
     private var regionLastMs: Long? = null
     private var lastStillMs: Long? = null
     private var regionRead = false
+    private var regionStills = 0
 
     /** Call it when the phone read a code in a still. A request of the server can still ask for the next still. */
     fun onStillCode() {
@@ -36,6 +41,7 @@ class LabelPolicy(
         if (regionLastMs?.let { nowMs - it > gapMs } != false) {
             regionSinceMs = null
             regionRead = false
+            regionStills = 0
         }
         if (regionInView) regionLastMs = nowMs
         if (codeAccepted) {
@@ -44,11 +50,12 @@ class LabelPolicy(
         }
         if (regionInView && regionSinceMs == null) regionSinceMs = nowMs
         if (!canUpload) return false
-        val waited = regionSinceMs?.let { regionInView && !regionRead && nowMs - it >= dwellMs } ?: false
+        val waited = regionSinceMs?.let { regionInView && !regionRead && regionStills < maxRegionStills && nowMs - it >= dwellMs } ?: false
         if (!requested && !waited) return false
         val last = lastStillMs
         if (last != null && nowMs - last < everyMs) return false
         lastStillMs = nowMs
+        if (waited) regionStills += 1
         regionSinceMs = null
         return true
     }

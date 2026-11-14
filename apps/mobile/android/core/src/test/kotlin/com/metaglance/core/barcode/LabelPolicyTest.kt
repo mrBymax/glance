@@ -112,4 +112,27 @@ class LabelPolicyTest {
     @Test fun `the region needs its time again after a still`() {
         assertEquals(listOf(2500, 5100), LabelPolicy(everyMs = 1000).stills(0..6000 step 100))
     }
+
+    @Test fun `a region that stays in view asks for 3 stills at most`() {
+        assertEquals(listOf(2500, 8500, 14500), LabelPolicy().stills(0..60000 step 100))
+    }
+
+    @Test fun `a region that comes back after its 3 stills asks again`() {
+        val policy = LabelPolicy()
+        policy.stills(0..30000 step 100)
+        policy.stills(30100..30700 step 100, region = false)
+        assertEquals(listOf(33300), policy.stills(30800..36000 step 100))
+    }
+
+    @Test fun `a request of the server gives a still also after the 3 stills of a region`() {
+        val policy = LabelPolicy()
+        policy.stills(0..30000 step 100)
+        assertTrue(policy.onFrame(30100, regionInView = true, codeAccepted = false, requested = true))
+    }
+
+    @Test fun `a still for a request is none of the 3 stills of a region`() {
+        val policy = LabelPolicy()
+        assertTrue(policy.onFrame(0, regionInView = true, codeAccepted = false, requested = true))
+        assertEquals(listOf(6000, 12000, 18000), policy.stills(100..60000 step 100))
+    }
 }
