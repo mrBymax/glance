@@ -9,16 +9,21 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | Path | Content |
 |---|---|
 | `src/config.ts` | `loadConfig` reads the settings from the environment and the command line. |
-| `src/app.ts` | `buildApp` makes the Fastify app: the CORS headers, the JSON error bodies, and `GET /healthz`. |
+| `src/app.ts` | `buildApp` makes the Fastify app: the CORS headers, the JSON error bodies, `GET /healthz`, the session paths, and the device socket. |
 | `src/bus.ts` | `EventBus` delivers messages inside the process, by topic. |
 | `src/clock.ts` | The time source of the runtime. |
-| `src/main.ts` | Starts the server and closes it on `SIGTERM` and `SIGINT`. |
+| `src/main.ts` | Opens the store, starts the server, and closes it on `SIGTERM` and `SIGINT`. |
 | `src/catalog/catalog.ts` | `readCatalogFile` reads a catalog file, and `indexCatalog` finds a product by its ID. |
 | `catalog/catalog.dev.json` | The dev catalog with four products. The tests use its IDs and prices. |
 | `src/recognition/result.ts` | `RecognitionResult`: what one frame shows. |
-| `src/sessions/` | The cart rules as the pure function `step`. See "Rules". |
+| `src/sessions/` | The cart rules as the pure function `step`, the session runtime, and the registry. See "Rules" and "Session runtime". |
+| `src/speech/` | The text of each spoken line. See "Spoken text". |
+| `src/db/` | The `Store` interface with a memory store and a MongoDB store. See "Storage". |
+| `src/http/` | The session paths and the events stream. See "REST paths". |
+| `src/ws/device.ts` | The socket of the phone. See "Device socket". |
+| `src/testing.ts` | Test helpers: an app on a free port, a reader for an events stream, and a phone on the device socket. |
 
-The server has no session path and no device socket yet.
+Parts that do not exist yet: recognition of a frame, speech clips, the kiosk, the payment, and the token check. The server takes each frame and drops it. Each line goes out as text with no clip. A kiosk code from the phone has no effect.
 
 ## Run it
 
@@ -35,7 +40,11 @@ Check it:
 ```bash
 curl http://localhost:8080/healthz
 # {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"store":"memory"}
+curl -X POST http://localhost:8080/api/sessions
+# {"sessionId":"...","token":"...","wsUrl":"ws://localhost:8080/ws/device?session=...&token=..."}
 ```
+
+At the start the server logs `store: memory` or `store: mongo`, and the number of products.
 
 ## Settings
 
@@ -65,6 +74,7 @@ curl http://localhost:8080/healthz
 - The flag `--fake` turns both fake switches on. A variable that is set wins over the flag.
 - Each path is relative to the working directory, which is `apps/server`.
 - With a missing key the server prints `config: <message>` and exits with code 1. The message names the variable and the switch that removes the need.
+- With `MONGODB_URI` the products come from the database, and `CATALOG_PATH` has no effect. If the database holds no product, the server prints `products is empty. Run npm run catalog:seed.` and exits with code 1. The seed command does not exist yet.
 
 ## Catalog
 
@@ -76,7 +86,7 @@ A catalog file is a JSON array. Each entry is a `Product` of `@glance/shared`. P
 
 ## Rules
 
-`step(state, input, ctx)` in `src/sessions/step.ts` holds the interaction rules of spec section 6.2. It returns the new state and a list of effects. It reads no clock and does no I/O: each input carries its time as `now`. No runtime calls it yet.
+`step(state, input, ctx)` in `src/sessions/step.ts` holds the interaction rules of spec section 6.2. It returns the new state and a list of effects. It reads no clock and does no I/O: each input carries its time as `now`. The session runtime calls it for each input.
 
 ```mermaid
 flowchart LR
@@ -98,6 +108,9 @@ flowchart LR
 | `view.ts` | `inView`, `excludeList` for the recognition worker, and `toSnapshot` for a client that connects |
 | `turn.ts` | The helpers that the handlers share |
 | `harness.ts` | A test helper that plays inputs with a clock of its own |
+| `runtime.ts` | `SessionRuntime`: one session in the process. It runs `step` and then the effects |
+| `registry.ts` | `SessionRegistry`: creates, finds, and removes sessions, and sends the tick |
+| `voice.ts` | `parseVoiceCommand`: the spoken command words |
 
 The rules that exist:
 
@@ -163,6 +176,124 @@ stateDiagram-v2
 
 Only the server computes a total, and each price comes from the catalog. Each timing number comes from `TIMING` of `@glance/shared`.
 
+## Session runtime
+
+`SessionRuntime` holds one session. `dispatch(input)` adds the clock time, runs `step`, and runs the effects in their order.
+
+- An event goes to the bus at once, on the topic of the session. The events stream and the device socket listen there.
+- A line gets its text at once. Then it waits in the outbox of the session for its clip. The outbox sends one message at a time, so the phone gets the lines in the order of the rules, also when an early clip is slow.
+- Each line goes to the phone as `speak` and to the bus as a `caption` event with the same ID (`s-1`, `s-2`). If the clip fails, the line goes out with `url: null`.
+- The runtime keeps the last 20 captions for the snapshot.
+- With no phone attached, the runtime drops the device messages. Events and captions still go to the bus.
+- After a step with an event, and after a profile patch, the runtime writes the session to the store. `dispatch` does not wait for the write. A sighting alone writes nothing.
+- After `session.end` the runtime stops: its stop listeners run one time. A stopped session still answers a snapshot, for the receipt.
+
+```mermaid
+sequenceDiagram
+  participant Phone
+  participant Socket as Device socket
+  participant Runtime as SessionRuntime
+  participant Rules as step
+  participant Bus as EventBus
+  participant Store
+  participant Web as Events stream
+  Phone->>Socket: intent yes, promptId p-0001
+  Socket->>Runtime: dispatch(input)
+  Runtime->>Rules: step(state, input with now)
+  Rules-->>Runtime: new state, effects
+  Runtime->>Bus: cart.updated
+  Bus->>Socket: cart.updated
+  Socket->>Phone: event cart.updated
+  Bus->>Web: data: cart.updated
+  Runtime->>Store: putSession, not awaited
+  Runtime->>Socket: speak s-2 "Added oat drink. Total one eighty-nine."
+  Socket->>Phone: speak s-2
+  Runtime->>Bus: caption s-2
+```
+
+`SessionRegistry` keeps the runtimes of the process.
+
+- `create` makes the session ID with `randomUUID()` and the token from 24 random bytes, and writes the first record.
+- `get` looks in the memory first and then in the store. So a phone that connects again after a restart of the server finds its session and its cart.
+- A stored session with a payment that the restart cut off gets a failed payment. The cart stays.
+- One timer sends a `tick` each second to each session in the phase `shopping` or `checkout`. The rules that depend on time alone need it.
+- The speak counter starts again at `s-1` after a restart, and the captions of the old process are gone.
+
+## Spoken text
+
+The rules select a line by its key, and `renderLine(line, profile)` in `src/speech/render.ts` writes its text. `lines.en.ts` holds one template for each key, with the text of the table "Spoken lines" of the plan.
+
+- `spokenPrice` in `numbers.ts` writes a price as words. The short form is "one eighty-nine". The full form is "one euro eighty-nine". The pay prompt and the paid line use the full form.
+- `yesPhrases` in `phrases.ts` names the input of the shopper: "Nod to add.", "Double tap to add.", "Say add.", "Press Add on your phone.", or "Press volume up to add.". A shopper with `headGestures: false` gets the phone phrases.
+- The detail level `brief` shortens the glance line, the added line, and the removed line. The level `detailed` adds the brand, the long pack text, and "Contains gluten." for a product that lists allergens.
+- No level shortens the pay prompt.
+- The voice says nothing about allergens for a product with no allergen data. It never says that a product is safe.
+- The profile language `it` gives the English text. The Italian lines do not exist yet.
+
+## Storage
+
+`Store` in `src/db/store.ts` is the interface for the data of spec section 8.6: products, sessions, kiosks, orders, and speech clips.
+
+- `MemoryStore` keeps the data in the process. A restart loses it. The server uses it when `MONGODB_URI` is not set.
+- `MongoStore` keeps the data in MongoDB, in the collections `products`, `sessions`, `kiosks`, `orders`, and `speech_clips`. It creates a unique index on `kiosks.code` and an index on `orders.sessionId`. `connect` rejects after 5 seconds if no server answers.
+- Each record that a store gives or takes is a copy.
+- `deleteSession` also deletes the orders of the session.
+- `src/db/contract.ts` holds the tests that each store must pass. No test has run them against a MongoDB server yet.
+
+## REST paths
+
+The paths are those of spec section 8.1. Each body and each answer is a type of `@glance/shared`.
+
+| Call | Body | Answer |
+|---|---|---|
+| `POST /api/sessions` | `CreateSessionRequest`, or no body | 201, `CreateSessionResponse` |
+| `GET /api/sessions/:id` | | 200, `SessionSnapshot` |
+| `PATCH /api/sessions/:id/profile` | `ProfilePatch` | 200, the new `Profile` |
+| `POST /api/sessions/:id/intents` | `WebIntentRequest` | 204 |
+| `POST /api/sessions/:id/cart` | `CartEditRequest` | 204 |
+| `GET /api/sessions/:id/events` | | a stream of `ServerEvent` |
+| `DELETE /api/sessions/:id` | | 204 |
+| `GET /healthz` | | 200, the state of the switches |
+
+- `wsUrl` of a new session is `PUBLIC_BASE_URL` with `ws` in place of `http`, plus `/ws/device?session=<id>&token=<token>`.
+- A body that fails its schema gets 400 with `{ "error": "bad_request" }`. An unknown session gets 404 with `{ "error": "not_found" }`. An unknown key in a profile patch is dropped.
+- A 204 says only that the server took the input. The outcome arrives as events.
+- No path checks the token yet. A client still sends `?token=` with each call.
+- The events stream sends `data: <json>` for each event, and the comment `: ping` at the start and then each 15 seconds. A web client opens the stream first and then gets the snapshot, so it loses no event.
+- `DELETE` sends `session.end` to the phone, closes its socket, ends each events stream of the session, and deletes the session with its orders.
+- The stream of a session that is paid or ended stays open and sends only pings.
+- A call with the JSON content type and an empty body counts as a call with no body.
+
+## Device socket
+
+The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2. The messages are `DeviceToServer` and `ServerToDevice` of `@glance/shared`.
+
+- An upgrade for another path or for an unknown session gets `404 Not Found`.
+- On open, the server sends a `snapshot`. Then it sends each event of the session as `event`, and each line as `speak`.
+- One phone holds a session. A second socket for the same session takes over, and the server closes the older one. No message goes to both.
+- `intent`, `prompt.done`, `device.state`, `cart.edit`, and `profile.set` go to the rules. After `profile.set` the phone gets a new `snapshot`.
+- `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished.
+- A binary message is a frame. A frame that decodes goes to the frame handler of the app, which drops it for now. The server logs a frame that does not decode and drops it.
+- The server logs and drops a text message that is no `DeviceToServer`. The socket stays open.
+- `kiosk.seen` and `biometric.result` have no effect yet.
+- A message can have at most 2 MB. A larger one closes the socket.
+- The server sends a ping each 20 seconds, and ends a socket that sent no pong since the last ping.
+- When the phone leaves, the session stays.
+
+Voice commands. Only a full match counts, with no regard to case and punctuation.
+
+| Words | Intent | Answers |
+|---|---|---|
+| add, add it | `yes` | a product prompt, or no prompt |
+| yes | `yes` | each prompt |
+| pay | `yes` | the pay prompt |
+| no | `no` | each prompt |
+| skip, skip it, remove, remove it | `no` | a product prompt, or no prompt |
+| cancel | `no` | the pay prompt |
+| undo, repeat, total, cart, help, stop | the same word | |
+
+So the word "add" never pays, and the word "pay" never adds a product.
+
 ## Checks
 
 ```bash
@@ -173,5 +304,13 @@ npm run lint                                         # at the repository root, f
 ```
 
 No test calls a vendor, and no test needs a key.
+
+Each test that needs a server starts one with `testApp` of `src/testing.ts`, on a free port of `127.0.0.1`, and closes it.
+
+The store tests of `src/db/mongo.test.ts` need a MongoDB server. Without `MONGODB_URI_TEST` they are skipped. With it, each test makes a database with a random name and drops it:
+
+```bash
+MONGODB_URI_TEST=<connection string> npm test --workspace @glance/server -- mongo
+```
 
 Each rule R1 to R24 has a test with its number in the name, in `src/sessions/*.test.ts`. `replays.test.ts` replays result sequences with gaps and changes, because live results flicker.
