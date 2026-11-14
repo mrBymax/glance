@@ -4,6 +4,8 @@ import {
 
 /** The cart lines that fit on a screen of 1080 px height next to the total. */
 export const KIOSK_MAX_ROWS = 7;
+/** The line of a spot check wraps to two lines on a 1080p screen, so that state shows two cart lines fewer. */
+export const KIOSK_SPOT_ROWS = 5;
 
 const DEFAULT_NAME = 'Checkout 3';
 const DEFAULT_STORE = 'Demo Market';
@@ -49,7 +51,7 @@ export function idleEvent(request: CreateKioskRequest, response: CreateKioskResp
 }
 
 /** Returns the first lines of a cart, and the number of lines that do not fit. */
-export function kioskRows(cart: Pick<Cart, 'items'> | null): { rows: CartItem[]; hiddenCount: number } {
+export function kioskRows(cart: Pick<Cart, 'items'> | null, maxRows = KIOSK_MAX_ROWS): { rows: CartItem[]; hiddenCount: number } {
   const items = cart?.items ?? [];
-  return { rows: items.slice(0, KIOSK_MAX_ROWS), hiddenCount: Math.max(0, items.length - KIOSK_MAX_ROWS) };
+  return { rows: items.slice(0, maxRows), hiddenCount: Math.max(0, items.length - maxRows) };
 }

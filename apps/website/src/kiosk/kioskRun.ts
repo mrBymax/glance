@@ -29,3 +29,25 @@ export const KIOSK_RUN: Timed<KioskEvent>[] = [
   { afterMs: 20000, event: failed },
   { afterMs: 24000, event: idle },
 ];
+
+/** A spot check starts this long after the glasses read the code. */
+export const SPOT_AFTER_MS = 2000;
+/** A spot check stays on the screen for this time. */
+export const SPOT_MS = 4000;
+
+function withSpotChecks(run: Timed<KioskEvent>[]): Timed<KioskEvent>[] {
+  let shiftMs = 0;
+  return run.flatMap((entry) => {
+    const at = entry.afterMs + shiftMs;
+    if (entry.event.state !== 'connected') return [{ ...entry, afterMs: at }];
+    shiftMs += SPOT_AFTER_MS + SPOT_MS;
+    return [
+      { afterMs: at, event: entry.event },
+      { afterMs: at + SPOT_AFTER_MS, event: { ...entry.event, state: 'spotcheck' } },
+      { afterMs: at + SPOT_AFTER_MS + SPOT_MS, event: entry.event },
+    ];
+  });
+}
+
+/** KIOSK_RUN with one spot check after each `connected` event, for the flags `replay` and `spot`. Each later event moves by 6 seconds. */
+export const KIOSK_SPOT_RUN: Timed<KioskEvent>[] = withSpotChecks(KIOSK_RUN);

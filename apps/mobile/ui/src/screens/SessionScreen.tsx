@@ -1,4 +1,5 @@
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
+import { Banner } from '@astryxdesign/core/Banner';
 import { Button } from '@astryxdesign/core/Button';
 import { Heading } from '@astryxdesign/core/Heading';
 import { HStack } from '@astryxdesign/core/HStack';
@@ -37,13 +38,15 @@ export function SessionScreen() {
   const promptArea = () => {
     if (state.prompt?.kind === 'product') return <PromptCard prompt={state.prompt} />;
     if (state.lookAlikes) return <LookAlikeNotice candidates={state.lookAlikes} />;
-    return <Text>{strings.idleHint}</Text>;
+    // During a spot check the banner above says what to do.
+    return state.spotCheck ? null : <Text>{strings.idleHint}</Text>;
   };
   return (
     <VStack as="main" padding={4} gap={4}>
       <StateBanner />
       <Heading level={1}>{strings.appTitle}</Heading>
       <StatusRow />
+      {state.spotCheck ? <Banner status="info" title={strings.spotCheckTitle} description={strings.spotCheckText(state.spotCheck.name)} /> : null}
       {promptArea()}
       <CaptionList />
       <CartList />

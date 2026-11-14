@@ -139,3 +139,20 @@ it('warns in text while the total is over the budget', () => {
   deliver(eventMessage('cart.updated', { cart: EMPTY_CART, change: null }));
   expect(screen.queryByText('Warning: over your budget.')).toBeNull();
 });
+it('asks the shopper to show the product of a spot check', () => {
+  const { deliver } = renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.spotcheck')] });
+  expect(screen.getByText('Quick check.')).toBeInTheDocument();
+  expect(screen.getByText(`Show me the ${eventFixture('checkout.spotcheck').product.name}.`)).toBeInTheDocument();
+  deliver(eventMessage('checkout.offered'));
+  expect(screen.queryByText('Quick check.')).toBeNull();
+});
+it('keeps the card of a product prompt during a spot check', () => {
+  renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.spotcheck'), pending()] });
+  expect(screen.getByText('Quick check.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
+});
+it('ends the spot check message when the checkout stops', () => {
+  const { deliver } = renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.spotcheck')] });
+  deliver(eventMessage('checkout.cancelled'));
+  expect(screen.queryByText('Quick check.')).toBeNull();
+});

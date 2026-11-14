@@ -106,6 +106,8 @@ export const EN = {
   budget: 'Budget',
   budgetOver: 'Warning: over your budget.',
   budgetDetail: (total: string, budget: string) => `Total ${total}. Budget ${budget}.`,
+  spotCheckTitle: 'Quick check.',
+  spotCheckText: (name: string) => `Show me the ${name}.`,
 
   ask: 'Ask a question',
   askShort: 'Ask',
@@ -272,6 +274,9 @@ export const IT: Strings = {
   budget: 'Budget',
   budgetOver: 'Attenzione: hai superato il budget.',
   budgetDetail: (total, budget) => `Totale ${total}. Budget ${budget}.`,
+  spotCheckTitle: 'Controllo rapido.',
+  // No article before the name: the gender of a product name is not known.
+  spotCheckText: (name) => `Mostrami questo prodotto: ${name}.`,
 
   ask: 'Fai una domanda',
   askShort: 'Domanda',
