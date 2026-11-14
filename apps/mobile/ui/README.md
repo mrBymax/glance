@@ -170,6 +170,7 @@ flowchart LR
 - `checkout.spotcheck` sets `spotCheck` to its product. While it is set, the session screen shows one info banner above the prompt area: "Quick check." and "Show me the <product>.". A product prompt keeps its card under the banner. `checkout.offered`, `checkout.cancelled`, `checkout.paid`, and a snapshot clear it.
 - `useStrings()` gives the strings to a component that needs no other part of `useUi()`. With no `BridgeProvider` above, it gives the English strings.
 - A snapshot replaces the session data, and it clears the error, the budget warning, and the look-alike list.
+- A product of a barcode scan has the ID `gtin-<13 digits>`, and its name comes from Open Food Facts. The page handles it as each other product: it shows the name as the server sends it, and it sends the ID back in `cart.edit`. Such a name can have 80 characters, so the card, the cart, and the receipt wrap it and never cut it. `src/test/scanned.ts` has two such products for the tests.
 - An error stays until a sign of recovery: a stream that starts, a new prompt, a snapshot, a payment, or `local.attempt`. `send` runs `local.attempt` before `setup.register`, `setup.requestCamera`, and `session.start`.
 - The list of captions holds the last 20, and the screen shows the last 4. A caption with a known ID replaces the old one.
 - `useSpokenText` announces each new caption, and the line `Cart: 2 items, 4.49 EUR.` after each cart change. It does not announce the captions of a snapshot, also when the snapshot loads again after a lost connection. `BridgeProvider` gives it the captions of the last snapshot.
@@ -313,6 +314,7 @@ The Settings button of the session screen opens `SettingsSheet`. `useUi().setPro
 - A speech rate that is not in `SPEECH_RATES` marks the nearest value.
 - Play sample sends `intent` with the kind `help`. The bridge has no message for a speech sample, so the voice speaks the help line at the new speed.
 - Delete my data asks in an `AlertDialog`. Delete sends `data.delete`, runs `local.reset`, and closes the dialog and the sheet.
+- The last line of the sheet is the attribution that the Open Database License asks for: "Product data: Open Food Facts (ODbL)", and a link to `https://openfoodfacts.org` (`OPEN_FOOD_FACTS_URL`). The link has the name "Open website of Open Food Facts" and the visible text "Open website", because a longer text is cut at a font scale of 200 percent. In the WebView the Android app opens the link outside the app, as it does for the Play Store link of the setup screen. In a desktop browser the link replaces the page.
 - `src/styles/narrow.css` sets the inline padding of a segment to 4 px. With the stock 12 px, "While in view" and "Phone" are cut at a width of 360 px. The Italian table uses "In vista" and "App" there, because "Telefono" is cut also with 4 px.
 
 ### State banner
@@ -367,6 +369,8 @@ jsdom has no layout and no colors. Measure these three in a browser, at 360 x 80
 
 2. Font scale. Assign `'200%'` to `document.documentElement.style.fontSize` on each screen and each sheet. No element may end to the right of 360 px, and no label may be cut. Do not test with `scrollWidth <= innerWidth` in the device toolbar: with a mobile viewport both numbers grow together.
 3. Contrast: the Lighthouse accessibility audit of the browser, in light mode and in dark mode.
+
+On 2026-11-14 headless Chrome ran check 2 with two scanned products (names of 80 characters with accents, one with a word of 33 characters), in English and in Italian, at 100 and at 200 percent. On the product card, the cart, the checkout sheet, the receipt, and the attribution of the settings sheet, no element ended to the right of 360 px and no text was cut. A word that is longer than a line breaks inside the word.
 
 ## Touch targets of 48 px
 

@@ -21,6 +21,9 @@ const TOGGLES = ['headGestures', 'haptics'] as const;
 const DIETS = ['vegan', 'vegetarian'] as const;
 const IN_VIEW = 'inView';
 
+/** The Open Database License asks for this attribution where the data shows. */
+export const OPEN_FOOD_FACTS_URL = 'https://openfoodfacts.org';
+
 function nearestRate(rate: number): number {
   return SPEECH_RATES.reduce<number>((best, value) => (Math.abs(value - rate) < Math.abs(best - rate) ? value : best), SPEECH_RATES[0]);
 }
@@ -162,6 +165,13 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
             <Heading level={2}>{strings.privacyTitle}</Heading>
             <Text>{strings.privacyText}</Text>
             <Button label={strings.deleteData} variant="destructive" size="lg" width="100%" onClick={() => setDeleteOpen(true)} />
+          </VStack>
+          <VStack gap={3}>
+            <Text>{strings.productData}</Text>
+            <Button label={strings.productDataLinkLabel} size="lg" width="100%" href={OPEN_FOOD_FACTS_URL}>
+              {/* The full name is cut at a font scale of 200 percent. */}
+              {strings.productDataLink}
+            </Button>
           </VStack>
         </VStack>
       </BottomSheet>
