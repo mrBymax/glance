@@ -1,23 +1,27 @@
 import { Button } from '@astryxdesign/core/Button';
 import { Link } from '@astryxdesign/core/Link';
 import { Picture } from '../components/Picture';
-import { Wordmark } from '../components/Wordmark';
+import { Logo } from '../components/Logo';
 import { CLOSING, FOOTER, SECTIONS } from '../content/site';
+import { ActionLift } from '../motion/Lift';
+import { Reveal } from '../motion/Reveal';
 
 export function Closing() {
   return (
     <section className="section closing" aria-labelledby="closing-title">
-      <div className="container container--narrow center">
+      <Reveal className="container container--narrow center">
         <Picture className="closing__mark" name="hero-poster" widths={[480, 960]} sizes="12rem" width={960} height={960} alt="" />
         <h2 id="closing-title" className="statement">
           {CLOSING.heading}
         </h2>
         <p className="lead">{CLOSING.body}</p>
         <div className="action-row action-row--center">
-          <Button label={CLOSING.primaryAction.label} variant="primary" size="lg" href={CLOSING.primaryAction.href} />
+          <ActionLift>
+            <Button label={CLOSING.primaryAction.label} variant="primary" size="lg" href={CLOSING.primaryAction.href} />
+          </ActionLift>
           <Button label={CLOSING.secondaryAction.label} size="lg" href={CLOSING.secondaryAction.href} />
         </div>
-      </div>
+      </Reveal>
     </section>
   );
 }
@@ -28,7 +32,7 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="container site-footer__inner">
         <div className="site-footer__brand">
-          <Wordmark />
+          <Logo height={32} alt="Meta Glance" />
           <p className="site-footer__note">{FOOTER.independence}</p>
           <p className="site-footer__note">
             {openFoodFacts.before}

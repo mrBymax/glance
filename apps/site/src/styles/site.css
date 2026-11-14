@@ -9,7 +9,8 @@
   --site-max: 82rem;
   --site-measure: 40rem;
   --site-section-space: clamp(4rem, 2.5rem + 6vw, 8rem);
-  --site-header-height: 4rem;
+  /* The header rows below, plus the 1 px hairline. SiteHeader also measures it into --site-header-measured. */
+  --site-header-height: calc(4rem + 1px);
 
   --site-display: clamp(2.75rem, 1.8rem + 4.6vw, 5rem);
   --site-statement: clamp(2rem, 1.4rem + 3vw, 3.75rem);
@@ -20,7 +21,7 @@
   --site-small: 0.9375rem;
   --site-numeral: clamp(4.5rem, 3rem + 6vw, 8rem);
 
-  scroll-padding-top: calc(var(--site-header-height) + var(--spacing-6));
+  scroll-padding-top: calc(var(--site-header-measured, var(--site-header-height)) + var(--spacing-6));
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -32,7 +33,24 @@
 /* Two rows in the header below 56.25rem: the anchors take their own row. */
 @media (max-width: 56.24rem) {
   :root {
-    --site-header-height: 6.75rem;
+    --site-header-height: calc(6.5rem + 1px);
+  }
+}
+
+/* Optimistic for each text of the page, also inside the components of Astryx and inside the nested dark themes. */
+[data-astryx-theme] {
+  --font-family-body: 'Optimistic VF', 'Optimistic Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-family-heading: var(--font-family-body);
+}
+
+/* The DRKM axis of Optimistic thins the strokes of light text on a dark ground, so a weight looks the same in both schemes. */
+[data-theme='dark'] {
+  font-variation-settings: 'DRKM' 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .site {
+    font-variation-settings: 'DRKM' 1;
   }
 }
 
@@ -44,7 +62,7 @@ body {
   min-block-size: 100dvh;
   background: var(--color-background-body);
   color: var(--color-text-primary);
-  font-family: Figtree, var(--font-family-body);
+  font-family: var(--font-family-body);
   font-size: var(--site-body);
   line-height: 1.55;
   overflow-x: clip;
@@ -56,7 +74,7 @@ body {
 }
 
 .site :where(h1, h2, h3) {
-  font-family: Figtree, var(--font-family-heading);
+  font-family: var(--font-family-heading);
   text-wrap: balance;
 }
 
@@ -203,6 +221,17 @@ main:focus {
   font-size: var(--site-body);
 }
 
+/* The wrapper of ActionLift: it moves the button and takes no space of its own. */
+.lift {
+  display: inline-flex;
+}
+
+@media (max-width: 37.49rem) {
+  .action-row .lift {
+    display: flex;
+  }
+}
+
 /* Header */
 
 .site-header {
@@ -217,11 +246,11 @@ main:focus {
 .site-header__inner {
   display: grid;
   grid-template-columns: auto 1fr auto;
+  grid-template-rows: 4rem;
   grid-template-areas: 'home nav action';
   align-items: center;
   gap: var(--spacing-4);
   max-inline-size: var(--site-max);
-  min-block-size: 4rem;
   margin-inline: auto;
   padding-inline: var(--site-gutter);
 }
@@ -266,8 +295,29 @@ main:focus {
 
 .site-header__nav a[aria-current='true'] {
   color: var(--color-text-primary);
+}
+
+/* The links paint above the pill, which is positioned and would otherwise cover them. */
+.site-header__nav a {
+  position: relative;
+  z-index: 1;
+}
+
+.site-header__nav ul {
+  position: relative;
+}
+
+/* The pill under the current link. Its left edge is the left edge of the list, so x is the offset of the link. */
+.site-header__pill {
+  position: absolute;
+  inset-block: calc(50% - 1.125rem);
+  inset-inline-start: 0;
+  block-size: 2.25rem;
+  border-radius: var(--radius-full);
   background: var(--color-background-card);
   box-shadow: inset 0 0 0 1px var(--color-border);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .site-header__action {
@@ -282,6 +332,7 @@ main:focus {
 @media (max-width: 56.24rem) {
   .site-header__inner {
     grid-template-columns: 1fr auto;
+    grid-template-rows: 3.5rem 3rem;
     grid-template-areas:
       'home action'
       'nav nav';
@@ -304,74 +355,82 @@ main:focus {
   }
 }
 
-/* The mark of the site: the glasses glyph in an ink disc, as in the phone app. */
-.wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  color: var(--color-text-primary);
-  font-weight: var(--font-weight-bold);
-  font-size: 1.0625rem;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
+/* The logo keeps a clear space of half its height on each side from the next element. */
+.logo img {
+  display: block;
+  block-size: auto;
+  max-inline-size: 100%;
 }
 
-.wordmark__disc {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 2rem;
-  block-size: 2rem;
-  border-radius: var(--radius-full);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+.site-footer .logo {
+  margin-block-end: var(--spacing-2);
 }
 
-.wordmark__disc svg {
-  inline-size: 1.125rem;
-  block-size: 1.125rem;
-}
-
-/* Hero: a dark stage in each color scheme, as a full-bleed film would be. */
-
+/*
+ * Hero: a dark stage in each color scheme, as a full-bleed film would be. It fills the first viewport with the header:
+ * its height is the viewport (100dvh, with 100vh for older browsers) less the header height that SiteHeader measures
+ * into --site-header-measured, and less its own top margin. Its bottom is the bottom of the viewport.
+ */
 .hero {
-  margin: var(--spacing-2) var(--site-gutter) 0;
+  --hero-gap: var(--spacing-2);
+  display: grid;
+  block-size: calc(100vh - var(--site-header-measured, var(--site-header-height)) - var(--hero-gap));
+  block-size: calc(100dvh - var(--site-header-measured, var(--site-header-height)) - var(--hero-gap));
+  min-block-size: 34rem;
+  max-block-size: 68rem;
+  margin: var(--hero-gap) var(--site-gutter) 0;
+  overflow: clip;
   border-radius: var(--radius-page);
-  background: var(--color-background-body);
+  /* A soft spot of light behind the object, from the text color of the dark theme. */
+  background:
+    radial-gradient(60% 55% at 50% 34%, color-mix(in srgb, var(--color-text-primary) 9%, transparent), transparent 70%),
+    var(--color-background-body);
   color: var(--color-text-primary);
 }
 
 @media (max-width: 37.49rem) {
   .hero {
-    margin-inline: var(--spacing-2);
+    min-block-size: 36rem;
+    margin-inline: var(--hero-gap);
   }
 }
 
 /* In the dark scheme the page canvas is dark too, so the dark stages take the lighter surface of the dark theme. */
 @media (prefers-color-scheme: dark) {
-  .site .hero,
+  .site .hero {
+    background:
+      radial-gradient(60% 55% at 50% 34%, color-mix(in srgb, var(--color-text-primary) 7%, transparent), transparent 70%),
+      var(--color-background-surface);
+  }
+
   .site .band {
     background: var(--color-background-surface);
   }
 
-  .site .phone {
+  .site .phone,
+  .site .kiosk {
     background: color-mix(in srgb, var(--color-background-body) 55%, black);
     box-shadow: inset 0 0 0 1px var(--color-border-emphasized);
   }
 }
 
+/* The media takes each pixel that the text leaves. */
 .hero__inner {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   justify-items: center;
-  gap: clamp(1.5rem, 1rem + 2vw, 3rem);
+  gap: clamp(0.75rem, 0.25rem + 1.5vw, 2rem);
+  inline-size: 100%;
   max-inline-size: var(--site-max);
+  min-block-size: 0;
   margin-inline: auto;
-  padding: clamp(1rem, 0.5rem + 2vw, 2.5rem) var(--site-gutter) clamp(3.5rem, 2rem + 5vw, 6rem);
+  padding: clamp(0.75rem, 0.25rem + 1.5vw, 2rem) var(--site-gutter) clamp(1.5rem, 0.75rem + 2.5vw, 3.5rem);
 }
 
 .hero__copy {
   display: grid;
   justify-items: center;
-  gap: var(--spacing-4);
+  gap: var(--spacing-3);
   max-inline-size: 46rem;
   text-align: center;
 }
@@ -391,7 +450,7 @@ main:focus {
 
 .hero__copy .action-row {
   justify-content: center;
-  margin-block-start: var(--spacing-4);
+  margin-block-start: var(--spacing-2);
 }
 
 @media (max-width: 37.49rem) {
@@ -404,6 +463,10 @@ main:focus {
   .action-row .astryx-button {
     inline-size: 100%;
   }
+
+  .hero__copy {
+    gap: var(--spacing-2);
+  }
 }
 
 .hero__origin {
@@ -412,30 +475,18 @@ main:focus {
 }
 
 .hero-media {
-  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-self: stretch;
   inline-size: 100%;
+  min-block-size: 0;
   margin: 0;
 }
 
-/* The frame keeps one size from the first paint, so neither the poster nor the canvas moves the text below. */
+/* The frame takes its size from the grid, not from its content, so neither the poster nor the canvas moves the text. */
 .hero-media__frame {
   position: relative;
-  inline-size: 100%;
-  aspect-ratio: 16 / 9;
-  max-block-size: min(46svh, 30rem);
-  margin-inline: auto;
-}
-
-@media (max-width: 37.49rem) {
-  .hero-media__frame {
-    aspect-ratio: 1 / 1;
-    max-block-size: min(40svh, 20rem);
-  }
-
-  .hero-media__bar {
-    justify-content: space-between;
-    text-align: start;
-  }
+  min-block-size: 8rem;
 }
 
 .hero-media__poster,
@@ -460,6 +511,7 @@ main:focus {
 }
 
 .hero-media[data-phase='playing'] .hero-media__poster,
+.hero-media[data-phase='holding'] .hero-media__poster,
 .hero-media[data-phase='paused'] .hero-media__poster,
 .hero-media[data-phase='ended'] .hero-media__poster {
   opacity: 0;
@@ -470,7 +522,14 @@ main:focus {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-3);
-  margin-block-start: var(--spacing-2);
+  margin-block-start: var(--spacing-1);
+}
+
+@media (max-width: 37.49rem) {
+  .hero-media__bar {
+    justify-content: space-between;
+    text-align: start;
+  }
 }
 
 .hero-media__caption {
@@ -484,10 +543,10 @@ main:focus {
   min-block-size: 2.75rem;
 }
 
+/* The poster capture of scripts/capture-poster.mjs: a square frame on a clear page. */
 .hero-media[data-capture='poster'] .hero-media__frame {
-  aspect-ratio: 1 / 1;
   inline-size: 720px;
-  max-block-size: none;
+  block-size: 720px;
 }
 
 .hero-media[data-capture='poster'] .hero-media__poster {
@@ -524,12 +583,20 @@ main:focus {
     column-gap: var(--spacing-4);
   }
 
-  .step__numeral {
+  .step__numeral-box {
     grid-row: span 2;
   }
 }
 
+/* The box clips the numeral while it rises into place. */
+.step__numeral-box {
+  display: block;
+  overflow: hidden;
+  line-height: 1;
+}
+
 .step__numeral {
+  display: inline-block;
   font-size: var(--site-numeral);
   font-weight: var(--font-weight-bold);
   line-height: 1;
@@ -560,7 +627,7 @@ main:focus {
   grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-8);
   align-items: center;
-  scroll-margin-block-start: calc(var(--site-header-height) + var(--spacing-6));
+  scroll-margin-block-start: calc(var(--site-header-measured, var(--site-header-height)) + var(--spacing-6));
 }
 
 @media (min-width: 64rem) {
@@ -723,15 +790,84 @@ main:focus {
   border-radius: var(--radius-container);
 }
 
-.stage--kiosk .stage__media {
-  padding: 0;
-  background: var(--color-background-body);
+/*
+ * The kiosk page as a screen in a bezel. The screen takes the canvas of the page and its text colors, so it is light in
+ * the light scheme and dark in the dark scheme. The code stays on its white card with the quiet zone.
+ */
+.kiosk {
+  container: kiosk / inline-size;
+  inline-size: 100%;
+  padding: 0.625rem;
+  border-radius: calc(var(--radius-container) + 0.625rem);
+  background: var(--color-accent);
+  box-shadow: var(--shadow-med);
 }
 
-.kiosk-shot {
+.kiosk__screen {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--spacing-5);
+  padding: clamp(1rem, 0.5rem + 2vw, 2rem);
+  border-radius: var(--radius-container);
+  background: var(--color-background-body);
+  color: var(--color-text-primary);
+}
+
+@container kiosk (min-width: 30rem) {
+  .kiosk__screen {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  }
+}
+
+.kiosk__code {
   display: block;
-  inline-size: 100%;
+  inline-size: min(100%, 16rem);
   block-size: auto;
+  margin-inline: auto;
+  border-radius: var(--radius-element);
+}
+
+.kiosk__text {
+  display: grid;
+  gap: var(--spacing-1);
+}
+
+.kiosk__place {
+  color: var(--color-text-secondary);
+  font-size: var(--site-small);
+}
+
+.kiosk__state {
+  font-size: clamp(1.25rem, 1rem + 1vw, 1.75rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+
+.kiosk__amount {
+  font-size: clamp(2.25rem, 1.6rem + 2.6vw, 3.5rem);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.kiosk__lines {
+  display: grid;
+  gap: var(--spacing-1);
+  margin: var(--spacing-2) 0 0;
+  font-size: var(--site-small);
+}
+
+.kiosk__lines div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+}
+
+.kiosk__lines dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .control {
@@ -780,139 +916,114 @@ main:focus {
   color: var(--color-text-secondary);
 }
 
-/* Technology */
+/* Technology: the diagram of the parts. One of its two drawings shows, after the width of the figure. */
 
 .diagram {
-  display: grid;
-  gap: var(--spacing-6);
+  container: diagram / inline-size;
   margin: 0 0 clamp(3rem, 2rem + 3vw, 5rem);
-  padding: clamp(1.25rem, 0.75rem + 2.5vw, 3rem);
+  padding: clamp(1rem, 0.5rem + 2vw, 3rem);
   border-radius: var(--radius-page);
   background: var(--color-background-card);
   box-shadow: inset 0 0 0 1px var(--color-border);
 }
 
-.diagram__main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--spacing-3);
+.diagram__svg {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  margin-inline: auto;
+  overflow: visible;
+  font-family: var(--font-family-body);
 }
 
-@media (min-width: 56.25rem) {
-  .diagram__main {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
+/* The wide drawing needs 70 rem of figure: its 1480 units are then 0.76 px or more, so its 18.5-unit text is 14 px. */
+.diagram__svg--wide {
+  display: none;
+}
+
+.diagram__svg--tall {
+  max-inline-size: 26rem;
+}
+
+@container diagram (min-width: 70rem) {
+  .diagram__svg--wide {
+    display: block;
+  }
+
+  .diagram__svg--tall {
+    display: none;
   }
 }
 
-.node {
-  display: grid;
-  gap: var(--spacing-1);
-  padding: var(--spacing-5);
-  border-radius: var(--radius-container);
-  background: var(--color-background-body);
-  box-shadow: inset 0 0 0 1px var(--color-border-emphasized);
+.dg-box rect {
+  fill: var(--color-background-body);
+  stroke: var(--color-border-emphasized);
+  stroke-width: 1.5;
 }
 
-.node__glyph {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 3rem;
-  block-size: 3rem;
-  margin-block-end: var(--spacing-2);
-  border-radius: var(--radius-full);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+.dg-box text {
+  font-size: 18.5px;
+  fill: var(--color-text-secondary);
 }
 
-.node--small .node__glyph {
-  inline-size: 2.25rem;
-  block-size: 2.25rem;
-  background: var(--color-neutral);
-  color: var(--color-text-primary);
-}
-
-.node__title {
-  font-size: 1.25rem;
+.dg-box .dg-box__title {
+  font-size: 24px;
   font-weight: var(--font-weight-semibold);
+  fill: var(--color-text-primary);
 }
 
-.node__body {
-  color: var(--color-text-secondary);
-  font-size: var(--site-small);
+.dg-box .dg-box__line {
+  fill: var(--color-text-primary);
 }
 
-.link {
-  display: grid;
-  justify-items: center;
-  gap: var(--spacing-1);
-  padding-block: var(--spacing-2);
-  color: var(--color-text-secondary);
-  font-size: var(--site-small);
-  text-align: center;
+.dg-arrow path {
+  fill: none;
+  stroke: var(--color-icon-secondary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.link__label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-1-5);
+.dg-arrow polygon {
+  fill: var(--color-icon-secondary);
 }
 
-.link__arrow {
-  display: inline-grid;
-  color: var(--color-text-primary);
-  transform: rotate(90deg);
+/* The one focal path: the QR code that the camera sees, not a message on the network. */
+.dg-arrow--focal path {
+  stroke: var(--color-text-primary);
+  stroke-width: 3;
+  stroke-dasharray: 10 7;
 }
 
-.link__arrow--back {
-  transform: rotate(-90deg);
+.dg-arrow--focal polygon {
+  fill: var(--color-text-primary);
 }
 
-.link__arrow svg {
-  inline-size: 1.125rem;
-  block-size: 1.125rem;
+.dg-label rect {
+  fill: var(--color-background-card);
 }
 
-@media (min-width: 56.25rem) {
-  .link {
-    max-inline-size: 9rem;
-  }
-
-  .link__label {
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .link__label--back {
-    flex-direction: column-reverse;
-  }
-
-  .link__arrow {
-    transform: none;
-  }
-
-  .link__arrow--back {
-    transform: rotate(180deg);
-  }
+.dg-label text,
+.dg-legend text {
+  font-size: 18.5px;
+  font-weight: var(--font-weight-medium);
+  fill: var(--color-text-secondary);
 }
 
-.diagram__sources {
-  display: grid;
-  gap: var(--spacing-3);
-  padding-block-start: var(--spacing-6);
-  border-block-start: 1px dashed var(--color-border-emphasized);
+.dg-legend__rule {
+  stroke: var(--color-border);
+  stroke-width: 1;
 }
 
-.diagram__sources-label {
-  color: var(--color-text-secondary);
-  font-size: var(--site-small);
-  font-weight: var(--font-weight-semibold);
+.dg-legend__sample {
+  stroke: var(--color-icon-secondary);
+  stroke-width: 2;
 }
 
-.diagram__sources-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
-  gap: var(--spacing-3);
+.dg-legend__sample--focal {
+  stroke: var(--color-text-primary);
+  stroke-width: 3;
+  stroke-dasharray: 10 7;
 }
 
 .specs {
@@ -998,8 +1109,14 @@ main:focus {
 
 .team {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacing-8) var(--spacing-6);
+}
+
+@media (min-width: 64rem) {
+  .team {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 37.49rem) {
@@ -1013,9 +1130,13 @@ main:focus {
   }
 }
 
+/* Each card spans three rows of the list (photo, name, title), so the names and the titles of a row line up. */
 .team__member {
   display: grid;
-  gap: var(--spacing-3);
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: var(--spacing-2);
+  align-content: start;
 }
 
 .team__photo {
@@ -1033,8 +1154,15 @@ main:focus {
   font-weight: var(--font-weight-semibold);
 }
 
+.team__frame {
+  margin-block-end: var(--spacing-1);
+}
+
 .team__role {
   color: var(--color-text-secondary);
+  font-size: var(--site-small);
+  line-height: 1.45;
+  text-wrap: pretty;
 }
 
 /* FAQ: the heading on the left, the questions on the right. */
@@ -1051,22 +1179,66 @@ main:focus {
   }
 }
 
-.faq__list .astryx-collapsible-trigger {
+.faq__list {
+  border-block-start: 1px solid var(--color-border);
+}
+
+.faq__item {
+  border-block-end: 1px solid var(--color-border);
+}
+
+.faq__heading {
+  margin: 0;
+}
+
+.faq__button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  inline-size: 100%;
   min-block-size: 3.5rem;
-  padding-block: var(--spacing-4);
+  padding: var(--spacing-4) var(--spacing-1);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.faq__button:focus-visible {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-inner);
+}
+
+.faq__chevron {
+  display: inline-grid;
+  flex: none;
+  color: var(--color-icon-secondary);
+}
+
+.faq__chevron svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+}
+
+.faq__panel {
+  overflow: hidden;
 }
 
 .faq__question {
   font-size: 1.1875rem;
   font-weight: var(--font-weight-semibold);
-  text-align: start;
+  line-height: 1.35;
 }
 
 .faq__answer {
   max-inline-size: var(--site-measure);
   font-size: var(--site-body);
   line-height: 1.55;
-  padding-block-end: var(--spacing-2);
+  padding: 0 var(--spacing-1) var(--spacing-5);
   color: var(--color-text-secondary);
 }
 

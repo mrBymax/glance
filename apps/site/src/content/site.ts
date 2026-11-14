@@ -141,6 +141,17 @@ export const CHAPTERS: readonly Chapter[] = [
   },
 ];
 
+/** The kiosk page of the recorded demo run, while it waits for the nod (apps/website on the app branch). */
+export const KIOSK_SCREEN = {
+  place: 'Checkout 3, Demo Market',
+  state: 'Waiting for your nod',
+  amount: '4.49 EUR',
+  lines: [
+    { name: 'Rye bread', detail: '1 x 2.60 EUR' },
+    { name: 'Oat drink', detail: '1 x 1.89 EUR' },
+  ],
+};
+
 export const CONTROL = {
   heading: 'You stay in control.',
   items: [
@@ -150,24 +161,54 @@ export const CONTROL = {
   ],
 };
 
+/** The diagram of the technology section, after docs/architecture.md of the app branch. */
+export const DIAGRAM = {
+  title: 'The parts of Meta Glance and what flows between them',
+  description:
+    'Data flows from the glasses through the phone to the server, which asks a model and the product data, speaks back through the phone, and updates the kiosk and the mirror.',
+  parts: {
+    glasses: { title: 'Glasses', lines: ['Ray-Ban Meta', 'Camera', 'Speakers', 'Motion sensor'] },
+    phone: { title: 'Phone', lines: ['Android app', 'Camera stream', 'Barcode reading', 'Face pixelation', 'Works screen off'] },
+    server: { title: 'Server', lines: ['Node.js', 'Recognition', 'Cart rules', 'Spoken lines', 'Kiosk checkout'] },
+    model: { title: 'Model', lines: ['Gemini'] },
+    storeList: { title: 'Store list', lines: ['Names and prices'] },
+    openFoodFacts: { title: 'Open Food Facts', lines: ['Allergens, diets'] },
+    sources: { title: 'Model and data', lines: ['The server asks', 'Gemini, the model', 'The store list', 'Open Food Facts'] },
+    kiosk: { title: 'Kiosk page', lines: ['Shows the QR code'] },
+    mirror: { title: 'Mirror page', lines: ['Lines for the room'] },
+  },
+  flows: {
+    glassesToPhone: 'Frames, motion',
+    phoneToGlasses: 'Spoken lines',
+    frames: 'Pixelated frames',
+    answers: 'Nods, codes',
+    serverToPhone: 'Lines, cart',
+    toModel: 'Frames',
+    toStoreList: 'Barcode',
+    toOpenFoodFacts: 'Barcode',
+    toSources: 'Frames, barcodes',
+    toKiosk: 'Cart, result',
+    toMirror: 'Lines, cart',
+    qr: 'QR code',
+  },
+  legend: [
+    { label: 'Data over the network', isFocal: false },
+    { label: 'Seen by the camera', isFocal: true },
+  ],
+  textAlternative: [
+    'The glasses send camera frames and the motion of the head to the phone. The phone plays the spoken lines in the glasses.',
+    'The phone reads barcodes, pixelates each face, and keeps the shop running with the screen off.',
+    'The phone sends the pixelated frames to the server, with the nods and shakes and each barcode and QR code that it reads.',
+    'The server sends the spoken lines and the cart back to the phone.',
+    'The server asks the Gemini model to name the product in a frame, and looks up a barcode in the store list and in Open Food Facts.',
+    'The server sends the cart and the result of the payment to the kiosk page, and the lines and the cart to the mirror page.',
+    'The kiosk page shows a QR code. The camera of the glasses sees it, and that starts the payment.',
+  ],
+};
+
 export const TECHNOLOGY = {
   heading: 'How the parts talk.',
-  lead: 'Four parts make one shop. The glasses see and speak, the phone connects, the server decides, and a model names the product.',
-  diagramLabel: 'Diagram: the glasses send camera frames and head motion to the phone. The phone sends frames, with faces pixelated, to the server. The server asks the recognition model, the store list, and Open Food Facts, and sends a spoken line back to the glasses through the phone.',
-  nodes: {
-    glasses: { title: 'Glasses', body: 'Ray-Ban Meta. Camera, speakers, and head motion.' },
-    phone: { title: 'Phone', body: 'Android app. Barcode reading, face pixelation.' },
-    server: { title: 'Server', body: 'One Node.js process. Cart rules, spoken lines, kiosks.' },
-    model: { title: 'Model', body: 'Gemini names the product from a frame.' },
-    storeList: { title: 'Store list', body: 'The items, prices, and names that the store sells.' },
-    openFoodFacts: { title: 'Open Food Facts', body: 'Allergens and diets of a product.' },
-  },
-  links: {
-    glassesToPhone: 'Frames and head motion',
-    phoneToGlasses: 'Spoken lines',
-    phoneToServer: 'Frames, faces pixelated',
-    serverToPhone: 'Prompts and cart',
-  },
+  lead: 'The glasses see and speak, the phone connects, the server decides, and a model names the product. The kiosk and the mirror show the result.',
   specs: [
     { term: 'Glasses', detail: "Ray-Ban Meta glasses, through Meta's Wearables Device Access Toolkit" },
     { term: 'Phone', detail: 'Android 10 or later' },

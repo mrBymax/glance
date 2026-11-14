@@ -3,6 +3,7 @@ import { Theme } from '@astryxdesign/core/theme';
 import { CircleCheck, FlaskConical } from 'lucide-react';
 import { defaultThemeSlug, themes } from '../astryx-themes';
 import { STATUS } from '../content/site';
+import { Reveal } from '../motion/Reveal';
 
 /** The honest part of the page, on a dark band: what runs today and what is a demo. */
 export function Status() {
@@ -10,15 +11,15 @@ export function Status() {
     <Theme theme={themes[defaultThemeSlug]} mode="dark">
       <section id="status" className="section band" aria-labelledby="status-title">
         <div className="container">
-          <div className="section-head">
+          <Reveal className="section-head">
             <p className="eyebrow">{STATUS.eyebrow}</p>
             <h2 id="status-title" className="section-title">
               {STATUS.heading}
             </h2>
             <p className="lead">{STATUS.lead}</p>
-          </div>
+          </Reveal>
           <div className="status-columns">
-            <section className="status-list" aria-labelledby="status-real">
+            <Reveal as="section" className="status-list" labelledBy="status-real">
               <h3 id="status-real" className="status-list__title">
                 {STATUS.real.title}
               </h3>
@@ -32,8 +33,8 @@ export function Status() {
                   </li>
                 ))}
               </ul>
-            </section>
-            <section className="status-list" aria-labelledby="status-demo">
+            </Reveal>
+            <Reveal as="section" className="status-list" labelledBy="status-demo" index={1}>
               <h3 id="status-demo" className="status-list__title">
                 {STATUS.demo.title}
               </h3>
@@ -47,7 +48,7 @@ export function Status() {
                   </li>
                 ))}
               </ul>
-            </section>
+            </Reveal>
           </div>
         </div>
       </section>

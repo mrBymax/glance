@@ -3,6 +3,7 @@ import { Theme } from '@astryxdesign/core/theme';
 import { themes, defaultThemeSlug } from '../astryx-themes';
 import { HERO, PRODUCT } from '../content/site';
 import { HeroStage } from '../hero/HeroStage';
+import { ActionLift } from '../motion/Lift';
 
 /** The opening: a dark stage with the animation, then the product name, one sentence, and two actions. */
 export function Hero() {
@@ -18,7 +19,9 @@ export function Hero() {
             </h1>
             <p className="hero__sentence">{PRODUCT.sentence}</p>
             <div className="action-row">
-              <Button label={HERO.primaryAction.label} variant="primary" size="lg" href={HERO.primaryAction.href} />
+              <ActionLift>
+                <Button label={HERO.primaryAction.label} variant="primary" size="lg" href={HERO.primaryAction.href} />
+              </ActionLift>
               <Button label={HERO.secondaryAction.label} size="lg" href={HERO.secondaryAction.href} />
             </div>
             <p className="hero__origin">{PRODUCT.origin}</p>

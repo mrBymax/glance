@@ -2,9 +2,12 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { Theme } from '@astryxdesign/core/theme';
 import { defaultThemeSlug, themes } from '../astryx-themes';
 import { Captions, Hand, ShieldCheck, Languages, type LucideIcon } from 'lucide-react';
+import { KioskScreen } from '../components/KioskScreen';
 import { Picture } from '../components/Picture';
 import { CHAPTERS, CONTROL, FEATURES_INTRO, VOICE_LINES, type Chapter } from '../content/site';
 import { TEAM } from '../content/team';
+import { CardLift } from '../motion/Lift';
+import { Reveal } from '../motion/Reveal';
 
 const PHONE = { widths: [390, 780], width: 780, height: 1688, sizes: '(min-width: 64rem) 18rem, (min-width: 37.5rem) 16rem, 70vw' } as const;
 
@@ -74,17 +77,7 @@ function ChapterMedia(props: { media: Chapter['media'] }) {
     case 'privacy':
       return <PrivacyPair />;
     case 'kiosk':
-      return (
-        <Picture
-          className="kiosk-shot"
-          name="kiosk-waiting"
-          widths={[800, 1600]}
-          sizes="(min-width: 75rem) 44rem, 90vw"
-          width={1600}
-          height={1000}
-          alt="The kiosk page: a large code, Checkout 3, Demo Market, Waiting for your nod, 4.49 euros, and the two items of the cart."
-        />
-      );
+      return <KioskScreen />;
   }
 }
 
@@ -92,7 +85,7 @@ function ChapterBlock(props: { chapter: Chapter; index: number }) {
   const { chapter, index } = props;
   const titleId = `${chapter.id}-title`;
   return (
-    <article id={chapter.id} className={index % 2 === 1 ? 'chapter chapter--reverse' : 'chapter'} aria-labelledby={titleId}>
+    <Reveal as="article" id={chapter.id} labelledBy={titleId} className={index % 2 === 1 ? 'chapter chapter--reverse' : 'chapter'}>
       <div className="chapter__copy">
         <p className="eyebrow">{chapter.eyebrow}</p>
         <h3 id={titleId} className="chapter__title">
@@ -109,12 +102,12 @@ function ChapterBlock(props: { chapter: Chapter; index: number }) {
         </ul>
       </div>
       <figure className={`stage stage--${chapter.media}`}>
-        <div className="stage__media">
+        <CardLift className="stage__media">
           <ChapterMedia media={chapter.media} />
-        </div>
+        </CardLift>
         <figcaption className="stage__caption">{chapter.mediaCaption}</figcaption>
       </figure>
-    </article>
+    </Reveal>
   );
 }
 
@@ -124,12 +117,12 @@ export function Features() {
   return (
     <section id="features" className="section" aria-labelledby="features-title">
       <div className="container">
-        <div className="section-head section-head--center">
+        <Reveal className="section-head section-head--center">
           <h2 id="features-title" className="section-title">
             {FEATURES_INTRO.heading}
           </h2>
           <p className="lead">{FEATURES_INTRO.body}</p>
-        </div>
+        </Reveal>
         <div className="chapters">
           {CHAPTERS.map((chapter, index) => (
             <ChapterBlock key={chapter.id} chapter={chapter} index={index} />
@@ -141,13 +134,13 @@ export function Features() {
           </h3>
           <ul className="control__list">
             {CONTROL.items.map((item, index) => (
-              <li key={item.title} className="control__item">
+              <Reveal as="li" key={item.title} className="control__item" index={index}>
                 <span className="control__glyph" aria-hidden="true">
                   <Icon icon={CONTROL_GLYPHS[index] ?? Hand} size="lg" />
                 </span>
                 <span className="control__item-title">{item.title}</span>
                 <span className="control__item-body">{item.body}</span>
-              </li>
+              </Reveal>
             ))}
           </ul>
         </section>
