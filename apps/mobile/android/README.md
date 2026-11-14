@@ -158,6 +158,10 @@ The detector cuts the angle of each axis into strokes. A nod is a stroke down an
 
 `MotionReplayTest` replays each motion recording in `core/src/test/resources/motion`. A file name ends with `__nod<n>_shake<n>.csv`, and the test expects these counts. The folder is empty until the probe run on the glasses.
 
+### Test against the real server
+
+`ServerSpineTest` in `core/src/integrationTest` plays one shop against the server of `apps/server` in fake mode, with the real `GlanceApi`, `DeviceSocket`, and codecs. It needs a server, so `./gradlew test` and `./gradlew check` do not run it. `node scripts/integration/server-kotlin.mjs` at the repository root starts the server, runs the test, and stops the server. `scripts/integration/README.md` lists the steps of the test.
+
 ## The probe
 
 Open "Glance Probe" on the phone. The text field above the buttons gives the label of a saved frame and of a motion recording.
@@ -239,6 +243,7 @@ Run each command in `apps/mobile/android`. PowerShell uses `.\gradlew.bat` in pl
 | `./gradlew :core:test` | Runs the unit tests of `core` |
 | `./gradlew :core:test --tests "*gesture*"` | Runs the tests of one package |
 | `./gradlew test` | Runs each unit test task. `app` has no unit test. |
+| `./gradlew :core:integrationTest -Pglance.serverUrl=<address>` | Runs the tests of `core/src/integrationTest` against a running Glance server. No other task runs them. |
 | `./gradlew :app:assembleDebug` | Builds `app/build/outputs/apk/debug/app-debug.apk` |
 | `./gradlew :app:installDebug` | Installs the debug build on each attached phone |
 
