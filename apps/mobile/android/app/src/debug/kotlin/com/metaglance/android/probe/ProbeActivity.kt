@@ -161,6 +161,13 @@ class ProbeActivity : AppCompatActivity() {
                 log.line("mock feed: phone camera")
             }
         }
+        lateinit var placeholderButton: Button
+        fun placeholderLabel() = if (glance.profileStore.usePlaceholder) "Use placeholder page: on" else "Use placeholder page: off"
+        placeholderButton = addButton(placeholderLabel()) {
+            glance.profileStore.usePlaceholder = !glance.profileStore.usePlaceholder
+            placeholderButton.text = placeholderLabel()
+            log.line("placeholder page ${if (glance.profileStore.usePlaceholder) "on" else "off"}. Close Glance and open it again.")
+        }
         addButton("Mock: disable") {
             datLink.stopSession()
             mock.disable()

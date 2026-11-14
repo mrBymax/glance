@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import com.metaglance.android.dat.DatLink
 import com.metaglance.android.mock.MockGlassesController
+import com.metaglance.android.session.ProfileStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,4 +18,5 @@ class GlanceApp : Application() {
 
     val datLink: DatLink by lazy { DatLink(this, scope) { datLog(it) } }
     val mockGlasses: MockGlassesController by lazy { MockGlassesController(this) }
+    val profileStore: ProfileStore by lazy { ProfileStore(this) }
 }

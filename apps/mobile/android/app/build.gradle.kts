@@ -34,6 +34,15 @@ android {
 }
 kotlin { compilerOptions { jvmTarget = JvmTarget.JVM_17 } }
 
+// Copies the build of the phone UI into the APK assets, as the folder "ui". It does not run npm.
+// Without that build, the APK holds only the placeholder page.
+val syncUi by tasks.registering(Sync::class) {
+    from(rootDir.resolve("../ui/dist"))
+    into(layout.buildDirectory.dir("generated/uiAssets/ui"))
+}
+android.sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/uiAssets"))
+tasks.named("preBuild") { dependsOn(syncUi) }
+
 dependencies {
     implementation(project(":core"))
     implementation(libs.mwdat.core)
