@@ -134,6 +134,7 @@ function changeQty(turn: Turn, productId: string, delta: number): boolean {
 
   const name = current?.name ?? localize(product!.name, s.profile.lang);
   const qty = (current?.qty ?? 0) + delta;
+  const totalBefore = s.cart.totalCents;
   let items = s.cart.items;
   if (!current) {
     items = [...items, cartLine(product!, name, qty)];
@@ -158,7 +159,15 @@ function changeQty(turn: Turn, productId: string, delta: number): boolean {
   emit(turn, { type: 'cart.updated', cart: s.cart, change: { kind: delta > 0 ? 'add' : 'remove', productId, name } });
   const totalCents = s.cart.totalCents;
   if (delta > 0) {
-    speak(turn, say({ key: 'cart.added', product: product!, totalCents, budgetCents: null }));
+    // Only the add that crosses the budget warns. A later add over the budget gets the usual line.
+    const budgetCents = s.profile.budgetCents;
+    if (budgetCents !== null && totalBefore <= budgetCents && totalCents > budgetCents) {
+      // The page drops its budget warning on cart.updated, so budget.exceeded follows it.
+      emit(turn, { type: 'budget.exceeded', budgetCents, totalCents });
+      speak(turn, say({ key: 'cart.added', product: product!, totalCents, budgetCents }, { sound: 'warning' }));
+    } else {
+      speak(turn, say({ key: 'cart.added', product: product!, totalCents, budgetCents: null }));
+    }
   } else if (product) {
     speak(turn, say({ key: 'cart.removed', product, totalCents }));
   }

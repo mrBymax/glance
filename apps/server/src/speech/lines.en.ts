@@ -117,10 +117,13 @@ export const LINES_EN: LineTemplates = {
   'glance.unknown': () => 'I do not know this product.',
   'glance.partial': (line) => `I can see part of it. ${AIM[line.aimHint]}`,
   'glance.skipped': () => 'Skipped.',
-  'cart.added': (line, profile) => sentences(
-    `Added ${nameInside(line.product, profile)}.`,
-    profile.detail === 'brief' ? '' : total(line.totalCents, profile),
-  ),
+  'cart.added': (line, profile) => {
+    const added = `Added ${nameInside(line.product, profile)}.`;
+    if (line.budgetCents === null) return sentences(added, profile.detail === 'brief' ? '' : total(line.totalCents, profile));
+    // The brief level also names the total here, because the budget sentence compares with it.
+    const budget = `That is over your budget of ${spokenPrice(line.budgetCents, profile.lang, 'full')}.`;
+    return sentences(added, total(line.totalCents, profile), budget);
+  },
   'cart.removed': (line, profile) => sentences(
     `Removed ${nameInside(line.product, profile)}.`,
     profile.detail === 'brief' ? '' : total(line.totalCents, profile),

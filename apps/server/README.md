@@ -392,6 +392,7 @@ The rules that exist:
 - An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
 - After an add, a no removes that unit for 8 seconds, and a second yes gets one hint (R10). On the prompt for "add another", a no removes one unit (R11).
 - An undo removes the last added unit that the cart still holds (R12). A cart edit sets the quantity of a cart line from 0 to 99.
+- An add that crosses the budget of the profile warns one time. See "Budget guard".
 - A yes or a no with no valid target gets one hint, if a prompt finished in the last 15 seconds (R20). Silence adds nothing (R21).
 - A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code. With its line, a busy kiosk also gives the event `error` with the code `kiosk.busy`.
 - A yes pays only as an answer to the pay prompt (R16). The effect `payment.start` asks the runtime for the payment, and the input `payment.result` brings its result.
@@ -419,6 +420,18 @@ The rules that exist:
 - The event `glance.pending`, the lines `glance.new` and `glance.inCart`, and the prompt of the snapshot carry the list.
 - A glance line with a warning has the sound `warning`.
 - A profile patch does not change a prompt that is already spoken. The snapshot computes the list with the profile of that moment.
+
+### Budget guard
+
+The profile holds `budgetCents`, or `null` for no budget. The rule is in `changeQty` of `src/sessions/answers.ts`.
+
+- An add crosses the budget when the total before it is at most the budget and the total after it is more.
+- For that add, the event `budget.exceeded` follows `cart.updated`. It holds the budget and the new total.
+- The line of that add is `cart.added` with `budgetCents`, and its sound is `warning` in place of `added`.
+- Each other add has `budgetCents: null`, also when the total is already over the budget. So the warning plays one time.
+- The rule holds for a yes and for a higher quantity in a cart edit.
+- When a removal brings the total back to the budget or under it, the next add that crosses the budget warns again.
+- A profile patch that lowers the budget under the total gives no event. The phone UI compares the two numbers by itself.
 
 The steps of a checkout:
 
@@ -519,6 +532,7 @@ The rules select a line by its key, and `renderLine(line, profile)` in `src/spee
 - `spokenPrice` in `numbers.ts` writes a price as words. The short form is "one eighty-nine". The full form is "one euro eighty-nine". The pay prompt and the paid line use the full form.
 - `yesPhrases` in `phrases.ts` names the input of the shopper: "Nod to add.", "Double tap to add.", "Say add.", "Press Add on your phone.", or "Press volume up to add.". A shopper with `headGestures: false` gets the phone phrases.
 - The detail level `brief` shortens the glance line, the added line, and the removed line. The level `detailed` adds the brand, the long pack text, and "Contains gluten." for a product that lists allergens.
+- The add that crosses the budget says "Added oat drink. Total twenty-one ten. That is over your budget of twenty euros." The budget has the full price form. The level `brief` also names the total in this line.
 - No level shortens the pay prompt.
 - A warning follows the price and comes before the yes phrase, at each detail level: "Oat drink, one litre, one eighty-nine. Warning: contains gluten. Nod to add." In the line for a product in the cart it follows the count.
 - The warning texts are "Warning: contains gluten, milk and nuts.", "Warning: not vegan.", "Warning: not vegetarian.", and "Allergen data is missing for this product." They equal the texts of the phone UI.

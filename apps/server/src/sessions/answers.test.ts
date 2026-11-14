@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { EMPTY_CART, TIMING as T } from '@glance/shared';
 import { accepts } from './answers';
-import { BARISTA, OAT, RYE, harness } from './harness';
+import { BARISTA, OAT, RYE, harness, product } from './harness';
 import { excludeList } from './view';
 
 it('R3: a yes with the ID of a replaced prompt adds nothing', () => {
@@ -257,4 +257,42 @@ it('accepts tells if an answer counts for the current prompt', () => {
   expect(accepts(h.state, { source: 'hud', promptId: id }, h.now + T.headWindowMs)).toBe(true);
   expect(accepts(h.state, { source: 'hud' }, h.now)).toBe(false);
   expect(accepts(h.state, { source: 'hud', promptId: 'p-9999' }, h.now)).toBe(false);
+});
+it('warns one time when an add crosses the budget', () => {
+  const h = harness({ profile: { budgetCents: 2000 }, products: [product('big-box', 1921)], cart: ['big-box'] });
+  h.see(OAT); h.done(); h.yes('head');
+  expect(h.events()).toEqual(['glance.cleared', 'cart.updated', 'budget.exceeded']);
+  expect(h.event('budget.exceeded')).toEqual({ type: 'budget.exceeded', budgetCents: 2000, totalCents: 2110 });
+  expect(h.speak()).toMatchObject({ line: { key: 'cart.added', totalCents: 2110, budgetCents: 2000 }, sound: 'warning' });
+  h.advance(T.viewMs); h.see(RYE); h.done(); h.yes('head');
+  expect(h.events()).toEqual(['glance.cleared', 'cart.updated']);
+  expect(h.speak()).toMatchObject({ line: { budgetCents: null }, sound: 'added' });
+});
+it('gives no budget warning for a total that equals the budget, and none with no budget', () => {
+  const exact = harness({ profile: { budgetCents: 2110 }, products: [product('big-box', 1921)], cart: ['big-box'] });
+  exact.see(OAT); exact.done(); exact.yes('head');
+  expect(exact.events()).toEqual(['glance.cleared', 'cart.updated']);
+  expect(exact.speak()).toMatchObject({ line: { budgetCents: null }, sound: 'added' });
+  const free = harness({ products: [product('big-box', 1921)], cart: ['big-box'] });
+  free.see(OAT); free.done(); free.yes('head');
+  expect(free.events()).toEqual(['glance.cleared', 'cart.updated']);
+});
+it('warns when a higher quantity in a cart edit crosses the budget', () => {
+  const h = harness({ profile: { budgetCents: 500 }, cart: [OAT] });
+  h.send({ type: 'cart.edit', productId: OAT, qty: 2 });
+  expect(h.events()).toEqual(['cart.updated']);
+  h.send({ type: 'cart.edit', productId: OAT, qty: 4 });
+  expect(h.events()).toEqual(['cart.updated', 'budget.exceeded']);
+  expect(h.event('budget.exceeded')).toEqual({ type: 'budget.exceeded', budgetCents: 500, totalCents: 756 });
+  expect(h.speak()).toMatchObject({ line: { key: 'cart.added', budgetCents: 500 }, sound: 'warning' });
+});
+it('warns again when the total comes back under the budget and an add crosses it again', () => {
+  const h = harness({ profile: { budgetCents: 300 }, cart: [OAT] });
+  h.send({ type: 'cart.edit', productId: OAT, qty: 2 });
+  expect(h.events()).toEqual(['cart.updated', 'budget.exceeded']);
+  h.send({ type: 'cart.edit', productId: OAT, qty: 1 });
+  expect(h.events()).toEqual(['cart.updated']);
+  expect(h.speak()).toMatchObject({ line: { key: 'cart.removed' }, sound: 'removed' });
+  h.send({ type: 'cart.edit', productId: OAT, qty: 2 });
+  expect(h.events()).toEqual(['cart.updated', 'budget.exceeded']);
 });

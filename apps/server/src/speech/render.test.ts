@@ -152,3 +152,10 @@ it('speaks the warning of a product in the cart before the yes phrase', () => {
   expect(text({ key: 'glance.inCart', product: oat, qty: 1, warnings: [gluten] }))
     .toBe('Oat drink. One is in your cart. Warning: contains gluten. Nod to add another. Shake to remove.');
 });
+it('speaks the budget line of the spec', () => {
+  const over: Line = { key: 'cart.added', product: oat, totalCents: 2110, budgetCents: 2000 };
+  const line = 'Added oat drink. Total twenty-one ten. That is over your budget of twenty euros.';
+  expect(text(over)).toBe(line);
+  expect(text(over, { detail: 'brief' })).toBe(line);
+  expect(text({ ...over, budgetCents: 2050 })).toBe('Added oat drink. Total twenty-one ten. That is over your budget of twenty euros fifty.');
+});

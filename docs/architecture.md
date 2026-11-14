@@ -165,7 +165,7 @@ Rules of this path:
 - After each step with an event, the runtime writes the session to the store.
 - In fake mode no frame goes to a worker. The server decodes each frame, logs it, and drops it. The `ScriptPlayer` dispatches the recognition results.
 
-The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. The server README lists each rule from R1 to R24.
+The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. When an add takes the total over the budget of the profile, the event `budget.exceeded` follows `cart.updated`, and the added line has the sound `warning`. The server README lists each rule from R1 to R24.
 
 ## Phases of a session
 
@@ -233,7 +233,7 @@ stateDiagram-v2
 ## Parts that do not exist yet
 
 - No path of the server checks the token of a session or of a kiosk.
-- The server never sends the events `glance.ambiguous`, `budget.exceeded`, `checkout.spotcheck`, and `error`. An `error` event comes only from the Android app, with a code that starts with `native.`.
+- The server never sends the events `glance.ambiguous`, `checkout.spotcheck`, and `error`. An `error` event comes only from the Android app, with a code that starts with `native.`.
 - The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
 - `biometric.request` and `biometric.result` have no effect.
 - The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
