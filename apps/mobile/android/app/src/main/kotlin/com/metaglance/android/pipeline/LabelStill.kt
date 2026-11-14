@@ -28,8 +28,8 @@ object LabelStill {
     fun read(photo: Bitmap, scan: (Bitmap) -> List<CodeHit>, readWords: (Bitmap) -> List<TextElement>, findFaces: (Bitmap) -> FaceResult): LabelOutcome {
         val source = StillPhoto.readable(photo)
         val hits = orNone { scan(source) }.filterNot { it.isQr }.map { it.toProductHit() }
-        // OCR of a full photo takes long, so it runs only when the scanner gave no code.
-        val words = if (CodeChoice.decoded(hits) == null) orNone { readWords(source) } else emptyList()
+        // OCR also runs when the scanner gave a code: the digits under the bars must not give another code.
+        val words = orNone { readWords(source) }
         CodeChoice.ofStill(hits, words, source.width, source.height)?.let { return LabelOutcome.Code(it) }
         return StillPhoto.prepareLabel(source, findFaces)?.let { LabelOutcome.Upload(it) } ?: LabelOutcome.Dropped
     }

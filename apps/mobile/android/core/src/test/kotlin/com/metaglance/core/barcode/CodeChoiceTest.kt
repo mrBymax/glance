@@ -39,9 +39,22 @@ class CodeChoiceTest {
         assertNull(CodeChoice.ofWords(emptyList()))
     }
 
-    @Test fun `a decoded code of a still counts before its digits`() {
-        val hits = listOf(ProductHit(pens, bars))
-        assertEquals(CodeRead(pens, BarcodeSource.BARCODE), CodeChoice.ofStill(hits, pastaDigits, 4000, 3000))
+    @Test fun `a decoded code of a still counts when the digits under it agree, and with no digits`() {
+        val hits = listOf(ProductHit(pasta, bars))
+        assertEquals(CodeRead(pasta, BarcodeSource.BARCODE), CodeChoice.ofStill(hits, pastaDigits, 4000, 3000))
+        assertEquals(CodeRead(pasta, BarcodeSource.BARCODE), CodeChoice.ofStill(hits, emptyList(), 4000, 3000))
+        // The digits of another product at the edge of the photo say nothing about this code.
+        assertEquals(CodeRead(pasta, BarcodeSource.BARCODE), CodeChoice.ofStill(hits, listOf(word(pens, 100, 100, width = 500)), 4000, 3000))
+    }
+
+    // ML Kit gave the code 3777654524301 for blurred bars of 3017624010701, with a right check digit.
+    @Test fun `a decoded code of a still with other digits under it gives no code`() {
+        assertNull(CodeChoice.ofStill(listOf(ProductHit(pens, bars)), pastaDigits, 4000, 3000))
+    }
+
+    @Test fun `the 12 digits of a decoder and the same code with 13 digits under it agree`() {
+        val hits = listOf(ProductHit("036000291452", bars))
+        assertEquals(CodeRead("036000291452", BarcodeSource.BARCODE), CodeChoice.ofStill(hits, listOf(word("0036000291452", 1000, 1320, width = 500)), 4000, 3000))
     }
 
     @Test fun `the digits under the region of a still count, and other digits of the photo do not`() {

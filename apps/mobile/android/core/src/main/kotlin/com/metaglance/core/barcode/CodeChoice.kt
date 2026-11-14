@@ -18,7 +18,7 @@ object CodeChoice {
     private const val MIN_DIGITS_WITH_NO_REGION = 12
 
     /** The decoded code with the largest box. The shopper holds one product up, so the largest code is the one to read. */
-    fun decoded(hits: List<ProductHit>): String? = hits.filter { it.code != null }.maxByOrNull { area(it.box) }?.code
+    fun decoded(hits: List<ProductHit>): String? = decodedHit(hits)?.code
 
     /** The largest box with the form of a product barcode, or null. */
     fun region(hits: List<ProductHit>): RectPx? = BarcodeRegion.largest(hits.mapNotNull { it.box }.filter(BarcodeRegion::isLinear))
@@ -28,15 +28,29 @@ object CodeChoice {
 
     /**
      * The code of a still photo of `width` x `height` pixels. A still is one image, so no other image can agree
-     * with it. A code of the decoder counts with its check digit. The digits count when they give exactly one
-     * code: under the region of the photo, or, with no region, in the full photo with 12 or 13 digits.
+     * with it. A code of the decoder counts with its check digit, unless the digits under its bars give another
+     * code: the decoder can read blurred bars as a wrong code with a right check digit. With no decoded code, the
+     * digits count when they give exactly one code: under the region of the photo, or, with no region, in the
+     * full photo with 12 or 13 digits.
      */
     fun ofStill(hits: List<ProductHit>, words: List<TextElement>, width: Int, height: Int): CodeRead? {
-        decoded(hits)?.let { return CodeRead(it, BarcodeSource.BARCODE) }
+        val decoded = decodedHit(hits)
+        if (decoded?.code != null) {
+            val printed = decoded.box?.let { codesIn(BarcodeRegion.forDigits(it, width, height), words) }.orEmpty()
+            val agree = printed.isEmpty() || printed.any { Gtin.normalize(it) == Gtin.normalize(decoded.code) }
+            return if (agree) CodeRead(decoded.code, BarcodeSource.BARCODE) else null
+        }
         val digitsArea = region(hits)?.let { BarcodeRegion.forDigits(it, width, height) }
-        val near = words.filter { word -> digitsArea == null || BarcodeRegion.holds(digitsArea, word.box.left + word.box.width / 2, word.box.top + word.box.height / 2) }
-        val codes = TextRows.codes(near).filter { digitsArea != null || it.length >= MIN_DIGITS_WITH_NO_REGION }
+        val codes = if (digitsArea != null) codesIn(digitsArea, words) else TextRows.codes(words).filter { it.length >= MIN_DIGITS_WITH_NO_REGION }
         return codes.singleOrNull()?.let { CodeRead(it, BarcodeSource.OCR) }
+    }
+
+    private fun decodedHit(hits: List<ProductHit>): ProductHit? = hits.filter { it.code != null }.maxByOrNull { area(it.box) }
+
+    /** The codes in the words whose center is inside `crop`. A null crop holds no word. */
+    private fun codesIn(crop: RectPx?, words: List<TextElement>): List<String> {
+        if (crop == null) return emptyList()
+        return TextRows.codes(words.filter { BarcodeRegion.holds(crop, it.box.left + it.box.width / 2, it.box.top + it.box.height / 2) })
     }
 
     private fun area(box: RectPx?): Long = box?.let { it.width.toLong() * it.height } ?: 0
