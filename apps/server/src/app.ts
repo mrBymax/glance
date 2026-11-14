@@ -190,6 +190,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       })));
     },
     afterStep: (session, before) => kiosks.sync(session, before),
+    log: (line) => app.log.info(line),
   });
   app.decorate('bus', bus);
   app.decorate('sessions', sessions);

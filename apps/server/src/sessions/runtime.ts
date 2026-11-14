@@ -31,9 +31,13 @@ export type RuntimeDeps = {
   restoreProducts?: (productIds: string[]) => Promise<void>;
   /** Runs after each step, with the state from before the step. */
   afterStep: (session: SessionRuntime, before: SessionState) => void;
+  /** Gets one line for each spoken line and for each line that the guard dropped. Without it the runtime logs neither. */
+  log?: (line: string) => void;
 };
 
 const KEPT_CAPTIONS = 20;
+/** The log line of a spoken line holds this number of characters of its text. */
+const LOGGED_TEXT_CHARS = 80;
 
 /**
  * One session in this process. It runs the rules for each input and then runs their effects:
@@ -107,6 +111,9 @@ export class SessionRuntime {
           break;
         case 'still.request':
           this.requestStill('label');
+          break;
+        case 'speak.dropped':
+          this.deps.log?.(`speak dropped session=${this.id} key=${effect.line.key} reason=${effect.reason}`);
           break;
       }
     }
@@ -210,6 +217,8 @@ export class SessionRuntime {
         // The line still goes out. The phone reads a line with no clip in its own voice.
         console.error(`session ${this.id}: no clip for the line ${id}:`, error);
       }
+      // What the shopper heard, in the order of the phone.
+      this.deps.log?.(`speak session=${this.id} key=${effect.line.key} text=${text.slice(0, LOGGED_TEXT_CHARS)} prompt=${promptId ?? 'none'}`);
       this.sink?.send({ t: 'speak', id, priority, text, lang, url, sound, interrupt, promptId });
       const caption: Caption = { id, text, lang, priority, url };
       this.captions.push(caption);

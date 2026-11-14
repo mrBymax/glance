@@ -36,6 +36,7 @@ let startPayment: ReturnType<typeof vi.fn<RuntimeDeps['startPayment']>>;
 let afterStep: ReturnType<typeof vi.fn<RuntimeDeps['afterStep']>>;
 let ask: ReturnType<typeof vi.fn<RuntimeDeps['ask']>>;
 let deps: RuntimeDeps;
+let logLines: string[];
 let registry: SessionRegistry;
 let session: SessionRuntime;
 let busEvents: ServerEvent[];
@@ -63,7 +64,9 @@ beforeEach(async () => {
     startPayment,
     ask,
     afterStep,
+    log: (line) => { logLines.push(line); },
   };
+  logLines = [];
   registry = new SessionRegistry(deps);
   session = await registry.create();
   busEvents = [];
@@ -326,4 +329,29 @@ it('ends a checkout that a restart cut off, so the kiosk is free and the shopper
   again.dispatch({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
   expect(again.state.checkout).toMatchObject({ step: 'offered' });
   expect(again.state.prompt!.id).toBe('p-0003');
+});
+
+it('logs each line that the shopper heard, with its key, its first 80 characters, and its prompt', async () => {
+  session.attach(sink);
+  session.dispatch(seeOat);
+  session.dispatch(help);
+  await session.settled();
+  expect(logLines).toHaveLength(2);
+  expect(logLines[0]).toBe(`speak session=${session.id} key=glance.new text=${glanceText} prompt=p-0001`);
+  const helpText = (sink.sent[1] as { text: string }).text;
+  expect(helpText.length).toBeGreaterThan(80);
+  expect(logLines[1]).toBe(`speak session=${session.id} key=info.help text=${helpText.slice(0, 80)} prompt=none`);
+});
+it('logs each line that the guard dropped, with the reason, and sends the phone nothing for it', async () => {
+  session.attach(sink);
+  session.dispatch(seeOat);
+  time += 1000;
+  session.dispatch({ type: 'recognition.slow' });
+  await session.settled();
+  expect(logLines).toEqual([
+    `speak dropped session=${session.id} key=recognition.slow reason=gap`,
+    `speak session=${session.id} key=glance.new text=${glanceText} prompt=p-0001`,
+  ]);
+  expect(sink.sent.filter((message) => message.t === 'speak')).toHaveLength(1);
+  expect(busEvents.filter((event) => event.type === 'caption')).toHaveLength(1);
 });
