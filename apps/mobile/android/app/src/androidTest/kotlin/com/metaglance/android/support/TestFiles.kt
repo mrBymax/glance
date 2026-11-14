@@ -31,8 +31,9 @@ object TestClips {
     const val DIGITS = "barcode-digits.mp4"
     const val DIGITS_TEXT = "8076809513753"
 
-    /** Bars that no scanner decodes, with no digits and with sharp digits. */
+    /** Bars that the scanner finds and does not decode, with no digits and with sharp digits. */
     const val BLURRED = "barcode-blurred.mp4"
+    const val BLURRED_IMAGE = "barcode-blurred.png"
     const val BLURRED_DIGITS = "barcode-blurred-digits.mp4"
     const val BLURRED_TEXT = "3017624010701"
     const val FRAME_SIZE = "720x1280"

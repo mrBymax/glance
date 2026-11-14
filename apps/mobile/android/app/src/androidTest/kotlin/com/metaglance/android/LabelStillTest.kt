@@ -11,12 +11,14 @@ import com.metaglance.android.pipeline.DigitReader
 import com.metaglance.android.pipeline.LabelOutcome
 import com.metaglance.android.pipeline.LabelStill
 import com.metaglance.android.support.TestClips
+import com.metaglance.core.barcode.BarcodeRegion
 import com.metaglance.core.barcode.CodeRead
 import com.metaglance.core.barcode.TextElement
 import com.metaglance.core.contract.BarcodeSource
 import com.metaglance.core.image.FaceResult
 import com.metaglance.core.image.RectPx
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,6 +38,24 @@ class LabelStillTest {
     fun thePhoneReadsTheBarcodeOfAStillWithMlKit() {
         val outcome = readWithMlKit(TestClips.BARCODE_IMAGE)
         assertEquals(CodeRead(TestClips.BARCODE_TEXT, BarcodeSource.BARCODE), (outcome as? LabelOutcome.Code)?.read)
+    }
+
+    // ML Kit gives an empty text and no format for bars that it finds and does not decode.
+    @Test
+    fun blurredBarsAreARegionWithNoTextAndTheStillGoesToTheServer() {
+        val photo = InstrumentationRegistry.getInstrumentation().context.assets.open(TestClips.BLURRED_IMAGE).use(BitmapFactory::decodeStream)
+        val scanner = CodeScanner()
+        val hits = try {
+            scanner.scan(photo)
+        } finally {
+            scanner.close()
+            photo.recycle()
+        }
+        assertEquals("The hits: ${hits.map { "${it.formatName} \"${it.text}\" ${it.box}" }}", 1, hits.size)
+        assertNull(hits.single().text)
+        assertNull(hits.single().productCode)
+        assertTrue(BarcodeRegion.isLinear(checkNotNull(hits.single().box)))
+        assertTrue(readWithMlKit(TestClips.BLURRED_IMAGE) is LabelOutcome.Upload)
     }
 
     @Test

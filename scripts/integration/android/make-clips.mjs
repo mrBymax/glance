@@ -6,6 +6,7 @@
 //   barcode.png                 the same code as a still image
 //   barcode-digits.mp4          the digits of the code 8076809513753 where a barcode prints them, with no bars
 //   barcode-blurred.mp4         the bars of the code 3017624010701 with a blur that hides each narrow bar, and no digits
+//   barcode-blurred.png         the same blurred bars as a still image
 //   barcode-blurred-digits.mp4  the same blurred bars with sharp digits under them
 // MockDeviceKit takes an h265 file on Android, so FFmpeg with libx265 must be on PATH.
 // Use: node android/make-clips.mjs [--force]
@@ -34,8 +35,14 @@ const BLURRED_TEXT = '3017624010701';
 /** The pixels of one narrow bar. ML Kit asks for 2 at least, so 5 decodes with a margin. */
 const BAR_PIXELS = 5;
 const BAR_HEIGHT_MM = 20;
-/** The blur radius in pixels. A narrow bar has 5 pixels, so no single bar stays. ZXing reads the code up to a radius of 3. */
-const BLUR_SIGMA = 6;
+/**
+ * The blur radius in pixels. Measured with ML Kit on the test phone, 2026-11-14, for bars of 5 pixels: the scanner
+ * decodes the code at 6, decodes it only in the larger crop at 8, and reports a region with no code from 10 to 16.
+ * At 20, with sharp digits on the bars, it gave the wrong code 3777654524301. At 26 it finds no region.
+ */
+const BLUR_SIGMA = 12;
+/** The white edge around the bars before the blur, so the blur has room. */
+const BLUR_EDGE = 80;
 const BLACK = '000000';
 const WHITE = 'FFFFFF';
 
@@ -105,8 +112,8 @@ async function makeBlurredImage(text, file, work, { digits }) {
   const sharp = join(work, 'sharp-digits.png');
   await writeSymbol(text, bars, { digits: false });
   await writeSymbol(text, sharp, { bars: false, digits });
-  // A white edge before the blur, so the blur has room. "darken" keeps the darker pixel of both images.
-  const edge = `pad=iw+80:ih+80:40:40:white`;
+  // "darken" keeps the darker pixel of both images.
+  const edge = `pad=iw+${2 * BLUR_EDGE}:ih+${2 * BLUR_EDGE}:${BLUR_EDGE}:${BLUR_EDGE}:white`;
   const filter = `[0:v]format=gbrp,${edge},gblur=sigma=${BLUR_SIGMA}[blurred];[1:v]format=gbrp,${edge}[digits];[blurred][digits]blend=all_mode=darken,${PAD}`;
   ffmpeg(['-i', bars, '-i', sharp, '-filter_complex', filter, '-frames:v', '1', file]);
 }
@@ -138,6 +145,7 @@ const MAKERS = {
   'barcode.png': (file, work) => makeBarcodeImage(BARCODE_TEXT, file, work),
   'barcode.mp4': (file, work) => clipOf(file, work, (image) => makeBarcodeImage(BARCODE_TEXT, image, work)),
   'barcode-digits.mp4': (file, work) => clipOf(file, work, (image) => makeDigitsImage(DIGITS_TEXT, image, work)),
+  'barcode-blurred.png': (file, work) => makeBlurredImage(BLURRED_TEXT, file, work, { digits: false }),
   'barcode-blurred.mp4': (file, work) => clipOf(file, work, (image) => makeBlurredImage(BLURRED_TEXT, image, work, { digits: false })),
   'barcode-blurred-digits.mp4': (file, work) => clipOf(file, work, (image) => makeBlurredImage(BLURRED_TEXT, image, work, { digits: true })),
 };

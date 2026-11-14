@@ -60,7 +60,8 @@ class CodeScanner {
 
     private fun scan(image: InputImage): List<CodeHit> = Tasks.await(scanner.process(image)).map { barcode ->
         val box = barcode.boundingBox?.let { RectPx(it.left, it.top, it.width(), it.height()) }
-        CodeHit(barcode.rawValue, barcode.format, box)
+        // ML Kit gives an empty text, and the format unknown, for a region that it did not decode.
+        CodeHit(barcode.rawValue?.takeIf { it.isNotEmpty() }, barcode.format, box)
     }
 
     companion object {
