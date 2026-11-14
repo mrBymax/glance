@@ -69,4 +69,48 @@ object I420 {
         }
         return argb
     }
+
+    /**
+     * Converts the `crop` of the Y plane to gray ARGB pixels, `scale` times as wide and as high, with alpha 0xFF.
+     * Each output pixel is a mix of its 4 nearest samples, so a scaled bar keeps a straight edge.
+     * The gray is in full range: 16 becomes black, and 235 becomes white.
+     */
+    fun cropLumaToArgb(i420: ByteArray, width: Int, height: Int, crop: RectPx, scale: Int): IntArray {
+        require(scale >= 1) { "The scale is $scale." }
+        require(i420.size >= width * height) { "A $width x $height Y plane has ${width * height} bytes. This buffer has ${i420.size}." }
+        require(
+            crop.left >= 0 &&
+                crop.top >= 0 &&
+                crop.width > 0 &&
+                crop.height > 0 &&
+                crop.left + crop.width <= width &&
+                crop.top + crop.height <= height
+        ) { "The crop $crop is not inside the $width x $height frame." }
+
+        val outWidth = crop.width * scale
+        val outHeight = crop.height * scale
+        // The place of each output column and row in the crop, in 1/256 of a pixel.
+        val sourceX = IntArray(outWidth) { place(it, scale, crop.width) }
+        val argb = IntArray(outWidth * outHeight)
+        for (outY in 0 until outHeight) {
+            val y = place(outY, scale, crop.height)
+            val row = (crop.top + (y shr 8)) * width + crop.left
+            val nextRow = if ((y shr 8) + 1 < crop.height) row + width else row
+            val weightY = y and 0xFF
+            for (outX in 0 until outWidth) {
+                val x = sourceX[outX] shr 8
+                val nextX = if (x + 1 < crop.width) x + 1 else x
+                val weightX = sourceX[outX] and 0xFF
+                val top = (i420[row + x].toInt() and 0xFF) * (256 - weightX) + (i420[row + nextX].toInt() and 0xFF) * weightX
+                val bottom = (i420[nextRow + x].toInt() and 0xFF) * (256 - weightX) + (i420[nextRow + nextX].toInt() and 0xFF) * weightX
+                val luma = (top * (256 - weightY) + bottom * weightY + 32768) shr 16
+                val gray = ((luma - 16) * 255 / 219).coerceIn(0, 255)
+                argb[outY * outWidth + outX] = (0xFF shl 24) or (gray shl 16) or (gray shl 8) or gray
+            }
+        }
+        return argb
+    }
+
+    /** The center of output pixel `out` in source pixels times 256, kept inside the `size` source pixels. */
+    private fun place(out: Int, scale: Int, size: Int): Int = ((2 * out + 1) * 256 / (2 * scale) - 128).coerceIn(0, (size - 1) * 256)
 }
