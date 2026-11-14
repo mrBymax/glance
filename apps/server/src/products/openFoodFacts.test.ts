@@ -5,7 +5,8 @@ import { afterAll, beforeEach, expect, it, vi } from 'vitest';
 import type { FetchFn } from '../speech/elevenlabs';
 import { FAKE_PRODUCT_INFO_DIR } from './fakeProductInfo';
 import {
-  DEFAULT_OFF_BASE_URL, DEFAULT_PRODUCT_INFO_USER_AGENT, OFF_HIT_TTL_MS, OFF_MISS_TTL_MS, OFF_TIMEOUT_MS, createOpenFoodFactsInfo,
+  DEFAULT_OFF_BASE_URL, DEFAULT_PRODUCT_INFO_USER_AGENT, OFF_HIT_TTL_MS, OFF_MISS_TTL_MS,
+  OFF_PAUSE_AFTER_429_MS, OFF_RETRY_AFTER_MS, OFF_TIMEOUT_MS, createOpenFoodFactsInfo,
 } from './openFoodFacts';
 
 // No test of this file reaches Open Food Facts. Each reader gets a fetch function of the test.
@@ -157,12 +158,38 @@ it('shares one request between the calls for one code that run together', async 
   expect(results[2]).toMatchObject({ brand: 'Barilla' });
   expect(fetchStub).toHaveBeenCalledTimes(1);
 });
-it('tries again after a failed request', async () => {
+it('after a failed request, waits 30 seconds before the next request for that code', async () => {
+  expect(OFF_RETRY_AFTER_MS).toBe(30_000);
   fetchStub.mockImplementationOnce(async () => new Response('busy', { status: 503 }));
   const info = reader();
   await expect(info.byGtin(SPAGHETTI)).rejects.toThrow(/503/);
+  now += OFF_RETRY_AFTER_MS - 1;
+  await expect(info.byGtin(SPAGHETTI)).rejects.toThrow(/failed 30 s ago/);
+  expect(fetchStub).toHaveBeenCalledTimes(1);
+  // Another code has no wait.
+  expect(await info.byGtin('3017624010701')).not.toBeNull();
+  now += 1;
   expect(await info.byGtin(SPAGHETTI)).toMatchObject({ brand: 'Barilla' });
+  expect(fetchStub).toHaveBeenCalledTimes(3);
+});
+it('after the status 429, makes no request for each code for 60 seconds', async () => {
+  expect(OFF_PAUSE_AFTER_429_MS).toBe(60_000);
+  fetchStub.mockImplementationOnce(async () => new Response('Too many requests', { status: 429 }));
+  const info = reader();
+  await expect(info.byGtin(SPAGHETTI)).rejects.toThrow(/429/);
+  now += OFF_PAUSE_AFTER_429_MS - 1;
+  await expect(info.byGtin('3017624010701')).rejects.toThrow(/allows no call/);
+  expect(fetchStub).toHaveBeenCalledTimes(1);
+  now += 1;
+  expect(await info.byGtin('3017624010701')).not.toBeNull();
   expect(fetchStub).toHaveBeenCalledTimes(2);
+});
+it('a body with the status 200 and no product is a failed read, and not a miss', async () => {
+  for (const body of ['{"error":"busy"}', '{"status":1}', '[]', '"ok"']) {
+    fetchStub.mockImplementation(async () => json(body));
+    await expect(reader().byGtin(SPAGHETTI)).rejects.toThrow(/no product/);
+  }
+  expect(readdirSync(cacheDir)).toEqual([]);
 });
 it('never asks for a code that only one store can know', async () => {
   const info = reader();
