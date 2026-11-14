@@ -3,6 +3,7 @@ import created from '@glance/shared/fixtures/rest/CreateSessionResponse.json';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { eventFixture, SNAPSHOT } from '../debug/fixtures';
 import { fakeFetch, fakeSources } from '../test/fakes';
+import { ASK_MESSAGE } from './askMessage';
 import { BrowserBridge, LAST_LINE_GRACE_MS } from './browserBridge';
 import { NATIVE_NEW, NATIVE_READY } from './fakeNative';
 
@@ -109,6 +110,12 @@ it('sends each action of the page to its path', async () => {
     { method: 'PATCH', url: `${path}/profile${q}`, body: { detail: 'brief' } },
     { method: 'POST', url: `${path}/intents${q}`, body: { kind: 'stop', source: 'phone' } },
   ]);
+});
+it('posts the question intent as each other intent', async () => {
+  const { bridge, http } = await started();
+  bridge.send(ASK_MESSAGE);
+  await vi.waitFor(() => expect(http.calls).toHaveLength(3));
+  expect(http.calls[2]).toEqual({ method: 'POST', url: `${path}/intents${q}`, body: { kind: 'ask', source: 'phone' } });
 });
 it('merges a profile patch and sends the new profile to the page', () => {
   const { bridge, seen } = offline();

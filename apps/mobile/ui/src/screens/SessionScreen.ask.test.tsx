@@ -1,3 +1,4 @@
+import { PageToNativeSchema } from '@glance/shared';
 import { screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { ASK_MESSAGE } from '../bridge/askMessage';
@@ -5,6 +6,10 @@ import { SNAPSHOT } from '../debug/fixtures';
 import { renderWithUi } from '../test/render';
 import { SessionScreen } from './SessionScreen';
 
+it('holds the intent ask of the contract, with no prompt ID', () => {
+  expect(ASK_MESSAGE).toEqual({ t: 'intent', kind: 'ask' });
+  expect(PageToNativeSchema.safeParse(ASK_MESSAGE).success).toBe(true);
+});
 it('asks the app to listen when the shopper presses the microphone button', async () => {
   const { bridge, user } = renderWithUi(<SessionScreen />, { messages: [{ t: 'snapshot', session: { ...SNAPSHOT, phase: 'shopping' } }] });
   await user.click(screen.getByRole('button', { name: 'Ask a question' }));
