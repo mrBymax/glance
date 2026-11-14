@@ -14,6 +14,10 @@ export const CANNOT_STREAM_THERMAL = 6;
 /** R23. */
 const CART_LINES_BY_VOICE = 5;
 
+/** Percent. The voice reports the battery one time at each level. */
+const BATTERY_LOW = 20;
+const BATTERY_VERY_LOW = 10;
+
 export function cannotStream(device: DeviceState): boolean {
   if (device.link !== 'connected') return false;
   const batteryLow = device.battery !== null && device.battery <= CANNOT_STREAM_BATTERY;
@@ -23,19 +27,18 @@ export function cannotStream(device: DeviceState): boolean {
 
 export function onDeviceState(turn: Turn, input: Extract<RuleInput, { type: 'device.state' }>): void {
   const { s, now } = turn;
+  const before = s.device;
   s.device = input.state;
   if (s.phase === 'paid' || s.phase === 'ended') return;
+  const { stream, battery } = input.state;
 
-  if (input.state.stream === 'streaming' && !s.cameraOn) {
+  if (stream === 'streaming' && !s.cameraOn) {
     s.cameraOn = true;
     if (s.phase === 'resting') s.phase = 'shopping';
     s.lastTargetAt = now;
     emitSessionState(turn);
     speak(turn, say({ key: 'session.start' }));
-    return;
-  }
-
-  if (input.state.stream === 'stopped' && s.cameraOn) {
+  } else if (stream === 'stopped' && s.cameraOn) {
     s.cameraOn = false;
     // R24: with no camera the shopper cannot look at the code. A payment that runs still ends by itself.
     if (s.checkout && !isPaying(s)) {
@@ -44,7 +47,35 @@ export function onDeviceState(turn: Turn, input: Extract<RuleInput, { type: 'dev
     }
     emitSessionState(turn);
     speak(turn, say({ key: cannotStream(input.state) ? 'device.regularCheckout' : 'device.cameraOff' }));
+  } else if (stream === 'paused' && before?.stream !== 'paused') {
+    // The glasses resume the stream by themselves after a tap, so the camera counts as on.
+    speak(turn, say({ key: 'device.paused' }));
   }
+
+  if (battery === null) return;
+  if (battery > BATTERY_LOW) {
+    s.batteryWarned = null;
+    return;
+  }
+  // With a stopped stream the shopper already heard why the camera is off.
+  if (stream === 'stopped') return;
+  if (battery <= BATTERY_VERY_LOW && s.batteryWarned !== BATTERY_VERY_LOW) {
+    s.batteryWarned = BATTERY_VERY_LOW;
+    speak(turn, say({ key: 'device.battery', percent: BATTERY_VERY_LOW }));
+  } else if (s.batteryWarned === null) {
+    s.batteryWarned = BATTERY_LOW;
+    speak(turn, say({ key: 'device.battery', percent: BATTERY_LOW }));
+  }
+}
+
+export function onRecognitionSlow(turn: Turn): void {
+  emit(turn, { type: 'error', code: 'recognition.slow', message: 'Recognition is slow right now.' });
+  speak(turn, say({ key: 'recognition.slow' }));
+}
+
+/** A session that has a device state had a phone before, so this socket is a phone that came back. */
+export function onSocketOpen(turn: Turn): void {
+  if (turn.s.device) speak(turn, say({ key: 'net.backOnline' }));
 }
 
 export function onProfileSet(turn: Turn, input: Extract<RuleInput, { type: 'profile.set' }>): void {

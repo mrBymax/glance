@@ -100,8 +100,10 @@ it('reports a recognizer that fails 3 times in a row, and keeps the socket open'
     await vi.waitFor(() => expect(logged(`recognition call failed. seq=${seq} Error: 503 overloaded`)).toBe(1));
   }
   expect(logged(`recognition is slow for the session ${sessionId}`)).toBe(1);
+  expect(await phone.next((m) => m.t === 'speak')).toMatchObject({ text: 'Recognition is slow right now.', priority: 'high' });
+  expect(await phone.next((m) => m.t === 'event' && m.event.type === 'error')).toMatchObject({ event: { code: 'recognition.slow' } });
   phone.send({ t: 'intent', kind: 'help', source: 'phone' });
-  expect(await phone.next((m) => m.t === 'speak')).toBeDefined();
+  expect(await phone.next((m) => m.t === 'speak' && m.priority === 'low')).toBeDefined();
 });
 it('ends the call of a session that a client deletes', async () => {
   let signal: AbortSignal | null = null;

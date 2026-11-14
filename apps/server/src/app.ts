@@ -169,7 +169,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     recognizer: deps.recognizer,
     clock: deps.clock,
     log: app.log,
-    onSlow: (session) => app.log.warn(`recognition is slow for the session ${session.id}: 3 calls failed in a row`),
+    onSlow: (session) => {
+      app.log.warn(`recognition is slow for the session ${session.id}: 3 calls failed in a row`);
+      session.dispatch({ type: 'recognition.slow' });
+    },
     requireBlur: config.requireBlur,
   });
   if (recognize) app.closers.add(() => recognize.stopAll());

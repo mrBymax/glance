@@ -106,6 +106,8 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
     session.attach(sink);
     send({ t: 'snapshot', session: session.snapshot() });
     unsubscribe = app.bus.subscribe(sessionTopic(session.id), (event) => send({ t: 'event', event } as ServerToDevice));
+    // The rules say "Back online." to a phone that comes back.
+    session.dispatch({ type: 'socket.open' });
     deps.onOpen(session);
 
     ws.on('pong', () => alive.set(ws, true));

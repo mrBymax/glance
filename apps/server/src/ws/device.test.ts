@@ -161,6 +161,21 @@ it('keeps the session when the phone leaves, and takes the phone back', async ()
   expect(await back.next((m) => m.t === 'snapshot')).toMatchObject({ session: { cart: { totalCents: 189 } } });
   back.close();
 });
+it('a phone that connects again hears Back online', async () => {
+  phone.send({ t: 'device.state', state: STREAMING });
+  await phone.next(isSpeak);
+  phone.close(); await phone.closed;
+  const again = await connectPhone(t, id, token);
+  expect(await again.next(isSpeak)).toMatchObject({ text: 'Back online.', priority: 'high' });
+  // The line comes after the snapshot, so the phone has the cart when it speaks.
+  expect(again.messages[0]!.t).toBe('snapshot');
+  again.close();
+});
+it('the first socket of a session hears no Back online', async () => {
+  phone.send({ t: 'intent', kind: 'help', source: 'phone' });
+  await phone.next(isSpeak);
+  expect(phone.messages.filter(isSpeak).map((m) => (m as { text: string }).text)).not.toContain('Back online.');
+});
 it('sends session.end and closes the socket when a client deletes the session', async () => {
   expect((await fetch(`${t.base}/api/sessions/${id}?token=${token}`, { method: 'DELETE' })).status).toBe(204);
   await phone.closed;

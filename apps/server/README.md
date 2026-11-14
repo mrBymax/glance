@@ -27,7 +27,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/ws/device.ts` | The socket of the phone. See "Device socket". |
 | `src/testing.ts` | Test helpers: an app on a free port, a reader for an events stream, and a phone on the device socket. |
 
-Parts that do not exist yet: the catalog seed, the `SAVE_FRAMES` switch, the spot check, and the fingerprint check. The lines for a paused stream, the battery, and slow recognition have a text, and no rule speaks them yet.
+Parts that do not exist yet: the catalog seed, the `SAVE_FRAMES` switch, the spot check, and the fingerprint check.
 
 ## Run it
 
@@ -94,7 +94,7 @@ Two switches let the other apps work with no key. `npm run dev:fake` turns both 
 - The server makes no Gemini call and does not read `GEMINI_API_KEY`.
 - One script player runs for each session. It starts when the phone opens the device socket, or when the first client opens the events stream of the session, whichever comes first.
 - Each 500 ms the player gives the rules the result that the script holds for the time since its start. Outside each step the result is `none`.
-- A session that starts from the events stream, with no phone, first gets the state of glasses that stream. A browser client then gets the "Camera on" caption.
+- A session that starts from the events stream, with no phone, first gets the state of glasses that stream. A browser client then gets the "Camera on" caption. A phone that opens its socket to this session later hears "Back online.", because the session already has a device state.
 - In a `kiosk` step the session sees the kiosk one time each second. `"newest"` names the kiosk that registered last. Each other value is a kiosk code.
 - The device socket still decodes each frame. It logs `frame seq=<n> w=<w> h=<h> blurred=<b> kind=<k> bytes=<n>` at `info` level and drops the frame.
 - The server has one kiosk from the start: `Checkout 3` at `Demo Market` with the code `K3X7`. A printed `GL1 K3X7` code starts a checkout.
@@ -185,7 +185,7 @@ The worker:
 - One call runs at a time for each session. While it runs, one frame waits, and a newer frame takes its place. A stream frame does not replace a waiting still.
 - A call that takes 4 seconds is dropped: the worker aborts it and ignores a late answer.
 - A call that fails gets one log line with the name of the error and at most 200 characters of its message.
-- After 3 failed calls in a row the server logs `recognition is slow for the session <id>`. No spoken line follows yet.
+- After 3 failed calls in a row the server logs `recognition is slow for the session <id>` and gives the rules the input `recognition.slow`. The voice says "Recognition is slow right now.", and the clients get the event `error` with the code `recognition.slow`. A good call starts the count again.
 - The worker holds a frame only for the time of its call. The server writes no frame to disk, to the store, or to a log.
 - The worker stops when its session stops and when the app closes.
 - Each result gets the log line `recognition session=<id> seq=<n> status=<status> ms=<n>`. It gives the server share of the time from glance to voice.
@@ -288,7 +288,7 @@ The rules that exist:
 - After an add, a no removes that unit for 8 seconds, and a second yes gets one hint (R10). On the prompt for "add another", a no removes one unit (R11).
 - An undo removes the last added unit that the cart still holds (R12). A cart edit sets the quantity of a cart line from 0 to 99.
 - A yes or a no with no valid target gets one hint, if a prompt finished in the last 15 seconds (R20). Silence adds nothing (R21).
-- A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code.
+- A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code. With its line, a busy kiosk also gives the event `error` with the code `kiosk.busy`.
 - A yes pays only as an answer to the pay prompt (R16). The effect `payment.start` asks the runtime for the payment, and the input `payment.result` brings its result.
 - A product held up during a checkout suspends it. The pay prompt returns with the new total when the product has left the view and the code is in view (R17).
 - A no on the pay prompt cancels the checkout, and the kiosk is muted until its code has left the view (R18).
@@ -317,6 +317,9 @@ The session rules:
 
 - The camera counts as on when the phone reports the stream state `streaming`. The voice then says the start line.
 - When the phone reports `stopped`, an open checkout ends and the cart stays (R24). The line is "Camera off. Please use a regular checkout." when the battery is at 5 percent or less, or the thermal level is 6 or more. `DeviceState` has no stream error, so `general.ts` holds these two limits. In each other case the line is "Camera off."
+- When the phone reports `paused`, and the state before was not `paused`, the line is "Paused. Tap the side of your glasses to resume." The camera still counts as on, so the stream that returns gets no "Camera on" line.
+- The voice reports the battery of the glasses one time at 20 percent and one time at 10 percent. A level above 20 percent starts the two warnings again. A state with a stopped stream gives no battery line.
+- The input `socket.open` gives "Back online." when the session already has a device state. The stored session holds that state, so the line also comes after a restart of the server. The first socket of a new session gets no line.
 - After 3 minutes with no product and no kiosk in view, the camera rests and the cart stays (R22). The effect `session.rest` tells the phone.
 - The intent `stop` ends the session. The intent `repeat` speaks the last line again.
 - The intents `total` and `cart` speak the cart. The cart by voice has at most five lines (R23).
@@ -445,7 +448,7 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2. The messages are `DeviceToServer` and `ServerToDevice` of `@glance/shared`.
 
 - An upgrade for another path or for an unknown session gets `404 Not Found`. An upgrade with a missing or wrong token gets `401 Unauthorized`. The server writes the answer and lets the client close the connection, with a limit of 5 seconds. If the server closes first, a client under load can get a connection reset in place of the status.
-- On open, the server sends a `snapshot`. Then it sends each event of the session as `event`, and each line as `speak`.
+- On open, the server sends a `snapshot`. Then it sends each event of the session as `event`, and each line as `speak`. A phone that comes back hears "Back online." after the snapshot.
 - One phone holds a session. A second socket for the same session takes over, and the server closes the older one. No message goes to both.
 - `intent`, `prompt.done`, `device.state`, `cart.edit`, and `profile.set` go to the rules. After `profile.set` the phone gets a new `snapshot`.
 - `speech.final` with a confidence of 0.5 or more goes through the command table below. A command becomes an intent with the source `voice` and the ID of the last prompt that finished.

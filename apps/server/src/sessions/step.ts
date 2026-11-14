@@ -1,7 +1,7 @@
 import { EMPTY_CART, type Profile, TIMING } from '@glance/shared';
 import { onAnswer, onCartEdit, onPromptDone, onUndo } from './answers';
 import { expireCheckout, onKioskSeen, onPaymentResult } from './checkout';
-import { onDeviceState, onGeneralIntent, onProfileSet, restWhenIdle } from './general';
+import { onDeviceState, onGeneralIntent, onProfileSet, onRecognitionSlow, onSocketOpen, restWhenIdle } from './general';
 import { onRecognition } from './glance';
 import { type Turn, emit } from './turn';
 import type { Effect, RuleContext, RuleInput, SessionState, SpeakEffect } from './types';
@@ -30,6 +30,7 @@ export function createSessionState(profile: Profile, now: number): SessionState 
     lastTargetAt: now,
     lastSpeak: null,
     device: null,
+    batteryWarned: null,
     lastReceipt: null,
   };
 }
@@ -73,6 +74,12 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
       break;
     case 'profile.set':
       onProfileSet(turn, input);
+      break;
+    case 'recognition.slow':
+      onRecognitionSlow(turn);
+      break;
+    case 'socket.open':
+      onSocketOpen(turn);
       break;
     case 'tick':
       break;
