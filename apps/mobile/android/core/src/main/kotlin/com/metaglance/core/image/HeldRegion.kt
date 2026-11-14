@@ -18,7 +18,7 @@ data class DetectedObject(val label: String, val score: Float, val box: RectPx)
  */
 object HeldRegion {
     /** The default of `glance.heldCrop` in the build of the app. */
-    const val DEFAULT_ON = true
+    const val DEFAULT_ON = false
 
     /** The classes that a product in a hand got in the measurement, and the food classes. A can has no class of its own: it is a `cup` or a `bottle`. */
     val LABELS = setOf(

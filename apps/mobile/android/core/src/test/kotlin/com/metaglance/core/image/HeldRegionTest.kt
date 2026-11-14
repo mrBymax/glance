@@ -140,6 +140,6 @@ class HeldRegionTest {
         assertEquals("held crop: off", HeldRegion.logLine(false))
         assertEquals("Held crop: on", HeldRegion.menuLabel(true))
         assertEquals("Held crop: off", HeldRegion.menuLabel(false))
-        assertEquals(true, HeldRegion.DEFAULT_ON)
+        assertEquals(false, HeldRegion.DEFAULT_ON)
     }
 }

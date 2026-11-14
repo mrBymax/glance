@@ -376,7 +376,7 @@ The app asks the glasses for a frame size and a frame rate. A person can change 
 | The frame size | `Stream quality: <name> <width> x <height>` | `glance.streamQuality` | `HIGH` | `HIGH` 720 x 1280, `MEDIUM` 504 x 896, `LOW` 360 x 640 |
 | The frames each second | `Stream frame rate: <n>` | `glance.streamFps` | `7` | 2, 7, 15, 24, 30 |
 | The still of the sharp second look | `Second look still: <off or on>` | `glance.secondLookStill` | `false` | `false`, `true` |
-| The crop of the held product | `Held crop: <on or off>` | `glance.heldCrop` | `true` | `true`, `false`. See "The crop of the held product". |
+| The crop of the held product | `Held crop: <on or off>` | `glance.heldCrop` | `false` | `true`, `false`. See "The crop of the held product". |
 
 1. Open "Glance Mock" and go to the group `Stream`, at the end of the list.
 2. Tap an item. Each tap goes to the next value, and from the last value to the first.
@@ -601,7 +601,7 @@ Measured on 2026-11-14 with `gemini-3.5-flash-lite` and the crops that the rule 
 
 | Setting | Item of "Glance Mock" | Key of `local.properties` | Default | Values |
 |---|---|---|---|---|
-| The held crop | `Held crop: <on or off>` | `glance.heldCrop` | `true` | `true`, `false` |
+| The held crop | `Held crop: <on or off>` | `glance.heldCrop` | `false` | `true`, `false` |
 
 - The item is in the group `Stream`. Each tap switches it. The app reads the value at each camera start and logs `held crop: on` or `held crop: off`. A running camera keeps its value.
 - The app keeps the value over a restart. The key of `local.properties` sets the value of the build, and from the first tap the value of the menu wins.
@@ -636,6 +636,8 @@ Nobody measured, as of 2026-11-14:
 - A product that is no can: a box, a bag, a pack of paper cups. The one appearance of the paper cups got 2 regions in 15 frames.
 
 ### Checks with the glasses
+
+The crop is off by default. The measurement of 2026-11-14 on saved frames showed no gain in the names (a crop alone named 10 of 65 held cans, the full frame 16), and the detector found a region in about half of the frames with a held can. Nobody has measured a crop at the native stream size, which is the case it was built for. So a person turns it on in "Glance Mock" to compare.
 
 Run one session with `Held crop: on` and the server with `SAVE_FRAMES`, and the same walk with `Held crop: off`.
 
@@ -1081,7 +1083,7 @@ The top line of the menu shows `NativeState` and `DeviceState` as JSON, live. Th
 | Force | `Meta AI missing`, `Update required`, `Stream error BATTERY_LOW`, `Stream error THERMAL_HOT`. MockDeviceKit has no call for these states, so the debug hooks of `DatLink` make them. |
 | App | `Server URL`. `Drop server link 10 s`: the socket closes and connects again after 10 seconds. `Sensitivity: gentle, normal, firm` for the head gestures. `Use placeholder page`. |
 | Barcode | `Barcode wait (ms)`, `Still gap (ms)`, and `Save barcode waits`: the two times of the label still, from the next camera start. They also count for real glasses. See "The two times of the label still". |
-| Stream | `Stream quality` and `Stream frame rate`: what the app asks of the camera stream, from the next camera start. `Held crop`: the upload of the crop around the product in the hand, on by default. See "The crop of the held product". `Second look still`: the still for a `glance.ambiguous` event, off by default. Each tap goes to the next value. They also count for real glasses. See "The stream settings". |
+| Stream | `Stream quality` and `Stream frame rate`: what the app asks of the camera stream, from the next camera start. `Held crop`: the upload of the crop around the product in the hand, off by default. See "The crop of the held product". `Second look still`: the still for a `glance.ambiguous` event, off by default. Each tap goes to the next value. They also count for real glasses. See "The stream settings". |
 
 The states of the app, and the items that make each one:
 
@@ -1350,7 +1352,7 @@ Git ignores `local.properties`. Each key is optional, and each one is also a Gra
 | `glance.streamQuality` | `HIGH` | The frame size that the app asks of the glasses, as `BuildConfig.STREAM_QUALITY`: `HIGH` (720 x 1280), `MEDIUM` (504 x 896), or `LOW` (360 x 640). Another value stops the build. See "The stream settings". |
 | `glance.streamFps` | `7` | The frames each second that the app asks for, as `BuildConfig.STREAM_FPS`: 2, 7, 15, 24, or 30. The app takes the nearest of these for another number. A value that is no whole number stops the build. |
 | `glance.secondLookStill` | `false` | `true` makes the app take a still for each `glance.ambiguous` event, as `BuildConfig.SECOND_LOOK_STILL`. Another value than `true` or `false` stops the build. See "The second look still". |
-| `glance.heldCrop` | `true` | `false` makes the app upload the full frame of each window, as before the held crop, as `BuildConfig.HELD_CROP`. Another value than `true` or `false` stops the build. See "The crop of the held product". |
+| `glance.heldCrop` | `false` | `true` makes the app upload the crop around the product in the hand; `false` uploads the full frame of each window, as before the held crop, as `BuildConfig.HELD_CROP`. Another value than `true` or `false` stops the build. See "The crop of the held product". |
 | `glance.demoStoreFile` | `glance-demo.jks` | The keystore of the demo build, as a path from the folder `app` |
 | `glance.demoStorePassword` | empty | The password of the keystore |
 | `glance.demoKeyAlias` | `glance-demo` | The name of the key in the keystore |
