@@ -237,3 +237,15 @@ it('a second yes while the payment runs starts no second payment and says nothin
   expect(payments(h)).toHaveLength(1);
   expect(h.state.cart.totalCents).toBe(639);
 });
+it('R15: a suspended checkout ends when the cart gets empty, so an empty cart never gets a pay prompt', () => {
+  const h = harness({ cart: [OAT] }); h.kiosk();
+  h.see(OAT); h.done(); h.no('head');               // the add-another prompt suspends the checkout, and the no removes the unit
+  expect(h.events()).toEqual(['glance.cleared', 'cart.updated', 'checkout.cancelled', 'session.state']);
+  expect(h.lines()).toEqual(['cart.removed']);
+  expect(h.state).toMatchObject({ phase: 'shopping', checkout: null, prompt: null, cart: EMPTY_CART });
+  h.advance(T.viewMs); h.kiosk();
+  expect(h.events()).toEqual([]);
+  expect(h.lines()).toEqual(['checkout.empty']);
+  expect(h.state.phase).toBe('shopping');
+  expect(payments(h)).toEqual([]);
+});

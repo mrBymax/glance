@@ -87,15 +87,22 @@ export function suspendCheckoutFor(turn: Turn, productId: string): void {
   checkout.suspendedBy = productId;
 }
 
-/** The pay prompt on the phone shows the total, so a cart change needs a new prompt with the new total. */
+/**
+ * The pay prompt on the phone shows the total, so a cart change needs a new prompt with the new total.
+ * R15: a checkout needs items in the cart, so an empty cart ends it.
+ */
 export function afterCartChange(turn: Turn): void {
   const { s } = turn;
-  if (s.checkout?.step !== 'offered') return;
+  const step = s.checkout?.step;
+  if (step !== 'offered' && step !== 'suspended') return;
   if (s.cart.items.length > 0) {
-    offer(turn, false);
+    // A suspended checkout gets its prompt with the new total when the code is in view again (R17).
+    if (step === 'offered') offer(turn, false);
     return;
   }
   endCheckout(turn);
+  // The shopper holds a product up. The next report of the code gives the line for an empty cart.
+  if (step === 'suspended') return;
   // The code is still in view, and this line is the one that R15 gives for an empty cart.
   if (s.kioskSeen) s.kioskSeen.said = true;
   speak(turn, say({ key: 'checkout.empty' }));

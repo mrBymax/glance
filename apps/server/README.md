@@ -293,6 +293,7 @@ The rules that exist:
 - A no on the pay prompt cancels the checkout, and the kiosk is muted until its code has left the view (R18).
 - A checkout ends when its code was out of view for 30 seconds (R19). The cart stays.
 - A cart change during a pay prompt gives a new pay prompt with the new total. The old prompt cannot pay.
+- A checkout needs items in the cart. When the cart gets empty, the checkout ends, also while a product suspends it. So an empty cart never gets a pay prompt.
 - While the payment runs, no answer, no undo, and no cart edit has an effect.
 
 The steps of a checkout:
@@ -305,7 +306,7 @@ stateDiagram-v2
   offered --> offered: cart change, or the code comes back after the head window
   offered --> paying: accepted yes on the pay prompt
   offered --> [*]: no, empty cart, or code out of view for 30 seconds
-  suspended --> [*]: code out of view for 30 seconds
+  suspended --> [*]: empty cart, or code out of view for 30 seconds
   paying --> [*]: payment result
 ```
 
