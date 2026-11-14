@@ -1,6 +1,7 @@
 import { type IntentSource, type Product, TIMING, cartTotalCents, localize } from '@glance/shared';
 import { openAskWindow } from './ask';
 import { afterCartChange, cancelCheckout, isConfirmed, startPayment } from './checkout';
+import { noteAnswer } from './code';
 import { say } from './say';
 import { type Turn, emit, speak } from './turn';
 import type { RuleInput, SessionState } from './types';
@@ -89,6 +90,7 @@ function answerProductPrompt(turn: Turn, kind: 'yes' | 'no', prompt: Extract<Ses
   const { s, now } = turn;
   const { productId } = prompt;
   s.prompt = null;
+  noteAnswer(s, now);
   // R8 and R10: no new prompt while the product stays in view.
   if (!s.muted.includes(productId)) s.muted.push(productId);
   emit(turn, { type: 'glance.cleared', promptId: prompt.id });

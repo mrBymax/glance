@@ -261,7 +261,7 @@ With the glasses, a still took 2.3 to 2.9 seconds and its label call 1.5 to 2.3 
 - The app keeps the values over a restart. An empty field gives the value of the build again.
 - A number outside the limits becomes the nearest limit. A text that is no whole number changes nothing.
 - The keys of `local.properties` set the values of the build. A value of the menu wins over them until a person empties the field.
-- A short barcode wait takes the still before the scanner and OCR had their time: OCR needs 3 equal reads, which take up to 1 second. Each still can stop Motion for a moment, so a nod can fail after it.
+- A short barcode wait takes the still before the scanner and OCR had their time: OCR needs 3 equal reads, which take up to 1 second. Each still stops Motion for seconds, so a nod can fail after it.
 - The server starts at most one label call each 5 seconds for a session. With a still gap below 5000 ms it drops some label frames, and the phone still reads each still for a code.
 - With real recognition, each label frame that the server accepts is one paid model call. A shorter still gap can cost more calls.
 - `LabelTiming` in `core` holds the limits and reads a field. The probe screen always uses the defaults, 1000 ms and 6000 ms.
@@ -287,11 +287,11 @@ Measured with Ray-Ban Meta glasses on 2026-11-14, in one test:
 - The scanner decoded no code at the length of an arm.
 - A label still was 1080 x 1440 (HEIC) and took 2.3 to 2.9 seconds. In one still the barcode of a pack of paper cups was about 95 pixels wide, which is too small to read.
 - With no barcode in view, the scanner reported the text of a laptop screen as a region. See the size rule above.
+- A still stopped the head-motion stream for 5.9 seconds, and for 10 seconds when the capture failed. A nod in that time is lost. So the server asks for a still only as an exception: see "The model also reads the code" in `apps/server/README.md`.
 
 What nobody measured:
 
 - The distance at which a code decodes from the stream of the real glasses. ML Kit asks for 2 pixels for each narrow bar, so an EAN-13 code must be 190 pixels wide in the frame. The research of 2026-11-13 estimates 7 to 11 cm for that. See "Checks with the glasses or with sound".
-- Whether a still stops Motion.
 - The size rule of a region and the barcode wait of 1000 ms with the real glasses. The instrumented tests did not run after these changes: they need the test phone.
 - The time of one scan with the 5 formats and the regions, and the time of one OCR run, on the phone.
 - The text that ML Kit gives for a UPC-E code. The app expects 8 digits.

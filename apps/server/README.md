@@ -457,7 +457,7 @@ sequenceDiagram
   alt digits with a right check digit, and the store sells the code
     Note over Server: the lookup of barcode.seen, source model
     Server-->>Phone: glance.pending and the glance line
-  else code visible in 2 frames inside 2 seconds, and no code read in the last 3 seconds
+  else code visible in 2 frames inside 2 seconds, and the limits of a still allow one
     Server-->>Phone: still.request with the purpose label
     alt the phone reads a code in its still
       Phone->>Server: barcode.seen
@@ -474,8 +474,17 @@ sequenceDiagram
 - `visible` is true when a hand holds a product up and the frame shows its barcode, or the package side with its barcode. The instruction gives false to a barcode on a shelf label, on a price tag, and on a product that stays on the shelf. `digits` holds the printed digits when the model can read each one. `agents/recognition.md` says: never guess a digit.
 - A model reads print and can write digits that are not there. So digits of the model count only with a right check digit and a product of the catalog or the store list. Then one frame is enough. Each other code of the model has no effect: the voice never says "not in this store" for digits that only the model read.
 - A package shown with its barcode side gets the status `none`, so the voice does not ask for the front.
-- The server sends `still.request` when the model saw a code in 2 frames less than 2 seconds apart, no code was read in the last 3 seconds, and the session got no request in the last 6 seconds. The rule is `onFrameCode` in `src/sessions/code.ts`.
-- After 2 requests with no code read, the next request waits 30 seconds. A still can stop Motion on the glasses for a moment, and a code that no reader can read must not cause one each 6 seconds. A code that was read brings the 6 seconds back.
+- The server sends `still.request` when the model saw a code in 2 frames less than 2 seconds apart, and the limits of a still allow one. The rule is `onFrameCode` in `src/sessions/code.ts`.
+
+A still is the exception. A still stops the head-motion stream of the glasses. In the test of 2026-11-14 the stream stopped for 5.9 seconds for one still, and for 10 seconds when the capture failed. A nod or a shake in that time is lost. So `stillAllowed` in `src/sessions/code.ts` gives each still request these limits, for a code and for a product that sight cannot name:
+
+- None while a product prompt is open: from its start to its answer, or to its end by R5. The shopper answers it with the head.
+- None while sight named a product in the last 3 seconds (`PRODUCT_KNOWN_MS`). The product is known, so its digits are not needed. In the test, the server asked for a still for a product that recognition had named.
+- None in the 8 seconds after a yes or a no to a product prompt (`STILL_AFTER_ANSWER_MS`). The shopper still holds the product, and a no can still remove the unit (R10).
+- None while a code was read in the last 3 seconds, and none while the payment runs.
+- One request each 6 seconds at most.
+- After 2 requests with no code read, the next request waits 30 seconds. A code that no reader can read must not cost the motion stream each 6 seconds. A code that was read brings the 6 seconds back.
+
 - The lookup of the digits can take up to 2500 ms for a product that the cache does not hold. A second frame in that time can still ask for a still. The still then gives the same product, and one appearance gets one prompt.
 
 ### A product that sight cannot name
@@ -505,9 +514,9 @@ sequenceDiagram
 ```
 
 - 2 stream frames with the status `unknown` or `unsure`, less than 2 seconds apart, ask the phone for a still. The rule is `onUnnamedProduct` in `src/sessions/code.ts`. The still of the sharp second look does not count.
-- The request has the limits of a still for a code, and shares them: no code or product accepted in the last 3 seconds, one request each 6 seconds, and 30 seconds after 2 requests with no code read.
+- The request has the limits of a still for a code, and shares them. See "The model also reads the code": no open product prompt, no product by sight in the last 3 seconds, no answer in the last 8 seconds, one request each 6 seconds, and 30 seconds after 2 requests with no code read.
 - The unknown line of a new appearance waits while a still can follow. It plays after 2 seconds when no second frame asked for a still, after 5 seconds when no label frame came, and at the end of a label call that gave no product. A barcode report, a product by sight, and a look-alike answer drop it.
-- When the limits allow no still, the unknown line plays at once, as before.
+- When the limits allow no still, the unknown line plays at once, as before. This holds for an unknown product that the shopper shows while a prompt is open.
 - An aim hint does not wait. It is quiet from the request to the end of the label call.
 - A session with no phone gets no still. Its unknown line plays 5 seconds after the request.
 

@@ -2,8 +2,8 @@ import { expect, it } from 'vitest';
 import { TIMING as T } from '@glance/shared';
 import { NO_RESULT } from '../recognition/result';
 import {
-  CODE_ACCEPTED_MS, CODE_FRAMES_WITHIN_MS, CODE_QUIET_MS, LABEL_ANSWER_MS, STILLS_BEFORE_WAIT, STILL_ANSWER_MS, STILL_REQUEST_EVERY_MS,
-  STILL_REQUEST_WAIT_MS,
+  CODE_ACCEPTED_MS, CODE_FRAMES_WITHIN_MS, CODE_QUIET_MS, LABEL_ANSWER_MS, PRODUCT_KNOWN_MS, STILLS_BEFORE_WAIT, STILL_AFTER_ANSWER_MS,
+  STILL_ANSWER_MS, STILL_REQUEST_EVERY_MS, STILL_REQUEST_WAIT_MS,
 } from './code';
 import { SAME_TEXT_MS } from './guard';
 import { type Harness, KIOSK, OAT, RYE, harness, product } from './harness';
@@ -234,7 +234,7 @@ it('asks for a still at most one time each 6 seconds', () => {
 });
 it('asks for no still while a code was accepted in the last 3 seconds', () => {
   const h = scanned();
-  h.barcode(found(NUTELLA));
+  h.barcode(missing());
   code(h); h.advance(500); code(h);
   expect(h.effects).toEqual([]);
   h.advance(1000); h.barcode(missing());
@@ -296,6 +296,7 @@ it('a label frame that gave no product gets no line while the payment runs', () 
 });
 it('the times of the design', () => {
   expect([CODE_QUIET_MS, CODE_FRAMES_WITHIN_MS, STILL_REQUEST_EVERY_MS]).toEqual([3000, 2000, 6000]);
+  expect([PRODUCT_KNOWN_MS, STILL_AFTER_ANSWER_MS]).toEqual([3000, 8000]);
 });
 it('after 2 stills with no code read, the next still waits 30 seconds, so a code that no reader can read does not stop Motion each 6 seconds', () => {
   expect([STILLS_BEFORE_WAIT, STILL_REQUEST_WAIT_MS]).toEqual([2, 30000]);
@@ -373,12 +374,56 @@ it('asks for no still for an unknown product while a code or a product was accep
   h.advance(100); unknown(h);
   expect(stillRequests(h)).toBe(1);
 
-  const seen = scanned();
-  seen.see(OAT);
-  seen.advance(CODE_ACCEPTED_MS - 600); unknown(seen); seen.advance(500); unknown(seen);
-  expect(stillRequests(seen)).toBe(0);
-  seen.advance(100); unknown(seen);
-  expect(stillRequests(seen)).toBe(1);
+});
+
+/** Sight named the product `ms` ago, and no prompt is open: the state after a prompt that ended with no answer. */
+function knownBySight(h: Harness, productId: string, ms: number): void {
+  h.state = { ...h.state, seen: { ...h.state.seen, [productId]: h.now - ms } };
+}
+const twoFrames: [string, (h: Harness) => void][] = [['a code in view', code], ['an unknown product', unknown]];
+
+it.each(twoFrames)('a still is the exception: none for %s while a product prompt is open', (_name, frame) => {
+  const h = scanned();
+  h.see(OAT);
+  // The oat drink left the view, and its prompt still waits for the answer.
+  h.advance(PRODUCT_KNOWN_MS + 500); frame(h); h.advance(500); frame(h);
+  expect(h.state.prompt).toMatchObject({ productId: OAT });
+  expect(stillRequests(h)).toBe(0);
+  // R5 ends the prompt with no answer. Then a still can help again.
+  h.advance(T.viewMs + T.promptTtlAfterLeftMs); frame(h); h.advance(500); frame(h);
+  expect(h.state.prompt).toBeNull();
+  expect(stillRequests(h)).toBe(1);
+});
+it.each(twoFrames)('a still is the exception: none for %s while sight named a product in the last 3 seconds', (_name, frame) => {
+  const h = scanned();
+  knownBySight(h, OAT, 0);
+  h.advance(PRODUCT_KNOWN_MS - 600); frame(h); h.advance(500); frame(h);
+  expect(stillRequests(h)).toBe(0);
+  h.advance(100); frame(h);
+  expect(stillRequests(h)).toBe(1);
+});
+it.each(twoFrames)('a still is the exception: none for %s in the 8 seconds after a yes', (_name, frame) => {
+  const h = scanned();
+  h.see(OAT); h.done(); h.yes('phone');
+  expect(h.state.prompt).toBeNull();
+  h.advance(STILL_AFTER_ANSWER_MS - 600); frame(h); h.advance(500); frame(h);
+  expect(stillRequests(h)).toBe(0);
+  h.advance(100); frame(h);
+  expect(stillRequests(h)).toBe(1);
+});
+it('a still is the exception: none in the 8 seconds after a no', () => {
+  const h = scanned();
+  h.see(OAT); h.done(); h.no('phone');
+  h.advance(STILL_AFTER_ANSWER_MS - 600); code(h); h.advance(500); code(h);
+  expect(stillRequests(h)).toBe(0);
+  h.advance(100); code(h);
+  expect(stillRequests(h)).toBe(1);
+});
+it('the unknown line plays at once while a product prompt is open, because no still can follow', () => {
+  const h = scanned();
+  h.see(OAT);
+  h.advance(PRODUCT_KNOWN_MS + 500); unknown(h);
+  expect(h.lines()).toEqual(['glance.unknown']);
 });
 it('asks for no still for an unknown product while the payment runs', () => {
   const h = harness({ cart: [OAT] });
@@ -465,7 +510,7 @@ it('the unknown line that waits is dropped when sight names look-alike products'
 });
 it('a session that the server of 2026-11-14 stored has a code state with fewer fields, and takes an unknown result', () => {
   const h = scanned();
-  const { heldAt: _heldAt, waitUntil: _waitUntil, unknownHeldAt: _unknownHeldAt, ...old } = h.state.code;
+  const { heldAt: _heldAt, waitUntil: _waitUntil, unknownHeldAt: _unknownHeldAt, answeredAt: _answeredAt, ...old } = h.state.code;
   h.state = { ...h.state, code: old as SessionState['code'] };
   h.advance(1000);
   expect(h.effects).toEqual([]);

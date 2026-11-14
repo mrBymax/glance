@@ -15,8 +15,15 @@ export const CODE_QUIET_MS = 3000;
 export const CODE_FRAMES_WITHIN_MS = 2000;
 /** No still while a code or a product was accepted inside this time. */
 export const CODE_ACCEPTED_MS = 3000;
-/** A still can stop Motion on the glasses for a moment, so a session asks for one at most one time in this time. */
+/**
+ * A still stops the head-motion stream of the glasses: for 5.9 seconds in the test of 2026-11-14, and for 10 seconds
+ * when the capture failed. A nod in that time is lost. So a session asks for a still at most one time in this time.
+ */
 export const STILL_REQUEST_EVERY_MS = 6000;
+/** No still while sight named a product inside this time: the product is known, and its digits are not needed. */
+export const PRODUCT_KNOWN_MS = 3000;
+/** No still for this time after the answer to a product prompt. The shopper still holds the product, and can nod or shake again (R10). */
+export const STILL_AFTER_ANSWER_MS = 8000;
 /** After this count of requests with no code read, the phone and the model cannot read the code that the model sees. */
 export const STILLS_BEFORE_WAIT = 2;
 /** The time between two requests after that count. A code that was read brings the 6 seconds back. */
@@ -32,14 +39,14 @@ export const LABEL_ANSWER_MS = TIMING.recognitionTimeoutMs + BARCODE_LOOKUP_MS;
 export function newCodeState(): CodeState {
   return {
     at: null, visibleAt: null, acceptedAt: null, stillRequestAt: null, stillsOpen: 0, miss: null,
-    heldAt: null, waitUntil: null, unknownHeldAt: null,
+    heldAt: null, waitUntil: null, unknownHeldAt: null, answeredAt: null,
   };
 }
 
 /** The code state of a session. A session that an older server stored has none, or one with fewer fields, so this fills it. */
 export function codeOf(s: SessionState): CodeState {
   const stored = (s as { code?: Partial<CodeState> }).code;
-  if (stored === undefined || stored.unknownHeldAt === undefined) s.code = { ...newCodeState(), ...stored };
+  if (stored === undefined || stored.answeredAt === undefined) s.code = { ...newCodeState(), ...stored };
   return s.code;
 }
 
@@ -54,10 +61,17 @@ export function codeQuiet(s: SessionState, now: number): boolean {
   return (at !== null && now - at < CODE_QUIET_MS) || (waitUntil !== null && now < waitUntil);
 }
 
-/** The limits that each still request has. They do not depend on the reason for the still. */
+/**
+ * The limits that each still request has. They do not depend on the reason for the still.
+ * A still is the exception: it costs the head-motion stream for seconds, so the rules ask for none
+ * while a nod can answer a prompt, and none for a product that is known.
+ */
 function stillAllowed(s: SessionState, now: number): boolean {
   if (isConfirmed(s)) return false;
+  if (s.prompt?.kind === 'product') return false;
+  if (Object.values(s.seen).some((at) => now - at < PRODUCT_KNOWN_MS)) return false;
   const state = codeOf(s);
+  if (state.answeredAt !== null && now - state.answeredAt < STILL_AFTER_ANSWER_MS) return false;
   if (state.acceptedAt !== null && now - state.acceptedAt < CODE_ACCEPTED_MS) return false;
   // A barcode on a shelf label, or one that is too far away, stays in view. Without the long wait it would get a still each 6 seconds.
   const every = state.stillsOpen >= STILLS_BEFORE_WAIT ? STILL_REQUEST_WAIT_MS : STILL_REQUEST_EVERY_MS;
@@ -90,9 +104,9 @@ export function onFrameCode(turn: Turn, code: FrameCode): void {
   if (stillAllowed(s, now)) requestStill(turn);
 }
 
-/** True when a still can help with a product that sight cannot name: the limits allow one, and sight named no product just now. */
-function stillCanName(s: SessionState, now: number): boolean {
-  return stillAllowed(s, now) && !Object.values(s.seen).some((at) => now - at < CODE_ACCEPTED_MS);
+/** The shopper answered a product prompt with a yes or a no. */
+export function noteAnswer(s: SessionState, now: number): void {
+  codeOf(s).answeredAt = now;
 }
 
 /**
@@ -106,7 +120,7 @@ export function onUnnamedProduct(turn: Turn): void {
   const before = state.heldAt;
   state.heldAt = now;
   if (before === null || now - before >= CODE_FRAMES_WITHIN_MS) return;
-  if (stillCanName(s, now)) requestStill(turn);
+  if (stillAllowed(s, now)) requestStill(turn);
 }
 
 /**
@@ -115,7 +129,7 @@ export function onUnnamedProduct(turn: Turn): void {
  */
 export function holdUnknownLine(turn: Turn): boolean {
   const { s, now } = turn;
-  if (!stillCanName(s, now)) return false;
+  if (!stillAllowed(s, now)) return false;
   codeOf(s).unknownHeldAt = now;
   return true;
 }

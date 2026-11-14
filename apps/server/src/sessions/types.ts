@@ -80,6 +80,8 @@ export type CodeState = {
   waitUntil: number | null;
   /** The time of the unknown result whose line waits for a still, or null when no line waits. */
   unknownHeldAt: number | null;
+  /** The last yes or no that answered a product prompt. No still follows it for 8 seconds. */
+  answeredAt: number | null;
 };
 
 /** What the guard of guard.ts knows about the voice of a session. Each time is a clock value, or null for "never". */
