@@ -5,6 +5,8 @@ import type { CatalogIndex } from './catalog/catalog';
 import type { Clock } from './clock';
 import type { Config } from './config';
 import type { Store } from './db/store';
+import { pathOnly } from './http/auth';
+import { registerDemoRoutes } from './http/demo';
 import { registerKioskRoutes } from './http/kiosks';
 import { registerSessionRoutes } from './http/sessions';
 import { registerSpeechRoutes } from './http/speech';
@@ -56,7 +58,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { config } = deps;
   // A script that the server cannot use stops the start, before a timer or a socket exists.
   const fakeScript = config.fakeRecognition === null ? null : readFakeScript(config.fakeRecognition, deps.catalog);
-  const app = Fastify({ logger: deps.log ?? true });
+  const log = deps.log ?? true;
+  const app = Fastify({
+    logger: log === false ? false : {
+      ...(log === true ? {} : log),
+      // The query string holds the token or the demo key, so the request log gets the method and the path only.
+      serializers: { req: (request: { method: string; url: string }) => ({ method: request.method, url: pathOnly(request.url) }) },
+    },
+  });
 
   app.decorate('closers', new Set<Closer>());
   app.addHook('preClose', async () => {
@@ -173,6 +182,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   registerKioskRoutes(app, { kiosks });
   registerSpeechRoutes(app, { cache: clips, fake: config.fakeSpeech });
+  registerDemoRoutes(app, { demoKey: config.demoKey });
   registerDeviceSocket(app, {
     onFrame: player ? logFrame : deps.onFrame ?? recognize ?? (() => undefined),
     onOpen: (session) => player?.start(session, { fakeDevice: false }),

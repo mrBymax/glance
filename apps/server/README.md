@@ -9,7 +9,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | Path | Content |
 |---|---|
 | `src/config.ts` | `loadConfig` reads the settings from the environment and the command line. |
-| `src/app.ts` | `buildApp` makes the Fastify app: the CORS headers, the JSON error bodies, `GET /healthz`, the paths, and the device socket. |
+| `src/app.ts` | `buildApp` makes the Fastify app: the CORS headers, the JSON error bodies, the request log with no query string, `GET /healthz`, the paths, and the device socket. |
 | `src/bus.ts` | `EventBus` delivers messages inside the process, by topic. |
 | `src/clock.ts` | The time source of the runtime. |
 | `src/main.ts` | Opens the store, starts the server, and closes it on `SIGTERM` and `SIGINT`. |
@@ -23,11 +23,11 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/speech/` | The text of each spoken line, and the speech clips. See "Spoken text" and "Speech clips". |
 | `src/kiosk/` | The kiosks and the mock payment. See "Kiosk and payment". |
 | `src/db/` | The `Store` interface with a memory store and a MongoDB store. See "Storage". |
-| `src/http/` | The session paths, the kiosk paths, the speech path, and the events streams. See "REST paths". |
+| `src/http/` | The session paths, the kiosk paths, the speech path, the demo path, the events streams, and the token check. See "REST paths". |
 | `src/ws/device.ts` | The socket of the phone. See "Device socket". |
 | `src/testing.ts` | Test helpers: an app on a free port, a reader for an events stream, and a phone on the device socket. |
 
-Parts that do not exist yet: the token check, the catalog seed, the `SAVE_FRAMES` switch, the spot check, and the fingerprint check. The lines for a paused stream, the battery, and slow recognition have a text, and no rule speaks them yet.
+Parts that do not exist yet: the catalog seed, the `SAVE_FRAMES` switch, the spot check, and the fingerprint check. The lines for a paused stream, the battery, and slow recognition have a text, and no rule speaks them yet.
 
 ## Run it
 
@@ -77,6 +77,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `SPEECH_CACHE_DIR` | `.cache/speech` | The folder for speech clips. |
 | `SAVE_FRAMES` | not set | A directory for frames. The config reads it, and no code uses it yet: the server stores no frame. |
 | `PAYMENT_DELAY_MS` | `1500` | The length of the mock payment. |
+| `DEMO_KEY` | not set | The key of `GET /api/demo/latest`. With no key, that path answers 404. |
 
 - An empty value counts as not set.
 - The flag `--fake` turns both fake switches on. A variable that is set wins over the flag.
@@ -422,12 +423,17 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 | `POST /api/kiosks` | `CreateKioskRequest` | 201, `CreateKioskResponse` |
 | `GET /api/kiosks/:id/events` | | a stream of `KioskEvent`. The first message is the current view. |
 | `GET /api/speech/<hash>.mp3` | | 200, the MP3 of a clip |
+| `GET /api/demo/latest?key=<DEMO_KEY>` | | 200, `LatestSessionResponse` |
 | `GET /healthz` | | 200, the state of the switches |
 
 - `wsUrl` of a new session is `PUBLIC_BASE_URL` with `ws` in place of `http`, plus `/ws/device?session=<id>&token=<token>`.
 - A body that fails its schema gets 400 with `{ "error": "bad_request" }`. An unknown session gets 404 with `{ "error": "not_found" }`. An unknown key in a profile patch is dropped.
 - A 204 says only that the server took the input. The outcome arrives as events.
-- No path checks the token yet. A client still sends `?token=` with each call.
+- Each path with a session ID needs `?token=<token>` with the token of that session. `GET /api/kiosks/:id/events` needs the token of the kiosk. `POST /api/sessions`, `POST /api/kiosks`, the speech path, and `GET /healthz` need no token.
+- A missing or wrong token gets 401 with `{ "error": "unauthorized" }`. So does a query string with two `token` keys. The server checks the ID first and the token second, and reads the body last: an unknown ID gets 404, and a wrong token with a bad body gets 401.
+- `tokenMatches` in `src/http/auth.ts` compares a token in constant time.
+- The request log holds the method and the path with no query string, because the query string holds the token.
+- `GET /api/demo/latest` gives the ID and the token of the newest session that has not stopped. The mirror page follows the session of the phone with it. The path answers 404 with `{ "error": "not_found" }` when `DEMO_KEY` is not set, when the key is wrong, and when no session is live. The key opens each session, so use a long random value.
 - The events stream sends `data: <json>` for each event, and the comment `: ping` at the start and then each 15 seconds. A web client opens the stream first and then gets the snapshot, so it loses no event.
 - `DELETE` sends `session.end` to the phone, closes its socket, ends each events stream of the session, frees its kiosk, and deletes the session with its orders.
 - An unknown kiosk gets 404.
@@ -438,7 +444,7 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 
 The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2. The messages are `DeviceToServer` and `ServerToDevice` of `@glance/shared`.
 
-- An upgrade for another path or for an unknown session gets `404 Not Found`. The server writes the answer and lets the client close the connection, with a limit of 5 seconds. If the server closes first, a client under load can get a connection reset in place of the status.
+- An upgrade for another path or for an unknown session gets `404 Not Found`. An upgrade with a missing or wrong token gets `401 Unauthorized`. The server writes the answer and lets the client close the connection, with a limit of 5 seconds. If the server closes first, a client under load can get a connection reset in place of the status.
 - On open, the server sends a `snapshot`. Then it sends each event of the session as `event`, and each line as `speak`.
 - One phone holds a session. A second socket for the same session takes over, and the server closes the older one. No message goes to both.
 - `intent`, `prompt.done`, `device.state`, `cart.edit`, and `profile.set` go to the rules. After `profile.set` the phone gets a new `snapshot`.

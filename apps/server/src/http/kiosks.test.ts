@@ -179,7 +179,7 @@ it('the kiosk is free again after a cancelled checkout', async () => {
 it('the kiosk is free again when a client deletes the session of its checkout', async () => {
   const first = await checkoutReady();
   await seeCode(first.phone, first.kiosk.code);
-  expect((await fetch(`${t.base}/api/sessions/${first.session.id}`, { method: 'DELETE', signal: abort.signal })).status).toBe(204);
+  expect((await fetch(`${t.base}/api/sessions/${first.session.id}?token=${first.session.token}`, { method: 'DELETE', signal: abort.signal })).status).toBe(204);
   const second = await shopperWithOatDrink();
   await seeCode(second.phone, first.kiosk.code);
   expect(second.session.state.phase).toBe('checkout');

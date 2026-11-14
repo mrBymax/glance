@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { type RawData, type WebSocket, WebSocketServer } from 'ws';
 import { type DeviceToServer, type FrameHeader, type ServerToDevice, decodeFrame, parseDeviceToServer } from '@glance/shared';
 import { sessionTopic } from '../bus';
+import { tokenMatches } from '../http/auth';
 import type { DeviceSink, SessionRuntime } from '../sessions/runtime';
 import { parseVoiceCommand } from '../sessions/voice';
 
@@ -22,7 +23,7 @@ const REFUSED_CLOSE_MS = 5000;
 /**
  * The socket of spec section 8.2, one for each session, at /ws/device?session=<id>&token=<token>.
  * A new socket for a session takes over, and the older one closes.
- * The token is not checked yet.
+ * An upgrade with a missing or wrong token gets 401, and one for an unknown session gets 404.
  */
 export function registerDeviceSocket(app: FastifyInstance, deps: {
   onFrame: FrameHandler;
@@ -64,6 +65,12 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
       const session = sessionId === null ? null : await app.sessions.get(sessionId);
       if (!session) {
         refuse(socket, '404 Not Found');
+        return;
+      }
+      // Two token keys are no token, as on the REST paths.
+      const tokens = url.searchParams.getAll('token');
+      if (tokens.length !== 1 || !tokenMatches(session.token, tokens[0])) {
+        refuse(socket, '401 Unauthorized');
         return;
       }
       wss.handleUpgrade(request, socket, head, (ws) => connect(ws, session));

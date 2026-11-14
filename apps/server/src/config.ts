@@ -20,6 +20,8 @@ export type Config = {
   /** A directory for frames, or null. The server stores no frame without it. */
   saveFramesDir: string | null;
   paymentDelayMs: number;
+  /** The key of GET /api/demo/latest, or null. Without it that path answers 404. */
+  demoKey: string | null;
 };
 
 export class ConfigError extends Error {}
@@ -79,6 +81,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     speechCacheDir: read('SPEECH_CACHE_DIR') ?? '.cache/speech',
     saveFramesDir: read('SAVE_FRAMES'),
     paymentDelayMs: readNumber('PAYMENT_DELAY_MS', 1500, 0, 600_000, true),
+    demoKey: read('DEMO_KEY'),
   };
 
   if (config.fakeRecognition === null && config.geminiApiKey === null) {
