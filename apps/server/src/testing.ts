@@ -2,6 +2,8 @@
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
+import { WebSocket } from 'ws';
+import { type DeviceToServer, type FrameHeader, type ServerToDevice, encodeFrame, parseServerToDevice } from '@glance/shared';
 import { type AppDeps, buildApp } from './app';
 import { indexCatalog, readCatalogFile } from './catalog/catalog';
 import { systemClock } from './clock';
@@ -54,4 +56,71 @@ export function eventReader(response: Response): { next(): Promise<unknown> } {
       }
     },
   };
+}
+
+/** A phone on the device socket of a test app. */
+export type TestPhone = {
+  /** Each message of the server, oldest first. */
+  messages: ServerToDevice[];
+  send(message: DeviceToServer): void;
+  /** For a test of bad input. */
+  sendRaw(data: string | Uint8Array): void;
+  sendFrame(header: FrameHeader, jpeg: Uint8Array): void;
+  /** The first message that matches. It also matches a message that came before the call. */
+  next(match: (message: ServerToDevice) => boolean): Promise<ServerToDevice>;
+  /** Resolves when the socket has closed. */
+  closed: Promise<void>;
+  close(): void;
+};
+
+/** Opens the device socket of a session. Rejects when the server refuses the upgrade. */
+export function connectPhone(t: TestApp, sessionId: string, token: string): Promise<TestPhone> {
+  const ws = new WebSocket(`${t.wsBase}/ws/device?session=${sessionId}&token=${token}`);
+  const messages: ServerToDevice[] = [];
+  const waiting: { match: (message: ServerToDevice) => boolean; resolve: (message: ServerToDevice) => void }[] = [];
+
+  ws.on('message', (data, isBinary) => {
+    const message = isBinary ? null : parseServerToDevice(JSON.parse(data.toString()));
+    // A message outside the contract is a bug of the server, so the test must see it.
+    if (!message) throw new Error(`The server sent a message that is no ServerToDevice: ${data.toString()}`);
+    messages.push(message);
+    for (const waiter of waiting.filter((entry) => entry.match(message))) {
+      waiting.splice(waiting.indexOf(waiter), 1);
+      waiter.resolve(message);
+    }
+  });
+
+  const phone: TestPhone = {
+    messages,
+    send: (message) => ws.send(JSON.stringify(message)),
+    sendRaw: (data) => ws.send(data),
+    sendFrame: (header, jpeg) => ws.send(encodeFrame(header, jpeg)),
+    next: (match) => {
+      const found = messages.find(match);
+      if (found) return Promise.resolve(found);
+      return new Promise((resolve) => waiting.push({ match, resolve }));
+    },
+    closed: new Promise((resolve) => ws.once('close', () => resolve())),
+    close: () => ws.close(),
+  };
+  return new Promise((resolve, reject) => {
+    ws.once('open', () => resolve(phone));
+    ws.once('error', reject);
+  });
+}
+
+/** The HTTP status of a refused socket upgrade. Rejects when the server accepts the upgrade. */
+export function upgradeStatus(url: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    ws.once('unexpected-response', (request, response) => {
+      request.destroy();
+      resolve(response.statusCode ?? 0);
+    });
+    ws.once('open', () => {
+      ws.close();
+      reject(new Error(`The server accepted the upgrade for ${url}.`));
+    });
+    ws.once('error', reject);
+  });
 }

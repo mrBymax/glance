@@ -6,8 +6,13 @@ import type { Config } from './config';
 import type { Store } from './db/store';
 import { registerSessionRoutes } from './http/sessions';
 import { SessionRegistry } from './sessions/registry';
+import { type FrameHandler, registerDeviceSocket } from './ws/device';
 
-export type AppDeps = { config: Config; clock: Clock; store: Store; catalog: CatalogIndex; log?: boolean };
+export type AppDeps = {
+  config: Config; clock: Clock; store: Store; catalog: CatalogIndex; log?: boolean;
+  /** Gets each frame of each phone. Without it the server drops the frames. */
+  onFrame?: FrameHandler;
+};
 
 type Closer = () => void | Promise<void>;
 
@@ -97,6 +102,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // The test helper sets the address after the server has its port, so the route reads it for each call.
   registerSessionRoutes(app, { publicBaseUrl: () => config.publicBaseUrl });
+  registerDeviceSocket(app, { onFrame: deps.onFrame ?? (() => undefined) });
 
   return app;
 }
