@@ -39,12 +39,12 @@ function reader(over: { baseUrl?: string; userAgent?: string } = {}) {
 }
 
 it('asks for one product with the fields that it reads, and names the app', async () => {
-  expect(await reader().byGtin(SPAGHETTI)).toMatchObject({ name: { it: 'Spaghetti n.5' }, brand: 'Barilla' });
+  expect(await reader().byGtin(SPAGHETTI)).toMatchObject({ brand: 'Barilla', quantity: '500 g' });
   expect(fetchStub).toHaveBeenCalledTimes(1);
   const [url, init] = fetchStub.mock.calls[0]!;
   expect(url).toBe(
     'https://world.openfoodfacts.org/api/v2/product/8076800195057'
-    + '?fields=code,product_name,product_name_en,product_name_it,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags',
+    + '?fields=code,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags',
   );
   expect(new Headers(init.headers).get('user-agent')).toBe('MetaGlance/0.1 (https://github.com/mrBymax/glance)');
   expect(init.signal).toBeInstanceOf(AbortSignal);

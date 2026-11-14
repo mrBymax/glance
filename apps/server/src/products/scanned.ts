@@ -70,16 +70,13 @@ export function spokenPack(packSize: string, lang: Lang): string {
 const UNKNOWN_PACK = { packSize: '1 pc', spoken: { en: 'one pack', it: 'una confezione' } };
 
 /**
- * Builds the product of a store item. The store gives the price, and its brand and pack size when it has them.
- * The database gives the name in each language, the allergens, and the diets. `details` is null when it gave nothing:
- * the product then has the name of the store and no allergen data.
+ * Builds the product of a store item. The store gives the name and the price, and its brand and pack size when it has them.
+ * The name of the database is never used: its users write it, often in another language or as a part of the name.
+ * The database gives the allergens and the diets. `details` is null when it gave nothing: the product then has no allergen data.
  * A product with no brand at all gets its name as the brand, so the detailed line says the name one time.
  */
 export function scannedProduct(item: StoreItem, details: ProductDetails | null): Product {
-  const name = {
-    en: details?.name.en ?? details?.name.any ?? item.name,
-    it: details?.name.it ?? details?.name.any ?? item.name,
-  };
+  const name = { en: item.name, it: item.name };
   const packSize = item.packSize ?? details?.quantity ?? null;
   const pack = packSize === null
     ? UNKNOWN_PACK.spoken
@@ -89,7 +86,7 @@ export function scannedProduct(item: StoreItem, details: ProductDetails | null):
     gtin: item.gtin,
     name,
     spokenName: name,
-    brand: item.brand ?? details?.brand ?? name.en,
+    brand: item.brand ?? details?.brand ?? item.name,
     packSize: packSize ?? UNKNOWN_PACK.packSize,
     spokenPack: pack,
     spokenPackDetailed: pack,

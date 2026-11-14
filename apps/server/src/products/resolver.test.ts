@@ -14,7 +14,7 @@ const NUTELLA = '3017624010701';
 const BARISTA = '7394376616037';
 const nutella: StoreItem = { gtin: NUTELLA, priceCents: 399, name: 'Nutella', brand: 'Ferrero', packSize: '400 g' };
 const details: ProductDetails = {
-  name: { en: 'Hazelnut spread', it: 'Crema di nocciole', any: 'Nutella' }, brand: 'Ferrero SpA', quantity: '0.4 kg',
+  brand: 'Ferrero SpA', quantity: '0.4 kg',
   allergens: ['milk', 'nuts'], vegan: false, vegetarian: true,
 };
 
@@ -43,19 +43,18 @@ it('builds a product from the store item and the details', () => {
   const product = scannedProduct(nutella, details);
   expect(product).toMatchObject({
     id: 'gtin-3017624010701', gtin: NUTELLA, priceCents: 399,
-    name: { en: 'Hazelnut spread', it: 'Crema di nocciole' }, spokenName: { en: 'Hazelnut spread', it: 'Crema di nocciole' },
+    name: { en: 'Nutella', it: 'Nutella' }, spokenName: { en: 'Nutella', it: 'Nutella' },
     brand: 'Ferrero', packSize: '400 g', spokenPack: { en: 'four hundred grams', it: 'quattrocento grammi' },
     allergens: ['milk', 'nuts'], vegan: false, vegetarian: true, lookAlikes: [],
   });
   expect(ProductSchema.parse(product)).toEqual(product);
 });
-it('takes the name of the language first, then the name with no language, then the name of the store', () => {
-  const name = (part: Partial<ProductDetails['name']>) =>
-    scannedProduct(nutella, { ...details, name: { en: null, it: null, any: null, ...part } }).name;
-  expect(name({ any: 'Nutella spread' })).toEqual({ en: 'Nutella spread', it: 'Nutella spread' });
-  expect(name({ it: 'Crema', any: 'Spread' })).toEqual({ en: 'Spread', it: 'Crema' });
-  expect(name({ en: 'Spread' })).toEqual({ en: 'Spread', it: 'Nutella' });
-  expect(name({})).toEqual({ en: 'Nutella', it: 'Nutella' });
+it('takes the name of the store list, never the name of the database', async () => {
+  // The fixtures of the database call these products "bueno" and "Spaghetti Nº5".
+  expect(await resolver().resolve('8000500037560')).toMatchObject({
+    name: { en: 'Kinder Bueno', it: 'Kinder Bueno' }, spokenName: { en: 'Kinder Bueno', it: 'Kinder Bueno' },
+  });
+  expect(await resolver().resolve('8076800195057')).toMatchObject({ name: { en: 'Spaghetti n.5', it: 'Spaghetti n.5' } });
 });
 it('with no details the product has the data of the store and no allergen data', () => {
   const product = scannedProduct(nutella, null);
@@ -126,7 +125,7 @@ it('a later resolve replaces the product that had no details', async () => {
   await lookup.resolve(NUTELLA);
   down = false;
   await lookup.resolve(NUTELLA);
-  expect(scanned.get('gtin-3017624010701')).toMatchObject({ name: { en: 'Hazelnut spread' }, allergens: ['milk', 'nuts'] });
+  expect(scanned.get('gtin-3017624010701')).toMatchObject({ name: { en: 'Nutella' }, allergens: ['milk', 'nuts'] });
 });
 it('rejects when the store list does not answer inside the budget, or fails', async () => {
   const slow: StoreList = { byGtin: () => never(), all: async () => [] };

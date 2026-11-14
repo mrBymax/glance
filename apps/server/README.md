@@ -146,7 +146,7 @@ A script file, as `fixtures/fake-script.json`:
 
 - The server makes no call to Open Food Facts.
 - The details of a scanned product come from `fixtures/product-info/<13 digits>.json`. Each file is a saved answer of Open Food Facts, with the fields that the server reads.
-- A code with no file counts as "not found": the product then has the name of the store list and no allergen data.
+- A code with no file counts as "not found": the product then has no allergen data.
 - The store list is real in each mode. It is a file, and it needs no service.
 
 `FAKE_SPEECH`:
@@ -330,6 +330,7 @@ The store list decides what the store sells. A code that the list does not hold 
 ```
 
 - The server keeps each code as 13 digits. A wrong check digit, a price of 0, an unknown key, and a code that the file holds two times stop the server at its start. The message names the file and the entry.
+- `name` is the name that the shopper reads and hears, in English and in Italian. The list has one name for each item, and no name for each language.
 - The dev list has 10 products that Italian supermarkets sell. Each code was read from Open Food Facts on 2026-11-14. The prices are invented for the demo.
 - `8076809513753` is the Barilla pesto alla genovese, and `8076800195057` is the Barilla spaghetti n.5.
 - A catalog product with a `gtin` wins over the store list: a barcode then gives the catalog product, with the price and the spoken texts of the catalog. The Barista oat drink of the dev catalog has the code `7394376616037`. If the two prices of one code differ, the server logs one `store list:` warning at its start.
@@ -357,23 +358,23 @@ To use an ERP, write a function that returns a `StoreList`, and return it from `
 
 ### Product details from Open Food Facts
 
-Open Food Facts gives the name in English and Italian, the allergens, and the diets. The store gives the price, and its own brand and pack size win when the list has them.
+The store list gives the name and the price of a product. Open Food Facts gives the allergens and the diets, and the brand and the pack size when the store list has none.
 
 Contains data from Open Food Facts, available under the Open Database License. See https://world.openfoodfacts.org and https://opendatacommons.org/licenses/odbl/1-0/.
 
-- The call is `GET <OFF_BASE_URL>/api/v2/product/<code>?fields=code,product_name,product_name_en,product_name_it,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags`, with the header `User-Agent` from `PRODUCT_INFO_USER_AGENT` and a time limit of 2000 ms. It needs no key.
+- The call is `GET <OFF_BASE_URL>/api/v2/product/<code>?fields=code,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags`, with the header `User-Agent` from `PRODUCT_INFO_USER_AGENT` and a time limit of 2000 ms. It needs no key.
 - The status 404, and a body with `"status": 0`, mean "not found". Each other status than 200, a body that is no JSON, a body with the status 200 and no product, and a network error are a failed read.
-- The name of a product is `product_name_<lang>` for the language of the profile, then `product_name`, then the name of the store list.
+- The name of a product is always the `name` of the store list, in each language. The server does not read the name of Open Food Facts: it is often in another language, or only a part of the name ("bueno" for Kinder Bueno, "Spaghetti Nº5").
 - `allergens_tags` and `traces_tags` map to the 14 allergens of `@glance/shared`, as one list. With no allergen in `allergens_tags` the product has no allergen data (`null`), also when traces exist. A wheat pasta with traces of mustard and no entry for gluten would else read as "no gluten".
 - `vegan` is true for the tag `en:vegan`, false for `en:non-vegan`, and `null` for each other case. `vegetarian` works the same way.
 - The parser reads each field alone. A field with a wrong type counts as no data, and the other fields stay.
-- A product that Open Food Facts does not have, a failed read, and a late answer all give a product with the name of the store and no allergen data. A shopper with an allergen or a diet in the profile then hears "Allergen data is missing for this product."
+- A product that Open Food Facts does not have, a failed read, and a late answer all give a product with no allergen data. A shopper with an allergen or a diet in the profile then hears "Allergen data is missing for this product."
 - The server never asks for a code that starts with `2`, `02`, or `04`. Such a code belongs to one store, and only the store list can know it.
 
 The cache:
 
 - A hit stays for 30 days and a miss for 1 day, in memory and as the file `<PRODUCT_CACHE_DIR>/<13 digits>.json`. A failed read is not kept as an answer.
-- After a failed read, the next request for that code waits 30 seconds. The phone repeats a code each second, and each report in that time gets the name of the store with no new call.
+- After a failed read, the next request for that code waits 30 seconds. The phone repeats a code each second, and each report in that time gets a product with no allergen data and no new call.
 - After the status 429, the server makes no request for each code for 60 seconds.
 - The calls for one code that run at the same time share one request.
 - A new process reads the files, so a restart makes no new call for a known code. To read a product again, delete its file and restart the server.
@@ -383,7 +384,7 @@ Limits of Open Food Facts:
 
 - It allows 15 product reads each minute for one address, and it can block an address that reads more. Each shopper shares the address of the server. The guards are the cache, the wait of 30 seconds after a failed read, and the pause of 60 seconds after the status 429. The server does not count its calls, so many new codes in one minute can pass the limit one time.
 - Its users write the data. The terms say that it is "for indicative information" and not for medical use. No line says that a product is safe.
-- A name can be in another language than its field says, and an allergen list can be empty for a product with allergens. A person must check each product of the store list before a real shop.
+- An allergen list can be empty for a product with allergens. A person must check each product of the store list before a real shop.
 - It has no price, and the server makes no search by brand and name.
 - The documentation calls the v2 path deprecated and still supported.
 - The server code made no call to Open Food Facts yet. Each test uses a fetch function of its own, or the fixtures.
@@ -466,10 +467,10 @@ curl http://localhost:8080/healthz
 # {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"fakeProductInfo":true,"store":"memory","saveFrames":false}
 curl -s -X POST http://localhost:8080/api/sessions -H "content-type: application/json" -d "{}"
 curl -N "http://localhost:8080/api/sessions/<sessionId>/events?token=<token>"
-# at second 10: {"type":"glance.pending","promptId":"p-0002","kind":"new","product":{"id":"gtin-8076800195057","name":"Spaghetti Nº5","packSize":"500 g","priceCents":109},"warnings":[],"qtyInCart":0}
-# then the caption "Spaghetti Nº5, five hundred grams, one oh nine. Nod to add."
+# at second 10: {"type":"glance.pending","promptId":"p-0002","kind":"new","product":{"id":"gtin-8076800195057","name":"Spaghetti n.5","packSize":"500 g","priceCents":109},"warnings":[],"qtyInCart":0}
+# then the caption "Spaghetti n.5, five hundred grams, one oh nine. Nod to add."
 curl -s -X POST "http://localhost:8080/api/sessions/<sessionId>/intents?token=<token>" -H "content-type: application/json" -d '{"kind":"yes","source":"phone","promptId":"p-0002"}'
-# cart.updated with one line of 109 cents, and the caption "Added Spaghetti Nº5. Total one oh nine."
+# cart.updated with one line of 109 cents, and the caption "Added Spaghetti n.5. Total one oh nine."
 ```
 
 For a code that the store does not sell, and for a label frame, write a script of your own and start the server with `FAKE_RECOGNITION=<path> FAKE_SPEECH=1 FAKE_PRODUCT_INFO=1 npm start`:

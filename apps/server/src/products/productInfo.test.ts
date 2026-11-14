@@ -9,7 +9,6 @@ const fixture = (gtin: string): unknown => JSON.parse(readFileSync(`${FAKE_PRODU
 
 it('reads the fields of a product', () => {
   expect(parseOffAnswer(fixture('8076800195057'))).toEqual({
-    name: { en: 'Spaghetti Nº5', it: 'Spaghetti n.5', any: 'Spaghetti Nº5' },
     brand: 'Barilla',
     quantity: '500 g',
     allergens: ['gluten', 'eggs', 'soy', 'mustard'],
@@ -47,20 +46,16 @@ it('reads vegan and vegetarian only from a sure tag', () => {
   // Two tags that disagree are no data.
   expect(diet(['en:vegan', 'en:non-vegan'])).toEqual([null, null]);
 });
-it('reads a missing or empty name as null, and removes extra spaces', () => {
-  expect(parseOffAnswer(fixture('3017624010701'))?.name).toEqual({ en: 'Nutella', it: null, any: 'Nutella' });
-  expect(parseOffAnswer(answer({ product_name: '  Acqua   minerale ', product_name_en: 7 }))?.name)
-    .toEqual({ en: null, it: null, any: 'Acqua minerale' });
-});
-it('takes the first brand, and writes the quantity with a space and no ".0"', () => {
+it('takes the first brand with no extra spaces, and writes the quantity with a space and no ".0"', () => {
+  expect(parseOffAnswer(answer({ brands: '  San   Pellegrino , Nestlé' }))?.brand).toBe('San Pellegrino');
   expect(parseOffAnswer(fixture('3017624010701'))).toMatchObject({ brand: 'Ferrero', quantity: '400 g' });
   expect(parseOffAnswer(fixture('8001250120120'))?.quantity).toBe('500 g');
   expect(parseOffAnswer(answer({ brands: ' , ', quantity: '6 x 33 cl' }))).toMatchObject({ brand: null, quantity: '6 x 33 cl' });
   expect(parseOffAnswer(answer({ brands: ['Barilla'], quantity: 500 }))).toMatchObject({ brand: null, quantity: null });
 });
 it('reads a field of the wrong type as no data and keeps the other fields', () => {
-  const details = parseOffAnswer(answer({ product_name: 'Tè', allergens_tags: 'en:milk', traces_tags: [3, 'en:eggs'], ingredients_analysis_tags: null }));
-  expect(details).toEqual({ name: { en: null, it: null, any: 'Tè' }, brand: null, quantity: null, allergens: null, vegan: null, vegetarian: null });
+  const details = parseOffAnswer(answer({ brands: 7, quantity: '1 L', allergens_tags: 'en:milk', traces_tags: [3, 'en:eggs'], ingredients_analysis_tags: null }));
+  expect(details).toEqual({ brand: null, quantity: '1 L', allergens: null, vegan: null, vegetarian: null });
 });
 it('reads an answer with the status 0, or with no product, as not found', () => {
   expect(parseOffAnswer({ code: '2999999999990', status: 0, status_verbose: 'product not found' })).toBeNull();
@@ -72,7 +67,7 @@ it('reads an answer with the status 0, or with no product, as not found', () => 
 
 it('the fake reader reads a fixture by the 13 digits and makes no call', async () => {
   const info = createFakeProductInfo();
-  expect(await info.byGtin('0000080177173')).toMatchObject({ name: { en: 'Nutella' }, quantity: '15 g', vegan: false });
+  expect(await info.byGtin('0000080177173')).toMatchObject({ brand: 'Ferrero', quantity: '15 g', vegan: false });
   expect(await info.byGtin('5449000000996')).toMatchObject({ brand: 'COCA-COLA SERVICES SA/NV', allergens: null });
 });
 it('the fake reader knows no other code', async () => {

@@ -22,7 +22,7 @@ export const OFF_RETRY_AFTER_MS = 30_000;
 /** The status 429 says that the address read too much. The database can block an address that goes on, so each code waits. */
 export const OFF_PAUSE_AFTER_429_MS = 60_000;
 
-const FIELDS = 'code,product_name,product_name_en,product_name_it,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags';
+const FIELDS = 'code,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags';
 const LOGGED_BODY_CHARS = 200;
 
 type Cached = { fetchedAt: number; details: ProductDetails | null };
@@ -30,7 +30,6 @@ type Cached = { fetchedAt: number; details: ProductDetails | null };
 const CachedSchema: z.ZodType<Cached> = z.object({
   fetchedAt: z.number(),
   details: z.object({
-    name: z.object({ en: z.string().nullable(), it: z.string().nullable(), any: z.string().nullable() }),
     brand: z.string().nullable(),
     quantity: z.string().nullable(),
     allergens: z.array(AllergenSchema).nullable(),

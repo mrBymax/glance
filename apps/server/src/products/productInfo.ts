@@ -2,10 +2,9 @@ import { type Allergen, EU_ALLERGENS } from '@glance/shared';
 
 /**
  * What a product database knows about one product. null means "no data" for each field.
- * `name.any` is the name with no language. `allergens` is never an empty list: the database cannot tell "no allergen".
+ * It holds no name: the store list names each product. `allergens` is never an empty list: the database cannot tell "no allergen".
  */
 export type ProductDetails = {
-  name: { en: string | null; it: string | null; any: string | null };
   brand: string | null;
   /** The pack size as text, for example "500 g". */
   quantity: string | null;
@@ -91,7 +90,6 @@ export function parseOffAnswer(body: unknown): ProductDetails | null {
   const fields = product as Record<string, unknown>;
   const analysis = tags(fields.ingredients_analysis_tags);
   return {
-    name: { en: text(fields.product_name_en), it: text(fields.product_name_it), any: text(fields.product_name) },
     brand: text(typeof fields.brands === 'string' ? fields.brands.split(',')[0] : null),
     quantity: quantity(fields.quantity),
     allergens: allergens(fields),

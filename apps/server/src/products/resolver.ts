@@ -52,7 +52,7 @@ export class ProductResolver {
    * A catalog product with the code wins. Each other product is built again with each call, so details
    * that came late the last time are in the next product.
    * Rejects when the store list fails or does not answer inside the budget.
-   * A database that fails or is late is no failure: the product then has the name of the store and no allergen data.
+   * A database that fails or is late is no failure: the product then has no allergen data.
    */
   async resolve(gtin13: string): Promise<Product | null> {
     const fromCatalog = this.catalogByGtin.get(gtin13);

@@ -167,7 +167,7 @@ it('the snapshot, a question, the cart by voice, and a new language find a scann
   phone.send({ t: 'intent', kind: 'yes', source: 'phone', promptId: pending.promptId });
   await phone.next(isEvent('cart.updated'));
   phone.send({ t: 'intent', kind: 'cart', source: 'phone' });
-  expect(await phone.next((m) => isSpeak(m) && m.text.includes(', one.'))).toMatchObject({ text: 'Spaghetti Nº5, one. Total one oh nine.' });
+  expect(await phone.next((m) => isSpeak(m) && m.text.includes(', one.'))).toMatchObject({ text: 'Spaghetti n.5, one. Total one oh nine.' });
 
   phone.send({ t: 'profile.set', patch: { lang: 'it' } });
   const renamed = await phone.next((m) => isEvent('cart.updated')(m) && eventOf<'cart.updated'>(m).change === null);
