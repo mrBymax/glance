@@ -277,7 +277,7 @@ class ProbeScreenTest {
         const val PIPELINE_MS = 15_000L
         const val RECORD_MS = 3_000L
         const val LOG_TAIL = 15
-        const val MAX_LONG_SIDE = 1280
+        const val MAX_LONG_SIDE = 768
         const val MAX_JPEG_BYTES = 200_000
         const val MOTION_COLUMNS = 14
         val UPLOAD_LINE = Regex("""upload seq=(\d+) (\d+)x(\d+) (\d+) bytes""")

@@ -62,14 +62,14 @@ class FramePrepTest {
         assertNull(FramePrep.prepare(frame(720, 1280, 128), FaceResult.Failed))
     }
 
-    @Test fun `keeps the full frame at the size of the stream`() {
+    @Test fun `keeps the full frame, with a long side of 768 pixels at most`() {
         fun size(w: Int, h: Int): Pair<Int, Int> {
             val prepared = FramePrep.prepare(frame(w, h, 128), FaceResult.NotRun)!!
             assertEquals(prepared.width * prepared.height, prepared.argb.size)
             return prepared.width to prepared.height
         }
-        assertEquals(720 to 1280, size(720, 1280))
-        assertEquals(504 to 896, size(504, 896))
+        assertEquals(432 to 768, size(720, 1280))
+        assertEquals(432 to 768, size(504, 896))
         assertEquals(360 to 640, size(360, 640))
     }
 
@@ -97,11 +97,11 @@ class FramePrepTest {
     @Test fun `pixelates a found face in the output`() {
         val f = noiseFrame(720, 1280)
         val out = FramePrep.prepare(f, FaceResult.Found(listOf(RectPx(300, 600, 120, 120))))!!
-        val x = 300 + 20
-        val y = 600 + 20
+        val x = (300 * 432 / 720) + 20
+        val y = (600 * 768 / 1280) + 20
         assertEquals(out.argb[y * out.width + x], out.argb[y * out.width + x + 1])
         assertTrue(out.blurred)
-        assertEquals(720 to 1280, out.width to out.height)
+        assertEquals(432 to 768, out.width to out.height)
         // The same two pixels differ with no face, so the test frame is noise at that place.
         val plain = FramePrep.prepare(f, FaceResult.Found(emptyList()))!!
         assertNotEquals(plain.argb[y * plain.width + x], plain.argb[y * plain.width + x + 1])

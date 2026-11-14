@@ -14,12 +14,6 @@ class PreparedFrame(val argb: IntArray, val width: Int, val height: Int, val blu
 
 object FramePrep {
     /**
-     * The long side of an upload at most: the largest stream frame, so no stream frame is made smaller.
-     * A smaller upload lost the flavor text of a can: recognition could not tell look-alike cans apart.
-     */
-    const val MAX_LONG_SIDE = 1280
-
-    /**
      * Scales and converts one frame for the upload. The output size follows the size of each frame,
      * because the glasses can lower the resolution during a stream.
      * The output is the full frame. A center crop cut off a product that the shopper held at chest height:
@@ -30,7 +24,7 @@ object FramePrep {
     fun prepare(frame: RawFrame, faces: FaceResult): PreparedFrame? {
         if (faces is FaceResult.Failed) return null
         val rect = FrameGeometry.full(frame.width, frame.height)
-        val (outWidth, outHeight) = FrameGeometry.outputSize(rect, MAX_LONG_SIDE)
+        val (outWidth, outHeight) = FrameGeometry.outputSize(rect)
         val argb = I420.cropScaleToArgb(frame.i420, frame.width, frame.height, rect, outWidth, outHeight)
         if (faces is FaceResult.Found) {
             Pixelate.apply(argb, outWidth, outHeight, faces.boxes.mapNotNull { FrameGeometry.mapBox(it, rect, outWidth, outHeight) })
