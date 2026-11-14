@@ -2,8 +2,12 @@
   "name": "glance-integration",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": ">=22.12" },
   "scripts": {
-    "server-kotlin": "node server-kotlin.mjs"
+    "server-kotlin": "node server-kotlin.mjs",
+    "server-web": "node server-web.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "25.17.0"
   }
 }

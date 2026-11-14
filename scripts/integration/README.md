@@ -2,11 +2,19 @@
 
 Each script here starts the Glance server of `apps/server` in fake mode on `127.0.0.1` and a free port, runs one test against it, and stops it. No test calls Gemini or ElevenLabs.
 
-Run `npm install` at the repository root first. `package.json` of this folder holds the tools of these scripts, so that no app gets a new dependency. It has no dependency yet.
+`package.json` of this folder holds the tools of these scripts, so that no app gets a new dependency. The folder is not a workspace of the repository, so it needs its own install:
+
+```bash
+npm install                               # at the repository root
+npm install --prefix scripts/integration  # puppeteer-core, for the test of the web pages
+```
 
 | Command, at the repository root | Test |
 |---|---|
 | `node scripts/integration/server-kotlin.mjs` | The server and the Kotlin client of the Android app |
+| `node scripts/integration/server-web.mjs` | The server, the phone UI with `BrowserBridge`, and the kiosk page |
+
+The exit code of each script is 0 for a pass, and the last line is `result: pass` or `result: fail`.
 
 ## The server and the Kotlin client
 
@@ -40,6 +48,59 @@ sequenceDiagram
 - In fake mode the server logs the header of each frame that decodes. The script reads the log and fails when one of the 3 frames is missing.
 - The mock payment takes 300 ms (`PAYMENT_DELAY_MS`).
 
+## The server and the web pages
+
+`server-web.mjs` needs Google Chrome on the machine. `puppeteer-core` starts the installed Chrome with no window and downloads no browser. To use another browser of the Chromium family, set `CHROME_PATH` to its program file.
+
+The script starts three servers on free ports of `127.0.0.1`: the Glance server in fake mode, the Vite dev server of `apps/mobile/ui`, and the Vite dev server of `apps/website` with its `/api` proxy to the Glance server. Each dev server uses the `vite.config.ts` of its app. Then it plays one shop in two pages:
+
+```mermaid
+sequenceDiagram
+    participant Test as server-web.mjs
+    participant Kiosk as Kiosk page
+    participant Phone as Phone UI with BrowserBridge
+    participant Server as Server in fake mode
+    Test->>Kiosk: open /kiosk?name=Checkout 7
+    Kiosk->>Server: POST /api/kiosks, then the event stream of the kiosk
+    Note over Kiosk: "Look at this code to pay", a new code
+    Test->>Phone: open /?ready=1&api=<server address>
+    Test->>Phone: glanceBridge.send session.start
+    Phone->>Server: POST /api/sessions, the event stream, the snapshot
+    Server-->>Phone: glance.pending for the oat drink
+    Note over Phone: product card with the price
+    Test->>Phone: click Add
+    Phone->>Server: POST .../intents yes
+    Server-->>Phone: cart.updated
+    Note over Phone: cart line and total
+    Note over Server: the script shows the session the newest kiosk
+    Server-->>Phone: checkout.offered
+    Server-->>Kiosk: kiosk.state connected
+    Note over Kiosk: "Waiting for your nod", the total, the cart line
+    Test->>Phone: glanceBridge.send intent yes with the ID of the pay prompt
+    Phone->>Server: POST .../intents yes
+    Server-->>Phone: checkout.paid, cart.updated, session.state paid
+    Server-->>Kiosk: kiosk.state paid
+    Note over Kiosk: "Paid", the total, the receipt line
+    Test->>Server: GET /api/sessions/:id
+```
+
+- The server plays `server-web.fake-script.json`: the oat drink is in view from 1.5 to 5.5 seconds after the event stream of the session opens, and the newest kiosk is in view from second 12. The kiosk page registers the newest kiosk.
+- The test reads the text that each page shows. For the events it reads the messages that `BrowserBridge` delivers to the page.
+- The phone UI has no start button and no checkout sheet yet. So the test sends `session.start` and the yes for the pay prompt through `window.glanceBridge`, which only the dev build has. The answer to the product card is a click on Add.
+- The last check reads the snapshot of the server: the phase `paid`, an empty cart, the receipt with the order ID of the page, and the caption "Paid. ...".
+- An error that a page throws fails the run.
+- The mock payment takes 300 ms (`PAYMENT_DELAY_MS`). One run takes about 20 seconds.
+- Each page loads two times. With an empty Vite cache, Vite can load a page again after the first load, and the second load keeps the page stable. So the kiosk page registers two kiosks, and the test uses the second one.
+- The mirror page is not part of the test. `/mirror` of the website shows one heading and follows no session yet.
+
+Known defect, which the test reports and which does not fail the run:
+
+- The phone UI with `?api=` does not show the caption "Paid. ...". The server sends it after `session.state` with the phase `paid`, and `BrowserBridge` closes the event stream at that event.
+- The run prints one line that starts with `known defect:`. With `node scripts/integration/server-web.mjs --strict`, a known defect fails the run. When the page shows the caption, the line goes away.
+
 ## Shared code
+
+`lib/pages.mjs` exports `startDevServer`, `startBrowser`, `openPage`, and `waitForText` for a test with web pages.
+
 
 `lib/server.mjs` exports `startFakeServer`. It removes each server variable of the shell from the environment of the server, sets `FAKE_RECOGNITION` and `FAKE_SPEECH`, and waits for `GET /healthz`. It throws when the answer does not show both fake switches. A script can give it the path of a `FAKE_RECOGNITION` script file.
