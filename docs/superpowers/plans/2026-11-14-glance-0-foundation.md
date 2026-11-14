@@ -16,6 +16,8 @@
 
 - Node 22 or later. npm workspaces. Do not add pnpm or yarn.
 - Library versions on 2026-11-14: `typescript` `^6.0.3`, `zod` `^4.6.7`, `vitest` `^5.1.0`.
+- Lint tools at the workspace root, checked together with TypeScript 6.0.3 on 2026-11-14: `eslint` `^10.15.0`, `@eslint/js` `^10.0.1`, `typescript-eslint` `^8.72.2`, `eslint-plugin-react-hooks` `^7.1.1`, `globals` `^17.14.0`.
+- The repository has a pre-commit hook: `.githooks/pre-commit` runs `scripts/hooks/pre-commit.mjs`. It stops a commit that holds a secret, an ESLint error in a staged file, or a ktlint error. Never commit with `--no-verify`. Fix the finding.
 - Money is an integer number of cents in EUR. Only the server computes a total.
 - Languages are `en` and `it`. English text is required. Italian text is optional.
 - The kiosk code text is `GL1`, one space, and the kiosk code. The kiosk code has 4 to 8 characters from `A-Z` and `0-9`. The text has at most 20 characters.
@@ -43,6 +45,7 @@
 - Create: `packages/shared/src/languages.ts`, `packages/shared/src/index.ts`
 - Test: `packages/shared/src/languages.test.ts`
 - Delete: `packages/shared/.gitkeep`
+- Already in the repository, do not rewrite: `eslint.config.mjs`, `.githooks/pre-commit`, `scripts/hooks/pre-commit.mjs`, `scripts/hooks/install.mjs`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -59,11 +62,23 @@
   "workspaces": ["packages/*", "apps/*", "apps/mobile/*"],
   "engines": { "node": ">=22" },
   "scripts": {
+    "prepare": "node scripts/hooks/install.mjs",
+    "lint": "eslint .",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2"
   }
 }
 ```
+
+The `prepare` script points git at `.githooks` after each `npm install`. It does nothing where git is missing, for example in the Docker build of Plan 1. `eslint.config.mjs` at the root holds the rules for each workspace. Do not add ESLint to a workspace package.
 
 `.nvmrc`: `22`
 
@@ -146,10 +161,13 @@ export function localize(text: Localized, lang: Lang): string;
 
 `index.ts` re-exports each module of this package with `export * from`.
 
-- [ ] **Step 5: Run the test and the typecheck**
+- [ ] **Step 5: Run the test, the typecheck, and the lint**
 
 Run: `npm test --workspace @glance/shared` and `npm run typecheck --workspace @glance/shared`
 Expected: 4 tests pass, and the typecheck prints no error.
+
+Run: `npm run lint`, then `git config --get core.hooksPath`
+Expected: ESLint prints no error, and git prints `.githooks`. From this commit on, the hook lints each staged JavaScript and TypeScript file. If a rule rejects code that a plan prescribes, fix the code where that is cheap. If not, change the rule in `eslint.config.mjs` with a comment that says why.
 
 - [ ] **Step 6: Commit**
 
@@ -752,7 +770,7 @@ REST calls, from spec section 8.1, with three additions: the cart edit, the snap
 - A body that fails its schema gets 400 with `{ "error": "bad_request" }`.
 - An event stream sends `data: <json>` and an empty line for each message, with no event name.
 - The outcome of an intent or a cart edit arrives as events. The answer 204 says only that the server took the input.
-- `demo/latest` gives the newest live session. The mirror page and the HUD use it to follow the session of the phone with no typed ID. It answers 404 when `DEMO_KEY` is not set, when the key is wrong, or when no session is live.
+- `demo/latest` gives the newest live session. The mirror page uses it to follow the session of the phone with no typed ID. It answers 404 when `DEMO_KEY` is not set, when the key is wrong, or when no session is live.
 
 - [ ] **Step 1: Write the fixtures**
 

@@ -37,6 +37,7 @@ What the other plans get from this plan:
 - Gradle 8.14.1 runs on JDK 17 to 24. `./gradlew --version` prints the JVM. If it prints 25 or later, select a JDK 21 in Android Studio: Settings, Build Tools, Gradle, Gradle JDK.
 - Run Gradle commands in `apps/mobile/android`. PowerShell uses `.\gradlew.bat`. A terminal outside Android Studio needs `JAVA_HOME` set to `C:\Program Files\Android\Android Studio\jbr`.
 - Run `adb` commands that name a device path in PowerShell. Git Bash rewrites `/sdcard/...` to a Windows path.
+- With more than one phone attached, set `ANDROID_SERIAL` to the serial of the test phone, and pass `-s <serial>` to `adb`. Without it, `./gradlew :app:installDebug` installs on each attached phone.
 - An Android phone with Android 10 or later, a USB cable, the Meta AI app, and the glasses paired in the Meta AI app.
 - A Meta developer account is necessary only if row 1 of the probe fails (Task 4).
 
@@ -147,7 +148,7 @@ Facts that the docs do not state:
 ### Task 1 [C1]: Gradle project, motion CSV, probe screen
 
 **Files:**
-- Create: `apps/mobile/android/settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, `gradle/libs.versions.toml`, the Gradle wrapper, `README.md`
+- Create: `apps/mobile/android/settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, `gradle/libs.versions.toml`, the Gradle wrapper, `.editorconfig`, `README.md`
 - Create: `core/build.gradle.kts`, `core/src/main/kotlin/com/metaglance/core/contract/Timing.kt`, `core/src/main/kotlin/com/metaglance/core/gesture/GyroSample.kt`, `core/src/main/kotlin/com/metaglance/core/gesture/MotionCsv.kt`
 - Test: `core/src/test/kotlin/com/metaglance/core/gesture/MotionCsvTest.kt`
 - Create: `app/build.gradle.kts`, `app/src/main/AndroidManifest.xml`, `app/src/debug/AndroidManifest.xml`, `app/src/main/kotlin/com/metaglance/android/GlanceApp.kt`, `app/src/debug/kotlin/com/metaglance/android/probe/ProbeActivity.kt`, `app/src/debug/kotlin/com/metaglance/android/probe/ProbeLog.kt`
@@ -211,6 +212,7 @@ activity = "1.12.4"
 lifecycle = "2.10.0"
 exifinterface = "1.4.2"
 junit = "4.13.2"
+ktlintGradle = "14.2.0"
 
 [libraries]
 mwdat-core = { group = "com.meta.wearable", name = "mwdat-core", version.ref = "mwdat" }
@@ -239,13 +241,28 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintGradle" }
 ```
 
 Android Gradle Plugin 8.11.1, Kotlin 2.2.21, and Gradle 8.14.1 are the versions of the CameraAccess sample of Meta for DAT 1.0.1.
 
 `settings.gradle.kts`: `pluginManagement` with `google()`, `mavenCentral()`, `gradlePluginPortal()`. `dependencyResolutionManagement` with `google()` and `mavenCentral()`. `rootProject.name = "Glance"`. `include(":app", ":core")`.
 
-Root `build.gradle.kts`: the four plugins of the catalog, each with `apply false`.
+Root `build.gradle.kts`: the five plugins of the catalog, each with `apply false`. Then `subprojects { apply(plugin = "org.jlleitschuh.gradle.ktlint") }`, so that `./gradlew ktlintCheck` and `./gradlew ktlintFormat` cover both modules.
+
+Lint: the pre-commit hook of the repository runs `./gradlew ktlintCheck --quiet` when a Kotlin file is staged (`scripts/hooks/pre-commit.mjs`). The author took version 14.2.0 of the ktlint plugin from the Gradle Plugin Portal on 2026-11-14 and did not run it with this build. If it does not work with Kotlin 2.2.21, find the version that does. Write `apps/mobile/android/.editorconfig` with these lines, and run `./gradlew ktlintFormat` before each commit:
+
+```ini
+root = true
+
+[*.{kt,kts}]
+ktlint_code_style = android_studio
+max_line_length = off
+# The constants of Timing keep the names of TIMING in Plan 0.
+ktlint_standard_property-naming = disabled
+```
+
+If another ktlint rule rejects code that this plan prescribes and `ktlintFormat` cannot fix it, disable that one rule in `.editorconfig` with a comment that says why. Do not remove the plugin, and do not commit with `--no-verify`.
 
 `gradle.properties` holds only these four lines: `org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8`, `android.useAndroidX=true`, `kotlin.code.style=official`, `android.nonTransitiveRClass=true`. Delete `gradle/gradle-daemon-jvm.properties` if the wizard wrote it. It can ask for a JDK that this build cannot download.
 
@@ -402,8 +419,8 @@ Write each number with `toString()`. A locale format writes a decimal comma on a
 
 - [ ] **Step 7: Run all checks**
 
-Run: `./gradlew --version`, then `./gradlew :core:test :app:assembleDebug`
-Expected: a JVM from 17 to 24, 5 tests pass, and `BUILD SUCCESSFUL`.
+Run: `./gradlew --version`, then `./gradlew ktlintFormat ktlintCheck :core:test :app:assembleDebug`
+Expected: a JVM from 17 to 24, no ktlint finding, 5 tests pass, and `BUILD SUCCESSFUL`.
 
 Run: `./gradlew :app:installDebug` with a phone or an emulator connected, then open "Glance Probe".
 Expected: the log shows `probe ready sdk=<n> appId=0`.
@@ -1027,10 +1044,10 @@ private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
 }
 @Test fun `has the fixture counts of Plan 0`() {
     assertEquals(mapOf("catalog" to 1, "events" to 16, "device-to-server" to 8, "server-to-device" to 6,
-        "bridge-page-to-native" to 12, "bridge-native-to-page" to 4, "rest" to 7), counts())
+        "bridge-page-to-native" to 12, "bridge-native-to-page" to 4, "rest" to 8), counts())
 }
 @Test fun `decodes each message fixture, and the file name is the wire value`() { /* five folders. Assert not null, and name == t or type. */ }
-@Test fun `decodes the catalog fixture and each rest fixture by the type in its file name`() { /* Product, and the 7 REST types */ }
+@Test fun `decodes the catalog fixture and each rest fixture by the type in its file name`() { /* Product, and the 8 REST types */ }
 @Test fun `encodes each message that the app sends back to the same JSON`() {
     /* folders device-to-server and bridge-native-to-page: encode(decode(text)) equals the file, compared as JSON trees with numbers as doubles */
 }
@@ -1548,7 +1565,7 @@ Rules:
 6. `url == null`: the line has `phoneVoice = true`. The player speaks `text` with the phone voice.
 7. `isMuted` is true while a line plays, and for `Timing.speechMuteAfterClipMs` after its end.
 
-Rule 6 differs from the note of Plan 0, which says "caption only, and `prompt.done` at once". With rule 6 the fake speech mode of Plan 1 and a failure of ElevenLabs are not silent. The team must confirm this.
+Rule 6 is the note of Plan 0 on `speak.url`: with no clip, the phone reads the text with its own voice and sends `prompt.done` when that voice ends. The fake speech mode of Plan 1 and a failure of ElevenLabs are then not silent.
 
 - [ ] **Step 1: Write the failing test**
 

@@ -49,7 +49,7 @@ Not checked: a typecheck, a validator run, or a build of HUD source. `Link` and 
 - Library versions on 2026-11-14: `react` and `react-dom` `^19.3.1`, `vite` `^8.3.8`, `typescript` `^6.0.3`, `vitest` `^5.1.0`, `@testing-library/react` `^16.3.3`, `@astryxdesign/core` `^0.7.15`, `@wearables-ui-toolkit/mrbd` `^130.33.0`.
 - Deadline: Sunday 2026-11-15 at 08:00 Finnish time. Feature freeze: Saturday 18:00. After the freeze, only fixes and content fills.
 - Cut rule of spec section 5: if a glance does not speak on the real glasses by Saturday 14:00, cut Tasks 6 and 7. Tasks 6 and 7 must merge before the freeze. Start Task 6 only when Tasks 1 to 5 are merged or wait for another seat.
-- This plan owns these files only: `apps/server/catalog/catalog.json`, `apps/website/src/pages/Landing.tsx`, `apps/website/src/pages/Privacy.tsx`, their test files, each file in `apps/website/src/content/`, `docs/demo/run-sheet.md`, and `apps/display-pow/`. Do not change another file of `apps/website`, `apps/server`, or `packages/shared`.
+- This plan owns these files only: `apps/server/catalog/catalog.json`, `apps/website/src/pages/Landing.tsx`, `apps/website/src/pages/Privacy.tsx`, their test files, each file in `apps/website/src/content/`, the two logo files in `apps/website/public/`, `docs/demo/run-sheet.md`, and `apps/display-pow/`. Do not change another file of `apps/website`, `apps/server`, or `packages/shared`.
 - Shared types come from `@glance/shared` (Plan 0). Do not define a shared type again.
 - Money is an integer number of cents. Show it with `formatEur` and the text `EUR`. Only the server computes a total. One exception: the recorded mode of the HUD has no server (`mockAnswer`, Task 6).
 - The website must not claim that the store installs nothing, that the store lends glasses, that the payment is real, or that a blind shopper tested Glance.
@@ -544,6 +544,7 @@ git commit -m "feat(website): add landing content and the copy guard"
 
 **Files:**
 - Modify: `apps/website/src/pages/Landing.tsx` (the placeholder of Plan 3)
+- Create: `apps/website/public/logo-light.svg`, `apps/website/public/logo-dark.svg` (copies of `assets/Glance.svg` and `assets/Glance Dark.svg`)
 - Test: `apps/website/src/pages/Landing.test.tsx`
 
 **Interfaces:**
@@ -674,7 +675,7 @@ Run: `npm run dev --workspace apps/website` and open `http://localhost:5174/`.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add apps/website/src/pages/Landing.tsx apps/website/src/pages/Landing.test.tsx
+git add apps/website/public/logo-light.svg apps/website/public/logo-dark.svg apps/website/src/pages/Landing.tsx apps/website/src/pages/Landing.test.tsx
 git commit -m "feat(website): add the landing page"
 ```
 

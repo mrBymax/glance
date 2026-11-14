@@ -186,7 +186,7 @@ Each task relies on these statements. If a plan changes one, change the task tha
 
 - Plan 1 Task 10: each stream message is `data: <json>` with no event name. A web client opens the stream first and then gets the snapshot. `PATCH .../profile` takes a `ProfilePatch`. An intent or a cart edit answers 204, and its outcome arrives as events. The server allows each origin.
 - Plan 1 Task 4: an answer with the source `phone` needs the ID of the current prompt and no `prompt.done`. An answer with no prompt ID does nothing. A no with the ID of the prompt that was just added removes that unit.
-- Plan 1 Task 5: the server sends no event when a payment starts. A cart change during checkout gives a new `checkout.offered` with a new prompt ID. After a payment come `checkout.paid`, `cart.updated` with an empty cart and `change: null`, and `session.state` with the phase `paid`.
+- Plan 1 Task 5: the server sends no event when a payment starts. A cart change during checkout gives a new `checkout.offered` with a new prompt ID. A later appearance of the kiosk code does the same when the head window of the old prompt is over (its rule 7a). After a payment come `checkout.paid`, `cart.updated` with an empty cart and `change: null`, and `session.state` with the phase `paid`.
 - Plan 1 Task 6: a stop gives the phase `ended`, and the server then takes no more input for that session. The idle rest gives the phase `resting`.
 - Plan 1 Task 15: `caption.url` is an absolute address, or `null`.
 - Plan 1 Task 16: the first message of the kiosk stream is the current view. The server shows `paid` or `failed` for 10 seconds, then `idle`. A code has 4 characters. Each `POST /api/kiosks` makes a new kiosk.
@@ -246,7 +246,7 @@ Query flags for development:
 | phone UI | `debug=1` | Shows the debug panel inside the WebView (Task 14) |
 | kiosk, mirror | `replay=1` | Plays a recorded event file, with no server (Tasks 6 and 13) |
 | mirror | `s=<sessionId>&t=<token>` | Selects the session (Task 13). The HUD of Plan 4 uses the same two names. |
-| mirror | `latest=<DEMO_KEY>` | Follows the newest session of the phone (Task 13). The HUD of Plan 4 uses the same name. |
+| mirror | `latest=<DEMO_KEY>` | Follows the newest session of the phone (Task 13). The HUD of Plan 4 has no such flag. |
 
 ---
 

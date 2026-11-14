@@ -1034,6 +1034,8 @@ Rules of this task:
 5. The offer makes a pay prompt with a new ID. It emits `checkout.offered` with the total, `itemCount` as the sum of the quantities, and `needsBiometric: false`. It speaks `checkout.offer` with the `promptId`.
 6. R17: when `glance.ts` makes a product prompt while the step is `offered` or `suspended`, the step is `suspended` and `suspendedBy` is that product. On the change from `offered`, the event `checkout.suspended` comes before `glance.pending`.
 7. Resume: a `kiosk.seen` for the checkout kiosk while `suspended`, with `suspendedBy` out of view. End a current product prompt with `glance.cleared`, then make the offer. The step is `offered` again.
+7a. Offer again: a `kiosk.seen` for the checkout kiosk while the step is `offered` makes the offer again when two things hold. It is a new appearance of the code (rule 1). And the head window of the current pay prompt is over: `doneAt` is set, `profile.headWindowMs` is not `null`, and `now - doneAt >= profile.headWindowMs`. The new pay prompt has a new ID, so the old one cannot pay (R3). A prompt that still plays, or whose head window is open, is never replaced by this rule.
+7b. The spec does not state rule 7a. It applies R15 to a later appearance of the code, as rule 7 of Task 3 does for a product. Without it, a shopper who waited longer than the head window cannot pay with a nod until R19 ends the checkout. With it, the shopper looks away and back at the code, and gets a new prompt.
 8. Accepted yes on the pay prompt (R16, with `accepts` of Task 4): step `paying`, no prompt, and the single effect `payment.start`.
 9. Accepted no on the pay prompt (R18): the checkout ends, and `mutedKioskId` is the kiosk. Line `checkout.cancelled`. `expire` clears `mutedKioskId` when the code has left the view.
 10. A checkout ends this way: `checkout = null`, phase `shopping`, the pay prompt is dropped, and the events are `checkout.cancelled` then `session.state`.
@@ -1143,6 +1145,19 @@ it('R19: the checkout ends when the code was out of view for 30 seconds, and the
   expect(h.events()).toEqual(['checkout.cancelled', 'session.state']);
   expect(h.state).toMatchObject({ phase: 'shopping', checkout: null });
   expect(h.state.cart.totalCents).toBe(639);
+});
+it('a new appearance of the code after the head window gives a new pay prompt, and the old one cannot pay', () => {
+  const h = full(); h.done(); const first = h.state.prompt!.id;
+  h.advance(T.viewMs); h.kiosk();
+  expect(h.effects).toEqual([]);                    // a new appearance, but the head window is still open
+  h.advance(T.headWindowMs); h.kiosk();
+  expect(h.events()).toEqual(['checkout.offered']);
+  expect(h.lines()).toEqual(['checkout.offer']);
+  expect(h.state.prompt!.id).not.toBe(first);
+  h.yes('voice', first);
+  expect(payments(h)).toEqual([]);
+  h.done(); h.yes('head');
+  expect(payments(h)).toHaveLength(1);
 });
 it('R21: silence never pays', () => {
   const away = full(); away.done();
@@ -3165,7 +3180,7 @@ Rules:
 6. The request log holds the method and the path with no query string, because the query string holds the token.
 7. `AppDeps.log` also takes `{ stream }`, an object with `write(line: string)`, for the log test.
 8. `Config` gains `demoKey: string | null` from `DEMO_KEY`. An empty value counts as not set.
-9. `GET /api/demo/latest?key=<key>` answers 200 with a `LatestSessionResponse` of `@glance/shared`: the ID and the token of the session in `app.sessions.live()` that was created last. The mirror page of Plan 3 and the HUD of Plan 4 call it each 2 seconds, so that they follow the session of the phone with no typed ID.
+9. `GET /api/demo/latest?key=<key>` answers 200 with a `LatestSessionResponse` of `@glance/shared`: the ID and the token of the session in `app.sessions.live()` that was created last. The mirror page of Plan 3 calls it each 2 seconds, so that it follows the session of the phone with no typed ID. The HUD of Plan 4 does not use this path: its live mode takes the flags `s` and `t`.
 10. That path answers 404 with `{ error: 'not_found' }` when `demoKey` is `null`, when the key does not match (`tokenMatches`), or when no session is live. It needs no session token. By rule 6 the log never holds the key.
 
 - [ ] **Step 1: Write the failing test**
@@ -3833,7 +3848,7 @@ REQUIRE_BLUR=
 DEMO_KEY=
 ```
 
-`REQUIRE_BLUR` and `DEMO_KEY` come from Tasks 14 and 17. Set `REQUIRE_BLUR=1` when the face blur of Plan 2 Task 18 is on the phone. Set `DEMO_KEY` to a random word of 12 characters or more. The mirror page and the HUD take it as `?latest=<key>`.
+`REQUIRE_BLUR` and `DEMO_KEY` come from Tasks 14 and 17. Set `REQUIRE_BLUR=1` when the face blur of Plan 2 Task 18 is on the phone. Set `DEMO_KEY` to a random word of 12 characters or more. The mirror page takes it as `?latest=<key>`.
 
 - [ ] **Step 2: Create the instance and deploy**
 
@@ -3848,12 +3863,14 @@ ssh root@<address>
 fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
 echo '/swapfile none swap sw 0 0' >> /etc/fstab
 git clone https://github.com/mrBymax/glance.git /opt/glance
-cd /opt/glance && git switch feat/server
+cd /opt/glance && git switch <branch>
 mkdir -p apps/website/dist apps/display-pow/dist
 cp infra/.env.example infra/.env
 nano infra/.env
 docker compose -f infra/compose.yaml up -d --build
 ```
+
+`<branch>` is the branch that holds the server code: `feat/server`, or `feat/overnight-build` after the unattended run, or `main` after the merge.
 
 If `npm ci` reports a missing package in the build, remove the two workspace flags from the Dockerfile. The image then holds the dependencies of each app.
 
@@ -4695,9 +4712,9 @@ git commit -m "feat(server): wait for a sharp still before the look-alike line"
 
 This plan uses the closest type in each case. A change of the contract is a decision for the team.
 
-1. `DeviceState` has no stream error. The server cannot tell "battery low" or "thermal hot" from another stop. Task 6 reads `battery` and `thermal` with two limits that the author chose.
+1. `DeviceState` has no stream error. The server cannot tell "battery low" or "thermal hot" from another stop. Task 6 reads `battery` and `thermal` with two limits that the author chose. Only the spoken line depends on these limits. The phone knows the real cause, sends it to the page as an `error` event (Plan 2 Task 11), and the page shows that message.
 2. Closed after the cross-check: `IntentKind` now has `ask`, and Task 26 rule 1a uses it. `speech.final` still has no `promptId`, so a voice yes binds to the last finished prompt that the server knows.
-3. No message tells the server that the phone closed its checkout screen. R19 uses the 30 seconds alone.
+3. No message tells the server that the phone closed its checkout screen. R19 uses the 30 seconds alone. The checkout sheet of Plan 3 opens by itself with each pay prompt, and a dismissed sheet is a cancel. With the second condition of R19, a shopper who walks away with the phone in a pocket would hold the kiosk until the camera rests (R22, 3 minutes). A shopper who pays with the phone button has 30 seconds from the last look at the code. If that is too short, the team adds a message for the open sheet.
 4. `ServerToDevice` has no request for a still, and no message says that the phone can take one. The phone must act on `glance.ambiguous`, and the server needs `SECOND_LOOK_WAIT_MS` (Task 30).
 5. `error.code` and `checkout.failed.reason` are free strings. This plan sets `recognition.slow`, `kiosk.busy`, and `declined`. No event says that recognition is fast again.
 6. Plan 0 defines no answer body for `PATCH profile`, `POST intents`, `POST cart`, and `DELETE`. This plan answers with the `Profile`, and with 204 for the other three.
@@ -4720,4 +4737,5 @@ Plans 2, 3, and 4 already agree with this plan on these points: the catalog file
 9. The Gemini project is on the paid tier. The team has confirmed that the paid tier does not train on the data (spec section 13).
 10. A native speaker reads the Italian lines of Task 28.
 11. The domain has two DNS records: `<domain>` and `hud.<domain>`.
+12. A later appearance of the kiosk code gives a new pay prompt when the head window of the old one is over (Task 5, rules 7a and 7b). The spec does not state this rule.
 
