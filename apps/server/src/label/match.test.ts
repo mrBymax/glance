@@ -55,9 +55,16 @@ it('needs half of the words of the name', () => {
   expect(match({ brand: 'Barilla', name: 'Fusilli' })).toBeNull();
 });
 it('gives no product when two items match', () => {
-  // "Spaghetti n.5" shares 2 of its 3 words with "Spaghetti n. 7".
+  // "Pesto alla genovese" shares 2 of its 3 words with "Pesto alla siciliana".
+  const two: StoreItem[] = [...items, { gtin: '8076809523509', priceCents: 289, name: 'Pesto alla siciliana', brand: 'Barilla', packSize: '190 g' }];
+  expect(matchLabel(read({ brand: 'Barilla', name: 'Pesto alla genovese' }), two, 0.6)).toBeNull();
+});
+it('needs each number of the name of the item, so another size or type of one product line gives no product', () => {
+  expect(match({ brand: 'Barilla', name: 'Spaghetti n.3' })).toBeNull();
+  expect(match({ brand: 'Barilla', name: 'Spaghetti' })).toBeNull();
+  expect(match({ brand: 'De Cecco', name: 'Spaghetti n.1' })).toBeNull();
   const two: StoreItem[] = [...items, { gtin: '8076800105056', priceCents: 109, name: 'Spaghetti n.7', brand: 'Barilla', packSize: '500 g' }];
-  expect(matchLabel(read({ brand: 'Barilla', name: 'Spaghetti n.5' }), two, 0.6)).toBeNull();
+  expect(matchLabel(read({ brand: 'Barilla', name: 'Spaghetti n.5' }), two, 0.6)).toBe('8076800195057');
 });
 it('the pack size selects between items with one brand and one name', () => {
   expect(match({ brand: 'Ferrero', name: 'Nutella' })).toBeNull();

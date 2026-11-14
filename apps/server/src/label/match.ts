@@ -16,7 +16,7 @@ function packKey(packSize: string): string {
  * Selects the store item of a label, or returns null. Free text of the model never becomes a product by itself:
  * 1. Digits count with a right check digit and an item of the store list. Two codes of two items give no product.
  * 2. Else the brand and the name must select exactly one item: the answer holds each word of the brand of the item
- *    and at least half of the words of its name. An item with no brand never matches this way.
+ *    and at least half of the words of its name, with each number of that name. An item with no brand never matches this way.
  *    Between items with one brand and one name, the pack size selects. Two matches or none give no product.
  * The second way also needs the confidence `minConfidence`. Returns the 13 digits of the item.
  */
@@ -36,6 +36,8 @@ export function matchLabel(answer: LabelAnswer, items: readonly StoreItem[], min
     const brand = words(item.brand);
     const name = words(item.name);
     if (brand.length === 0 || name.length === 0 || !brand.every((word) => read.has(word))) return false;
+    // "Spaghetti n.3" must not select "Spaghetti n.5": a number tells the products of one line apart.
+    if (!name.every((word) => !/\d/.test(word) || read.has(word))) return false;
     return name.filter((word) => read.has(word)).length * 2 >= name.length;
   });
   if (matches.length > 1 && answer.packSize !== null) {
