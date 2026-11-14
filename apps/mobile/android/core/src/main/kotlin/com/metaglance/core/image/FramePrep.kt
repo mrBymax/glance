@@ -1,0 +1,28 @@
+package com.metaglance.core.image
+
+/** The result of face detection on one frame. The boxes of `Found` are in frame pixels. */
+sealed interface FaceResult {
+    data object NotRun : FaceResult
+
+    data object Failed : FaceResult
+
+    data class Found(val boxes: List<RectPx>) : FaceResult
+}
+
+/** One frame that is ready for the JPEG encoder. `argb` has `width * height` pixels in rows. */
+class PreparedFrame(val argb: IntArray, val width: Int, val height: Int, val blurred: Boolean)
+
+object FramePrep {
+    /**
+     * Crops, scales, and converts one frame for the upload. The output size follows the size of each frame,
+     * because the glasses can lower the resolution during a stream.
+     * Returns null when face detection failed: a frame that can show a face does not leave the phone.
+     */
+    fun prepare(frame: RawFrame, faces: FaceResult, crop: Boolean): PreparedFrame? {
+        if (faces is FaceResult.Failed) return null
+        val rect = if (crop) FrameGeometry.centerCrop(frame.width, frame.height) else FrameGeometry.full(frame.width, frame.height)
+        val (outWidth, outHeight) = FrameGeometry.outputSize(rect)
+        val argb = I420.cropScaleToArgb(frame.i420, frame.width, frame.height, rect, outWidth, outHeight)
+        return PreparedFrame(argb, outWidth, outHeight, blurred = faces is FaceResult.Found)
+    }
+}

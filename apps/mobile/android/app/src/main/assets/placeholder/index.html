@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Glance placeholder</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: sans-serif; font-size: 1rem; margin: 0.75rem; }
+    h1 { font-size: 1.2rem; margin: 0 0 0.5rem; }
+    h2 { font-size: 1rem; margin: 1rem 0 0.25rem; }
+    pre { font-size: 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 0.5rem; border: 1px solid; }
+    button { font-size: 0.9rem; min-height: 3rem; margin: 0.2rem 0.2rem 0.2rem 0; padding: 0 0.75rem; }
+    #prompt { padding: 0.5rem; border: 2px solid; }
+    #captions { margin: 0; padding-left: 1.2rem; }
+  </style>
+</head>
+<body>
+  <h1>Glance placeholder page</h1>
+  <p>This page stands in for the phone UI. Each button sends one message to the app.</p>
+
+  <h2>Prompt</h2>
+  <div id="prompt">
+    <p id="prompt-text">No prompt.</p>
+    <button id="add" type="button" disabled>Add</button>
+    <button id="skip" type="button" disabled>Skip</button>
+  </div>
+
+  <h2>Messages to the app</h2>
+  <div id="buttons"></div>
+
+  <h2>Captions</h2>
+  <ol id="captions"></ol>
+
+  <h2>native.state</h2>
+  <pre id="state">No state yet.</pre>
+
+  <h2>profile</h2>
+  <pre id="profile">No profile yet.</pre>
+
+  <h2>Log</h2>
+  <pre id="log"></pre>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
