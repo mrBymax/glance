@@ -104,7 +104,11 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
       session.detach(sink);
     };
     const sink: DeviceSink = {
-      send,
+      send: (message) => {
+        // A still costs the shopper time and can cost a model call, so the log shows each request.
+        if (message.t === 'still.request') app.log.info(`still.request session=${session.id}`);
+        send(message);
+      },
       close: () => {
         // The events stop now. The close handshake takes time, and the new socket already gets each event.
         leave();

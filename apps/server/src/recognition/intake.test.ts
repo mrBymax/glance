@@ -56,7 +56,7 @@ it('gives the recognizer the JPEG of the frame, and tells a still from a frame',
 it('logs the status and the time of each call', async () => {
   phone.sendFrame({ seq: 5, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
   await phone.next((m) => m.t === 'speak');
-  expect(logLines.join('')).toMatch(new RegExp(`recognition session=${sessionId} seq=5 status=identified ms=\\d+`));
+  expect(logLines.join('')).toMatch(new RegExp(`recognition session=${sessionId} seq=5 status=identified code=no ms=\\d+`));
 });
 it('a frame with blurred false still becomes a glance', async () => {
   phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: false }, JPEG);

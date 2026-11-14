@@ -226,7 +226,7 @@ The worker:
 - After 3 failed calls in a row the server logs `recognition is slow for the session <id>` and gives the rules the input `recognition.slow`. The voice says "Recognition is slow right now.", and the clients get the event `error` with the code `recognition.slow`. A good call starts the count again.
 - The worker holds a frame only for the time of its call.
 - The worker stops when its session stops and when the app closes.
-- Each result gets the log line `recognition session=<id> seq=<n> status=<status> ms=<n>`. It gives the server share of the time from glance to voice.
+- Each result gets the log line `recognition session=<id> seq=<n> status=<status> code=<digits|visible|no> ms=<n>`. `code` is what the model said about a barcode in the frame. Each request for a still gets the line `still.request session=<id>`. It gives the server share of the time from glance to voice.
 - The digits of the code of a result go to the lookup of a barcode. A frame with the kind `label` never reaches the worker.
 
 ### Stored frames
@@ -448,7 +448,7 @@ A frame with the kind `label` is the still of a barcode that the phone could not
 - The answer is `digits` (a list of digit runs), `brand`, `name`, `packSize`, and `confidence`. An answer that fails the schema counts as an empty one.
 - `matchLabel` in `src/label/match.ts` selects the store item. Free text of the model never becomes a product by itself:
   1. Digits count with a right check digit and an item of the store list. Two codes of two items give no product.
-  2. Else the brand and the name must select exactly one item. The brand, the name, and the pack size of the answer must together hold each word of the brand of the item, each word of its name, and each number of its name. The compare has no regard to case and accents, and words of 1 or 2 letters do not count. So "Pesto alla calabrese" never selects "Pesto alla genovese", and "Spaghetti n.3" never selects "Spaghetti n.5". This way also needs a confidence of `RECOGNITION_MIN_CONFIDENCE` or more.
+  2. Else the brand and the name must select exactly one item. The brand, the name, and the pack size of the answer must together hold each word of the brand of the item, each word of its name, and each number of its name. The compare has no regard to case and accents, and words of 1 or 2 letters do not count. So "Pesto alla calabrese" never selects "Pesto alla genovese", and "Spaghetti n.3" never selects "Spaghetti n.5". An item with no brand in the store list matches by each word of its name alone, so give a demo item a name that is printed on its package. This way also needs a confidence of `RECOGNITION_MIN_CONFIDENCE` or more.
   3. Between items with one brand and one name, the pack size selects. Two matches or none give no product.
 - A match goes through the lookup of `barcode.seen`, with the source `label`.
 - With no match, and when the call fails or is late, the voice says "I cannot read this code. Hold it closer.", at most one time each 10 seconds.

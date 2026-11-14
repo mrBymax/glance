@@ -120,7 +120,12 @@ class FramePipeline(
         if (stillGaveCode.getAndSet(false)) label.onStillCode()
         // A frame that waits in the socket is no reason to drop a still.
         val canUpload = gate().let { it == null || it == UploadSkip.STILL_SENDING }
-        if (label.onFrame(nowMs, decoded != null || region != null, vote.accepted, labelRequested.getAndSet(false), canUpload)) onLabelStill()
+        val requested = labelRequested.getAndSet(false)
+        if (label.onFrame(nowMs, decoded != null || region != null, vote.accepted, requested, canUpload)) {
+            // Why the still: a person who reads the log must see if the scanner or the server asked.
+            log("label still asked: " + if (requested) "server request" else "region $region in ${frame.width}x${frame.height}")
+            onLabelStill()
+        }
     }
 
     /** The second and the third way to read a code: the region in a larger scale, then the digits under the bars. */

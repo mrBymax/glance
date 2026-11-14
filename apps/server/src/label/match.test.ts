@@ -91,8 +91,12 @@ it('the pack size selects between items with one brand and one name', () => {
   expect(match({ brand: 'Ferrero', name: 'Nutella', packSize: '15 G' })).toBe('0000080177173');
   expect(match({ brand: 'Ferrero', name: 'Nutella', packSize: '750 g' })).toBeNull();
 });
-it('never matches an item with no brand by its name', () => {
-  expect(match({ brand: 'Forno', name: 'Pane del forno' })).toBeNull();
+it('matches an item with no brand by each word of its name', () => {
+  expect(match({ brand: 'Forno', name: 'Pane del forno' })).toBe('2000000000015');
+  expect(match({ brand: 'Biscoff', name: 'you gotta love' }, 0.6)).toBeNull();
+  const withBiscoff = [...items, { gtin: '7312220096019', priceCents: 279, name: 'Biscoff' }];
+  expect(matchLabel(read({ brand: 'Biscoff', name: 'you gotta love' }), withBiscoff, 0.6)).toBe('7312220096019');
+  expect(match({ brand: 'Forno', name: 'Pane' })).toBeNull();
 });
 it('needs the confidence of recognition for a match by brand and name', () => {
   expect(match({ brand: 'Barilla', name: 'Pesto alla genovese', confidence: 0.59 })).toBeNull();

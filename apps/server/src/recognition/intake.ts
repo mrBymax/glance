@@ -58,7 +58,7 @@ export function createFrameHandler(deps: {
     exclude: () => excludeList(session.state, deps.clock.now()),
     onResult: (result, info) => {
       // These lines give the server share of the time from glance to voice.
-      deps.log.info(`recognition session=${session.id} seq=${info.seq} status=${result.status} ms=${info.ms}`);
+      deps.log.info(`recognition session=${session.id} seq=${info.seq} status=${result.status} code=${result.code.digits ?? (result.code.visible ? "visible" : "no")} ms=${info.ms}`);
       session.dispatch({ type: 'recognition', result, still: info.still });
       if (result.code.digits !== null) deps.onCode(session, result.code.digits);
     },
