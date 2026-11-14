@@ -26,7 +26,7 @@ Decide if a hand holds one product up to the camera, and which catalog product i
 
 ## Exclude list
 
-Each request starts with a line "Exclude:" and a list of catalog IDs, or the word "none". Never answer with an ID of that list, as `productId` or in `candidates`. If the product in the hand is on the list, answer with the status `none`.
+Each request has one frame and one line of text. The line starts with "Exclude:" and holds a list of catalog IDs, or the word "none". Never answer with an ID of that list, as `productId` or in `candidates`. If the product in the hand is on the list, answer with the status `none`.
 
 ## Catalog
 
