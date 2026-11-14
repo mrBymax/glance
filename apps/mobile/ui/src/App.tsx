@@ -1,11 +1,9 @@
 import { Heading } from '@astryxdesign/core/Heading';
-import { HStack } from '@astryxdesign/core/HStack';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { VStack } from '@astryxdesign/core/VStack';
-import { Glasses } from 'lucide-react';
 import { useUi } from './bridge/BridgeContext';
 import { BrowserBridge } from './bridge/browserBridge';
-import { Mark } from './components/Mark';
+import { Logo } from './components/Logo';
 import { DebugPanel } from './debug/DebugPanel';
 import { SessionScreen } from './screens/SessionScreen';
 import { SetupScreen } from './screens/SetupScreen';
@@ -17,11 +15,10 @@ function ScreenView(props: { screen: Screen }) {
   if (props.screen === 'session') return <SessionScreen />;
   return (
     <VStack as="main" className="glance-page" paddingBlock={4} gap={6}>
-      <HStack gap={3} vAlign="center">
-        <Mark icon={Glasses} />
-        <Heading level={1}>{strings.appTitle}</Heading>
-      </HStack>
-      <Spinner size="lg" label={strings.loading} />
+      <Heading level={1} className="glance-hero">
+        <Logo size="hero" alt={strings.logoName} hasEntrance />
+      </Heading>
+      <Spinner size="lg" label={strings.loading} className="glance-start" />
     </VStack>
   );
 }

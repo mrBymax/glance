@@ -43,14 +43,41 @@
   overflow-wrap: anywhere;
 }
 
-/* The disc that holds the glyph of a screen: the glasses of Glance, the check of a payment. */
+/* The logo. Its height is in px (Logo.tsx), because a logotype keeps its size at each font scale. */
+.glance-logo,
+.glance-logo img {
+  display: block;
+}
+
+.glance-logo img {
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+/* The first screen gives the logo room above it, and sets the logo and the title apart from the steps below. */
+.glance-hero {
+  padding-block: var(--spacing-6) var(--spacing-2);
+}
+
+.glance-logo--enter {
+  animation: glance-logo-in var(--duration-slow) var(--ease-entrance) both;
+}
+
+@keyframes glance-logo-in {
+  from { opacity: 0; transform: translateY(0.5rem); }
+}
+
+/* The spinner of the loading screen sits under the left edge of the logo, not in the middle of the screen. */
+.glance-start {
+  align-self: flex-start;
+}
+
+/* The disc that holds the glyph of a step or a state: the store of a checkout, the check of a payment. */
 .glance-mark {
   flex: none;
   inline-size: var(--size-element-lg);
   block-size: var(--size-element-lg);
   border-radius: var(--radius-full);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
 }
 
 .glance-mark svg {
@@ -253,7 +280,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .glance-caption--newest {
+  .glance-caption--newest,
+  .glance-logo--enter {
     animation: none;
   }
 }

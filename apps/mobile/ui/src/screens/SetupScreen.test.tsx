@@ -6,6 +6,13 @@ import { uncoveredTouchTargets } from '../test/touchTargets';
 import { EN } from '../text/strings';
 import { META_AI_STORE_URL, SetupScreen } from './SetupScreen';
 
+it('opens with the logo, then a main heading of its own', () => {
+  renderWithUi(<SetupScreen />, { native: NATIVE_NEW });
+  const logo = screen.getByRole('img', { name: 'Meta Glance' });
+  const heading = screen.getByRole('heading', { level: 1, name: 'Set up in four steps' });
+  expect(heading).not.toContainElement(logo);
+  expect(logo.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
 it('shows four steps and marks the current one', () => {
   renderWithUi(<SetupScreen />, { native: NATIVE_NEW });
   const steps = within(screen.getByRole('list', { name: 'Setup' })).getAllByRole('listitem');

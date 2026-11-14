@@ -12,6 +12,7 @@ import type { NativeState, PageToNative } from '@glance/shared';
 import { Bell, Camera, Check, Glasses, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useUi } from '../bridge/BridgeContext';
+import { Logo } from '../components/Logo';
 import { Mark } from '../components/Mark';
 import { StateBanner } from '../components/StateBanner';
 import { setupStepOf, type SetupStep } from '../state/selectors';
@@ -83,10 +84,10 @@ export function SetupScreen() {
   return (
     <VStack as="main" className="glance-page" paddingBlock={4} gap={6}>
       <StateBanner />
-      <HStack gap={3} vAlign="center">
-        <Mark icon={Glasses} />
+      <VStack className="glance-hero" gap={5}>
+        <Logo size="hero" alt={strings.logoName} hasEntrance />
         <Heading level={1}>{strings.setupTitle}</Heading>
-      </HStack>
+      </VStack>
       <Stepper orientation="vertical" label={strings.setupSteps} activeStep={step}>
         {labels.map((label, index) => (
           <Step key={label} step={index} label={label} />

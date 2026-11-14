@@ -20,6 +20,7 @@ it('shows the debug panel in a browser', () => {
 it('hides the debug panel inside the app', () => {
   renderInWebView('/');
   expect(screen.getByText('Starting Glance.')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1, name: 'Meta Glance' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Debug' })).toBeNull();
 });
 it('shows the debug panel inside the app with the flag debug', () => {

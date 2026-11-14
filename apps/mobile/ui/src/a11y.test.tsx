@@ -31,10 +31,11 @@ const SCENES: [string, () => Promise<unknown>][] = [
   ['debug panel', async () => tap(renderWithUi(<App />, { messages: session }), 'Debug')],
 ];
 
-it.each(SCENES)('%s: one main landmark, one main heading, named controls, covered touch targets', async (_name, open) => {
+it.each(SCENES)('%s: one main landmark, one main heading, one named logo, named controls, covered touch targets', async (_name, open) => {
   await open();
   expect(screen.getAllByRole('main')).toHaveLength(1);
   expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  expect(screen.getAllByRole('img', { name: 'Meta Glance' })).toHaveLength(1);
   const controls = ['button', 'link', 'radio', 'checkbox', 'spinbutton'].flatMap((role) => screen.queryAllByRole(role));
   expect(controls.length).toBeGreaterThan(0);
   for (const control of controls) expect(control).toHaveAccessibleName();

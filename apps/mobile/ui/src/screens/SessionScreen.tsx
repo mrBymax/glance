@@ -8,13 +8,14 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
-import { Glasses, Mic, Power, ScanLine, Settings, Undo2 } from 'lucide-react';
+import { Mic, Power, ScanLine, Settings, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { ASK_MESSAGE } from '../bridge/askMessage';
 import { useUi } from '../bridge/BridgeContext';
 import { CaptionList } from '../components/CaptionList';
 import { CartList } from '../components/CartList';
 import { CheckoutSheet } from '../components/CheckoutSheet';
+import { Logo } from '../components/Logo';
 import { LookAlikeNotice } from '../components/LookAlikeNotice';
 import { Mark } from '../components/Mark';
 import { PromptCard } from '../components/PromptCard';
@@ -56,10 +57,9 @@ export function SessionScreen() {
       <StateBanner />
       <VStack gap={3}>
         <HStack hAlign="between" vAlign="center" gap={3}>
-          <HStack gap={3} vAlign="center">
-            <Mark icon={Glasses} />
-            <Heading level={1}>{strings.appTitle}</Heading>
-          </HStack>
+          <Heading level={1}>
+            <Logo size="header" alt={strings.logoName} />
+          </Heading>
           <IconButton label={strings.settings} icon={<Icon icon={Settings} />} size="lg" variant="ghost" onClick={() => setSettingsOpen(true)} />
         </HStack>
         <StatusRow />

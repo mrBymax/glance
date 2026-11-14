@@ -23,7 +23,8 @@
     </queries>
 
     <application android:name=".GlanceApp" android:label="Glance" android:allowBackup="false"
-        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
+        android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.Glance">
         <meta-data android:name="com.meta.wearable.mwdat.APPLICATION_ID" android:value="${mwdat_application_id}" />
         <meta-data android:name="com.meta.wearable.mwdat.CLIENT_TOKEN" android:value="${mwdat_client_token}" />
 
@@ -48,6 +49,7 @@
         <!-- The mock menu is a second launcher icon in each build type: mock mode is the fallback of the live demo.
              It has a task of its own, so a change from the menu to "Glance" and back keeps both screens. -->
         <activity android:name=".mock.MockMenuActivity" android:exported="true" android:label="Glance Mock"
+            android:icon="@mipmap/ic_launcher_mock" android:roundIcon="@mipmap/ic_launcher_mock"
             android:screenOrientation="portrait" android:launchMode="singleTask"
             android:taskAffinity="com.metaglance.android.mock">
             <intent-filter>

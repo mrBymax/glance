@@ -18,7 +18,7 @@ function allTexts(table: Node): Entry[] {
 }
 
 // These texts are equal in both languages: a name, a loan word, or a pattern with no word.
-const SAME = new Set(['appTitle', 'cartLine', 'standard', 'privacyTitle', 'candidate', 'budget', 'status.percent', 'status.online', 'status.offline']);
+const SAME = new Set(['logoName', 'cartLine', 'standard', 'privacyTitle', 'candidate', 'budget', 'status.percent', 'status.online', 'status.offline']);
 
 it('selects the table of the language', () => {
   expect(stringsFor('en')).toBe(EN);
