@@ -1,15 +1,21 @@
 // Stop hook of Claude Code for this repository. .claude/settings.json runs it each time Claude wants to stop.
 // When code changed and no documentation changed with it, the hook asks Claude one time to update the documentation.
-// Input: JSON on stdin. Answer: {"decision":"block","reason":"..."} on stdout keeps Claude at work. No output lets it stop.
-// The hook never stops Claude two times in a row, and each failure of the hook itself lets Claude stop.
+// Input: JSON on stdin. Output: hookSpecificOutput.additionalContext on stdout keeps Claude at work. No output lets it stop.
+// The hook never asks two times in a row, and each failure of the hook itself lets Claude stop.
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { readFileSync, writeFileSync } = require('node:fs');
-const { isAbsolute, join } = require('node:path');
+const { join, resolve } = require('node:path');
 
 const CODE = /^(apps|packages|infra|scripts|agents)\//;
 const NOT_CODE = [/\.md$/, /(^|\/)package-lock\.json$/, /\.test\.[a-z]+$/, /\/src\/(test|androidTest)\//, /\/fixtures\//, /\/testdata\//];
 const DOCS = [/(^|\/)README\.md$/, /^docs\/(?!overnight\/|superpowers\/|research\/)/];
+
+// trimEnd, not trim: a status line can start with a space.
+const run = (dir, ...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trimEnd();
+const topOf = (dir) => run(dir, 'rev-parse', '--show-toplevel');
+const commonOf = (dir) => resolve(dir, run(dir, 'rev-parse', '--git-common-dir'));
+const samePath = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
 
 function main() {
   let input = {};
@@ -19,10 +25,18 @@ function main() {
     // No input, or input that is not JSON. Go on with the defaults.
   }
 
-  const start = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
-  const top = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: start, encoding: 'utf8' }).trim();
-  // trimEnd, not trim: a status line can start with a space.
-  const git = (...args) => execFileSync('git', args, { cwd: top, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trimEnd();
+  // The project root, or the git worktree of this repository that Claude works in.
+  let top = topOf(process.env.CLAUDE_PROJECT_DIR || process.cwd());
+  const common = commonOf(top);
+  if (typeof input.cwd === 'string' && input.cwd !== '') {
+    try {
+      const other = topOf(input.cwd);
+      if (samePath(commonOf(other), common)) top = other;
+    } catch {
+      // The working directory of Claude is outside a git repository.
+    }
+  }
+  const git = (...args) => run(top, ...args);
   const tryGit = (...args) => {
     try {
       return git(...args);
@@ -32,8 +46,7 @@ function main() {
   };
 
   // The state lives in the git folder, so git never tracks it. One entry for each working tree.
-  const common = git('rev-parse', '--git-common-dir');
-  const stateFile = join(isAbsolute(common) ? common : join(top, common), 'glance-stop-docs.json');
+  const stateFile = join(common, 'glance-stop-docs.json');
   let state = {};
   try {
     state = JSON.parse(readFileSync(stateFile, 'utf8'));
@@ -76,7 +89,7 @@ function main() {
   }
   const list = [...areas].map(([area, count]) => `${area} (${count} ${count === 1 ? 'file' : 'files'})`).join(', ');
 
-  const reason = [
+  const request = [
     'Documentation check of this repository (.claude/hooks/stop-docs.cjs).',
     `Code changed, and no documentation changed with it: ${list}.`,
     'Before you stop, update each document that these changes make wrong or incomplete:',
@@ -87,7 +100,7 @@ function main() {
     'If no document needs a change, say so in one line and stop.',
   ].join('\n');
   save({ ...seen, asked: fingerprint });
-  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'Stop', additionalContext: request } }));
 }
 
 try {
