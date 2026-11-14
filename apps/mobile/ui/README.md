@@ -247,7 +247,7 @@ End asks first, because the server takes no input for a session that ended.
 |---|---|
 | `glance.pending` with a warning | `warning` |
 | `glance.pending` with no warning, `checkout.offered` | `prompt` |
-| `cart.updated` with the change `add` or `remove` | `added` or `removed` |
+| `cart.updated` with the change `add` or `remove` | `added` or `removed`. No pattern for the add that brings the total over the budget of the profile: `budget.exceeded` follows it |
 | `budget.exceeded` | `warning` |
 | `checkout.paid` | `paid` |
 | `checkout.failed`, `error` | `error` |
@@ -255,6 +255,7 @@ End asks first, because the server takes no input for a session that ended.
 | `native.state` with a stream that changes from `streaming` or `paused` to `stopped` | `cameraOff` |
 
 - Each other message gives no pattern: a caption, a snapshot, a `cart.updated` with no change, the first native state, and a native state with the same stream value.
+- One event of the shop gives one pattern. `apps/server/README.md` lists each sound and each vibration with its trigger, in "A guard for the voice".
 - With `profile.haptics` off, no message gives a pattern.
 - `BridgeProvider` keeps the newest state in a ref. Two messages can arrive before the next render, and each pattern needs the state before its message.
 

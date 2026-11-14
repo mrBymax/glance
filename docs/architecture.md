@@ -317,7 +317,7 @@ sequenceDiagram
       Label->>Runtime: dispatch(label, empty), which speaks no line
     else no item, or the call failed
       Label->>Runtime: dispatch(label, failed)
-      Runtime->>Socket: speak "I cannot read this code. Hold it closer.", at most one time each 10 seconds
+      Runtime->>Socket: speak "I cannot read this code. Hold it closer.", one time for each appearance
     end
   end
 ```
@@ -366,6 +366,7 @@ Rules of this path:
 - Digits that the model read count only with a right check digit and a product of the catalog or the store list. Then one frame is enough. The model never causes the line "This product is not in this store."
 - A label gives a product only when its answer selects exactly one item of the store list: by digits with a right check digit, else by the item that the model chose from the list, else by each word of the brand and each word and number of the name. Digits of one item and a chosen item that is another one give no product. Free text of the model never becomes a product.
 - A still that shows no product gets no line. The line "I cannot read this code." is for an answer that read something and selected no item.
+- Each line of the rules goes through one guard, `src/sessions/guard.ts`. A line that answers an action of the shopper always plays, and so do a product prompt, a checkout line, and a state line. Each other line is dropped when a line of the last 20 seconds had its text, or when it comes less than 3 seconds after another unsolicited line. A line about a failed read plays one time for each appearance of a product or a code. The server logs each spoken line and each dropped line. `apps/server/README.md` has the definition and the audit of each line, in "A guard for the voice".
 - One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight speaks no unknown line and no aim hint. The same holds while the server waits for a still that it asked for, and for its label call. The recognition instruction also gives the status `none` to a package shown with its barcode side.
 - 2 frames with a product that sight cannot name ask for a still, with the limits of a still for a code. The unknown line waits for the still and its label call, and plays only when they gave no product.
 - The phone takes a label still by itself when a barcode region was in view for the barcode wait with no accepted code, and after each `still.request`. It takes at most one each still gap.

@@ -231,7 +231,7 @@ The worker:
 - One call runs at a time for each session. While it runs, one frame waits, and a newer frame takes its place. A stream frame does not replace a waiting still.
 - A call that takes 4 seconds is dropped: the worker aborts it and ignores a late answer.
 - A call that fails gets one log line with the name of the error and at most 200 characters of its message.
-- After 3 failed calls in a row the server logs `recognition is slow for the session <id>` and gives the rules the input `recognition.slow`. The voice says "Recognition is slow right now.", and the clients get the event `error` with the code `recognition.slow`. A good call starts the count again.
+- After 3 failed calls in a row the server logs `recognition is slow for the session <id>` and gives the rules the input `recognition.slow`. The voice says "Recognition is slow right now.", and the clients get the event `error` with the code `recognition.slow`. A good call starts the count again. The rules pass at most one such report each 60 seconds.
 - The worker holds a frame only for the time of its call.
 - The worker stops when its session stops and when the app closes.
 - Each result gets the log line `recognition session=<id> seq=<n> status=<status> code=<digits|visible|no> ms=<n>`. `code` is what the model said about a barcode in the frame. Each request for a still gets the line `still.request session=<id>`. It gives the server share of the time from glance to voice.
@@ -405,7 +405,7 @@ Limits of Open Food Facts:
 - The server makes 13 digits of each code: a UPC-A code gets a leading 0, and an EAN-8 code gets five. A code of 8 digits counts as EAN-8, so the phone must expand a UPC-E code to 12 digits before it sends it.
 - The lookup runs before the rules, as the lookup of a kiosk code does. Its outcome is the rule input `barcode`.
 - `product`: the product takes the path of a product that recognition named. One appearance gets one prompt (R1), a yes adds one unit at the price of the store (R7), and a no skips it (R8, R9). The phone repeats its report each second, and reports less than 3 seconds apart are one appearance.
-- `notInStore`: the voice says "This product is not in this store." one time for each appearance of that code. No prompt and no event follows. The line waits while the product of a prompt is in view.
+- `notInStore`: the voice says "This product is not in this store." one time for each appearance of that code, and at most one time each 20 seconds. No prompt and no event follows. The line waits while the product of a prompt is in view.
 - `invalid`: a code with a wrong check digit, or with 14 digits, has no effect.
 - A scanned product has the ID `gtin-<13 digits>`. The cart, the warnings, the snapshot, a question, the cart by voice, the spot check, and a new profile language find it by that ID as they find a catalog product.
 - The clip seed makes no clip for a scanned product. With real speech, each new line of a scanned product is one ElevenLabs call.
@@ -510,7 +510,7 @@ A frame with the kind `label` is the still of a package that the phone could not
      Between items with one brand and one name, the pack size selects. Two matches or none give no product.
 - A match goes through the lookup of `barcode.seen`, with the source `label`.
 - An answer with no digits, no brand, no name, and no item is an empty answer: the still showed no product. The voice says nothing for it.
-- With an answer that read something and matched nothing, and when the call fails or is late, the voice says "I cannot read this code. Hold it closer.", at most one time each 10 seconds. When recognition by sight asked for the still, the voice says "I do not know this product." in its place.
+- With an answer that read something and matched nothing, and when the call fails or is late, the voice says "I cannot read this code. Hold it closer." When recognition by sight asked for the still, the voice says "I do not know this product." in its place. One appearance of a product or a code gets one such line, and not one line for each still. See "A guard for the voice".
 - One label call runs at a time for each session, and a session starts at most one call each 5 seconds. A label frame that arrives during a call, or too early, is dropped with a `label frame dropped` warning.
 - A label frame of a session that rests, is paid, or ended is dropped with no call.
 - With `REQUIRE_BLUR=1` the server drops a label frame with `blurred: false`. With `SAVE_FRAMES` it saves each label frame that it accepts.
@@ -645,7 +645,7 @@ For a code that the store does not sell, and for a label frame, write a script o
 }
 ```
 
-- At second 2 the events stream gets the caption "This product is not in this store."
+- At second 3 the events stream gets the caption "This product is not in this store." The report of second 2 comes less than 3 seconds after "Camera on.", so the guard for the voice drops its line, and the next report speaks it.
 - At second 8.5 a phone on the device socket gets `still.request`. A browser client has no device socket and gets nothing.
 - `label` is the answer of the fake label reader for each label frame of a phone. Here a label frame gives `glance.pending` for the Nutella. A script with no `label` reads nothing, and the voice says nothing.
 
@@ -793,7 +793,7 @@ flowchart LR
   input["RuleInput with now"] --> step
   state["SessionState"] --> step
   step --> next["new SessionState"]
-  step --> effects["Effect list: event, speak, session.rest, session.end, payment.start, biometric.request, ask, still.request"]
+  step --> effects["Effect list: event, speak, speak.dropped, session.rest, session.end, payment.start, biometric.request, ask, still.request"]
 ```
 
 | File in `src/sessions` | Content |
@@ -808,6 +808,7 @@ flowchart LR
 | `barcode.ts` | The outcome of a barcode lookup, and the label frame that gave no product |
 | `code.ts` | The code state of a session: the quiet time of recognition, and the request for a still |
 | `say.ts` | The priority, the sound, and the interrupt value of each line |
+| `guard.ts` | The guard against a voice that repeats itself: which line is unsolicited, and when the voice drops it. See "A guard for the voice" |
 | `view.ts` | `inView`, `excludeList` for the recognition worker, and `toSnapshot` for a client that connects |
 | `warnings.ts` | `warningsFor`: the allergen and diet warnings of a product for one profile |
 | `turn.ts` | The helpers that the handlers share |
@@ -824,6 +825,7 @@ The rules that exist:
 - A product in the cart gets the prompt for "add another" (R11).
 - A glance prompt carries the warnings of its product for the profile of the shopper. See "Allergen guard".
 - An unknown product gets one line for each appearance (R13). The line waits while a still can name the product. See "A product that sight cannot name". An aim hint plays at most one time each 5 seconds.
+- Each line goes through the guard for the voice. It drops a line that the shopper did not ask for when the line repeats a text, follows another line too closely, or names a failed read a second time. See "A guard for the voice".
 - An `ambiguous` result gets the look-alike answer, and never a prompt. See "Look-alike products".
 - A yes or a no counts only with the ID of the current prompt (R3). From the head it also needs a finished prompt, the product in view, and the head window (R4). From voice, touchpad, key, or camera it needs a finished prompt (R5). From the phone or the HUD it needs the ID alone (R6).
 - An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
@@ -832,7 +834,7 @@ The rules that exist:
 - An add that crosses the budget of the profile warns one time. See "Budget guard".
 - A yes or a no with no valid target gets one hint, if a prompt finished in the last 15 seconds (R20). Silence adds nothing (R21).
 - A double tap with no current prompt opens the question window in place of that hint. See "Questions about a product".
-- A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code. With its line, a busy kiosk also gives the event `error` with the code `kiosk.busy`.
+- A kiosk code starts a checkout when the cart has items and no product prompt is current (R15). A busy kiosk and an empty cart get one line for each appearance of the code, and at most one each 20 seconds. With its line, a busy kiosk also gives the event `error` with the code `kiosk.busy`.
 - A yes pays only as an answer to the pay prompt (R16). The effect `payment.start` asks the runtime for the payment, and the input `payment.result` brings its result.
 - A product held up during a checkout suspends it. The pay prompt returns with the new total when the product has left the view and the code is in view (R17).
 - A no on the pay prompt cancels the checkout, and the kiosk is muted until its code has left the view (R18).
@@ -844,6 +846,103 @@ The rules that exist:
 - A barcode of a product that the store sells gets the prompt of that product. A code that the store does not sell gets one line. See "Barcode scan".
 - While the shopper shows a barcode, and for 3 seconds after, recognition gives no unknown line and no aim hint. The same holds while the server waits for a still and its label call.
 - 2 frames with a product that sight cannot name ask the phone for a still, and the label call reads the package. See "A product that sight cannot name".
+
+### A guard for the voice
+
+The shopper wears the voice in the ear. A line that repeats, or a row of lines about one product, is noise. `src/sessions/guard.ts` holds one guard for each line of the rules. `speak` in `turn.ts` asks it before a line becomes an effect.
+
+Solicited and unsolicited. This is the one definition, as `isSolicited` in `guard.ts`:
+
+- A line is solicited when the handler of an action of the shopper speaks it, in the step of that action. The actions are the inputs `intent` (yes, no, undo, repeat, total, cart, help, ask, stop), `cart.edit`, `profile.set`, `question`, `answer` (the answer of the model to a question), and `biometric.result`.
+- Each other line is unsolicited: a line for a recognition result, a barcode, a label frame, a kiosk code, a device state, a socket, a payment result, or slow recognition.
+- A line of a time rule is unsolicited, also when the time rule runs in the step of an action. An example is the unknown line that waited for a still.
+
+The rules of the guard:
+
+- A solicited line always plays. `repeat` always replays the last line that the shopper heard.
+- An unsolicited line with the text of a line of the last 20 seconds is dropped (`SAME_TEXT_MS`). The compare uses the text that the shopper hears, and it counts solicited lines too.
+- An unsolicited line less than 3 seconds after another unsolicited line is dropped (`UNSOLICITED_GAP_MS`). The guard does not keep it for later.
+- Three kinds of unsolicited lines always play, inside the 3 seconds and with a repeated text: a product prompt (`glance.new`, `glance.inCart`), a checkout line (`checkout.offer`, `checkout.cancelled`, `checkout.paid`, `checkout.failed`, `checkout.biometric`, `spotcheck.ask`, `spotcheck.thanks`), and a state line (`session.start`, `session.rest`, `device.cameraOff`, `device.regularCheckout`, `device.paused`, `device.battery`, `net.backOnline`). `LINE_KIND` in `guard.ts` gives each line its kind.
+- A line about a read that failed in the background (`glance.unknown`, `barcode.unreadable`) plays one time for each appearance of a product or a code. The appearance ends when the view was empty for the view time of the rules, 3 seconds: no recognition result with a product or a visible code, no barcode report, and no label frame. A product prompt also ends it. So a product that stays in view gets one such line, and not one line for each still.
+- The sound of a line is a field of its `speak` message. A dropped line sends no message, so its sound does not play.
+- A dropped line is not the last line for `repeat`.
+- An event still goes out when its line is dropped. For example, `glance.ambiguous` still asks the phone for a still.
+- A rule that speaks one time for each appearance gets a new chance after a drop for the 3 seconds: the lines `checkout.busy`, `checkout.empty`, and `barcode.notInStore`. The phone reports a code that stays in view one time each second, and a later report speaks the line. The `error` event `kiosk.busy` goes out with the line that plays.
+
+```mermaid
+flowchart TD
+  line["A rule speaks a line"] --> solicited{"Handler of an action of the shopper?"}
+  solicited -- yes --> play["speak effect"]
+  solicited -- no --> kind{"Prompt, checkout line, or state line?"}
+  kind -- yes --> play
+  kind -- no --> attempt{"Line about a failed read, and this appearance had one?"}
+  attempt -- yes --> drop["speak.dropped effect, reason appearance"]
+  attempt -- no --> same{"Text of a line of the last 20 seconds?"}
+  same -- yes --> dropSame["speak.dropped effect, reason same text"]
+  same -- no --> gap{"Less than 3 seconds after an unsolicited line?"}
+  gap -- yes --> dropGap["speak.dropped effect, reason gap"]
+  gap -- no --> play
+```
+
+The log shows what the shopper heard, at `info` level:
+
+```text
+speak session=<id> key=glance.new text=Nutella, four hundred grams, three ninety-nine. Nod to add. prompt=p-0003
+speak dropped session=<id> key=barcode.unreadable reason=appearance
+```
+
+- `speak` has the line key, the first 80 characters of the text, and the prompt ID or `none`. The runtime writes it when the line goes to the phone, so the order is that of the phone.
+- `speak dropped` has the line key and the reason: `same text`, `gap`, or `appearance`.
+
+What the guard costs. These cases are silent now:
+
+- A second product that the store does not sell, less than 20 seconds after the first one, gets no line: both lines have the text "This product is not in this store." The same holds for a second unknown product and for a second unreadable code.
+- A look-alike line less than 3 seconds after a prompt line is dropped. Its prompt still ends, and the phone UI shows the look-alike notice.
+
+The audit of 2026-11-14: each line that the server speaks with no action of the shopper, with its trigger and its limits. Each row also has the guard: "always" for a line that always plays, else the limits of 20 seconds and 3 seconds.
+
+| Line | Trigger | Limit of its rule | Guard |
+|---|---|---|---|
+| `glance.new`, `glance.inCart`: the product prompt. Sound `warning` with a warning | An `identified` result, a barcode of the store, or a label match | One for each appearance of the product (R1). A new product takes the place of the prompt (R2) | always |
+| `glance.unknown`: "I do not know this product." | An `unknown` result, or a failed label read of a still that sight asked for | One for each appearance (R13). It waits for a still | one for each appearance, then 20 s and 3 s |
+| `glance.partial`: "I can see part of it. ..." | An `unsure` result with an aim hint | One each 5 seconds. None while a barcode has the voice | 20 s for one hint text, 3 s |
+| `glance.ambiguous`: the look-alike line | An `ambiguous` result | One for each appearance of the same candidates | 20 s, 3 s |
+| `barcode.notInStore` | A barcode of the phone that the store list does not hold | One for each appearance of that code | 20 s, 3 s, new chance after 3 s |
+| `barcode.unreadable`: "I cannot read this code. Hold it closer." | A label read that matched nothing or failed | None of its own. Before the guard: one each 10 seconds | one for each appearance, then 20 s and 3 s |
+| `checkout.empty`, `checkout.busy` | A kiosk code with an empty cart, or of a busy kiosk | One for each appearance of the code | 20 s, 3 s, new chance after 3 s |
+| `checkout.offer`: the pay prompt. Sound `found` | A kiosk code with items in the cart. Again after a cart change, after the product of R17 left the view, and when the code comes back after the head window | One for each of these events | always |
+| `spotcheck.ask`, `spotcheck.thanks` | A kiosk that asks for a spot check, and the product of the check | One for each check, and one more when its product leaves the cart | always |
+| `checkout.cancelled` | The code was out of view for 30 seconds (R19) | One for each checkout | always |
+| `checkout.paid` with the sound `paid`, `checkout.failed` | The result of the payment | One for each payment | always |
+| `session.start`: "Camera on. ..." | The stream state changes to `streaming` | One for each change | always |
+| `device.cameraOff`, `device.regularCheckout`, `device.paused` | The stream state changes to `stopped` or `paused` | One for each change | always |
+| `device.battery` | The battery of the glasses at 20 percent and at 10 percent | One for each level | always |
+| `session.rest`: "Camera off. Your cart is safe." | 3 minutes with no product and no kiosk in view (R22) | One for each rest | always |
+| `net.backOnline`: "Back online." | The device socket opens for a session that has a device state | One for each socket. The phone waits 500 ms to 8 seconds between two attempts | always |
+| `recognition.slow` | 3 failed recognition calls in a row | One each 60 seconds, with its `error` event (`SLOW_REPORT_EVERY_MS`). Before: one for each 3 failed calls, about each 12 seconds | 20 s, 3 s |
+
+- A warning has no line of its own. The allergen and diet warnings are part of the product prompt, and the budget warning is part of `cart.added`, which answers a yes.
+- The lines `cart.added`, `cart.removed`, `glance.skipped`, `undo.nothing`, the three hints, `info.total`, `info.cart`, `info.help`, the four `ask` lines, and `checkout.biometric` answer an action. The guard never drops them.
+- Not limited: results that change between two products give a new prompt line for each change (R2). The guard lets each prompt play, because a prompt with no line cannot take a nod.
+- Not limited: a connection that drops again and again gives "Connection lost" on the phone and "Back online." for each drop of 3 seconds or more.
+
+What the phone plays by itself. The Android app and the phone UI were read for this audit on 2026-11-14:
+
+| Sound or vibration | Trigger | Limit |
+|---|---|---|
+| The sound and the clip of a line (`SpeechQueue`, `ExoLinePlayer`) | A `speak` message of the server | One for each message. The app plays no line again by itself |
+| The phone voice in place of a clip (`PhoneVoice`) | A line with no clip, or a clip that does not load in 3 seconds | One for each line |
+| "Connection lost. Your cart is safe. Glances are paused." (`ConnectionAnnouncer`) | The socket was down for 3 seconds | One for each drop |
+| The pattern `prompt` or `warning` | The event `glance.pending` or `checkout.offered` | One for each prompt. A repeated barcode report gives no new event |
+| The pattern `added` or `removed` | The event `cart.updated` with a change | One for each change. The add that crosses the budget gives only `warning` |
+| The pattern `warning` | The event `budget.exceeded` | One for each add that crosses the budget |
+| The pattern `paid` or `error` | `checkout.paid`, `checkout.failed`, or an `error` event | One for each event. The server sends `recognition.slow` at most one time each 60 seconds |
+| The pattern `cameraPaused` or `cameraOff` | The stream state of the app changes | One for each change |
+
+- The Android app vibrates only for a `haptic` message of the page, and the page sends one only for the rows above.
+- A still, a label upload, a reference picture, and a barcode report play no sound and give no vibration on the phone.
+- One fault was found and fixed: the add that crosses the budget gave two patterns, `added` and then `warning`. It gives one now.
+- With TalkBack on, the phone UI also writes each caption into a live region, so TalkBack can read a line that the voice speaks. This audit did not change that.
 
 ### Allergen guard
 
@@ -870,8 +969,8 @@ An `ambiguous` result names two or more candidates. The model cannot tell which 
 - If the product of the current prompt is one of the candidates, the prompt ends with `glance.cleared`. The shopper cannot add a product that the model is no longer sure of.
 - If the current prompt is for another product, and that product is in view, the result has no effect.
 - In each other case the event `glance.ambiguous` carries the candidates as product references, and the voice speaks the line `glance.ambiguous`. The line has the priority `normal`, no sound, and no interrupt. It is no prompt, so a yes adds nothing.
-- One appearance gets one line. Results with the same candidates, each less than 3 seconds after the one before, are one appearance. The order of the candidates does not count.
-- A new product prompt ends the appearance. If the model then gives the same `ambiguous` result again, the prompt ends and the line plays again.
+- One appearance gets one line. Results with the same candidates, each less than 3 seconds after the one before, are one appearance. The order of the candidates does not count. The guard for the voice can drop the line of a new appearance, and the event still goes out.
+- A new product prompt ends the appearance. If the model then gives the same `ambiguous` result again, the prompt ends. The line plays again when 20 seconds passed since its last time, and 3 seconds since the prompt line.
 - The line names the words that end each spoken name: "I cannot tell which oat drink this is. Turn the front to me." Names with no common last word give "I cannot tell if this is oat drink or rye bread. Turn the front to me.", with the first two candidates.
 - The line and the event say no price.
 - The default script of fake mode has such a result at second 33.
@@ -1069,6 +1168,8 @@ Only the server computes a total, and each price comes from the catalog or from 
 `SessionRuntime` holds one session. `dispatch(input)` adds the clock time, runs `step`, and runs the effects in their order.
 
 - An event goes to the bus at once, on the topic of the session. The events stream and the device socket listen there.
+- The effect `speak.dropped` is a line that the guard for the voice dropped. The runtime logs `speak dropped session=<id> key=<key> reason=<reason>`, and the phone gets nothing.
+- Each line that goes to the phone gets the log line `speak session=<id> key=<key> text=<first 80 characters> prompt=<id|none>`.
 - A line gets its text at once. Then it waits in the outbox of the session for its clip. The outbox sends one message at a time, so the phone gets the lines in the order of the rules, also when an early clip is slow.
 - Each line goes to the phone as `speak` and to the bus as a `caption` event with the same ID (`s-1`, `s-2`). If the clip fails, the line goes out with `url: null`.
 - The effect `payment.start` starts the mock payment. After each step, the kiosk service reads the checkout of the session and updates the kiosk.

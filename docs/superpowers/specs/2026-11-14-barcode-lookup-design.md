@@ -137,6 +137,15 @@ One test with Ray-Ban Meta glasses ran on 2026-11-14, in Finland. The stream fel
 
 The text above describes the first design. `apps/server/README.md` and `apps/mobile/android/README.md` describe what is built.
 
+## Reference pictures and a guard for the voice
+
+Decisions of the user on 2026-11-14, after the test with the glasses:
+
+- The server stores pictures of the demo products, and the model compares the still with them. The label call sends each picture as its own image part, at the low media resolution, with the code and the name of its item. Recognition by sight gets no picture, because it runs 2 times each second.
+- A person takes a picture through the glasses: `POST /api/demo/reference` marks the newest live session, and the server sends `still.request` with the new purpose `reference`. The phone takes that still outside its still limits and reads no code in it, so the barcode side of a product also becomes a picture.
+- `ReferenceImages` is the interface, with a folder behind it. A database with a vector index can take its place for a store with thousands of items. That part is not built.
+- The server must not repeat a line or a sound that the shopper did not ask for. One guard in the rules drops such a line: the same text inside 20 seconds, a second line inside 3 seconds, and a second line about a failed read for one appearance. A prompt, a checkout line, and a state line always play. `apps/server/README.md` has the rules and the audit, in "A guard for the voice".
+
 ## Not in this change
 
 - Prices from Open Prices. The store list is the only price.
