@@ -27,7 +27,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/ws/device.ts` | The socket of the phone. See "Device socket". |
 | `src/testing.ts` | Test helpers: an app on a free port, a reader for an events stream, and a phone on the device socket. |
 
-Parts that do not exist yet: the catalog seed, the `SAVE_FRAMES` switch, the spot check, and the fingerprint check.
+Parts that do not exist yet: the catalog seed, the spot check, and the fingerprint check.
 
 ## Run it
 
@@ -44,7 +44,7 @@ Check it:
 
 ```bash
 curl http://localhost:8080/healthz
-# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"store":"memory"}
+# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"store":"memory","saveFrames":false}
 curl -X POST http://localhost:8080/api/sessions
 # {"sessionId":"...","token":"...","wsUrl":"ws://localhost:8080/ws/device?session=...&token=..."}
 ```
@@ -75,7 +75,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `ELEVENLABS_VOICE_EN` | not set | Needed when `FAKE_SPEECH` is off. |
 | `ELEVENLABS_VOICE_IT` | not set | The voice for Italian. |
 | `SPEECH_CACHE_DIR` | `.cache/speech` | The folder for speech clips. |
-| `SAVE_FRAMES` | not set | A directory for frames. The config reads it, and no code uses it yet: the server stores no frame. |
+| `SAVE_FRAMES` | not set | A directory for frames. When it is set, the server writes each frame there. See "Stored frames". Keep it not set for the demo and on the deployed server. |
 | `PAYMENT_DELAY_MS` | `1500` | The length of the mock payment. |
 | `DEMO_KEY` | not set | The key of `GET /api/demo/latest`. With no key, that path answers 404. |
 
@@ -96,7 +96,7 @@ Two switches let the other apps work with no key. `npm run dev:fake` turns both 
 - Each 500 ms the player gives the rules the result that the script holds for the time since its start. Outside each step the result is `none`.
 - A session that starts from the events stream, with no phone, first gets the state of glasses that stream. A browser client then gets the "Camera on" caption. A phone that opens its socket to this session later hears "Back online.", because the session already has a device state.
 - In a `kiosk` step the session sees the kiosk one time each second. `"newest"` names the kiosk that registered last. Each other value is a kiosk code.
-- The device socket still decodes each frame. It logs `frame seq=<n> w=<w> h=<h> blurred=<b> kind=<k> bytes=<n>` at `info` level and drops the frame.
+- The device socket still decodes each frame. It logs `frame seq=<n> w=<w> h=<h> blurred=<b> kind=<k> bytes=<n>` at `info` level and drops the frame. With `SAVE_FRAMES` it saves the frame first.
 - The server has one kiosk from the start: `Checkout 3` at `Demo Market` with the code `K3X7`. A printed `GL1 K3X7` code starts a checkout.
 
 A script file, as `fixtures/fake-script.json`:
@@ -164,6 +164,7 @@ sequenceDiagram
 | `gemini.ts` | `createGeminiRecognizer`: one `generateContent` call of `@google/genai` for each frame |
 | `worker.ts` | `RecognitionWorker`: the calls of one session |
 | `intake.ts` | `createFrameHandler`: one worker for each session, between the device socket and the rules |
+| `save.ts` | `createFrameSaver`: the writer of the `SAVE_FRAMES` switch |
 | `fake.ts` | The script file and `ScriptPlayer` of fake recognition |
 
 The request:
@@ -186,9 +187,22 @@ The worker:
 - A call that takes 4 seconds is dropped: the worker aborts it and ignores a late answer.
 - A call that fails gets one log line with the name of the error and at most 200 characters of its message.
 - After 3 failed calls in a row the server logs `recognition is slow for the session <id>` and gives the rules the input `recognition.slow`. The voice says "Recognition is slow right now.", and the clients get the event `error` with the code `recognition.slow`. A good call starts the count again.
-- The worker holds a frame only for the time of its call. The server writes no frame to disk, to the store, or to a log.
+- The worker holds a frame only for the time of its call.
 - The worker stops when its session stops and when the app closes.
 - Each result gets the log line `recognition session=<id> seq=<n> status=<status> ms=<n>`. It gives the server share of the time from glance to voice.
+
+### Stored frames
+
+Without `SAVE_FRAMES` the server stores no frame. A frame lives in memory from its socket message to the end of its recognition call. The server writes no frame to disk, to the store, or to a log.
+
+- A log line about a frame holds its sequence number, its width and height, the `blurred` value, its kind, and its byte count. It holds no bytes of the image. With real recognition this line has the `debug` level.
+- `SAVE_FRAMES=<directory>` is for the test set of the recognition model. The server then writes each frame that it accepts to `<directory>/<sessionId>/<seq>.jpg`. A frame with a sequence number that the folder already holds replaces the older file.
+- With `REQUIRE_BLUR=1` and real recognition, the server drops a frame with `blurred: false` before the write.
+- The switch also works with fake recognition, which makes no recognition call. So the team can collect frames with no cost.
+- A write that fails gets the log line `frame not saved. seq=<n> <message> session=<id>`, and the recognition call goes on.
+- At its start the server logs `SAVE_FRAMES is on. The server writes each frame to <directory>.` at `warn` level.
+- `GET /healthz` answers `"saveFrames": true` while the switch is on. Check for `false` before the demo (spec section 11.1).
+- `src/recognition/save.ts` is the only file on the frame path that imports the file system. A test checks this.
 
 Frames with `blurred: false` did not go through face detection on the phone. Without `REQUIRE_BLUR` they still go to Gemini, and the server logs `frame not blurred: the phone did not run face detection` one time for each session. With `REQUIRE_BLUR=1` the server drops them and logs `frame dropped: not blurred` one time for each session.
 
@@ -427,7 +441,7 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 | `GET /api/kiosks/:id/events` | | a stream of `KioskEvent`. The first message is the current view. |
 | `GET /api/speech/<hash>.mp3` | | 200, the MP3 of a clip |
 | `GET /api/demo/latest?key=<DEMO_KEY>` | | 200, `LatestSessionResponse` |
-| `GET /healthz` | | 200, the state of the switches |
+| `GET /healthz` | | 200, the state of the switches: `fakeRecognition`, `fakeSpeech`, `store`, and `saveFrames` |
 
 - `wsUrl` of a new session is `PUBLIC_BASE_URL` with `ws` in place of `http`, plus `/ws/device?session=<id>&token=<token>`.
 - A body that fails its schema gets 400 with `{ "error": "bad_request" }`. An unknown session gets 404 with `{ "error": "not_found" }`. An unknown key in a profile patch is dropped.

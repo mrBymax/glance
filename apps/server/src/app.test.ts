@@ -16,7 +16,7 @@ afterAll(() => app.close());
 
 it('answers the health check', async () => {
   const res = await app.inject({ method: 'GET', url: '/healthz' });
-  expect(res.json()).toEqual({ ok: true, fakeRecognition: true, fakeSpeech: true, store: 'memory' });
+  expect(res.json()).toEqual({ ok: true, fakeRecognition: true, fakeSpeech: true, store: 'memory', saveFrames: false });
 });
 it('answers a preflight request and sets the CORS header', async () => {
   const res = await app.inject({ method: 'OPTIONS', url: '/api/sessions',

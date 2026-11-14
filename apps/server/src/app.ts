@@ -14,12 +14,13 @@ import { KioskService } from './kiosk/kiosks';
 import { createPayments } from './kiosk/payment';
 import { ScriptPlayer, readFakeScript } from './recognition/fake';
 import type { Recognizer } from './recognition/gemini';
-import { createFrameHandler } from './recognition/intake';
+import { createFrameHandler, saveFrameWith } from './recognition/intake';
+import type { FrameSaver } from './recognition/save';
 import { SessionRegistry } from './sessions/registry';
 import { ClipCache } from './speech/clips';
 import type { Synthesize } from './speech/elevenlabs';
 import { createClipUrl } from './speech/service';
-import { type FrameHandler, registerDeviceSocket } from './ws/device';
+import { type FrameHandler, frameLogLine, registerDeviceSocket } from './ws/device';
 
 export type AppDeps = {
   config: Config; clock: Clock; store: Store; catalog: CatalogIndex;
@@ -31,6 +32,8 @@ export type AppDeps = {
   synthesize?: Synthesize;
   /** Gets each frame of each phone, in place of the recognizer. With neither, the server drops the frames. */
   onFrame?: FrameHandler;
+  /** Writes each frame to disk. Only main.ts makes one, and only with SAVE_FRAMES. Without it the server stores no frame. */
+  saveFrame?: FrameSaver;
 };
 
 type Closer = () => void | Promise<void>;
@@ -110,6 +113,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return name ? reply.code(status).send({ error: name }) : reply.code(400).send({ error: 'bad_request' });
   });
 
+  const saveFrame = deps.saveFrame ?? null;
   const bus = new EventBus();
   const clips = new ClipCache(config.speechCacheDir, deps.store);
   const kiosks = new KioskService({ store: deps.store, bus, clock: deps.clock });
@@ -147,6 +151,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     fakeRecognition: config.fakeRecognition !== null,
     fakeSpeech: config.fakeSpeech,
     store: config.mongodbUri === null ? 'memory' : 'mongodb',
+    // The team checks this before the demo: the server must store no frame then.
+    saveFrames: saveFrame !== null,
   }));
 
   // With fake recognition, one script player stands for the frames and the recognition calls of each session.
@@ -159,10 +165,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     },
   });
   if (player) app.closers.add(() => player.stopAll());
-  const logFrame: FrameHandler = (_session, { header, jpeg }) => {
-    app.log.info(
-      `frame seq=${header.seq} w=${header.w} h=${header.h} blurred=${header.blurred} kind=${header.kind ?? 'frame'} bytes=${jpeg.length}`,
-    );
+  // Fake recognition drops each frame after this line. With SAVE_FRAMES it saves the frame first,
+  // so the team can collect frames for the test set with no recognition call.
+  const logFrame: FrameHandler = (session, { header, jpeg }) => {
+    app.log.info(frameLogLine(header, jpeg.length));
+    // The JPEG is a view on the socket message, and the write ends later, so the saver gets a copy.
+    if (saveFrame) saveFrameWith(saveFrame, app.log, session.id, { header, jpeg: new Uint8Array(jpeg) });
   };
 
   const recognize = player || deps.onFrame || !deps.recognizer ? null : createFrameHandler({
@@ -174,6 +182,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       session.dispatch({ type: 'recognition.slow' });
     },
     requireBlur: config.requireBlur,
+    saveFrame,
   });
   if (recognize) app.closers.add(() => recognize.stopAll());
 

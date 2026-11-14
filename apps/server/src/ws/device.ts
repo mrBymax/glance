@@ -11,6 +11,11 @@ import { parseVoiceCommand } from '../sessions/voice';
 /** Gets each frame that decodes. The JPEG is a view on the socket message: the handler copies it if it keeps it. */
 export type FrameHandler = (session: SessionRuntime, frame: { header: FrameHeader; jpeg: Uint8Array }) => void;
 
+/** The log line of a frame: its header fields and its size. No log line holds bytes of the image. */
+export function frameLogLine(header: FrameHeader, bytes: number): string {
+  return `frame seq=${header.seq} w=${header.w} h=${header.h} blurred=${header.blurred} kind=${header.kind ?? 'frame'} bytes=${bytes}`;
+}
+
 const DEVICE_PATH = '/ws/device';
 const MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
 const PING_EVERY_MS = 20_000;
