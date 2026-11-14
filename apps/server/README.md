@@ -18,7 +18,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `scripts/catalog-check.ts`, `scripts/catalog-seed.ts` | `npm run catalog:check` and `npm run catalog:seed`. See "Catalog". |
 | `catalog/catalog.dev.json` | The dev catalog with four products. The tests use its IDs and prices. |
 | `catalog/store-list.dev.json` | The dev store list: 10 real barcodes with invented prices. See "Barcode scan". |
-| `catalog/catalog.demo.json`, `catalog/store-list.demo.json` | The files of a demo with real products: a catalog with no invented product, and the dev store list with five more items. See "A demo with real products". |
+| `catalog/catalog.demo.json`, `catalog/store-list.demo.json` | The files of a demo with real products: a catalog with no invented product, and the store list of the products on the demo table. See "A demo with real products". |
 | `src/products/` | The store list, the product details of Open Food Facts, and the lookup of a barcode. See "Barcode scan". |
 | `src/label/` | The model call that reads the still of a label, and its match against the store list. See "Label frames". |
 | `src/reference/images.ts` | `ReferenceImages`: the reference pictures of the store items, as a folder. See "Reference pictures". |
@@ -373,7 +373,7 @@ The store list decides what the store sells. A code that the list does not hold 
 - `8076809513753` is the Barilla pesto alla genovese, and `8076800195057` is the Barilla spaghetti n.5.
 - A catalog product with a `gtin` wins over the store list: a barcode then gives the catalog product, with the price and the spoken texts of the catalog. The Barista oat drink of the dev catalog has the code `7394376616037`. If the two prices of one code differ, the server logs one `store list:` warning at its start.
 - `brand` and `packSize` are optional. The label call and recognition by sight get each item with the fields that it has, and choose an item by the meaning of the package text. See "Label frames" and "Recognition knows the store list".
-- `catalog/store-list.demo.json` is the dev list with five more items that have a name only, for example "Paper cups". See "A demo with real products".
+- `catalog/store-list.demo.json` holds the products on the demo table, each with the digits under its barcode and a price. See "A demo with real products".
 
 ### An ERP in place of the file
 
@@ -705,8 +705,8 @@ CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.j
 ```
 
 - `catalog/catalog.demo.json` holds the one product of the dev catalog that has a barcode: the Barista oat drink of Oatly.
-- `catalog/store-list.demo.json` holds the 10 items of the dev list and five items with a name only. Add the products on the table to a copy of it. `README.md` at the repository root says how.
-- The start log has `catalog: 1 products` and `store list: catalog/store-list.demo.json, 15 items`.
+- `catalog/store-list.demo.json` holds only the products on the demo table. Its prices are invented. Add a product with its barcode digits, a price, and a name. `README.md` at the repository root says how.
+- The start log has `catalog: 1 products` and `store list: catalog/store-list.demo.json, <n> items`.
 - The server starts with a catalog that holds one product, or none. Recognition by sight then names only store items.
 - The demo catalog is no input for `catalog:check` and `catalog:seed`: the check wants a look-alike pair and 12 products.
 - The default script of `--fake` names products of the dev catalog. So use the demo catalog with real recognition, or with a script of your own.
