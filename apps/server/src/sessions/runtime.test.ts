@@ -336,11 +336,32 @@ it('logs each line that the shopper heard, with its key, its first 80 characters
   session.dispatch(seeOat);
   session.dispatch(help);
   await session.settled();
-  expect(logLines).toHaveLength(2);
-  expect(logLines[0]).toBe(`speak session=${session.id} key=glance.new text=${glanceText} prompt=p-0001`);
+  const spoken = logLines.filter((line) => line.startsWith('speak '));
+  expect(spoken).toHaveLength(2);
+  expect(spoken[0]).toBe(`speak session=${session.id} key=glance.new text=${glanceText} prompt=p-0001`);
   const helpText = (sink.sent[1] as { text: string }).text;
   expect(helpText.length).toBeGreaterThan(80);
-  expect(logLines[1]).toBe(`speak session=${session.id} key=info.help text=${helpText.slice(0, 80)} prompt=none`);
+  expect(spoken[1]).toBe(`speak session=${session.id} key=info.help text=${helpText.slice(0, 80)} prompt=none`);
+});
+it('logs for each product prompt the time from the frame to the result, of the product read, and of the clip', async () => {
+  session.attach(sink);
+  clipDelays = [40];
+  session.dispatch(seeOat, { frameToResultMs: 1400, resolveMs: 12 });
+  session.dispatch(help);
+  await session.settled();
+  const timing = logLines.filter((line) => line.startsWith('glance timing '));
+  expect(timing).toHaveLength(1);
+  const match = new RegExp(`^glance timing session=${session.id} product=oat-drink-1l frameToResultMs=1400 resolveMs=12 clipMs=(\\d+)$`).exec(timing[0]!);
+  expect(match).not.toBeNull();
+  expect(Number(match![1])).toBeGreaterThanOrEqual(35);
+  // The line follows the speak line of its prompt.
+  expect(logLines.indexOf(timing[0]!)).toBe(1);
+});
+it('a product prompt of an input with no measured times logs none for them', async () => {
+  session.attach(sink);
+  session.dispatch(seeOat);
+  await session.settled();
+  expect(logLines[1]).toMatch(new RegExp(`^glance timing session=${session.id} product=oat-drink-1l frameToResultMs=none resolveMs=none clipMs=\\d+$`));
 });
 it('logs each line that the guard dropped, with the reason, and sends the phone nothing for it', async () => {
   session.attach(sink);
@@ -351,6 +372,7 @@ it('logs each line that the guard dropped, with the reason, and sends the phone 
   expect(logLines).toEqual([
     `speak dropped session=${session.id} key=recognition.slow reason=gap`,
     `speak session=${session.id} key=glance.new text=${glanceText} prompt=p-0001`,
+    expect.stringMatching(/^glance timing /),
   ]);
   expect(sink.sent.filter((message) => message.t === 'speak')).toHaveLength(1);
   expect(busEvents.filter((event) => event.type === 'caption')).toHaveLength(1);

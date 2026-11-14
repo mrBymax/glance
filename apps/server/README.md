@@ -941,6 +941,19 @@ speak dropped session=<id> key=barcode.unreadable reason=appearance
 - `speak` has the line key, the first 80 characters of the text, and the prompt ID or `none`. The runtime writes it when the line goes to the phone, so the order is that of the phone.
 - `speak dropped` has the line key and the reason: `same text`, `gap`, or `appearance`.
 
+Each product prompt also gets one line that shows where the time went, after its `speak` line:
+
+```text
+glance timing session=<id> product=oat-drink-1l frameToResultMs=1420 resolveMs=0 clipMs=310
+glance timing session=<id> product=gtin-3017624010701 frameToResultMs=none resolveMs=35 clipMs=2
+```
+
+- `frameToResultMs`: from the arrival of the frame at the recognition worker to the result of its call. It holds the wait for a free call and the call. The numbers above are an example of the format.
+- `resolveMs`: the read of the product. It is 0 for a catalog product, a few milliseconds for a store item in the product cache, and up to 2500 for an item that the cache does not hold.
+- `clipMs`: from the rules to the `speak` message of the phone. It holds the wait behind an older line in the outbox, and the clip.
+- A prompt from a barcode of the phone or from a label still has `frameToResultMs=none`: no stream frame of the server belongs to it. Its `resolveMs` is the lookup of the code.
+- The sum is the server share of the time from the frame to the spoken line. The upload of the frame and the play of the clip on the phone are not in it.
+
 What the guard costs. These cases are silent now:
 
 - A second product that the store does not sell, less than 20 seconds after the first one, gets no line: both lines have the text "This product is not in this store." The same holds for a second unknown product and for a second unreadable code.
@@ -1217,6 +1230,7 @@ Only the server computes a total, and each price comes from the catalog or from 
 - An event goes to the bus at once, on the topic of the session. The events stream and the device socket listen there.
 - The effect `speak.dropped` is a line that the guard for the voice dropped. The runtime logs `speak dropped session=<id> key=<key> reason=<reason>`, and the phone gets nothing.
 - Each line that goes to the phone gets the log line `speak session=<id> key=<key> text=<first 80 characters> prompt=<id|none>`.
+- Each product prompt gets the log line `glance timing session=<id> product=<id> frameToResultMs=<n|none> resolveMs=<n|none> clipMs=<n>`. The caller of `dispatch` gives the first two numbers, and the rules hold no state for them. See "A guard for the voice".
 - A line gets its text at once. Then it waits in the outbox of the session for its clip. The outbox sends one message at a time, so the phone gets the lines in the order of the rules, also when an early clip is slow.
 - Each line goes to the phone as `speak` and to the bus as a `caption` event with the same ID (`s-1`, `s-2`). If the clip fails, the line goes out with `url: null`.
 - The effect `payment.start` starts the mock payment. After each step, the kiosk service reads the checkout of the session and updates the kiosk.

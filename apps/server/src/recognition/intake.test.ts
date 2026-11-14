@@ -65,6 +65,13 @@ it('logs the status and the time of each call', async () => {
   await phone.next((m) => m.t === 'speak');
   expect(logLines.join('')).toMatch(new RegExp(`recognition session=${sessionId} seq=5 status=identified code=no ms=\\d+`));
 });
+it('logs where the time from the frame to the spoken line went', async () => {
+  phone.sendFrame({ seq: 5, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
+  await phone.next((m) => m.t === 'speak');
+  await vi.waitFor(() => expect(logLines.join('')).toMatch(
+    new RegExp(`glance timing session=${sessionId} product=oat-drink-1l frameToResultMs=\\d+ resolveMs=0 clipMs=\\d+`),
+  ));
+});
 it('a frame with blurred false still becomes a glance', async () => {
   phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: false }, JPEG);
   await phone.next((m) => m.t === 'speak');

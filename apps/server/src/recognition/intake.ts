@@ -68,9 +68,12 @@ export function createFrameHandler(deps: {
     onResult: (result, info) => {
       // These lines give the server share of the time from glance to voice.
       deps.log.info(`recognition session=${session.id} seq=${info.seq} status=${result.status} code=${result.code.digits ?? (result.code.visible ? "visible" : "no")} ms=${info.ms}`);
+      const resultAt = performance.now();
       const give = (): void => {
         if (session.stopped) return;
-        session.dispatch({ type: 'recognition', result, still: info.still });
+        session.dispatch({ type: 'recognition', result, still: info.still }, {
+          frameToResultMs: info.waitMs + info.ms, resolveMs: Math.round(performance.now() - resultAt),
+        });
         if (result.code.digits !== null) deps.onCode(session, result.code.digits);
       };
       const read = result.productId === null ? null : deps.resolveProduct(result.productId);

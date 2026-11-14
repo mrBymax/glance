@@ -35,6 +35,13 @@ export type RuntimeDeps = {
   log?: (line: string) => void;
 };
 
+/**
+ * The times that the caller of `dispatch` measured before the rules ran, in milliseconds. null: the path has no such time.
+ * frameToResultMs: from the arrival of the frame on the server to the result of its recognition call.
+ * resolveMs: the read of the product, for a store item or a barcode.
+ */
+export type PromptTrace = { frameToResultMs: number | null; resolveMs: number | null };
+
 const KEPT_CAPTIONS = 20;
 /** The log line of a spoken line holds this number of characters of its text. */
 const LOGGED_TEXT_CHARS = 80;
@@ -74,8 +81,11 @@ export class SessionRuntime {
     return this.hasStopped;
   }
 
-  /** Runs the rules for one input with the clock time, and then the effects in their order. */
-  dispatch(input: RuleInputBody): void {
+  /**
+   * Runs the rules for one input with the clock time, and then the effects in their order.
+   * `trace` goes to the log line `glance timing` of a product prompt that this input opens.
+   */
+  dispatch(input: RuleInputBody, trace?: PromptTrace): void {
     const before = this.state;
     const next = step(before, { ...input, now: this.deps.clock.now() }, this.ruleContext());
     this.state = next.state;
@@ -88,7 +98,7 @@ export class SessionRuntime {
           this.deps.bus.publish(sessionTopic(this.id), effect.event);
           break;
         case 'speak':
-          this.speak(effect);
+          this.speak(effect, trace);
           break;
         case 'session.rest':
           this.enqueue(async () => this.sink?.send({ t: 'session.rest' }));
@@ -201,7 +211,8 @@ export class SessionRuntime {
     }
   }
 
-  private speak(effect: SpeakEffect): void {
+  private speak(effect: SpeakEffect, trace?: PromptTrace): void {
+    const startedAt = performance.now();
     const { lang } = this.state.profile;
     // The text is written now, with the profile of this step. Only the clip can take time.
     const text = renderLine(effect.line, this.state.profile);
@@ -219,6 +230,14 @@ export class SessionRuntime {
       }
       // What the shopper heard, in the order of the phone.
       this.deps.log?.(`speak session=${this.id} key=${effect.line.key} text=${text.slice(0, LOGGED_TEXT_CHARS)} prompt=${promptId ?? 'none'}`);
+      if (effect.line.key === 'glance.new' || effect.line.key === 'glance.inCart') {
+        // clipMs holds the wait in the outbox and the clip. The three numbers are the server share of the time from frame to voice.
+        const clipMs = Math.round(performance.now() - startedAt);
+        this.deps.log?.(
+          `glance timing session=${this.id} product=${effect.line.product.id} frameToResultMs=${trace?.frameToResultMs ?? 'none'}`
+          + ` resolveMs=${trace?.resolveMs ?? 'none'} clipMs=${clipMs}`,
+        );
+      }
       this.sink?.send({ t: 'speak', id, priority, text, lang, url, sound, interrupt, promptId });
       const caption: Caption = { id, text, lang, priority, url };
       this.captions.push(caption);

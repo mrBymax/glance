@@ -65,7 +65,10 @@ export function createBarcodeReports(deps: {
     if (late(gtin)) return done(gtin, 'dropped');
     if (product) {
       reached(gtin);
-      session.dispatch({ type: 'barcode', outcome: { kind: 'product', productId: product.id } });
+      // No frame of the server belongs to a code of the phone, so the timing line of the prompt has the lookup only.
+      session.dispatch({ type: 'barcode', outcome: { kind: 'product', productId: product.id } }, {
+        frameToResultMs: null, resolveMs: Math.round(performance.now() - startedAt),
+      });
       return done(gtin, 'product');
     }
     if (fromPhone) {
