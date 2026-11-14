@@ -4,14 +4,15 @@
 // "adb reverse", builds the phone UI, builds and installs the debug APK and its test APK, runs the instrumented
 // tests, and then removes the reverse and stops the server. No step calls a vendor.
 //
-// The three tests of the brief are three suites:
+// The three tests of the brief are three suites, and the other inputs have a suite of their own:
 //   spine  SpineTest: one shop from the first frame to the payment
 //   state  DeviceStatesTest and SetupFlowTest: each device and error state
 //   page   PhoneUiPageTest: the phone UI in the WebView
+//   input  VolumeKeysTest, TouchpadInputTest, and VoiceCommandsTest: the volume keys, the touchpad, and the voice
 //
 // Use, in scripts/integration:
 //   node android/run-spine.mjs                 the spine suite, one time
-//   node android/run-spine.mjs --integration   the three suites, each with a new server
+//   node android/run-spine.mjs --integration   the four suites, each with a new server
 //   node android/run-spine.mjs --suite state   one suite. A list takes commas: --suite state,page
 //   node android/run-spine.mjs --runs 3        each selected suite three times, each time with a new server
 //   node android/run-spine.mjs --all           each instrumented test class
@@ -41,6 +42,7 @@ const SUITES = {
   spine: [SPINE_CLASS],
   state: [STATES_CLASS, `${APP_ID}.SetupFlowTest`],
   page: [`${APP_ID}.PhoneUiPageTest`],
+  input: [`${APP_ID}.VolumeKeysTest`, `${APP_ID}.TouchpadInputTest`, `${APP_ID}.VoiceCommandsTest`],
 };
 /** The clip of the kiosk that declines each payment, in the cache folder of the app. */
 const FAIL_KIOSK_CLIP = 'kiosk-fail.mp4';

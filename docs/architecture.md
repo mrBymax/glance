@@ -164,6 +164,41 @@ Rules of this path:
 - After each step with an event, the runtime writes the session to the store.
 - In fake mode no frame goes to a worker. The server decodes each frame, logs it, and drops it. The `ScriptPlayer` dispatches the recognition results.
 
+### Answers from the other inputs
+
+The head is one of four inputs of the Android app. Each other input sends its answer on the same socket.
+
+```mermaid
+sequenceDiagram
+  participant Glasses as Glasses, or mock glasses
+  participant Keys as Volume keys of the phone
+  participant App as Android app
+  participant Socket as Device socket
+  participant Runtime as SessionRuntime
+  Note over App: the prompt p-0001 is finished: prompt.done went out
+  alt touchpad
+    Glasses->>App: InputEvent.Select, a double tap
+    App->>Socket: intent yes, source touch, promptId p-0001
+    Socket->>Runtime: dispatch(intent)
+  else voice
+    Glasses->>App: final transcript "add"
+    Note over App: VoiceInput drops a result while a line plays, and for 500 ms after it
+    App->>Socket: speech.final with text, confidence, locale
+    Note over Socket: parseVoiceCommand maps the text to a command
+    Socket->>Runtime: dispatch(intent yes, source voice, ID of the last finished prompt)
+  else volume keys, with mainYes key in the profile
+    Keys->>App: volume up
+    App->>Socket: intent yes, source key, promptId p-0001
+    Socket->>Runtime: dispatch(intent)
+  end
+  Note over Runtime: step accepts the yes while the prompt is current and finished (R3, R5)
+```
+
+- A double tap carries the ID of the last finished prompt, also after that prompt ended, and the server decides if it counts. A swipe sends `intent repeat` with the source `touch`, and the server sends its last line again.
+- The app sends each final speech result as `speech.final` and maps no word to an intent. The server drops a result with a confidence below 0.5 and a text that is no command.
+- Volume up is a yes and volume down is a no, only when `mainYes` of the profile is `key` and a prompt is current. In each other case the key changes the volume of the phone.
+- Speech needs the microphone permission of the glasses. The app asks for it when the page sets `mainYes` to `voice`, and when the page sends the intent `ask`.
+
 The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. The server README lists each rule from R1 to R24.
 
 ## Phases of a session
@@ -233,7 +268,8 @@ stateDiagram-v2
 
 - No path of the server checks the token of a session or of a kiosk.
 - The server never sends the events `glance.ambiguous`, `budget.exceeded`, `checkout.spotcheck`, and `error`. An `error` event comes only from the Android app, with a code that starts with `native.`.
-- The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
+- Nobody has run the touchpad, the voice, and the volume keys with the real glasses. The app has each path, and the tests use mock glasses. With the real glasses a session attaches Speech only after the probe sets `ProbeDecisions.SPEECH` to true.
+- The intent `ask` has no effect on the server.
 - `biometric.request` and `biometric.result` have no effect.
 - The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
 - The phone UI has the session screen only. No screen shows the pay prompt or the receipt.

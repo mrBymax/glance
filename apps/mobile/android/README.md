@@ -361,7 +361,7 @@ Run them with the script, in `scripts/integration`. It needs `adb`, FFmpeg, and 
 |---|---|
 | `npm install` | Installs `qrcode`, one time |
 | `node android/run-spine.mjs` | Starts the fake server, sets `adb reverse`, builds the phone UI, builds and installs both APK files, and runs the suite `spine`. Then it removes the reverse and stops the server. |
-| `node android/run-spine.mjs --integration` | Runs the three suites, each with a new server: `spine` (`SpineTest`), `state` (`DeviceStatesTest`, `SetupFlowTest`), and `page` (`PhoneUiPageTest`) |
+| `node android/run-spine.mjs --integration` | Runs the four suites, each with a new server: `spine` (`SpineTest`), `state` (`DeviceStatesTest`, `SetupFlowTest`), `page` (`PhoneUiPageTest`), and `input` (`VolumeKeysTest`, `TouchpadInputTest`, `VoiceCommandsTest`) |
 | `node android/run-spine.mjs --suite state` | Runs one suite. A list takes commas: `--suite state,page`. |
 | `node android/run-spine.mjs --runs 3` | Runs each selected suite three times, each time with a new server |
 | `node android/run-spine.mjs --all` | Runs each test class |
