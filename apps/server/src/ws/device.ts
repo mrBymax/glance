@@ -4,11 +4,17 @@ import type { FastifyInstance } from 'fastify';
 import { type RawData, type WebSocket, WebSocketServer } from 'ws';
 import { type DeviceToServer, type FrameHeader, type ServerToDevice, decodeFrame, parseDeviceToServer } from '@glance/shared';
 import { sessionTopic } from '../bus';
+import { tokenMatches } from '../http/auth';
 import type { DeviceSink, SessionRuntime } from '../sessions/runtime';
 import { parseVoiceCommand } from '../sessions/voice';
 
 /** Gets each frame that decodes. The JPEG is a view on the socket message: the handler copies it if it keeps it. */
 export type FrameHandler = (session: SessionRuntime, frame: { header: FrameHeader; jpeg: Uint8Array }) => void;
+
+/** The log line of a frame: its header fields and its size. No log line holds bytes of the image. */
+export function frameLogLine(header: FrameHeader, bytes: number): string {
+  return `frame seq=${header.seq} w=${header.w} h=${header.h} blurred=${header.blurred} kind=${header.kind ?? 'frame'} bytes=${bytes}`;
+}
 
 const DEVICE_PATH = '/ws/device';
 const MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
@@ -22,7 +28,7 @@ const REFUSED_CLOSE_MS = 5000;
 /**
  * The socket of spec section 8.2, one for each session, at /ws/device?session=<id>&token=<token>.
  * A new socket for a session takes over, and the older one closes.
- * The token is not checked yet.
+ * An upgrade with a missing or wrong token gets 401, and one for an unknown session gets 404.
  */
 export function registerDeviceSocket(app: FastifyInstance, deps: {
   onFrame: FrameHandler;
@@ -66,6 +72,12 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
         refuse(socket, '404 Not Found');
         return;
       }
+      // Two token keys are no token, as on the REST paths.
+      const tokens = url.searchParams.getAll('token');
+      if (tokens.length !== 1 || !tokenMatches(session.token, tokens[0])) {
+        refuse(socket, '401 Unauthorized');
+        return;
+      }
       wss.handleUpgrade(request, socket, head, (ws) => connect(ws, session));
     };
     open().catch((error) => {
@@ -99,6 +111,8 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
     session.attach(sink);
     send({ t: 'snapshot', session: session.snapshot() });
     unsubscribe = app.bus.subscribe(sessionTopic(session.id), (event) => send({ t: 'event', event } as ServerToDevice));
+    // The rules say "Back online." to a phone that comes back.
+    session.dispatch({ type: 'socket.open' });
     deps.onOpen(session);
 
     ws.on('pong', () => alive.set(ws, true));

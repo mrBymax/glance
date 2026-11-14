@@ -1,3 +1,4 @@
+import { Button } from '@astryxdesign/core/Button';
 import { Heading } from '@astryxdesign/core/Heading';
 import { HStack } from '@astryxdesign/core/HStack';
 import { List, ListItem } from '@astryxdesign/core/List';
@@ -8,7 +9,7 @@ import { eur } from '../text/format';
 
 /** The cart lines and the total, as the server sent them. The page adds no prices. */
 export function CartList() {
-  const { state, strings } = useUi();
+  const { state, strings, send } = useUi();
   const { cart } = state;
   return (
     <VStack as="section" gap={2}>
@@ -21,6 +22,11 @@ export function CartList() {
                 key={item.productId}
                 label={<Text>{item.name}</Text>}
                 description={<Text type="supporting">{strings.cartLine(item.packSize, item.qty, eur(item.unitPriceCents))}</Text>}
+                endContent={(
+                  <Button label={strings.removeLabel(item.name)} onClick={() => send({ t: 'cart.edit', productId: item.productId, qty: item.qty - 1 })}>
+                    {strings.remove}
+                  </Button>
+                )}
               />
             ))}
           </List>

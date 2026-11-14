@@ -70,6 +70,8 @@ export type SessionState = {
   /** For the repeat intent. */
   lastSpeak: SpeakEffect | null;
   device: DeviceState | null;
+  /** The battery level of the last spoken warning. A level above 20 percent sets it to null. */
+  batteryWarned: 20 | 10 | null;
   lastReceipt: Receipt | null;
 };
 
@@ -82,7 +84,11 @@ export type RuleInputBody =
   | { type: 'device.state'; state: DeviceState }
   | { type: 'cart.edit'; productId: string; qty: number }
   | { type: 'profile.set'; patch: ProfilePatch }
-  | { type: 'payment.result'; ok: boolean; orderId: string; paidAt: string };
+  | { type: 'payment.result'; ok: boolean; orderId: string; paidAt: string }
+  /** 3 recognition calls in a row failed. */
+  | { type: 'recognition.slow' }
+  /** The device socket of the session opened. */
+  | { type: 'socket.open' };
 export type RuleInput = RuleInputBody & { now: number };
 
 export type SpeakEffect = {

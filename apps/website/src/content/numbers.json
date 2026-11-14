@@ -1,0 +1,13 @@
+{
+  "context": null,
+  "items": [
+    { "id": "accuracy-correct", "label": "Frames with the correct product", "value": null, "unit": "of 100", "note": "100 frames from the glasses, over all products of the catalog." },
+    { "id": "accuracy-wrong", "label": "Frames with a wrong product named", "value": null, "unit": "of 100", "note": "The target is 0. If the model is not sure, the voice gives an aim hint and no name." },
+    { "id": "latency-median", "label": "Glance to voice, median", "value": null, "unit": "s", "note": "20 glances at the venue, timed on video from the product at rest to the first sound of the line." },
+    { "id": "latency-p95", "label": "Glance to voice, 95th percentile", "value": null, "unit": "s", "note": "Value 19 of the same 20 glances, in order of time." },
+    { "id": "false-yes", "label": "False yes in the walk test", "value": null, "unit": "in 15 minutes", "note": "Two people walk, talk, and put products back on a low shelf." },
+    { "id": "false-no", "label": "False no in the walk test", "value": null, "unit": "in 15 minutes", "note": "The same walk test." },
+    { "id": "kiosk-distance", "label": "Kiosk code decodes from", "value": null, "unit": "m", "note": "Measured from a chair to the kiosk screen." },
+    { "id": "battery", "label": "Glasses battery used in 10 minutes", "value": null, "unit": "percent", "note": "Camera stream, head motion, and audio together." }
+  ]
+}

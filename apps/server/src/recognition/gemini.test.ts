@@ -49,6 +49,8 @@ it('sends one frame, the exclude list, the catalog, and the answer schema', asyn
   expect(url).toContain('/models/gemini-3.5-flash-lite:generateContent');
   expect(url).not.toContain('test-key');
   expect(headers.get('x-goog-api-key')).toBe('test-key');
+  // The API rejects a server deadline below 10 seconds, so the call must send none.
+  expect(headers.get('x-server-timeout')).toBeNull();
 
   const contents = body.contents as { parts: { inlineData?: { mimeType: string; data: string }; text?: string }[] }[];
   expect(contents).toHaveLength(1);

@@ -12,10 +12,11 @@ let logLines: string[];
 let apps: TestApp[];
 let t: TestApp;
 let sessionId: string;
+let token: string;
 let phone: TestPhone;
 
 /** A test app with the stub recognizer, one session, and its phone. The log lines go to `logLines`. */
-async function appWithPhone(env: Record<string, string> = {}): Promise<{ t: TestApp; sessionId: string; phone: TestPhone }> {
+async function appWithPhone(env: Record<string, string> = {}): Promise<{ t: TestApp; sessionId: string; token: string; phone: TestPhone }> {
   const app = await testApp(env, {
     recognizer: { recognize },
     log: { level: 'info', stream: { write: (line) => { logLines.push(line); } } },
@@ -24,7 +25,7 @@ async function appWithPhone(env: Record<string, string> = {}): Promise<{ t: Test
   const created = CreateSessionResponseSchema.parse(await (await fetch(`${app.base}/api/sessions`, { method: 'POST' })).json());
   const appPhone = await connectPhone(app, created.sessionId, created.token);
   await appPhone.next((m) => m.t === 'snapshot');
-  return { t: app, sessionId: created.sessionId, phone: appPhone };
+  return { t: app, sessionId: created.sessionId, token: created.token, phone: appPhone };
 }
 const logged = (text: string) => logLines.filter((line) => line.includes(text)).length;
 
@@ -32,7 +33,7 @@ beforeEach(async () => {
   recognize = vi.fn<Recognizer['recognize']>(async () => ok);
   logLines = [];
   apps = [];
-  ({ t, sessionId, phone } = await appWithPhone());
+  ({ t, sessionId, token, phone } = await appWithPhone());
 });
 afterEach(async () => {
   for (const app of apps) await app.close();
@@ -99,8 +100,10 @@ it('reports a recognizer that fails 3 times in a row, and keeps the socket open'
     await vi.waitFor(() => expect(logged(`recognition call failed. seq=${seq} Error: 503 overloaded`)).toBe(1));
   }
   expect(logged(`recognition is slow for the session ${sessionId}`)).toBe(1);
+  expect(await phone.next((m) => m.t === 'speak')).toMatchObject({ text: 'Recognition is slow right now.', priority: 'high' });
+  expect(await phone.next((m) => m.t === 'event' && m.event.type === 'error')).toMatchObject({ event: { code: 'recognition.slow' } });
   phone.send({ t: 'intent', kind: 'help', source: 'phone' });
-  expect(await phone.next((m) => m.t === 'speak')).toBeDefined();
+  expect(await phone.next((m) => m.t === 'speak' && m.priority === 'low')).toBeDefined();
 });
 it('ends the call of a session that a client deletes', async () => {
   let signal: AbortSignal | null = null;
@@ -110,7 +113,7 @@ it('ends the call of a session that a client deletes', async () => {
   });
   phone.sendFrame({ seq: 1, ts: 1, w: 576, h: 768, blurred: true }, JPEG);
   await vi.waitFor(() => expect(signal).not.toBeNull());
-  await fetch(`${t.base}/api/sessions/${sessionId}`, { method: 'DELETE' });
+  await fetch(`${t.base}/api/sessions/${sessionId}?token=${token}`, { method: 'DELETE' });
   await vi.waitFor(() => expect(signal!.aborted).toBe(true));
 });
 it('ends each call when the app closes', async () => {

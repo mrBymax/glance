@@ -202,3 +202,8 @@ Each entry: the decision or the fact, the reason, and the address of the source.
 - Open, not changed: BrowserBridge does not handle an event stream that the browser will not open again (readyState 2, for example a 404 after a server restart). The page then stays `offline` until a reload. The kiosk page handles this case (`closed` in lib/events.ts) and registers a new kiosk. The EventSourceLike type of Plan 3 Task 3 has no readyState.
 - Fact from the code: CaptionList puts `lang` on a span inside the Astryx Text, not on Text, because the earlier agent found that Text takes no lang prop. The plan test `toHaveAttribute('lang', ...)` passes on the span.
 - Fact from the code: kioskFlags cuts a name at 40 characters and then removes spaces at the end, so a cut name can be shorter than 40.
+
+## Vendor checks
+
+- Fact: the Gemini API rejects a server deadline below 10 seconds. The first check of Plan 1 Task 13 Step 5 gave status 400, "Manually set deadline 4s is too short. Minimum allowed deadline is 10s." Cause: `httpOptions.timeout` of `@google/genai` goes out as the header `X-Server-Timeout` (see `node_modules/@google/genai/dist/node/index.mjs`, `SERVER_TIMEOUT_HEADER`). Each real recognition call would have failed. Fix: `apps/server/src/recognition/gemini.ts` sends no timeout, and the abort signal of the worker ends a call after 4 seconds. The second check passed in 1349 ms with the model `gemini-3.5-flash-lite`. The frame was a generated image, so the result `status: none` is correct.
+- Decision: the ElevenLabs check of Plan 1 Task 15 Step 5 (curl, "Camera on.") was not repeated, because the team made the same call on 2026-11-14. The night keeps its ElevenLabs calls for one clip through the cache of the server.

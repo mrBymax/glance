@@ -1,0 +1,12 @@
+/* The mirror runs on a second screen next to the demo, so each caption must be readable from a few meters. */
+.mirror {
+  min-block-size: 100vh;
+  background: var(--color-background-body);
+}
+/* A flex child does not go below the width of its longest word without min-inline-size, and a long line would push the cart. */
+.mirror-voice { flex: 2 1 480px; min-inline-size: 0; }
+.mirror-cart { flex: 1 1 320px; min-inline-size: 0; }
+.mirror-caption-current { font-size: clamp(40px, 6vw, 96px); line-height: 1.15; }
+.mirror-caption-old { font-size: clamp(24px, 3vw, 48px); line-height: 1.2; }
+.mirror-cart-line { font-size: clamp(24px, 2.4vw, 40px); line-height: 1.25; }
+.mirror-cart-detail { font-size: clamp(18px, 1.6vw, 28px); line-height: 1.3; }

@@ -9,6 +9,10 @@
     "start": "node --import tsx src/main.ts",
     "test": "vitest run",
     "model:check": "tsx --env-file-if-exists=.env scripts/check-model.ts",
+    "catalog:check": "tsx scripts/catalog-check.ts",
+    "catalog:seed": "tsx --env-file-if-exists=.env scripts/catalog-seed.ts",
+    "replay": "tsx --env-file-if-exists=.env scripts/replay.ts",
+    "smoke": "tsx scripts/smoke.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

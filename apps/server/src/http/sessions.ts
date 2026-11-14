@@ -5,6 +5,7 @@ import {
 } from '@glance/shared';
 import { sessionTopic } from '../bus';
 import type { SessionRuntime } from '../sessions/runtime';
+import { queryValue, tokenMatches, unauthorized } from './auth';
 import { sendEventStream } from './sse';
 
 type SessionRequest = FastifyRequest<{ Params: { id: string } }>;
@@ -18,7 +19,7 @@ export function deviceSocketUrl(publicBaseUrl: string, sessionId: string, token:
 /**
  * The session paths of spec section 8.1.
  * An intent or a cart edit gets 204 when the server took the input. Its outcome arrives as events.
- * No path checks the token yet.
+ * Each path with a session ID needs the token of the session in the query string.
  */
 export function registerSessionRoutes(app: FastifyInstance, deps: {
   publicBaseUrl: () => string;
@@ -29,10 +30,20 @@ export function registerSessionRoutes(app: FastifyInstance, deps: {
 }): void {
   const badRequest = (reply: FastifyReply) => reply.code(400).send({ error: 'bad_request' });
 
-  /** Answers 404 and returns null for an unknown session. */
+  /**
+   * Answers 404 for an unknown session and 401 for a missing or wrong token, and then returns null.
+   * Each handler calls it before it reads the body, so a wrong token with a bad body gets 401.
+   */
   const find = async (request: SessionRequest, reply: FastifyReply): Promise<SessionRuntime | null> => {
     const session = await app.sessions.get(request.params.id);
-    if (!session) await reply.code(404).send({ error: 'not_found' });
+    if (!session) {
+      await reply.code(404).send({ error: 'not_found' });
+      return null;
+    }
+    if (!tokenMatches(session.token, queryValue(request, 'token'))) {
+      await unauthorized(reply);
+      return null;
+    }
     return session;
   };
 

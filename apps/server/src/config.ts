@@ -20,11 +20,15 @@ export type Config = {
   /** A directory for frames, or null. The server stores no frame without it. */
   saveFramesDir: string | null;
   paymentDelayMs: number;
+  /** The key of GET /api/demo/latest, or null. Without it that path answers 404. */
+  demoKey: string | null;
 };
 
 export class ConfigError extends Error {}
 
 const DEFAULT_FAKE_SCRIPT = 'fixtures/fake-script.json';
+/** The catalog file when CATALOG_PATH is not set. */
+export const DEFAULT_CATALOG_PATH = 'catalog/catalog.dev.json';
 
 /**
  * Reads the settings from the environment and the command line.
@@ -66,7 +70,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     publicBaseUrl: read('PUBLIC_BASE_URL') ?? `http://localhost:${port}`,
     mongodbUri: read('MONGODB_URI'),
     mongodbDb: read('MONGODB_DB') ?? 'glance',
-    catalogPath: read('CATALOG_PATH') ?? 'catalog/catalog.dev.json',
+    catalogPath: read('CATALOG_PATH') ?? DEFAULT_CATALOG_PATH,
     geminiApiKey: read('GEMINI_API_KEY'),
     geminiModel: read('GEMINI_MODEL') ?? 'gemini-3.5-flash-lite',
     geminiMediaResolution: mediaResolution,
@@ -79,6 +83,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     speechCacheDir: read('SPEECH_CACHE_DIR') ?? '.cache/speech',
     saveFramesDir: read('SAVE_FRAMES'),
     paymentDelayMs: readNumber('PAYMENT_DELAY_MS', 1500, 0, 600_000, true),
+    demoKey: read('DEMO_KEY'),
   };
 
   if (config.fakeRecognition === null && config.geminiApiKey === null) {

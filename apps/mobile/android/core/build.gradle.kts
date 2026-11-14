@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -20,4 +21,27 @@ dependencies {
 
 tasks.test {
     systemProperty("glance.fixtures", rootDir.resolve("../../../packages/shared/fixtures").canonicalPath)
+}
+
+// The tests in src/integrationTest need a running Glance server, so no other task depends on this one.
+// scripts/integration/server-kotlin.mjs starts the server and gives its address as -Pglance.serverUrl.
+testing {
+    suites {
+        register<JvmTestSuite>("integrationTest") {
+            useJUnit(libs.versions.junit.get())
+            dependencies { implementation(project()) }
+            targets.all {
+                testTask.configure {
+                    description = "Runs the tests that need a Glance server at -Pglance.serverUrl."
+                    providers.gradleProperty("glance.serverUrl").orNull?.let { systemProperty("glance.serverUrl", it) }
+                    // Gradle cannot see the server as an input, so a pass of an earlier run says nothing.
+                    outputs.upToDateWhen { false }
+                    testLogging {
+                        events("passed", "failed", "skipped")
+                        exceptionFormat = TestExceptionFormat.FULL
+                    }
+                }
+            }
+        }
+    }
 }

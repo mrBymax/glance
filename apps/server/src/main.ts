@@ -9,6 +9,7 @@ import type { Store } from './db/store';
 import { ELEVENLABS_MODEL, createSynthesize } from './speech/elevenlabs';
 import { FakeScriptError } from './recognition/fake';
 import { RECOGNITION_TEMPLATE_PATH, type Recognizer, createGeminiRecognizer } from './recognition/gemini';
+import { createFrameSaver } from './recognition/save';
 
 class StartError extends Error {}
 
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
   const synthesize = config.fakeSpeech || config.elevenlabsApiKey === null ? undefined : createSynthesize(config.elevenlabsApiKey);
   const app = await buildApp({
     config, clock: systemClock, store, catalog, ...(recognizer ? { recognizer } : {}), ...(synthesize ? { synthesize } : {}),
+    ...(config.saveFramesDir === null ? {} : { saveFrame: createFrameSaver(config.saveFramesDir) }),
   });
   app.addHook('onClose', () => store.close());
   app.log.info(`store: ${config.mongodbUri === null ? 'memory' : 'mongo'}`);
@@ -53,6 +55,7 @@ async function main(): Promise<void> {
     ? `recognition: ${config.geminiModel}, blur ${config.requireBlur ? 'required' : 'not required'}`
     : `recognition: fake, script ${config.fakeRecognition}`);
 
+  if (config.saveFramesDir !== null) app.log.warn(`SAVE_FRAMES is on. The server writes each frame to ${config.saveFramesDir}.`);
   app.log.info(config.fakeSpeech ? 'speech: fake' : `speech: ${ELEVENLABS_MODEL}, clips in ${config.speechCacheDir}`);
 
   let closing = false;
