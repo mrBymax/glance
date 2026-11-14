@@ -2,9 +2,11 @@ import { BottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Button } from '@astryxdesign/core/Button';
 import { Heading } from '@astryxdesign/core/Heading';
 import { HStack } from '@astryxdesign/core/HStack';
+import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
 import type { NativeToPage } from '@glance/shared';
+import { Bug } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useUi } from '../bridge/BridgeContext';
 import { BrowserBridge } from '../bridge/browserBridge';
@@ -49,7 +51,9 @@ export function DebugPanel() {
 
   return (
     <>
-      <Button label="Debug" onClick={() => setOpen(true)} />
+      <HStack paddingInline={4} paddingBlockEnd={4}>
+        <Button label="Debug" icon={<Icon icon={Bug} />} variant="ghost" onClick={() => setOpen(true)} />
+      </HStack>
       <BottomSheet isOpen={isOpen} onOpenChange={setOpen} label="Debug" height="tall">
         <VStack gap={5}>
           <Heading level={2}>Debug</Heading>

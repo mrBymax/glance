@@ -8,8 +8,8 @@ const NOT_ON_SCREEN = 'dialog:not([open]), [aria-hidden="true"], [popover]';
 // jsdom has no layout, so this check knows the Astryx classes that styles/touch.css and the Astryx props raise to 48 px.
 function isCovered(control: Element): boolean {
   if (control.classList.contains('astryx-button')) return true;
-  if (control.classList.contains('astryx-segmented-control-item') && control.getAttribute('data-size') === 'lg') return true;
   if (control.matches('input[type="checkbox"]') && control.closest('li.astryx-list-item[data-density="spacious"]')) return true;
+  if (control.matches('input[type="radio"]') && control.closest('.astryx-radio-list-item')) return true;
   return control.matches('input') && control.closest('.astryx-number-input') !== null;
 }
 

@@ -71,3 +71,17 @@ it('shows the text and the button of the step below the list, where they have th
   expect(list).not.toContainElement(screen.getByRole('button', { name: 'Start shopping' }));
   expect(list).not.toContainElement(screen.getByText(EN.readyText));
 });
+it('numbers the taps of the jump to Meta AI in their order', () => {
+  renderWithUi(<SetupScreen />, { native: NATIVE_NEW });
+  const taps = screen.getAllByRole('list').find((list) => list.tagName === 'OL' && list.getAttribute('aria-label') === null);
+  expect(within(taps as HTMLElement).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+    'This opens the Meta AI app.', 'Confirm there that Glance may connect to your glasses.', 'Meta AI then returns you to Glance.',
+  ]);
+});
+it('puts the cause of a denied permission before the purpose and the taps', () => {
+  renderWithUi(<SetupScreen />, { native: { ...NATIVE_READY, cameraPermission: 'denied' } });
+  const denied = screen.getByText(EN.cameraDenied);
+  const purpose = screen.getByText(EN.cameraWhy);
+  expect(denied.compareDocumentPosition(purpose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(purpose.compareDocumentPosition(screen.getByText(EN.cameraOpens)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});

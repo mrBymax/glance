@@ -4,6 +4,8 @@ The phone UI of Meta Glance: a Vite app with React 19 and Astryx. The Android ap
 
 The app has two screens. The setup screen links the glasses and asks for the camera in three steps. The session screen shows the product card of the current prompt, the last spoken lines as text, the cart, the checkout sheet with the receipt, and the settings sheet. It has a phone button for each action of the shopper, and a pocket mode. One banner on each screen states the device and error states. A debug panel sends events into the page.
 
+`docs/design.md` holds the design: the references, the reference lock, the decision ledger, and the tokens.
+
 ## Run it
 
 Run each command at the repository root, after `npm install`.
@@ -219,8 +221,8 @@ stateDiagram-v2
 
 - `loading` shows until the host sends the first `native.state`.
 - The list of steps shows only the three labels. The text and the button of the current step sit below the list, under a heading with the label of the step. Inside a vertical step the content is indented, and "Start shopping" did not fit at a root font size of 200 percent on a 360 px screen.
-- Step 1, link: the page says that Meta AI opens, what to confirm there, and how to return. If the Meta AI app is missing, the step shows a link to its Play Store page (`META_AI_STORE_URL`). With no network it shows Try again. While the registration runs, it shows no button.
-- Step 2, camera: the page states the purpose of the camera before it asks. A denied permission adds one line, and the button asks again.
+- Step 1, link: the page says that Meta AI opens, what to confirm there, and how to return. If the Meta AI app is missing, the step shows a link to its Play Store page (`META_AI_STORE_URL`). With no network it shows the cause as a warning and Try again. While the registration runs, it shows a spinner with "Waiting for Meta AI." and no button. The taps of the jump to Meta AI show as a numbered list.
+- Step 2, camera: the page states the purpose of the camera before it asks. A denied permission adds a warning above the purpose, and the button asks again.
 - Step 3, ready: Start shopping sends `session.start`. The session screen shows when the snapshot arrives.
 - `local.reset` returns to step 3. The Done button of the receipt, the banner of an ended session, and Delete my data run it.
 
@@ -230,14 +232,18 @@ Each action that the shopper can do with the head or the voice also has a button
 
 | Button | Where | Sends |
 |---|---|---|
-| Ask, with a microphone icon and the name "Ask a question" | Action row. Shown in the phases `shopping` and `checkout`. | `ASK_MESSAGE` of `src/bridge/askMessage.ts`: `{ t: 'intent', kind: 'ask' }` |
-| Undo | Action row. Hidden while the cart is empty. | `{ t: 'intent', kind: 'undo' }` |
-| Repeat, with the name "Repeat the last line" | Under the captions. Hidden with no caption. | `{ t: 'intent', kind: 'repeat' }` |
+| Ask, with a microphone icon and the name "Ask a question" | Dock at the bottom of the screen. Shown in the phases `shopping` and `checkout`. | `ASK_MESSAGE` of `src/bridge/askMessage.ts`: `{ t: 'intent', kind: 'ask' }` |
+| Undo | Dock at the bottom of the screen. Hidden while the cart is empty. | `{ t: 'intent', kind: 'undo' }` |
+| Repeat, with the name "Repeat the last line" | Beside the heading of the captions. Hidden with no caption. | `{ t: 'intent', kind: 'repeat' }` |
 | Remove, with the name "Remove <product>" | Each cart line | `{ t: 'cart.edit', productId, qty }` with one unit less. The quantity 0 removes the line. |
-| Pocket mode | Action row | `{ t: 'pocket.set', on: true }` |
-| End | Action row | Opens an `AlertDialog`. End sends `{ t: 'session.end' }`, and "Keep shopping" sends nothing. |
+| Pocket mode | Row under the cart | `{ t: 'pocket.set', on: true }` |
+| End | Row under the cart | Opens an `AlertDialog`. End sends `{ t: 'session.end' }`, and "Keep shopping" sends nothing. |
 
 End asks first, because the server takes no input for a session that ended.
+
+- The dock of Ask and Undo sticks to the bottom of the screen while the page scrolls. At a large font scale its buttons take two rows, so it scrolls with the page there (`src/styles/glance.css`).
+- Settings is an icon button with the name "Settings" at the end of the title row.
+- The captions show in a dark window of fixed height (`CaptionList`). It scrolls to its newest line, so a new caption moves no other content of the page. The newest line is in full ink, and the older lines are gray.
 
 "Ask a question" needs no prompt ID. The Android app relays the intent, and `BrowserBridge` posts it as each other intent. The server opens a question window of 10 seconds for it and says "Listening." A browser has no microphone, so with `BrowserBridge` the window closes with no question.
 
@@ -282,7 +288,7 @@ The button "Pocket mode" sends `pocket.set` with `on: true`. `SessionScreen` the
 
 - With a `BrowserBridge`, a tap delivers the message through `bridge.inject`. The message then takes the path of a message of the app, and the list Sent shows its haptic message. Inside the WebView, a tap runs `dispatch`, and the app gets no haptic message.
 - The session query opens the mirror page of the website: `/mirror?<query>`.
-- A sheet under another sheet measures smaller in the browser: a segment of the settings sheet gave 46 px under the checkout sheet, and 48 px alone. Measure a sheet only while it is the top one.
+- A sheet under another sheet measures smaller in the browser: a control of the settings sheet gave 46 px under the checkout sheet, and 48 px alone. Measure a sheet only while it is the top one.
 
 ### Checkout sheet
 
@@ -301,22 +307,22 @@ The Settings button of the session screen opens `SettingsSheet`. `useUi().setPro
 
 | Preference | Control | Patch |
 |---|---|---|
-| Voice detail | 3 segments | `{ detail }` |
-| Speech speed | 5 segments, one for each value of `SPEECH_RATES` | `{ speechRate }` |
+| Voice detail | 3 radio rows | `{ detail }` |
+| Speech speed | 5 radio rows, one for each value of `SPEECH_RATES` | `{ speechRate }` |
 | Head gestures, haptics | 2 checkboxes | `{ headGestures }` or `{ haptics }`: only the key that changed |
-| Gesture meaning | 2 segments | `{ yesGesture }` |
-| Head window | 3 segments | `{ headWindowMs }`: 8000, 15000, or `null` for "While in view" |
-| Main yes input | 5 segments | `{ mainYes }` |
+| Gesture meaning | 2 radio rows | `{ yesGesture }` |
+| Head window | 3 radio rows | `{ headWindowMs }`: 8000, 15000, or `null` for "While in view" |
+| Main yes input | 5 radio rows | `{ mainYes }` |
 | Allergens | 14 checkboxes, one for each value of `EU_ALLERGENS` | `{ allergens }`: the full new list, in the order of `EU_ALLERGENS` |
 | Diet | 2 checkboxes: Vegan, Vegetarian | `{ vegan }` or `{ vegetarian }`: only the key that changed |
 | Budget | A number input in whole euros, from 1, with a clear button | `{ budgetCents }`: the value times 100, or `null` after Clear Budget |
-| Language | 2 segments: English, Italiano. Each name is in its own language (`LANGUAGE_NAMES`). | `{ lang }` |
+| Language | 2 radio rows: English, Italiano. Each name is in its own language (`LANGUAGE_NAMES`). | `{ lang }` |
 
 - A speech rate that is not in `SPEECH_RATES` marks the nearest value.
 - Play sample sends `intent` with the kind `help`. The bridge has no message for a speech sample, so the voice speaks the help line at the new speed.
 - Delete my data asks in an `AlertDialog`. Delete sends `data.delete`, runs `local.reset`, and closes the dialog and the sheet.
 - The last line of the sheet is the attribution that the Open Database License asks for: "Product data: Open Food Facts (ODbL)", and a link to `https://openfoodfacts.org` (`OPEN_FOOD_FACTS_URL`). The link has the name "Open website of Open Food Facts" and the visible text "Open website", because a longer text is cut at a font scale of 200 percent. In the WebView the link has no `target`, and the Android app opens it outside the app, as it does for the Play Store link of the setup screen. With a `BrowserBridge` the link has `target="_blank"` and opens a new tab, because a page that goes to another address loses its session.
-- `src/styles/narrow.css` sets the inline padding of a segment to 4 px. With the stock 12 px, "While in view" and "Phone" are cut at a width of 360 px. The Italian table uses "In vista" and "App" there, because "Telefono" is cut also with 4 px.
+- Each choice is a `RadioList`, one row for each value. A `SegmentedControl` cut "While in view" and "Phone" at a width of 360 px, and each label of 5 segments at a font scale of 200 percent. A row holds the full label in both languages.
 
 ### State banner
 
@@ -339,7 +345,7 @@ The Settings button of the session screen opens `SettingsSheet`. `useUi().setPro
 
 - The title and the description of a banner together hold the spoken line of the design. The texts are in `src/text/strings.ts` under `banner`.
 - `NativeState` has no cause for a stopped stream. So `regularCheckout` uses the limits of the server: `REGULAR_CHECKOUT_BATTERY` and `REGULAR_CHECKOUT_THERMAL`. The `stopped` banner shows the message of an `error` event of the app as its cause.
-- `StatusRow` shows four statuses as words under the heading of the session screen: glasses, battery, camera, and network.
+- `StatusRow` shows four statuses under the heading of the session screen, one pill for each: glasses, battery, camera, and network. Each pill has a glyph and words. A problem (no glasses, battery at 20 percent or less, camera paused, no network) also gets the warning fill and a warning glyph.
 
 Test tool: `renderWithUi(ui, { native, messages })` in `src/test/render.tsx` renders a component with a `BrowserBridge` that has no server. It returns `bridge`, `user`, and `deliver(...messages)`.
 
@@ -362,7 +368,7 @@ jsdom has no layout and no colors. Measure these three in a browser, at 360 x 80
 1. Touch targets, with Settings open. The line must print `[]`.
 
 ```js
-[...document.querySelectorAll('.astryx-button, .astryx-segmented-control-item, li.astryx-list-item:has(input)')]
+[...document.querySelectorAll('.astryx-button, .astryx-radio-list-item, li.astryx-list-item:has(input)')]
   .map((el) => [el, el.getBoundingClientRect()])
   .filter(([, box]) => box.width > 0 && (box.width < 48 || box.height < 48))
   .map(([el, box]) => `${el.textContent.trim()} ${Math.round(box.width)}x${Math.round(box.height)}`)
@@ -373,13 +379,16 @@ jsdom has no layout and no colors. Measure these three in a browser, at 360 x 80
 
 On 2026-11-14 headless Chrome ran check 2 with two scanned products (names of 80 characters with accents, one with a word of 33 characters), in English and in Italian, at 100 and at 200 percent. On the product card, the cart, the checkout sheet, the receipt, and the attribution of the settings sheet, no element ended to the right of 360 px and no text was cut. A word that is longer than a line breaks inside the word.
 
+After the redesign, on the same day, a script in headless Chrome ran checks 1 and 2 and measured the contrast of each text: 24 scenes (each setup step, the session with each prompt and banner, a cart of 1 and of 7 lines, the checkout, the fingerprint step, the payment, the receipt, the settings sheet, pocket mode, the end dialog, and `?replay=1`), at 360 x 800 and 412 x 915, in light and dark mode, at 100 and 200 percent, in English and in Italian. In all 384 pictures no element ended right of the screen, the page did not scroll sideways, no label was cut, and no control was below 48 x 48 px. The lowest contrast of a text was 5.22:1 (the End button of the end dialog in dark mode). The ring of an empty check box, of a radio, and of the budget field measured 5.41:1 in light mode and 5.65:1 in dark mode.
+
 ## Touch targets of 48 px
 
 The design requires touch targets of 48 px or more. Astryx controls are 28, 32, and 36 px high.
 
 - `src/styles/touch.css` raises the three Astryx height tokens to 48, 48, and 56 px, and gives each `Button` a minimum width of 48 px.
 - `src/styles/touch.css` also sets the clear button of an input to a height of 48 px. Its stock height is 20 px, and Astryx grows its hit area to 44 px at most. In Chrome at 360 px the button "Clear Budget" then measured 48 x 48 px.
-- `SegmentedControl` needs `size="lg"`. `CheckboxList` needs `density="spacious"`. A smaller variant is below 48 px.
+- `src/styles/touch.css` raises each row of a `RadioList` to 48 px. Its stock height is 32 px, and Astryx grows its hit area to 44 px at most.
+- `CheckboxList` needs `density="spacious"`. A smaller variant is below 48 px. Do not use `SegmentedControl`: no size of it holds the labels at 360 px.
 - Do not use `Switch`, `Slider`, or a raw `button`. No rule covers them.
 - jsdom has no layout, so a test cannot measure a control. `uncoveredTouchTargets(root)` in `src/test/touchTargets.ts` lists each control that none of these rules covers. A screen test expects an empty list.
 - To measure in a browser, open the dev server and run this in the console. It must print `true`.
@@ -391,6 +400,10 @@ The design requires touch targets of 48 px or more. Astryx controls are 28, 32, 
 ## Astryx
 
 - The theme is the stock Neutral theme. `npx @astryxdesign/cli theme add neutral` wrote `src/astryx-themes.ts`. Do not edit that file.
+- The `fonts.css` file of the theme loads Figtree from Google Fonts, and the phone can be offline. `vite.config.ts` serves `src/styles/fonts.css` in its place, with the files of `@fontsource-variable/figtree` (SIL Open Font License 1.1). The page loads no remote file.
+- The glyphs come from `lucide-react`, the icon set of the Neutral theme. `Icon` of Astryx takes a Lucide component.
+- `src/styles/glance.css` holds the app classes for the parts that Astryx has no prop for. Each value is an Astryx token or a `rem` value.
+- Astryx spacing is in `rem`, so each inset doubles at a font scale of 200 percent. A container query in `src/styles/glance.css` keeps the insets of the page, the cards, and the sheets at their size of 100 percent when the root font is large. It also lets the label of a button or a row take a second line, where Astryx cuts it with an ellipsis.
 - The app uses the prebuilt CSS of Astryx (`src/styles/globals.css`). It has no StyleX compiler, so `xstyle` does not work here.
 - Before the first use of a component, run `npx @astryxdesign/cli component <Name>` in this folder.
 - `AGENTS.md` holds the Astryx rules for agents, and the Glance rules that win over them.

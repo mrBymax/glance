@@ -2,13 +2,20 @@ import { Banner } from '@astryxdesign/core/Banner';
 import { Button } from '@astryxdesign/core/Button';
 import { Card } from '@astryxdesign/core/Card';
 import { Heading } from '@astryxdesign/core/Heading';
+import { HStack } from '@astryxdesign/core/HStack';
+import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
 import type { CurrentPrompt } from '@glance/shared';
+import { ShoppingCart } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useUi } from '../bridge/BridgeContext';
 import { eur, warningText } from '../text/format';
 
+/**
+ * The card of the product that the voice just named: the name, the pack size, the price, each warning, and the answers.
+ * The price is the largest text of the screen, because a shopper needs it first.
+ */
 export function PromptCard(props: { prompt: Extract<CurrentPrompt, { kind: 'product' }> }) {
   const { prompt } = props;
   const { send, strings } = useUi();
@@ -27,31 +34,38 @@ export function PromptCard(props: { prompt: Extract<CurrentPrompt, { kind: 'prod
   };
 
   return (
-    <Card>
-      <VStack gap={3}>
-        <Heading level={2}>{prompt.product.name}</Heading>
-        <Text>{prompt.product.packSize}</Text>
-        <Text type="display-1">{eur(prompt.product.priceCents)}</Text>
-        {inCart ? <Text>{strings.inCart(prompt.qtyInCart)}</Text> : null}
+    <Card className="glance-card" elevation="low">
+      <VStack gap={4}>
+        <VStack gap={1}>
+          {inCart ? (
+            <HStack gap={1.5} vAlign="center">
+              <Icon icon={ShoppingCart} size="sm" color="secondary" />
+              <Text type="supporting" weight="medium">{strings.inCart(prompt.qtyInCart)}</Text>
+            </HStack>
+          ) : null}
+          <Heading level={2} className="glance-title">{prompt.product.name}</Heading>
+          <Text type="large" color="secondary">{prompt.product.packSize}</Text>
+        </VStack>
+        <Text className="glance-amount" display="block">{eur(prompt.product.priceCents)}</Text>
         {prompt.warnings.map((warning) => {
           const text = warningText(warning, strings);
           return <Banner key={text} status="warning" title={text} />;
         })}
-        <Button
-          label={inCart ? strings.addAnother : strings.add}
-          variant="primary"
-          size="lg"
-          width="100%"
-          isDisabled={isAnswered}
-          onClick={() => answer('yes')}
-        />
-        <Button
-          label={inCart ? strings.removeOne : strings.skip}
-          size="lg"
-          width="100%"
-          isDisabled={isAnswered}
-          onClick={() => answer('no')}
-        />
+        <HStack className="glance-pair" gap={2} wrap="wrap">
+          <Button
+            label={inCart ? strings.addAnother : strings.add}
+            variant="primary"
+            size="lg"
+            isDisabled={isAnswered}
+            onClick={() => answer('yes')}
+          />
+          <Button
+            label={inCart ? strings.removeOne : strings.skip}
+            size="lg"
+            isDisabled={isAnswered}
+            onClick={() => answer('no')}
+          />
+        </HStack>
       </VStack>
     </Card>
   );

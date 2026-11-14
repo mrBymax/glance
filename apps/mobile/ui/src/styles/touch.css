@@ -11,3 +11,7 @@
 .astryx-input-clear-button {
   block-size: 48px;
 }
+/* A radio row is 32 px high, and Astryx grows its hit area to 44 px at most. */
+.astryx-radio-list-item {
+  min-block-size: var(--size-element-md);
+}

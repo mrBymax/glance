@@ -43,11 +43,11 @@ it('sends the head window as a number of milliseconds, and a checkbox in both di
 it('shows a new value at once', async () => {
   const { user, sheet } = await open();
   await user.click(sheet.getByRole('radio', { name: 'Brief' }));
-  expect(sheet.getByRole('radio', { name: 'Brief' })).toHaveAttribute('aria-checked', 'true');
+  expect(sheet.getByRole('radio', { name: 'Brief' })).toBeChecked();
 });
 it('marks the nearest speed for a rate that is not in the list', async () => {
   const { sheet } = await open({ messages: [{ t: 'profile', profile: { ...DEFAULT_PROFILE, speechRate: 1.3 } }] });
-  expect(sheet.getByRole('radio', { name: '1.2x' })).toHaveAttribute('aria-checked', 'true');
+  expect(sheet.getByRole('radio', { name: '1.2x' })).toBeChecked();
 });
 it('plays a sample line', async () => {
   const { bridge, user, sheet } = await open();
@@ -161,7 +161,7 @@ it('marks the language of the profile, and returns to English', async () => {
   const { bridge, user } = renderWithUi(<SessionScreen />, { messages: [{ t: 'profile', profile: { ...DEFAULT_PROFILE, lang: 'it' } }] });
   await user.click(screen.getByRole('button', { name: 'Impostazioni' }));
   const italian = within(screen.getByRole('dialog', { name: 'Impostazioni' }));
-  expect(italian.getByRole('radio', { name: 'Italiano' })).toHaveAttribute('aria-checked', 'true');
+  expect(italian.getByRole('radio', { name: 'Italiano' })).toBeChecked();
   await user.click(italian.getByRole('radio', { name: 'English' }));
   expect(patches(bridge)).toEqual([{ lang: 'en' }]);
   expect(document.documentElement).toHaveAttribute('lang', 'en');

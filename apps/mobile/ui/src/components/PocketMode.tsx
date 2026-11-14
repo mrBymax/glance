@@ -1,9 +1,11 @@
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { Button } from '@astryxdesign/core/Button';
 import { Heading } from '@astryxdesign/core/Heading';
+import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import { Theme } from '@astryxdesign/core/theme';
 import { VStack } from '@astryxdesign/core/VStack';
+import { LockOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { defaultThemeSlug, themes } from '../astryx-themes';
 import { useUi } from '../bridge/BridgeContext';
@@ -24,11 +26,13 @@ export function PocketMode(props: { onLeave(): void }) {
   };
   return (
     <Theme theme={themes[defaultThemeSlug]} mode="dark">
-      <VStack as="main" className="pocket-screen" padding={4} gap={4} hAlign="center" vAlign="center">
-        <Heading level={1}>{strings.pocketMode}</Heading>
-        <Text type="display-1">{eur(state.cart.totalCents)}</Text>
-        <Text>{strings.items(itemCount(state.cart))}</Text>
-        <Button label={strings.unlock} size="lg" onClick={() => setLeaveOpen(true)} />
+      <VStack as="main" className="pocket-screen" padding={6} gap={8} hAlign="stretch" vAlign="between">
+        <Heading level={1} color="secondary">{strings.pocketMode}</Heading>
+        <VStack gap={2}>
+          <Text className="glance-amount" display="block">{eur(state.cart.totalCents)}</Text>
+          <Text type="large" color="secondary">{strings.items(itemCount(state.cart))}</Text>
+        </VStack>
+        <Button label={strings.unlock} icon={<Icon icon={LockOpen} />} size="lg" width="100%" onClick={() => setLeaveOpen(true)} />
       </VStack>
       <AlertDialog
         isOpen={isLeaveOpen}

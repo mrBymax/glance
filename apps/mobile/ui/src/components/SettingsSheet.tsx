@@ -2,12 +2,15 @@ import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { BottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Button } from '@astryxdesign/core/Button';
 import { CheckboxList, CheckboxListItem } from '@astryxdesign/core/CheckboxList';
+import { Divider } from '@astryxdesign/core/Divider';
 import { Heading } from '@astryxdesign/core/Heading';
+import { Icon } from '@astryxdesign/core/Icon';
 import { NumberInput } from '@astryxdesign/core/NumberInput';
-import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
+import { RadioList, RadioListItem } from '@astryxdesign/core/RadioList';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
 import { EU_ALLERGENS, LANGS, type Profile } from '@glance/shared';
+import { ExternalLink, Trash2, Volume2 } from 'lucide-react';
 import { useState } from 'react';
 import { useUi } from '../bridge/BridgeContext';
 import { BrowserBridge } from '../bridge/browserBridge';
@@ -31,15 +34,15 @@ function nearestRate(rate: number): number {
 
 type Option = readonly [value: string, label: string];
 
-/** One preference with 2 to 5 values. The control has no visible label of its own, so a text line names it. */
+/**
+ * One preference with 2 to 5 values, as one radio row for each value. A row holds a label of each length at a font
+ * scale of 200 percent. A segmented control cut "While in view" and "Phone" on a 360 px screen.
+ */
 function Choice(props: { label: string; value: string; options: readonly Option[]; onChange(value: string): void }) {
   return (
-    <VStack gap={2}>
-      <Text weight="semibold">{props.label}</Text>
-      <SegmentedControl label={props.label} size="lg" layout="fill" value={props.value} onChange={props.onChange}>
-        {props.options.map(([value, label]) => <SegmentedControlItem key={value} value={value} label={label} />)}
-      </SegmentedControl>
-    </VStack>
+    <RadioList label={props.label} value={props.value} onChange={props.onChange} width="100%">
+      {props.options.map(([value, label]) => <RadioListItem key={value} value={value} label={label} />)}
+    </RadioList>
   );
 }
 
@@ -71,8 +74,8 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
 
   return (
     <>
-      <BottomSheet isOpen={isOpen} onOpenChange={(open) => { if (!open) onClose(); }} label={strings.settings} height="tall">
-        <VStack gap={5}>
+      <BottomSheet isOpen={isOpen} onOpenChange={(open) => { if (!open) onClose(); }} label={strings.settings} height="tall" padding={0}>
+        <VStack className="glance-sheet" gap={5}>
           <Heading level={2}>{strings.settings}</Heading>
           <Choice
             label={strings.voiceDetail}
@@ -83,7 +86,7 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
               if (detail) setProfile({ detail });
             }}
           />
-          <VStack gap={2}>
+          <VStack gap={3}>
             <Choice
               label={strings.speechSpeed}
               value={String(nearestRate(profile.speechRate))}
@@ -93,11 +96,13 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
                 if (speechRate !== undefined) setProfile({ speechRate });
               }}
             />
-            <Button label={strings.playSample} size="lg" width="100%" onClick={() => send({ t: 'intent', kind: 'help' })} />
+            <Button label={strings.playSample} icon={<Icon icon={Volume2} />} size="lg" width="100%" onClick={() => send({ t: 'intent', kind: 'help' })} />
           </VStack>
+          <Divider />
           <CheckboxList
             label={strings.inputAndFeedback}
             density="spacious"
+            hasDividers
             value={TOGGLES.filter((key) => profile[key])}
             onChange={onSwitches(TOGGLES)}
           >
@@ -125,9 +130,11 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
               if (mainYes) setProfile({ mainYes });
             }}
           />
+          <Divider />
           <CheckboxList
             label={strings.allergens}
             density="spacious"
+            hasDividers
             value={profile.allergens}
             // The patch holds the full list, in the order of the EU list.
             onChange={(values) => setProfile({ allergens: EU_ALLERGENS.filter((key) => values.includes(key)) })}
@@ -137,6 +144,7 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
           <CheckboxList
             label={strings.diet}
             density="spacious"
+            hasDividers
             value={DIETS.filter((key) => profile[key])}
             onChange={onSwitches(DIETS)}
           >
@@ -155,6 +163,7 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
             // With hasClear the input reports null for the clear button.
             onChange={(value: number | null) => setProfile({ budgetCents: value === null ? null : Math.round(value * 100) })}
           />
+          <Divider />
           <Choice
             label={strings.language}
             value={profile.lang}
@@ -164,14 +173,16 @@ export function SettingsSheet(props: { isOpen: boolean; onClose(): void }) {
               if (lang) setProfile({ lang });
             }}
           />
+          <Divider />
           <VStack gap={3}>
             <Heading level={2}>{strings.privacyTitle}</Heading>
             <Text>{strings.privacyText}</Text>
-            <Button label={strings.deleteData} variant="destructive" size="lg" width="100%" onClick={() => setDeleteOpen(true)} />
+            <Button label={strings.deleteData} icon={<Icon icon={Trash2} />} variant="destructive" size="lg" width="100%" onClick={() => setDeleteOpen(true)} />
           </VStack>
+          <Divider />
           <VStack gap={3}>
-            <Text>{strings.productData}</Text>
-            <Button label={strings.productDataLinkLabel} size="lg" width="100%" href={OPEN_FOOD_FACTS_URL} {...outside}>
+            <Text type="supporting">{strings.productData}</Text>
+            <Button label={strings.productDataLinkLabel} icon={<Icon icon={ExternalLink} />} size="lg" width="100%" href={OPEN_FOOD_FACTS_URL} {...outside}>
               {/* The full name is cut at a font scale of 200 percent. */}
               {strings.productDataLink}
             </Button>
