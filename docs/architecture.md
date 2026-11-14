@@ -30,6 +30,7 @@ flowchart LR
 
   browser["Phone UI in a browser: BrowserBridge"]
   kioskPage["Kiosk page: apps/website, /kiosk"]
+  hud["Display HUD mockup: apps/display-pow"]
 
   glasses -- "frames, gyroscope samples, device state" --> app
   page -- "PageToNative" --> app
@@ -41,6 +42,8 @@ flowchart LR
   rest -- "ServerEvent stream" --> browser
   kioskPage -- "POST /api/kiosks" --> rest
   rest -- "KioskEvent stream" --> kioskPage
+  hud -- "snapshot call, intent with the source hud" --> rest
+  rest -- "ServerEvent stream" --> hud
 
   socket -- "frames" --> recognition
   recognition -- "one JPEG for each call" --> gemini
@@ -69,6 +72,7 @@ flowchart LR
 | Phone UI | `apps/mobile/ui` | Shows the current prompt, the last lines as text, and the cart. It has no network code: each message goes through a `GlanceBridge`. |
 | Server | `apps/server` | Recognizes the product in a frame, runs the cart rules, writes the spoken lines, and runs the checkout with a mock payment. |
 | Website | `apps/website` | The kiosk page shows the code that starts a checkout, and then the cart and the result. |
+| Display HUD | `apps/display-pow` | A mockup of the screen for glasses with a display. It shows the pending product, the total, and the last line of one session, and it sends a yes or a no. Without a session it plays a recording. |
 
 Facts that the diagram does not show:
 

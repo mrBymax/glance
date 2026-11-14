@@ -76,7 +76,8 @@ A live session uses three paths of the server, each with `?token=<token>`:
 ## Gotchas
 
 - The dock with the two buttons exists only while a product is pending. The runtime audit of the toolkit rejects a dock with no enabled action. When the dock appears, the toolkit puts the focus on Add, unless the focus is on the status region. After an answer the focus is on no element until the next key or the next product.
-- A failed answer in live mode shows the toast `Not sent. Try again.` Nobody checked this toast in a browser.
+- A failed answer in live mode shows the toast `Not sent. Try again.` The product stays pending, and the focus stays on the button.
+- The HUD shows no sign of a lost stream. The last state stays on the screen until the stream opens again. Then the HUD gets the snapshot.
 - The gap of `.content-inset` is `calc(var(--uit-spacing-large) + var(--uit-spacing-xsmall))`. The structure check of the toolkit rejects each other gap for a stack with labels and text. The class `fact-group` keeps each label near its values.
 - With a caption of two lines, the status region scrolls. The product and the total stay in view at 600 x 600.
 - `openLive` opens the stream first. It gets the snapshot after each open of the stream, so a reconnect gives a fresh state. An event that arrives while the snapshot is on its way is applied one more time after the snapshot.
@@ -103,8 +104,18 @@ The runtime audit of the toolkit needs the dev server and a Chrome with a debug 
 node skills/mrbd-ui-toolkit/library/uit-screen-architecture-web/scripts/audit-runtime.mjs http://127.0.0.1:9222
 ```
 
-The audit has no finding while a product with no warning is pending. It has one kind of finding in the other states: the caption repeats a text of the screen. Examples are `Camera on` and `Warning: contains gluten.` The caption is the spoken line, and the spoken line names the same facts, so the finding stays.
+The audit has one kind of finding: the caption repeats a text of the screen. On 2026-11-14 the recording gave this finding in three states:
 
-No test renders the screen. Nobody checked the screen in the Display simulator or on glasses.
+| State | Text that the caption repeats |
+|---|---|
+| Camera on, no product, caption `Camera on. Hold a product up to hear its price.` | `Camera on` and the prompt line |
+| Oat drink pending | `Warning: contains gluten.` |
+| Camera off at the end of the recording, caption `Camera off.` | `Camera off` |
+
+The caption is the spoken line, and the spoken line names the same facts, so the finding stays. The audit had no finding in each other state: the rye bread pending with the focus on Add, after Add, after Skip, the unknown product, a product pending in live mode, and the toast of a failed answer.
+
+No test renders the screen. The checks of the screen ran by hand in headless Chrome at 600 x 600: both buttons in recorded mode, and Add and the toast in live mode with the fake server. Nobody checked the screen in the Display simulator or on glasses.
+
+For the audit of the live mode, start Chrome again. In one run, a headless Chrome tab that showed the recorded mode did not answer after a change to a live address. The cause is not known.
 
 No test opens a network connection. The tests of `openLive` and `postIntent` use stubs for `EventSource` and `fetch`.
