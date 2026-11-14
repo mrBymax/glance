@@ -11,6 +11,11 @@ it('uses the defaults', () => {
     speechCacheDir: '.cache/speech', saveFramesDir: null, paymentDelayMs: 1500,
   });
 });
+it('reads the demo key, and an empty value counts as not set', () => {
+  expect(loadConfig(KEYS, []).demoKey).toBeNull();
+  expect(loadConfig({ ...KEYS, DEMO_KEY: '' }, []).demoKey).toBeNull();
+  expect(loadConfig({ ...KEYS, DEMO_KEY: 'k-demo' }, []).demoKey).toBe('k-demo');
+});
 it('needs no key in fake mode', () => {
   expect(loadConfig({}, ['--fake'])).toMatchObject({
     fakeRecognition: 'fixtures/fake-script.json', fakeSpeech: true, geminiApiKey: null, elevenlabsApiKey: null,
