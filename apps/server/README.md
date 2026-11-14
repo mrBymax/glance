@@ -34,6 +34,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `agents/answers.md` (repository root) | The instruction for the model that answers a question. |
 | `scripts/check-ask.ts` | `npm run ask:check`: one question to the real service. See "Checks". |
 | `scripts/replay.ts` | `npm run replay`: the accuracy of the real service on a folder of frames. See "Replay a test set". |
+| `scripts/held-probe.ts` | `npm run held:probe`: the answers of the real service on frames that a person labeled, by the product in the hand. See "Measured: the product in the hand, and items that look alike". |
 | `scripts/live-probe.ts` | `npm run live:probe`: the delay and the answers of a Gemini Live session on saved frames. See "Measured: a Gemini Live session". |
 | `scripts/smoke.ts` | `npm run smoke`: a check of a running server through its REST paths, its device socket, and its events stream. See "Checks". |
 | `src/sessions/` | The cart rules as the pure function `step`, the session runtime, and the registry. See "Rules" and "Session runtime". |
@@ -80,7 +81,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `MONGODB_DB` | `glance` | The database name. |
 | `CATALOG_PATH` | `catalog/catalog.dev.json` | The catalog file. |
 | `GEMINI_API_KEY` | not set | Needed when `FAKE_RECOGNITION` is off. |
-| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | The recognition model. |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | The recognition model. Keep the default: two larger models named no more products and were slower. See "Measured: the product in the hand, and items that look alike". |
 | `GEMINI_MEDIA_RESOLUTION` | `default` | `default` or `low`. |
 | `RECOGNITION_CONCURRENCY` | `8` | An integer from 1 to 12. The number of recognition calls that one session runs at the same time. See "Recognition". |
 | `RECOGNITION_REFERENCES` | `3` | An integer from 0 to 3. The number of reference pictures of one store item in each recognition call for a frame. `0` means none. See "Reference pictures in a frame call". |
@@ -223,7 +224,8 @@ The request:
 
 - The system instruction is `agents/recognition.md` with one line for each product in place of `{{catalog}}`: ID, name, brand, pack size, look, and look-alikes. It holds no price.
 - `{{storeItems}}` gets one line for each item of the store list that the catalog does not hold: the ID `gtin-<13 digits>`, the name, and the brand and the pack size when the store list or the product cache has them. A store item has no look. The instruction says that the package text can be in another language than the name, and that a similar product is no match. See "Recognition knows the store list".
-- The answer is JSON with the six fields of spec section 11.1 and the field `code`. Its schema lets `productId` and `candidates` take only the IDs of the catalog and of the store items. With no ID at all, `productId` can only be `null`.
+- The answer is JSON with the field `held`, the six fields of spec section 11.1, and the field `code`. Its schema lets `productId` and `candidates` take only the IDs of the catalog and of the store items. With no ID at all, `productId` can only be `null`.
+- `held` is the first field. It is true when a hand holds a product and presents it to the camera. It is false for a frame with no product, and for a product that stands on a table or a shelf, or that another person holds. The instruction makes `identified` and `ambiguous` valid only with `held` true, and asks for the larger and nearer product when a hand holds two. See "The product in the hand".
 - `code` is `{ visible, digits }`: the barcode of the frame, as the model sees it. See "The model also reads the code".
 - The text part is `Exclude: none.` or `Exclude: <id>, <id>.`, with the products that the shopper skipped in the last 10 seconds (R9).
 - With reference pictures, the request starts with them, and the instruction gets their rules. See "Reference pictures in a frame call".
@@ -254,7 +256,7 @@ A store item has no description of its package, and a stream frame is small. Wit
 - The pictures are those of `REFERENCE_DIR`. See "Reference pictures" for how to take them.
 - Each picture is one image part at the media resolution `MEDIA_RESOLUTION_LOW` (280 tokens), after the text part `Reference picture of <product ID>: <name>`. Then come the text `The frame`, the frame, and the exclude line. A store item that the catalog holds has the ID and the name of its catalog product.
 - A call with pictures gets the section "Reference pictures" at the end of its instruction. The text is `REFERENCE_RULES` in `src/recognition/prompt.ts`. It says: the last image is the frame, a picture can show another side or other light, a match of shape, colors, and print gives `identified` also when the text is too small to read, a package that is only similar gives `unsure`, and no answer is about a picture alone.
-- For store items that look alike, `agents/recognition.md` and `REFERENCE_RULES` say: name such an item only when the frame shows the part that tells it apart, prefer the flavor text because the light of the room can change a color, and answer `unsure` in each other case.
+- For store items that look alike, `agents/recognition.md` and `REFERENCE_RULES` say: name such an item only when the flavor text on the product in the hand is readable, never by a color alone, and answer `ambiguous` with the items that it can be in each other case. The rules then speak the look-alike line, and the phone takes a still. See "Look-alike products".
 - With no picture, the request and the instruction are those of a server with no reference picture.
 - A frame call gets at most 12 pictures and at most 2 MB of JPEG bytes (`MAX_FRAME_REFERENCES`, `MAX_FRAME_REFERENCE_BYTES`). Each item gets its newest picture before an item gets a second one, in the order of the store list. So 4 items get 3 pictures each, 6 items get 2 each, and 12 items get 1 each. With more than 12 items, only the first 12 items of the store list get a picture, and the log line of the pictures ends with `<n> items with pictures get none in a frame call`.
 - The server sends each picture to the Files API of Gemini one time (`createPictureUploader`), and a frame call holds the address of the file. So a frame call uploads no picture. 3 pictures of 130 kB in each of 7 calls a second would be 27 Mbit/s.
@@ -279,7 +281,7 @@ Measured on 2026-11-14 with `npm run reference:probe`: 48 stream frames of two t
 - 3 pictures as files cost about 170 ms more than no picture at the median, and 1051 prompt tokens. 12 pictures cost about 310 ms and 3925 tokens.
 - With four items and the rule for items that look alike, the model named the can only in 4 of the 7 frames that show its front, and in no frame that shows its back. It answered `unsure` for 19 frames, and `none` for 8 in place of 18 without pictures. An `unsure` answer asks the phone for a still, and the label call names the product. The run does not tell the effect of the rule from the effect of the three more items.
 - An `unsure` answer never held a product: each `unsure` answer of the 240 calls had `productId: null`, with a confidence of 0.3 to 0.8. So no rule can count two `unsure` answers as one `identified`, and the server has none.
-- Not measured: a choice between store items that look alike. No frame of the three cans of one design exists, so no call had one of them in a hand. A wrong name is worse than no name. Record frames of each can, label them, and run the probe before a demo with them. Set `RECOGNITION_REFERENCES=0` if the model names the wrong one. See the rule R2 in "Rules" for results that change between two products.
+- A choice between store items that look alike was measured later that day, with each of the three cans in a hand. See "Measured: the product in the hand, and items that look alike".
 
 ```bash
 CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.json npm run reference:probe --workspace @glance/server -- --labels <labels.json> --pictures 0,3 --upload
@@ -292,10 +294,13 @@ CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.j
 
 `normalizeResult` never turns another status into `identified`:
 
-- An answer that fails the schema counts as no product.
+- An answer that fails the schema counts as no product. An answer with no `held` field fails it.
+- An answer with `held` false counts as no product, with each status, and it loses its code. So a product on a table gets no name, no look-alike line, no aim hint, and no still.
 - `identified` with an ID outside the catalog and the store items becomes `unknown`. With an excluded ID it becomes `none`. Below `RECOGNITION_MIN_CONFIDENCE` it becomes `unsure`.
 - `ambiguous` keeps the candidates that are in the catalog or the store items and not excluded. With one candidate left it becomes `unsure` with the aim hint `turn`. With none it becomes `unknown`.
-- Each status keeps the code. The digits lose their spaces, and digits with another character become `null`. A code with digits counts as visible. An answer with no code, or with a bad one, keeps its other fields.
+- Each status of an answer with `held` true keeps the code. The digits lose their spaces, and digits with another character become `null`. A code with digits counts as visible. An answer with no code, or with a bad one, keeps its other fields.
+- Digits that are the code of a store item of the instruction become `null`, and the code stays visible. See "The model also reads the code".
+- A result has no `held` field: the rules get the status `none` for a product that no hand holds.
 
 The worker:
 
@@ -314,6 +319,84 @@ The worker:
 - Each result gets the log line `recognition session=<id> seq=<n> status=<status> code=<digits|visible|no> ms=<n>`. `code` is what the model said about a barcode in the frame. Each request for a still gets the line `still.request session=<id>`. It gives the server share of the time from glance to voice.
 - The digits of the code of a result go to the lookup of a barcode. A frame with the kind `label` never reaches the worker.
 - A result that names a store item goes through `ProductResolver.resolve` before it reaches the rules. With the details in the cache, this takes no time. See "Recognition knows the store list".
+
+### The product in the hand
+
+The voice names only the product that the shopper holds. A table behind the hand can hold other products of the store, and the model can read them too.
+
+- In the test of 2026-11-14 a label still named the can in the hand, and its prompt played. 0.5 seconds later one stream frame came back `identified` as another can, which stood on a table behind the hand, and that prompt took the place of the first one. The same happened a second time in that session.
+- `agents/recognition.md` says: find the hand first, look only at the product in it, and never give the name of a product that stands behind or beside it. A product on a table, on a shelf, in a basket, on a checkout belt, or in the hand of another person does not count. The product in the hand counts also when it is tilted, low in the frame, at an edge, or partly behind the fingers.
+- The field `held` makes the model say where the product is, before it names it. `normalizeResult` turns an answer with `held` false into `none`.
+- The rules do the rest: one result by sight never replaces a prompt. See R2 in "Rules".
+- A second form of the answer was measured and is not used: the field `heldDescription` before `held`, one short phrase about the thing in the hand. It named no more products, it gave one wrong name in 25 frames, and the median call took 150 ms more. The phrases showed what the model sees in a frame of 288 x 448 pixels: "a blurred can held in a hand", and "showing its barcode side" for a front.
+
+### Measured: the product in the hand, and items that look alike
+
+Measured on 2026-11-14 with `npm run held:probe`, the real service, one call at a time, the demo catalog, and a store list of 4 cans: one white and red energy drink, and three cans of one brand and one design in three flavors. Each can had 3 reference pictures.
+
+The set: 82 stream frames of one session of that day, which a person labeled by eye. The stream had fallen to 360 x 640, so 77 frames have 288 x 448 pixels and 5 have 402 x 626. The room had purple light. Each frame also shows one or more cans on a table.
+
+| Group | Frames |
+|---|---|
+| One of the three cans of one design in a hand, with its front to the camera | 30: 11, 11, and 8 for the three flavors |
+| One of these cans in a hand, from the back or the side, or cut off by the frame | 22 |
+| The white and red can in a hand | 15: 14 with its front, 1 cut off |
+| No product in a hand, and cans on a table | 15 |
+| Of the 67 frames with a can in a hand: the can is low in the frame or at its edge | 16 |
+
+Before and after, on the 82 frames. "Before" is the request of the commit `64cfbe5`. "After" is the request of this section: the field `held`, the instruction for the product in the hand, and the rule that only the flavor text names an item of one design.
+
+| Group | Before: right name, wrong name, `ambiguous`, `unsure`, `none` | After: right name, wrong name, `ambiguous`, `unsure`, `none` |
+|---|---|---|
+| Can of one design, front (30) | 0, 1, 2, 26, 1 | 0, 0, 18, 9, 2, and 1 failed call |
+| Can of one design, back or cut off (22) | 0, 0, 0, 12, 10 | 0, 0, 8, 8, 6 |
+| White and red can (15) | 10, 0, 0, 3, 2 | 11, 0, 0, 2, 1, and 1 `ambiguous` with the three other cans |
+| No product in a hand (15) | 0, 0, 0, 0, 14, and 1 failed call | 0, 0, 0, 0, 15 |
+| Low or at the edge (16 of the frames above) | 0, 0, 0, 7, 9 | 0, 0, 3, 5, 7, and 1 failed call |
+| Median and 90th percentile of a call | 1247 ms, 1553 ms | 1226 ms, 1451 ms |
+
+- The wrong name of "Before" is the error of the test: a can of one design in the hand, and the answer `identified` with the white and red can, at the confidence 0.95.
+- No call named a product in a frame with no product in a hand, before and after. The error came from frames with a product in the hand and another one behind it.
+- Recognition by sight names none of the three cans of one design in these frames, before and after. The frame has too few pixels for the flavor text, and the purple light makes the colors of two cans look the same. The gain is the answer `ambiguous` in place of `unsure`: 26 in place of 2. It asks for a still after one frame, and the still names the can.
+- `unsure` fell from 41 answers to 19. Each `unsure` answer had `held` true, in each run. No call answered `unsure` for a frame with no product in a hand. So the rules have no case for "`unsure` with `held` false": `normalizeResult` gives `none` for it.
+- The phone sent 12 stills in that session. The rules of the server asked for 5, the phone took 3 for a `glance.ambiguous` event, and the barcode scanner of the phone asked for 4. 2 of the 4 stills of the scanner show cans on a table and no product in a hand. The server did not ask for them, and no rule of the server stops them.
+- The "After" request was also run on 8 stills of the session (864 x 1008 and 1080 x 1440): the 2 stills with a readable front gave the right name, the 5 stills of a back gave `ambiguous`, and the still with the can at its edge gave `unsure`.
+
+What was tried, each on a part of the set. "Half" is each second frame of each group, 44 frames with 16 fronts of the cans of one design. "Subset" is 25 frames with 15 such fronts. The wrong names count the 44 or the 25 frames.
+
+| Variant | Frames | Fronts: right name, `ambiguous`, `unsure` | Wrong names | Median |
+|---|---|---|---|---|
+| `held` and the instruction for the hand, with the look-alike rule of before | half | 1, 0, 14 | 0 | 1211 ms |
+| The same, and the rule "name the item by its flavor text or by its color block" | half | 2, 5, 8 | 0 | 1191 ms |
+| That rule with `gemini-3.6-flash` at the thinking level `minimal` | half | 0, 4, 11 | 0 | 1869 ms |
+| That rule with `gemini-3.8-flash` at the thinking level `low`, its lowest | subset | 1, 3, 9 | 0, and 3 calls of more than 4 seconds | 2997 ms |
+| That rule with the field `heldDescription` | subset | 1, 4, 7 | 1 | 1338 ms |
+| That rule with the reference pictures at the media resolution `medium` | subset | 1, 2, 8 | 4 | 1267 ms |
+| That rule with 1 reference picture for each item | subset | 2, 4, 7 | 3 | 1105 ms |
+| That rule with the frame at the media resolution `ultra_high` | subset | 0, 3, 11 | 1 | 1785 ms |
+| The rule "only the flavor text names the item" (the "After" request) with 1 reference picture for each item | half | 0, 13, 2 | 4 | 1152 ms |
+| The "After" request with the frame before the reference pictures | subset | 0, 5, 6 | 6 | 1227 ms |
+| The "After" request, the same subset | subset | 1, 6, 8 | 0 | 1247 ms |
+
+- The color rule gave wrong flavors: with a color block as a reason for a name, the model named a can of another flavor, or the white and red can, at the confidence 0.95. So the instruction takes only the flavor text.
+- 3 reference pictures for each item gave fewer wrong names than 1. The newest picture of an item can show its back, and one picture is then no help for a front.
+- The reference pictures stay before the frame. With the frame first, 6 of 25 answers named the white and red can for another can in the hand.
+- The larger models did not name more cans, and their calls took 1.5 and 2.4 times as long. The model page (https://aistudio.google.com/docs/models, read on 2026-11-14) lists `gemini-3.6-flash` and `gemini-3.8-flash` as the stable larger models of the family, and the model list of the key holds both. So `GEMINI_MODEL` keeps its default.
+- The media resolution `high` of an image part has 1120 tokens, as the default (https://aistudio.google.com/docs/media-resolution, read on 2026-11-14), so it was not run. `ultra_high` has 2240 tokens: it named no more cans, and the median call took 550 ms more.
+- The numbers of two runs of one request differ. The "After" request ran two times on the 82 frames, with one sentence about the digits added between the runs: the fronts gave 1, 15, 13 and then 0, 18, 9. Each run had no wrong name, and one `ambiguous` answer with the three cans for the white and red can.
+- Not measured: the full frame of the phone. Each saved frame is the center crop of before, so no frame shows what the full frame adds. See `apps/mobile/android/README.md`.
+- Not measured: a second light, a second room, other products, and a session with the new rules.
+
+```bash
+CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.json npm run held:probe --workspace @glance/server -- --labels <labels.json>
+```
+
+- The labels file is `{ "frames": [{ "file": "<jpg>", "held": "<product ID>" or null, "view": "front", "back", "part", or "none", "edge": true or false }] }`. A path is relative to the folder of the file. `held` is the product in the hand, `view` is what the frame shows of it, and `edge` marks a product that is low in the frame or at its edge.
+- `--half a` or `--half b` takes each second frame of each group. `--pictures <n>` sets the reference pictures for each item, `--model <id>` the model, `--thinking minimal|low|medium|high` the thinking level, `--frame-resolution` and `--reference-resolution` the media resolution of the image parts (`low`, `medium`, `high`, or `ultra`), and `--template <file>` the instruction. `--out <file>` writes one JSON line for each frame.
+- The output has one line for each frame with the answer of the model, then one row for each group: `correct`, `wrong`, `ambiguous`, `unsure`, `unknown`, `none`, and `failed`. Then come the `unsure` answers by `held`, and the median and the 90th percentile of a call.
+- `wrong` is `identified` with another product than the one in the hand, and `ambiguous` with candidates that do not hold it. For a frame with no product in a hand, `none` is `correct`. The exit code is 1 with a wrong answer.
+- Each frame is one paid Gemini call. The frames of a test show a room and people: keep the labels file and the frames outside the repository.
+- This section took 584 recognition calls and 12 label calls.
 
 ### Stored frames
 
@@ -598,6 +681,8 @@ sequenceDiagram
 
 - `visible` is true when a hand holds a product up and the frame shows its barcode, or the package side with its barcode. The instruction gives false to a barcode on a shelf label, on a price tag, and on a product that stays on the shelf. `digits` holds the printed digits when the model can read each one. `agents/recognition.md` says: never guess a digit.
 - A model reads print and can write digits that are not there. So digits of the model count only with a right check digit and a product of the catalog or the store list. Then one frame is enough. Each other code of the model has no effect: the voice never says "not in this store" for digits that only the model read.
+- Digits that are the code of a store item of the instruction do not count. The ID of a store item is `gtin-<13 digits>`, so the instruction shows the model the code of each one. On 2026-11-14 the model wrote such a code for a barcode that it could not read: 6 times in about 640 calls, on stream frames of 288 x 448 pixels and on one still of 1080 x 1440. 5 of the 6 codes were those of another item of the same brand, and each one has a right check digit. `normalizeResult` makes such digits `null` and keeps the code visible. The still then follows, and the label call reads the digits: in the same stills it read each code right.
+- So the digits of the model count only for a catalog product with a `gtin`, whose ID does not show the code. An ID with no code in it for each store item would bring the digits back. This part is not built.
 - A package shown with its barcode side gets the status `none`, so the voice does not ask for the front.
 - The server sends `still.request` when the model saw a code in 2 frames less than 2 seconds apart, and the limits of a still allow one. The rule is `onFrameCode` in `src/sessions/code.ts`.
 
@@ -825,6 +910,14 @@ CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.j
 - The demo catalog is no input for `catalog:check` and `catalog:seed`: the check wants a look-alike pair and 12 products.
 - The default script of `--fake` names products of the dev catalog. So use the demo catalog with real recognition, or with a script of your own.
 
+The settings of the demo server, after the measurement of 2026-11-14 (see "Measured: the product in the hand, and items that look alike"):
+
+- Set `CATALOG_PATH=catalog/catalog.demo.json` and `STORE_LIST_PATH=catalog/store-list.demo.json`.
+- Do not set `GEMINI_MODEL`, `GEMINI_MEDIA_RESOLUTION`, `RECOGNITION_REFERENCES`, `RECOGNITION_CONCURRENCY`, and `RECOGNITION_MIN_CONFIDENCE`. The defaults are the measured request: `gemini-3.5-flash-lite`, the default media resolution, and 3 reference pictures for each item before the frame.
+- Take 3 reference pictures of each item: its front, its back, and the side with its name.
+- Do not set `SECOND_LOOK_WAIT_MS`. A can of one design then gets the look-alike line at once, and the still names it some seconds later. A wait of 5000 ms would hold the line for that still. Nobody tested it: in the session of 2026-11-14 the phone sent the still 2.9 to 3.3 seconds after the event, and the call of a still follows.
+- Do not set `SAVE_FRAMES` for the demo. Set it to collect frames for the next measurement.
+
 Measured in the test of 2026-11-14, with Ray-Ban Meta glasses and the real model:
 
 - The stream fell to 504 x 896, so the uploaded frames were about 402 x 626 and blurred. The scanner of the phone read no code at the length of an arm.
@@ -981,7 +1074,10 @@ flowchart LR
 The rules that exist:
 
 - A recognized product gets a glance prompt with a new ID (R1). A new product replaces the pending product (R2).
-- The product that a prompt replaced gets no prompt by sight while sight named the product of that prompt in the last second (`GO_BACK_AFTER_MS` in `src/sessions/glance.ts`). Two store items that look alike can get their names in turn, frame by frame. They then get two prompts, and the second one stays. A barcode and a label match are sure, so they bring the first product back at once.
+- A result by sight replaces the prompt of another product only as the second result in a row for that product, at most 1.5 seconds after the first one (`SWITCH_WITHIN_MS` in `src/sessions/glance.ts`). Each result between them ends the row: a result for the product of the prompt, for a third product, and a result with no name. So one stray frame never changes the product, while the line of the prompt plays, while its head window is open, and after it. In the test of 2026-11-14 one frame named a can on a table behind the can in the hand, 0.5 seconds after the prompt of the can in the hand.
+- This holds for each product prompt: one that a barcode, a label match, digits of the model, or a still opened, and one that a stream frame opened. With no product prompt, one result by sight opens a prompt, as before.
+- A barcode, a label match, and digits of the model are sure. They replace a prompt at once.
+- The product that a prompt replaced gets no prompt by sight while sight named the product of that prompt in the last second (`GO_BACK_AFTER_MS` in `src/sessions/glance.ts`). Two store items that look alike can get their names in turn, in pairs of frames. They then get two prompts, and the second one stays. Names that change with each frame keep the first prompt. A barcode and a label match bring the first product back at once.
 - Results inside the view time belong to one appearance. A product that comes back after it left the view gets a new prompt.
 - A product prompt ends when its product left the view for 15 seconds (R5).
 - A product in the cart gets the prompt for "add another" (R11).
@@ -1090,7 +1186,7 @@ The audit of 2026-11-14: each line that the server speaks with no action of the 
 
 | Line | Trigger | Limit of its rule | Guard |
 |---|---|---|---|
-| `glance.new`, `glance.inCart`: the product prompt. Sound `warning` with a warning | An `identified` result, a barcode of the store, or a label match | One for each appearance of the product (R1). A new product takes the place of the prompt (R2) | always |
+| `glance.new`, `glance.inCart`: the product prompt. Sound `warning` with a warning | An `identified` result, a barcode of the store, or a label match | One for each appearance of the product (R1). A new product takes the place of the prompt (R2): by sight with its second result in a row, and at once with a barcode or a label match | always |
 | `glance.unknown`: "I do not know this product." | An `unknown` result, or a failed label read of a still that sight asked for | One for each appearance (R13). It waits for a still | one for each appearance, then 20 s and 3 s |
 | `glance.partial`: "I can see part of it. ..." | An `unsure` result with an aim hint | One each 5 seconds. None while a barcode has the voice | 20 s for one hint text, 3 s |
 | `glance.ambiguous`: the look-alike line | An `ambiguous` result | One for each appearance of the same candidates | 20 s, 3 s |
@@ -1110,7 +1206,7 @@ The audit of 2026-11-14: each line that the server speaks with no action of the 
 
 - A warning has no line of its own. The allergen and diet warnings are part of the product prompt, and the budget warning is part of `cart.added`, which answers a yes.
 - The lines `cart.added`, `cart.removed`, `glance.skipped`, `undo.nothing`, `hint.lookAtCode`, `info.total`, `info.cart`, `info.help`, the four `ask` lines, and `checkout.biometric` answer an action. The guard never drops them.
-- Results that change between two products give two prompt lines, and no line for the changes after them: see R2 in "Rules". A third product gets its prompt line at once. The guard lets each prompt play, because a prompt with no line cannot take a nod.
+- Results that change between two products give one prompt line, or two when the names change in pairs of frames, and no line for the changes after them: see R2 in "Rules". A third product gets its prompt line with its second result in a row. The guard lets each prompt play, because a prompt with no line cannot take a nod.
 - Not limited: a connection that drops again and again gives "Connection lost" on the phone and "Back online." for each drop of 3 seconds or more.
 
 What the phone plays by itself. The Android app and the phone UI were read for this audit on 2026-11-14:
@@ -1155,7 +1251,8 @@ What the phone plays by itself. The Android app and the phone UI were read for t
 
 An `ambiguous` result names two or more candidates. The model cannot tell which of them the frame shows.
 
-- If the product of the current prompt is one of the candidates, the prompt ends with `glance.cleared`. The shopper cannot add a product that the model is no longer sure of.
+- If the product of the current prompt is one of the candidates, and a stream frame opened that prompt, the prompt ends with `glance.cleared`. The shopper cannot add a product that the model is no longer sure of.
+- A prompt that a sure source opened or confirmed stays, and the result has no effect. The sure sources are a barcode, a label match, digits of the model, and a still. A stream frame is smaller than a still, and for store items of one design it answers `ambiguous` in most frames. Without this rule each such prompt would end 150 ms after its start.
 - If the current prompt is for another product, and that product is in view, the result has no effect.
 - In each other case the event `glance.ambiguous` carries the candidates as product references, and the voice speaks the line `glance.ambiguous`. The line has the priority `normal`, no sound, and no interrupt. It is no prompt, so a yes adds nothing.
 - One appearance gets one line. Results with the same candidates, each less than 3 seconds after the one before, are one appearance. The order of the candidates does not count. The guard for the voice can drop the line of a new appearance, and the event still goes out.
@@ -1189,7 +1286,7 @@ sequenceDiagram
   end
 ```
 
-- With `SECOND_LOOK_WAIT_MS=0`, which is the default, the look-alike line plays at once, and the result of a still counts as the result of a stream frame.
+- With `SECOND_LOOK_WAIT_MS=0`, which is the default, the look-alike line plays at once, and the result of a still goes through the rules of a stream frame. One difference stays: a prompt that a still opened is sure. See "Look-alike products".
 - With a wait, an `ambiguous` result of a stream frame gives the event `glance.ambiguous` at once. The line waits in `SessionState.heldAmbiguous`.
 - An `identified` result drops the line that waits, for a still and for a stream frame. The product gets its usual prompt (R1).
 - Each other result of a still speaks the line at once: `ambiguous`, `unknown`, `unsure`, `none`, and a product ID that the catalog does not hold. That result has no other effect, so no second line and no second event follows.
