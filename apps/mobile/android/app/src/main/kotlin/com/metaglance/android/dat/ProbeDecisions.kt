@@ -18,4 +18,7 @@ object ProbeDecisions {
     const val PITCH_DOWN_SIGN = 1
     val YAW_AXIS = Axis.Y
     const val MOTION_NEEDS_STREAM = true
+
+    /** True if a line must play on the phone speaker, because a line in the glasses disturbs the stream. */
+    const val AUDIO_ON_PHONE = false
 }

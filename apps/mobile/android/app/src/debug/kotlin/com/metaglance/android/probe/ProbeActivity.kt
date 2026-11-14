@@ -32,11 +32,16 @@ import com.meta.wearable.dat.motion.types.MotionSample
 import com.meta.wearable.dat.motion.types.MotionSource
 import com.meta.wearable.dat.motion.types.Vector3
 import com.metaglance.android.GlanceApp
+import com.metaglance.android.audio.ExoLinePlayer
 import com.metaglance.android.audio.PhoneVoice
 import com.metaglance.android.dat.DatLink
 import com.metaglance.android.dat.ProbeDecisions
 import com.metaglance.android.mock.MockGlassesController
+import com.metaglance.android.pipeline.FramePipeline
 import com.metaglance.android.pipeline.QrScanner
+import com.metaglance.core.audio.PlayableLine
+import com.metaglance.core.contract.Lang
+import com.metaglance.core.contract.SoundName
 import com.metaglance.core.gesture.GyroSample
 import com.metaglance.core.gesture.GyroStats
 import com.metaglance.core.gesture.HeadGesture
@@ -46,6 +51,7 @@ import com.metaglance.core.gesture.MotionCsv
 import com.metaglance.core.gesture.Sensitivity
 import com.metaglance.core.image.I420
 import com.metaglance.core.image.RawFrame
+import com.metaglance.core.net.GlanceApi
 import java.io.File
 import java.io.FileWriter
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +61,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.OkHttpClient
 
 /** The probe of step C1: one screen with buttons and a log. It is in the debug build only. */
 class ProbeActivity : AppCompatActivity() {
@@ -75,7 +82,9 @@ class ProbeActivity : AppCompatActivity() {
     private var recordJob: Job? = null
     private var enduranceJob: Job? = null
     private var gestureJob: Job? = null
+    private var pipelineJob: Job? = null
     private val voice: PhoneVoice by lazy { PhoneVoice(this) }
+    private var linePlayer: ExoLinePlayer? = null
 
     private val bluetoothRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         onBluetooth(granted)
@@ -116,6 +125,8 @@ class ProbeActivity : AppCompatActivity() {
         recordJob?.cancel()
         enduranceJob?.cancel()
         gestureJob?.cancel()
+        pipelineJob?.cancel()
+        linePlayer?.release()
         voice.shutdown()
         log.onLine = {}
         super.onDestroy()
@@ -188,6 +199,13 @@ class ProbeActivity : AppCompatActivity() {
             gestureButton.text = if (on) "Gesture test: on" else "Gesture test: off"
         }
         addButton("Still") { lifecycleScope.launch { datLink.captureStill() } }
+        lateinit var pipelineButton: Button
+        pipelineButton = addButton("Pipeline test: off") {
+            val on = togglePipelineTest()
+            pipelineButton.text = if (on) "Pipeline test: on" else "Pipeline test: off"
+        }
+        addButton("Play test line") { playLine("/clip.wav") }
+        addButton("Play bad clip") { playLine("/missing.mp3") }
         lateinit var recordButton: Button
         recordButton = addButton("Record motion: off") {
             val on = toggleMotionRecording()
@@ -297,6 +315,37 @@ class ProbeActivity : AppCompatActivity() {
             }
         }
         return true
+    }
+
+    // Runs the frame path of the app with a gate that always passes. Nothing goes to a server.
+    private fun togglePipelineTest(): Boolean {
+        pipelineJob?.let {
+            it.cancel()
+            pipelineJob = null
+            return false
+        }
+        pipelineJob = lifecycleScope.launch(Dispatchers.Default.limitedParallelism(1)) {
+            val pipeline = FramePipeline(
+                gate = { null },
+                onKioskText = { text -> log.line("kiosk $text") },
+                onUpload = { header, jpeg -> log.line("upload seq=${header.seq} ${header.w}x${header.h} ${jpeg.size} bytes") },
+                log = log::line
+            )
+            try {
+                datLink.frames.collect { pipeline.onFrame(it) }
+            } finally {
+                pipeline.close()
+            }
+        }
+        return true
+    }
+
+    // The fake server has /clip.wav and no /missing.mp3, so the second path shows the change to the phone voice.
+    private fun playLine(path: String) {
+        val serverUrl = glance.profileStore.serverUrl
+        val player = linePlayer ?: ExoLinePlayer(this, voice, GlanceApi(OkHttpClient(), serverUrl)::clipUrl).also { linePlayer = it }
+        log.line("line start $serverUrl$path")
+        player.play(PlayableLine("t", SoundName.FOUND, serverUrl + path, "Test line.", Lang.EN, 1.0, false)) { log.line("line ended") }
     }
 
     private fun toggleMotionRecording(): Boolean {
