@@ -109,11 +109,17 @@ enum class BarcodeSource {
     OCR
 }
 
-/** The reason of a `still.request`. `LABEL` is a barcode that the server sees and cannot read. */
+/**
+ * The reason of a `still.request`. `LABEL` is a barcode that the server sees and cannot read.
+ * `REFERENCE` is a reference picture of a store item, which a person asked for.
+ */
 @Serializable
 enum class StillPurpose {
     @SerialName("label")
-    LABEL
+    LABEL,
+
+    @SerialName("reference")
+    REFERENCE
 }
 
 @Serializable

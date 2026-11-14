@@ -38,6 +38,7 @@ import com.metaglance.core.contract.Profile
 import com.metaglance.core.contract.Profiles
 import com.metaglance.core.contract.ServerEvent
 import com.metaglance.core.contract.ServerToDevice
+import com.metaglance.core.contract.StillPurpose
 import com.metaglance.core.frame.FrameHeader
 import com.metaglance.core.frame.FrameKind
 import com.metaglance.core.gesture.HeadGestureConfig
@@ -511,8 +512,11 @@ class SessionController(
             is ServerToDevice.SessionRest -> stopDat()
             is ServerToDevice.SessionEnd -> onServerSessionEnd()
             is ServerToDevice.BiometricRequest -> onBiometricRequest()
-            // The frame path owns the limit for label stills, so the request goes through it.
-            is ServerToDevice.StillRequest -> framePipeline?.requestLabelStill() ?: log("still.request: no stream")
+            is ServerToDevice.StillRequest -> when (message.purpose) {
+                // The frame path owns the limit for label stills, so the request goes through it.
+                StillPurpose.LABEL -> framePipeline?.requestLabelStill() ?: log("still.request: no stream")
+                StillPurpose.REFERENCE -> takeReferenceStill()
+            }
         }
     }
 
@@ -790,6 +794,45 @@ class SessionController(
                     }
                     LabelOutcome.Dropped -> log("label still $size dropped: face detection failed, $took")
                 }
+            } finally {
+                policy.onEnd()
+            }
+        }
+    }
+
+    /**
+     * A reference picture of a store item: a person holds the product up and asks the server for it. The still
+     * does not wait for the limits of a label still, and the phone reads no code in it, because the server wants
+     * the picture also when the barcode is in view. Each face is pixelated, as in each other upload.
+     */
+    private fun takeReferenceStill() {
+        val startMs = SystemClock.elapsedRealtime()
+        val policy = stillPolicy
+        if (!datRunning || !policy.tryStartNow(startMs)) {
+            log(if (datRunning) "reference still dropped: a still runs" else "reference still dropped: no stream")
+            return
+        }
+        scope.launch {
+            try {
+                val photo = dat.captureStill() ?: return@launch
+                val capturedAt = System.currentTimeMillis()
+                val still = withContext(Dispatchers.Default) {
+                    val faces = FaceFinder()
+                    try {
+                        StillPhoto.prepareLabel(photo) { faces.find(it) }
+                    } finally {
+                        faces.close()
+                    }
+                }
+                if (still == null) {
+                    log("reference still dropped: face detection failed")
+                    return@launch
+                }
+                val header = FrameHeader(uploadSeq.incrementAndGet(), capturedAt, still.width, still.height, blurred = true, kind = FrameKind.LABEL)
+                val sent = socket?.sendFrame(header, still.jpeg) == true
+                tap?.onFrame(header, still.jpeg.size, sent)
+                val result = if (sent) "sent" else "not sent, the socket is down"
+                log("reference still seq=${header.seq} ${still.width}x${still.height} ${still.jpeg.size} bytes $result, ${SystemClock.elapsedRealtime() - startMs} ms")
             } finally {
                 policy.onEnd()
             }

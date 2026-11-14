@@ -17,6 +17,17 @@ class StillPolicy(private val everyMs: Long = DEFAULT_EVERY_MS) {
         return true
     }
 
+    /**
+     * For a still that a person asked for, for example a reference picture: it does not wait for `everyMs`.
+     * Returns false only while a capture runs. On true, call [onEnd] when the capture ends.
+     */
+    fun tryStartNow(nowMs: Long): Boolean {
+        if (running) return false
+        running = true
+        lastStartMs = nowMs
+        return true
+    }
+
     fun onEnd() {
         running = false
     }

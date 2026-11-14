@@ -49,10 +49,14 @@ class CodecTest {
         )
     }
 
-    @Test fun `decodes a request for a still of a label, and no request with another purpose`() {
+    @Test fun `decodes a request for a still of a label or of a reference picture, and no request with another purpose`() {
         assertEquals(
             ServerToDevice.StillRequest(StillPurpose.LABEL),
             Codec.decodeServerToDevice("""{"t":"still.request","purpose":"label"}""")
+        )
+        assertEquals(
+            ServerToDevice.StillRequest(StillPurpose.REFERENCE),
+            Codec.decodeServerToDevice("""{"t":"still.request","purpose":"reference"}""")
         )
         assertNull(Codec.decodeServerToDevice("""{"t":"still.request","purpose":"face"}"""))
         assertNull(Codec.decodeServerToDevice("""{"t":"still.request"}"""))
