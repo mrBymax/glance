@@ -17,8 +17,30 @@ const KEPT_LOG_LINES = 5000;
 const SERVER_VARIABLES = [
   'PORT', 'PUBLIC_BASE_URL', 'MONGODB_URI', 'MONGODB_DB', 'CATALOG_PATH', 'GEMINI_API_KEY', 'GEMINI_MODEL',
   'GEMINI_MEDIA_RESOLUTION', 'RECOGNITION_MIN_CONFIDENCE', 'REQUIRE_BLUR', 'FAKE_RECOGNITION', 'FAKE_SPEECH',
-  'ELEVENLABS_API_KEY', 'ELEVENLABS_VOICE_EN', 'ELEVENLABS_VOICE_IT', 'SPEECH_CACHE_DIR', 'SAVE_FRAMES', 'PAYMENT_DELAY_MS', 'DEMO_KEY',
+  'ELEVENLABS_API_KEY', 'ELEVENLABS_VOICE_EN', 'ELEVENLABS_VOICE_IT', 'SPEECH_CACHE_DIR', 'SAVE_FRAMES', 'PAYMENT_DELAY_MS',
+  'SECOND_LOOK_WAIT_MS', 'DEMO_KEY', 'STORE_LIST_PATH', 'FAKE_PRODUCT_INFO', 'OFF_BASE_URL', 'PRODUCT_INFO_USER_AGENT', 'PRODUCT_CACHE_DIR',
 ];
+
+/**
+ * The environment of the server of a test: the shell environment with no server variable, and then the three fake switches.
+ * So the server reads the dev catalog and the dev store list, and it calls no vendor and no Open Food Facts.
+ */
+export function fakeServerEnv(shell, { port, fakeScript, paymentDelayMs, demoKey }) {
+  const env = { ...shell };
+  for (const name of SERVER_VARIABLES) delete env[name];
+  env.PORT = String(port);
+  env.FAKE_SPEECH = '1';
+  env.FAKE_RECOGNITION = fakeScript ?? '1';
+  env.FAKE_PRODUCT_INFO = '1';
+  env.PAYMENT_DELAY_MS = String(paymentDelayMs);
+  if (demoKey !== null) env.DEMO_KEY = demoKey;
+  return env;
+}
+
+/** `health` is the answer of GET /healthz. A server that reports no switch for the product details counts as real. */
+export function inFakeMode(health) {
+  return health.fakeRecognition === true && health.fakeSpeech === true && health.fakeProductInfo === true;
+}
 
 /** Asks the system for a port that is free now. */
 export function freePort() {
@@ -39,17 +61,11 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
  * `fakeScript` is the path of a FAKE_RECOGNITION script file. Without it the server plays its default script.
  * `demoKey` is the key of GET /api/demo/latest. Without it that path answers 404.
  * Returns the address, the demo key, the log lines so far, and `stop`.
- * Throws when the server does not start, or when one of its two fake switches is off.
+ * Throws when the server does not start, or when one of its three fake switches is off.
  */
 export async function startFakeServer({ fakeScript, paymentDelayMs = 300, demoKey = null } = {}) {
   const port = await freePort();
-  const env = { ...process.env };
-  for (const name of SERVER_VARIABLES) delete env[name];
-  env.PORT = String(port);
-  env.FAKE_SPEECH = '1';
-  env.FAKE_RECOGNITION = fakeScript ?? '1';
-  env.PAYMENT_DELAY_MS = String(paymentDelayMs);
-  if (demoKey !== null) env.DEMO_KEY = demoKey;
+  const env = fakeServerEnv(process.env, { port, fakeScript: fakeScript ?? null, paymentDelayMs, demoKey });
 
   // node runs the server with no npm and no shell between, so `stop` ends the server process itself.
   const child = spawn(process.execPath, ['--import', 'tsx', 'src/main.ts', '--fake'], {
@@ -84,9 +100,9 @@ export async function startFakeServer({ fakeScript, paymentDelayMs = 300, demoKe
       // The server does not listen yet.
     }
     if (health) {
-      if (health.fakeRecognition !== true || health.fakeSpeech !== true) {
+      if (!inFakeMode(health)) {
         await stop();
-        throw new Error(`The server is not in fake mode: ${JSON.stringify(health)}. A test must make no vendor call.`);
+        throw new Error(`The server is not in fake mode: ${JSON.stringify(health)}. A test must call no vendor and no Open Food Facts.`);
       }
       return { url, port, demoKey, log, stop };
     }

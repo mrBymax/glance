@@ -8,7 +8,7 @@
   "scripts": {
     "server-kotlin": "node server-kotlin.mjs",
     "server-web": "node server-web.mjs",
-    "test": "node --test android/",
+    "test": "node --test android/ lib/",
     "android:clips": "node android/make-clips.mjs",
     "android:spine": "node android/run-spine.mjs",
     "android:state": "node android/run-spine.mjs --suite state",
