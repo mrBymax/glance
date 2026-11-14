@@ -499,13 +499,14 @@ class DatLink(
         fun stop() {
             if (stopRequested) return
             stopRequested = true
-            val lastStream = camera?.stream?.state?.value?.toCore() ?: DatStream.NONE
             camera?.stop()
             session.stop()
+            // The stream collectors end here, so no later stream state arrives. The snapshot gets the end states
+            // from this function and from release.
             cameraScope?.cancel()
             camera = null
             if (isCurrent) {
-                _snapshot.update { it.copy(session = session.state.value.toCore(), stream = lastStream) }
+                _snapshot.update { it.copy(session = session.state.value.toCore(), stream = endStream(DatStream.STOPPING)) }
             }
             // The state collector stays until STOPPED arrives. Then onState releases this run.
         }
@@ -514,9 +515,14 @@ class DatLink(
             job.cancel()
             if (isCurrent) {
                 current = null
-                _snapshot.update { it.copy(motionStarted = false, inputsActive = false, speechStarted = false) }
+                _snapshot.update {
+                    it.copy(stream = endStream(DatStream.STOPPED), motionStarted = false, inputsActive = false, speechStarted = false)
+                }
             }
         }
+
+        // A run with no camera has no stream.
+        private fun endStream(state: DatStream): DatStream = if (cameraRequested) state else DatStream.NONE
 
         private fun onState(state: DeviceSessionState) {
             log("session $state")

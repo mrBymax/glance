@@ -43,6 +43,7 @@ import com.metaglance.core.audio.PlayableLine
 import com.metaglance.core.contract.Lang
 import com.metaglance.core.contract.SoundName
 import com.metaglance.core.gesture.GyroSample
+import com.metaglance.core.gesture.GyroScript
 import com.metaglance.core.gesture.GyroStats
 import com.metaglance.core.gesture.HeadGesture
 import com.metaglance.core.gesture.HeadGestureConfig
@@ -223,6 +224,22 @@ class ProbeActivity : AppCompatActivity() {
                 }
                 glasses.services.motion.setMotionFeed(samples, true)
                 log.line("mock motion feed: ${samples.size} samples with gyroscope x=1.0, in a loop")
+            }
+        }
+        addButton("Mock: nod") {
+            withMockGlasses { glasses ->
+                val config = HeadGestureConfig.of(
+                    Sensitivity.NORMAL,
+                    ProbeDecisions.PITCH_AXIS,
+                    ProbeDecisions.PITCH_DOWN_SIGN,
+                    ProbeDecisions.YAW_AXIS
+                )
+                // 3 seconds of rest, one nod of 15 degrees, then rest: one nod each 4 seconds in a loop.
+                val samples = GyroScript(config).rest(3000).pitch(0.26, 250).pitch(-0.26, 250).rest(500).samples().map {
+                    MotionSample(it.tNs, null, Vector3(it.x, it.y, it.z), null, null, MotionSource.GLASSES)
+                }
+                glasses.services.motion.setMotionFeed(samples, true)
+                log.line("mock motion feed: one nod each 4 seconds, ${samples.size} samples in a loop")
             }
         }
         addButton("Mock: double tap") { withMockGlasses { it.services.input.select(InputSource.CAPTOUCH) } }

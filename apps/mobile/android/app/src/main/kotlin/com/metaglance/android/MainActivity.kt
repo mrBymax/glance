@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -19,18 +20,15 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewAssetLoader
 import com.metaglance.android.bridge.UiAssetsHandler
 import com.metaglance.android.bridge.WebBridge
-import com.metaglance.core.contract.NativeToPage
-import com.metaglance.core.contract.PageToNative
-import com.metaglance.core.contract.Profiles
-import com.metaglance.core.state.StateMapper
 import java.io.IOException
-import kotlinx.coroutines.launch
 
-/** The one screen of the app: a WebView with the phone UI, or with the placeholder page. */
+/**
+ * The one screen of the app: a WebView with the phone UI, or with the placeholder page.
+ * `SessionController` handles each message of the page.
+ */
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var bridge: WebBridge
@@ -43,13 +41,13 @@ class MainActivity : AppCompatActivity() {
         volumeControlStream = AudioManager.STREAM_MUSIC
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         buildWebView()
-        bridge = WebBridge(webView, ::onPageMessage)
+        bridge = WebBridge(webView, glance.session::onPageMessage)
 
         // After a registration, Meta AI opens this activity again. The SDK must run before it gets the intent.
         if (glance.mockGlasses.enabled || bluetoothGranted()) glance.datLink.initialize(bluetoothGranted())
         glance.datLink.handleIntent(this, intent)
 
-        lifecycleScope.launch { glance.datLink.snapshot.collect { sendState() } }
+        glance.session.attachPage(bridge::send, this)
         pageUrl = if (BuildConfig.DEBUG && BuildConfig.UI_DEV_URL.isNotEmpty()) {
             BuildConfig.UI_DEV_URL
         } else {
@@ -65,30 +63,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        glance.session.detachPage(this)
         bridge.close()
         (webView.parent as? FrameLayout)?.removeView(webView)
         webView.destroy()
         super.onDestroy()
     }
 
-    private fun onPageMessage(message: PageToNative) {
-        when (message) {
-            is PageToNative.UiReady -> {
-                sendState()
-                bridge.send(NativeToPage.ProfileChanged(glance.profileStore.profile))
-            }
-            is PageToNative.ProfileSet -> {
-                val profile = Profiles.applyPatch(glance.profileStore.profile, message.patch)
-                glance.profileStore.profile = profile
-                bridge.send(NativeToPage.ProfileChanged(profile))
-            }
-            else -> Log.i(TAG, "page message with no handler yet: $message")
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val handled = when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> glance.session.onVolumeKey(up = true)
+            KeyEvent.KEYCODE_VOLUME_DOWN -> glance.session.onVolumeKey(up = false)
+            else -> false
         }
-    }
-
-    private fun sendState() {
-        val state = StateMapper.nativeState(glance.datLink.snapshot.value, phoneOnline = true, socketExpected = false, socketOpen = false)
-        bridge.send(NativeToPage.NativeStateChanged(state))
+        return handled || super.onKeyDown(keyCode, event)
     }
 
     // The page needs JavaScript. It comes from the APK, or from the dev server of a debug build.
