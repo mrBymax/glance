@@ -6,9 +6,15 @@
   <img alt="Glance logo" src="assets/Glance.png">
 </picture>
 
-Meta Glance is a proof of concept for the Meta challenge at Junction 2026. Smart glasses replace the scanner in scan-as-you-shop: a glance tells the name and the price of a product, a nod adds it to the cart, and a nod at the kiosk code pays.
+Meta Glance is a protocol for acting in the real world with AI glasses. It is a proof of concept for the Meta challenge at Junction 2026.
 
-The design is in `docs/superpowers/specs/2026-11-13-meta-glance-design.md`, and the design of the barcode scan is in `docs/superpowers/specs/2026-11-14-barcode-lookup-design.md`. The implementation plans are in `docs/superpowers/plans/`. The architecture of the parts that exist is in `docs/architecture.md`.
+The loop is the same at each place: look at a Glance code, hear what it is and what it costs, and nod to confirm. A place is anything that shows a Glance code and acts on the result: a checkout, a bus, a gate, a vending machine.
+
+The first working demo is a store. A glance tells the name and the price of a product, a nod adds it to the cart, and a nod at the code of the checkout pays. The payment is a mock. No other place exists yet.
+
+`docs/protocol.md` describes the protocol: the code, the session, the confirmation, and what a place must implement. The product site has its own branch, `feat/product-site`, and its own pull request.
+
+The design of the store demo is in `docs/superpowers/specs/2026-11-13-meta-glance-design.md`, and the design of the barcode scan is in `docs/superpowers/specs/2026-11-14-barcode-lookup-design.md`. The implementation plans are in `docs/superpowers/plans/`. The architecture of the parts that exist is in `docs/architecture.md`.
 
 ## State of the build
 

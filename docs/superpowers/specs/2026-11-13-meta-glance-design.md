@@ -1,5 +1,7 @@
 # Meta Glance PoC - design document
 
+Note of 2026-11-14: the framing changed. Meta Glance is a protocol for AI glasses, and the store of this document is its first demo. See `docs/protocol.md`.
+
 - Date: 2026-11-13
 - Status: draft 3, after five zero-context reviews and the first team review on pull request 3. It waits for team approval.
 - Event: Junction 2026, Meta challenge "AI Glasses for Everyone, Everyday" (`CHALLENGE.md`)
