@@ -34,6 +34,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `agents/answers.md` (repository root) | The instruction for the model that answers a question. |
 | `scripts/check-ask.ts` | `npm run ask:check`: one question to the real service. See "Checks". |
 | `scripts/replay.ts` | `npm run replay`: the accuracy of the real service on a folder of frames. See "Replay a test set". |
+| `scripts/live-probe.ts` | `npm run live:probe`: the delay and the answers of a Gemini Live session on saved frames. See "Measured: a Gemini Live session". |
 | `scripts/smoke.ts` | `npm run smoke`: a check of a running server through its REST paths, its device socket, and its events stream. See "Checks". |
 | `src/sessions/` | The cart rules as the pure function `step`, the session runtime, and the registry. See "Rules" and "Session runtime". |
 | `src/speech/` | The text of each spoken line, and the speech clips. See "Spoken text" and "Speech clips". |
@@ -214,6 +215,7 @@ sequenceDiagram
 | `save.ts` | `createFrameSaver`: the writer of the `SAVE_FRAMES` switch |
 | `fake.ts` | The script file and `ScriptPlayer` of fake recognition |
 | `replay.ts` | `listFrames`, `replayFrames`, `summarize`, and `formatTable` of the replay tool |
+| `liveReport.ts` | The function `report_view` of a Gemini Live session, its instruction, and the answer that a call gives. Only `scripts/live-probe.ts` uses it |
 
 The request:
 
@@ -310,6 +312,70 @@ latency: median 1340 ms, p95 2210 ms
 - The numbers of the table above are an example of the format. No replay with the real service has run yet.
 
 Frames with `blurred: false` did not go through face detection on the phone. Without `REQUIRE_BLUR` they still go to Gemini, and the server logs `frame not blurred: the phone did not run face detection` one time for each session. With `REQUIRE_BLUR=1` the server drops them and logs `frame dropped: not blurred` one time for each session.
+
+### Measured: a Gemini Live session
+
+The server has no Live path. A Live session was measured on 2026-11-14 as a second path beside the call for each frame, and it gave no gain that the server can use. `scripts/live-probe.ts` repeats the measurement.
+
+What the documentation says (read on 2026-11-14):
+
+- Models: `gemini-3.8-live` (the default), `gemini-3.8-live-extended-thinking`, `gemini-3.1-flash-live-preview` (called legacy), and `gemini-2.5-flash-native-audio-preview-12-2025`. See https://aistudio.google.com/docs/models and https://aistudio.google.com/docs/live-api/capabilities.
+- Input: audio, text, and JPEG images at 1 frame each second at most. Output: audio only. So a structured answer must be a function call. See https://aistudio.google.com/docs/live-api.
+- Function calls: each model has them. `gemini-3.1-flash-live-preview` waits for the answer of the client, and `gemini-3.8-live` does not wait by default. See https://aistudio.google.com/docs/live-api/tools.
+- Limits: a session with video ends after 2 minutes without `contextWindowCompression`. A connection lives for about 10 minutes, and the server sends `goAway` before its end. A new connection continues the session with the handle of `sessionResumption`, which is valid for 2 hours. See https://aistudio.google.com/docs/live-api/session-management.
+- The pages give no delay in milliseconds and no rate limit.
+
+What the service did, with `@google/genai` 3.3.0:
+
+- `ai.live.connect` needs `httpOptions: { apiVersion: 'v1beta' }`. Without it the socket answered 404.
+- The key of the team opens a session of 3 of the 4 models. Its model list shows none of them. `gemini-3.8-live-extended-thinking` needs a thinking level and was not measured.
+- A model starts no turn for a frame. With frames only, and an instruction to report each change or each second, no report came in 20 seconds (2 runs).
+- `proactivity.proactiveVideo` would start a turn for an image. The service refuses it for `gemini-3.8-live` and for the 2.5 model: "Proactive video is not supported for this model."
+- `activityStart`, one frame, and `activityEnd` with the automatic activity detection off closed the socket of both models: "Precondition check failed."
+- The text `report` through `sendRealtimeInput` starts a turn, and the model then calls `report_view`. This is the only form that gave reports.
+- A new `report` before the report of the last one stops that turn. With one `report` each 500 ms, `gemini-3.8-live` gave 1 report in 44 seconds. So the client sends the next `report` when a report arrives.
+- The service took 2.6 frames each second, above the documented 1.
+- No session sent audio.
+
+The measurement: session `9c6f46c1` of the test of 2026-11-14, stream frames 300 to 400 at the gaps of their file times (about 380 ms), with `CATALOG_PATH=catalog/catalog.demo.json` and `STORE_LIST_PATH=catalog/store-list.demo.json`. The model can name 2 products: the oat drink and the can. A person looked at the frames:
+
+- No hand holds a product before frame 316 and from frame 389 on.
+- A hand holds the can with its back to the camera in frames 316 to 349 and 358 to 361.
+- The front of the can is in view from frame 362 to frame 384. The can moves in frames 385 to 388.
+
+| Path | Runs | First name after frame 362 | Results | Names in frames 362 to 384 | Wrong names |
+|---|---|---|---|---|---|
+| Call for each frame, the log of the test (3 calls at a time) | 1 | 1466 ms | one for each frame, each about 1.3 s old | 18 of 22 results | 0 |
+| Call for each frame, one call at a time, 52 calls | 1 | 988 ms | median 1071 ms for each call | 17 of 23 frames | 0 |
+| `gemini-3.1-flash-live-preview`, next `report` after each report | 4 | 1054, 1589, 1633, 2641 ms | one each 750 ms (median) | each report after the first name | No name before the can came. The name stayed for 1 to 3 reports after the can left |
+| The same with `mediaResolution` low | 1 | 1477 ms | one each 720 ms | each report after the first name | 1: the first report named the can with no product in a hand |
+| `gemini-3.1-flash-live-preview`, one `report` each second | 1 | 2325 ms | one each second | each report after the first name | 0 |
+| `gemini-3.8-live`, next `report` after each report | 3 | 713, 893, 956 ms | one each 810 ms (median) | each report but 1 after the first name | In 2 of 3 runs the first report named the oat drink with no product in a hand. In each run it named the can with no can in a hand, up to 4 seconds after the can left |
+| `gemini-3.8-live`, one `report` each second | 1 | 912 ms | one each second | each report after the first name | 1: the can 3.7 seconds after the last frame |
+
+- `gemini-3.1-flash-live-preview` is not faster. Its first name came 1.05 to 2.6 seconds after the first frame with the front. The call for each frame gave it after 1.0 to 1.5 seconds. Each report needs 0.5 to 1.2 seconds, and a frame also waits for the next `report`.
+- `gemini-3.8-live` gave the first name 0.1 to 0.7 seconds earlier than the call for each frame. It also named a product with no product in view. In the long run, 25 of its 52 reports gave the 13 digits of the product ID as the digits of a barcode, and no frame shows readable digits. The voice says a name and a price, so the server cannot use these reports.
+- A session keeps its frames as context. After the first name, a Live model named the can in each report, also in the frames where the can moves and the call for each frame answered `unsure`. For the same reason the name stayed after the can left.
+- For the back of the can, `gemini-3.1-flash-live-preview` answered `none` with a visible code, as the call for each frame does.
+- Tokens: the context grew by about 147 tokens each second with `gemini-3.1-flash-live-preview` (8056 after 43 seconds), and by about 443 with `gemini-3.8-live` (20878 after 43 seconds). `gemini-3.8-live` also wrote 33 to 423 thought tokens for each report.
+- Not measured: a session longer than 45 seconds, `goAway`, a new connection with a resumption handle, the effect of the context compression on the delay, two sessions at the same time, and a rate limit.
+- In the test of 2026-11-14 the call for each frame named the can in the first frame that showed its front. Before that frame the can lay at the lower edge of the picture, or showed its back.
+
+Run it again. Each run opens one paid Live session for the length of the frames plus 4 seconds:
+
+```bash
+npm run live:probe --workspace @glance/server -- --frames <SAVE_FRAMES dir>/<sessionId> --from 352 --to 392 \
+  --first 362 --product gtin-5999571058020 --form tick --tick-ms loop --model gemini-3.1-flash-live-preview
+```
+
+- `--form tick` sends the text `report`: one each `--tick-ms` milliseconds (default 1000). With `--tick-ms loop` the next one goes out when a report arrives, and after 2 seconds with no report.
+- The forms `change` and `pace` send frames only, and `activity` marks each frame as an activity of the user. These three gave no report.
+- `change` and `pace` also ask for `proactiveVideo`, which the service refuses. `--no-proactive-video` leaves it out.
+- `--model <id>` selects the Live model (default `gemini-3.8-live`), `--media-resolution low` sets the resolution of the session, and `--every <n>` sends each n-th frame.
+- `--first` is the first frame that shows the product `--product`. The summary line counts the delay from that frame.
+- `--per-frame` opens no session. It sends each frame to the call for each frame, one call at a time.
+- The output has one line for each report: the time, the newest frame that the session had, the status, the product, and the arguments of the call. A `usage` line follows each turn.
+- The command reads `apps/server/.env` for the key, `CATALOG_PATH`, and `STORE_LIST_PATH`. The frames of a test show a room and people: keep them outside the repository.
 
 ## Barcode scan
 
