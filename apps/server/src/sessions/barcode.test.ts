@@ -3,7 +3,7 @@ import { TIMING as T } from '@glance/shared';
 import { NO_RESULT } from '../recognition/result';
 import {
   CODE_ACCEPTED_MS, CODE_FRAMES_WITHIN_MS, CODE_QUIET_MS, LABEL_ANSWER_MS, PRODUCT_KNOWN_MS, STILLS_BEFORE_WAIT, STILL_AFTER_ANSWER_MS,
-  STILL_ANSWER_MS, STILL_REQUEST_EVERY_MS, STILL_REQUEST_WAIT_MS,
+  STILL_ANSWER_MS, STILL_REQUEST_EVERY_MS, STILL_REQUEST_WAIT_MS, productNamed,
 } from './code';
 import { SAME_TEXT_MS } from './guard';
 import { type Harness, KIOSK, OAT, RYE, harness, product } from './harness';
@@ -214,6 +214,16 @@ it('a still that showed no product gets no line, and does not use the turn of th
   expect(h.effects).toEqual([]);
   // The empty still does not use the turn of the unreadable line.
   h.label('failed');
+  expect(h.lines()).toEqual(['barcode.unreadable']);
+});
+it('a label call that gave no answer gets no line, and does not use the turn of the unreadable line', () => {
+  const h = scanned();
+  // The session of 2026-11-14: the call ended after 8 seconds with no answer, and the shopper held nothing by then.
+  h.label('started'); h.advance(8000); h.label('error');
+  expect(h.effects).toEqual([]);
+  h.advance(10_000);
+  expect(spokenKeys(h)).toEqual([]);
+  h.label('started'); h.label('failed');
   expect(h.lines()).toEqual(['barcode.unreadable']);
 });
 it('a code that the model sees in 2 frames inside 2 seconds asks the phone for a still', () => {
@@ -428,6 +438,33 @@ it('a still is the exception: none in the 8 seconds after a no', () => {
   h.advance(100); code(h);
   expect(stillRequests(h)).toBe(1);
 });
+it('the product in the hand has its name while its prompt is open, for 8 seconds after its answer, and for 3 seconds after its last name', () => {
+  const h = scanned();
+  expect(productNamed(h.state, h.now)).toBe(false);
+  h.show(OAT);
+  // The oat drink left the view, and its prompt still waits for the answer.
+  h.advance(PRODUCT_KNOWN_MS + 500);
+  expect(productNamed(h.state, h.now)).toBe(true);
+  h.done(); h.yes();
+  h.advance(STILL_AFTER_ANSWER_MS - 1);
+  expect(productNamed(h.state, h.now)).toBe(true);
+  h.advance(1);
+  expect(productNamed(h.state, h.now)).toBe(false);
+
+  const seen = scanned();
+  knownBySight(seen, OAT, PRODUCT_KNOWN_MS - 1);
+  expect(productNamed(seen.state, seen.now)).toBe(true);
+  seen.advance(1);
+  expect(productNamed(seen.state, seen.now)).toBe(false);
+});
+it('a pay prompt, and a session that an older server stored, name no product', () => {
+  const h = harness({ cart: [OAT] });
+  h.kiosk();
+  expect(h.state.prompt).toMatchObject({ kind: 'pay' });
+  expect(productNamed(h.state, h.now)).toBe(false);
+  const { code: _code, ...stored } = scanned().state;
+  expect(productNamed(stored as SessionState, 1_000_000)).toBe(false);
+});
 it('the unknown line plays at once while a product prompt is open, because no still can follow', () => {
   const h = scanned();
   h.show(OAT);
@@ -471,6 +508,19 @@ it('a still with no product in it drops the unknown line, and the next unknown f
   h.advance(500);
   expect(h.effects).toEqual([]);
   unknown(h);
+  expect(h.lines()).toEqual(['glance.unknown']);
+});
+it('a label call that gave no answer drops the unknown line, and the next unknown frame starts the unknown rule again', () => {
+  const h = scanned();
+  unknown(h); h.advance(500); unknown(h);
+  h.advance(2500); h.label('started'); h.advance(8000); h.label('error');
+  expect(h.effects).toEqual([]);
+  h.advance(3000);
+  expect(spokenKeys(h)).toEqual([]);
+  // The shopper still holds the product. Its line waits 2 seconds for a still, as the line of a new appearance does.
+  unknown(h);
+  expect(h.effects).toEqual([]);
+  h.advance(CODE_FRAMES_WITHIN_MS);
   expect(h.lines()).toEqual(['glance.unknown']);
 });
 it('the unknown line plays when no label frame comes in 5 seconds after the request', () => {
@@ -541,7 +591,7 @@ it('one voice: no aim hint while the server waits for a still and its label call
   expect(h.lines()).toEqual(['glance.partial']);
 });
 it('a label call that gives no end holds the unknown line for the time of the call and the lookup', () => {
-  expect(LABEL_ANSWER_MS).toBe(6500);
+  expect(LABEL_ANSWER_MS).toBe(10_500);
   const h = scanned();
   unknown(h); h.advance(500); unknown(h);
   h.advance(2500); h.label('started');

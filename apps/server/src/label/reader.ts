@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+/**
+ * A label call carries the still and the reference pictures, so it gets more time than a frame call.
+ * Measured on 2026-11-14: 1.2 to 3.8 s, and 3 of 4 calls ran into the old limit of 4 s while frame calls ran.
+ */
+export const LABEL_TIMEOUT_MS = 8000;
+
 /** What the model read on the still of a label. Each text is what the package shows, and null when the model cannot read it. */
 export type LabelAnswer = {
   /** Each run of digits near a barcode, as printed. */

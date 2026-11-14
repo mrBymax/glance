@@ -1,12 +1,15 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { DEFAULT_PROFILE } from '@glance/shared';
 import type { BarcodeReport } from '../products/barcodes';
 import type { ReferenceImage, ReferenceImages } from '../reference/images';
 import type { StoreList } from '../products/storeList';
+import { PRODUCT_KNOWN_MS, STILL_AFTER_ANSWER_MS } from '../sessions/code';
 import type { SessionRuntime } from '../sessions/runtime';
-import type { RuleInputBody } from '../sessions/types';
-import { LABEL_EVERY_MS, LABEL_TIMEOUT_MS, REFERENCE_CAPTURE_MS, ReferenceCaptureError, createLabelHandler } from './intake';
-import { type LabelAnswer, type LabelReader, NO_LABEL } from './reader';
+import { createSessionState } from '../sessions/step';
+import type { RuleInputBody, SessionState } from '../sessions/types';
+import { LABEL_EVERY_MS, REFERENCE_CAPTURE_MS, ReferenceCaptureError, createLabelHandler } from './intake';
+import { LABEL_TIMEOUT_MS, type LabelAnswer, type LabelReader, NO_LABEL } from './reader';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
 const header = { seq: 4, ts: 4, w: 1440, h: 1080, blurred: true, kind: 'label' as const };
@@ -17,6 +20,8 @@ let inputs: RuleInputBody[];
 let stopListeners: (() => void)[];
 let stopped: boolean;
 let phase: string;
+/** What the rules hold for the session, on top of a new state. */
+let held: Partial<SessionState>;
 let now: number;
 let session: SessionRuntime;
 let lines: string[];
@@ -27,10 +32,11 @@ beforeEach(() => {
   stopListeners = [];
   stopped = false;
   phase = 'shopping';
+  held = {};
   now = 1_000_000;
   session = {
     id: 's-1',
-    get state() { return { phase }; },
+    get state() { return { ...createSessionState(DEFAULT_PROFILE, 0), ...held, phase }; },
     get stopped() { return stopped; },
     dispatch: (input: RuleInputBody) => { inputs.push(input); },
     onStop: (listener: () => void) => { stopListeners.push(listener); return () => undefined; },
@@ -143,7 +149,7 @@ it('starts at most one call each 5 seconds for a session, so a phone that sends 
   expect(inputs).toEqual([]);
   expect(lines.join('\n')).toContain('label frame dropped: the last label call started 4999 ms ago. seq=5');
   // Another session has its own time.
-  onFrame({ ...session, id: 's-2', state: { phase: 'shopping' }, stopped: false } as unknown as SessionRuntime, { header, jpeg: JPEG });
+  onFrame({ ...session, id: 's-2', state: session.state, stopped: false } as unknown as SessionRuntime, { header, jpeg: JPEG });
   expect(read).toHaveBeenCalledTimes(2);
   now += 1;
   onFrame(session, { header: { ...header, seq: 6 }, jpeg: JPEG });
@@ -158,7 +164,36 @@ it('drops a label frame of a session that does not shop, with no call', () => {
   handler({ read })(session, { header, jpeg: JPEG });
   expect(read).toHaveBeenCalledTimes(1);
 });
-it('ends a call after 8 seconds, and the read counts as failed', async () => {
+it('drops a label frame with no call while the product has its name: an open product prompt, an answer in the last 8 seconds, a name in the last 3 seconds', () => {
+  const read = vi.fn<LabelReader['read']>(async () => NO_LABEL);
+  const onFrame = handler({ read });
+  const prompt = { id: 'p-0004', kind: 'product' as const, mode: 'new' as const, productId: 'oat-drink-1l', startedAt: now, doneAt: null };
+  const code = createSessionState(DEFAULT_PROFILE, 0).code;
+  const named: Partial<SessionState>[] = [
+    { prompt },
+    // The session of 2026-11-14: the still that the server asked for arrived 3.8 seconds after the nod that added the product.
+    { code: { ...code, answeredAt: now - 3810 } },
+    { code: { ...code, answeredAt: now - STILL_AFTER_ANSWER_MS + 1 } },
+    { seen: { 'oat-drink-1l': now - PRODUCT_KNOWN_MS + 1 } },
+  ];
+  for (held of named) onFrame(session, { header, jpeg: JPEG });
+  expect(read).not.toHaveBeenCalled();
+  expect(inputs).toEqual([]);
+  expect(lines.filter((line) => line === 'label frame dropped: the product is already named. seq=4 session=s-1')).toHaveLength(4);
+  // The drop starts no wait of 5 seconds.
+  held = { code: { ...code, answeredAt: now - STILL_AFTER_ANSWER_MS }, seen: { 'oat-drink-1l': now - PRODUCT_KNOWN_MS } };
+  onFrame(session, { header, jpeg: JPEG });
+  expect(read).toHaveBeenCalledTimes(1);
+});
+it('a marked session still gets its reference picture while a product prompt is open', async () => {
+  const references = memoryReferences();
+  held = { prompt: { id: 'p-0001', kind: 'product', mode: 'new', productId: 'oat-drink-1l', startedAt: now, doneAt: null } };
+  const onFrame = handler(null, { references });
+  const capture = onFrame.capture(session, '3017624010701');
+  onFrame(session, { header, jpeg: JPEG });
+  expect((await capture).count).toBe(1);
+});
+it('ends a call after 8 seconds, and tells the rules that the call gave no answer', async () => {
   expect(LABEL_TIMEOUT_MS).toBe(8000);
   vi.useFakeTimers();
   const call = pending();
@@ -167,8 +202,13 @@ it('ends a call after 8 seconds, and the read counts as failed', async () => {
   expect(call.signals[0]!.aborted).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
   expect(call.signals[0]!.aborted).toBe(true);
-  expect(inputs).toEqual([{ type: 'label', read: 'started' }, { type: 'label', read: 'failed' }]);
+  expect(inputs).toEqual([{ type: 'label', read: 'started' }, { type: 'label', read: 'error' }]);
   expect(lines.join('\n')).toMatch(/label call failed. seq=4 Error: no answer in 8000 ms/);
+});
+it('tells the rules that the call gave no answer when the reader fails', async () => {
+  handler({ read: async () => { throw new Error('503 overloaded'); } })(session, { header, jpeg: JPEG });
+  await vi.waitFor(() => expect(inputs).toEqual([{ type: 'label', read: 'started' }, { type: 'label', read: 'error' }]));
+  expect(lines.join('\n')).toContain('label call failed. seq=4 Error: 503 overloaded session=s-1');
 });
 it('aborts the call when the session stops, and gives the rules nothing more', async () => {
   const call = pending();

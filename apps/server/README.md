@@ -645,7 +645,7 @@ Limits of Open Food Facts:
 - `invalid`: a code with a wrong check digit, or with 14 digits, has no effect.
 - A scanned product has the ID `gtin-<13 digits>`. The cart, the warnings, the snapshot, a question, the cart by voice, the spot check, and a new profile language find it by that ID as they find a catalog product.
 - The clip seed makes no clip for a scanned product. With real speech, each new line of a scanned product is one ElevenLabs call.
-- One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight gives no unknown line and no aim hint. So a shopper who shows a barcode does not hear "Turn the front to me." The same holds while the server waits for a still that it asked for (5 seconds), and for the label call of that still (6.5 seconds at most). An `ambiguous` result in that time does not end the wait.
+- One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight gives no unknown line and no aim hint. So a shopper who shows a barcode does not hear "Turn the front to me." The same holds while the server waits for a still that it asked for (5 seconds), and for the label call of that still (10.5 seconds at most: the 8 seconds of the call and the 2.5 seconds of the lookup). An `ambiguous` result in that time does not end the wait.
 - A result that arrives after the session stopped is dropped. A result that arrives after the result of a later report of another code is dropped too: the shopper shows the other code now.
 - The scanned products live in the memory of the process. The start puts each item of the store list there, with the details that the product cache holds, and each lookup puts the product there again with the details of that time. When a stored session loads after a restart, the server resolves the scanned products of its cart again. A product that the store list no longer holds stays a cart line with its old price: the shopper can remove it, and the voice does not name it.
 
@@ -715,10 +715,12 @@ sequenceDiagram
   Server-->>Phone: still.request with the purpose label
   alt the phone sends a label frame, and the label call selects an item
     Server-->>Phone: glance.pending and the glance line
-  else the label call read a package and selects no item, or the call fails
+  else the label call read a package and selects no item
     Server-->>Phone: "I do not know this product."
   else the still shows no product
     Note over Server: no line. The next unknown frame gets the line at once
+  else the label call fails or gives no answer in 8 seconds
+    Note over Server: no line. The next unknown frame starts the unknown rule again
   else no label frame in 5 seconds
     Server-->>Phone: "I do not know this product."
   end
@@ -726,7 +728,8 @@ sequenceDiagram
 
 - 2 stream frames with the status `unknown` or `unsure`, less than 2 seconds apart, ask the phone for a still. The rule is `onUnnamedProduct` in `src/sessions/code.ts`. The still of the sharp second look does not count.
 - The request has the limits of a still for a code, and shares them. See "The model also reads the code": no open product prompt, no product by sight in the last 3 seconds, no answer in the last 8 seconds, one request each 6 seconds, and 30 seconds after 2 requests with no code read. One result by sight that named a product and got no second result does not count as a product by sight.
-- The unknown line of a new appearance waits while a still can follow. It plays after 2 seconds when no second frame asked for a still, after 5 seconds when no label frame came, and at the end of a label call that gave no product. A barcode report, a product by sight, and a look-alike answer drop it.
+- The unknown line of a new appearance waits while a still can follow. It plays after 2 seconds when no second frame asked for a still, after 5 seconds when no label frame came, and at the end of a label call that read a package and gave no product. A barcode report, a product by sight, a look-alike answer, and a label call with no answer drop it.
+- After a label call with no answer, the unknown rule starts again with the next frame that shows a product without a name. A shopper who put the product down hears nothing.
 - When the limits allow no still, the unknown line plays at once, as before. This holds for an unknown product that the shopper shows while a prompt is open.
 - An aim hint does not wait. It is quiet from the request to the end of the label call. A look-alike result in that time drops the unknown line that waits, and the aim hint stays quiet. Before, that result ended the quiet, and "Turn the front to me." could play while the still was on its way.
 - The server knows of a still only by its own request and by the label frame. The phone also takes a label still by itself, when it finds a code region in a frame, and it sends no message at the start of that still. In the test of 2026-11-14 one aim hint played 2.3 seconds after the phone started such a still, and 1.2 seconds before its label frame arrived. No rule of the server can stop that line.
@@ -758,7 +761,9 @@ A frame with the kind `label` is the still of a package that the phone could not
      Between items with one brand and one name, the pack size selects. Two matches or none give no product.
 - A match goes through the lookup of `barcode.seen`, with the source `label`.
 - An answer with no digits, no brand, no name, and no item is an empty answer: the still showed no product. The voice says nothing for it.
-- With an answer that read something and matched nothing, and when the call fails or is late, the voice says "I cannot read this code. Hold it closer." When recognition by sight asked for the still, the voice says "I do not know this product." in its place. One appearance of a product or a code gets one such line, and not one line for each still. See "A guard for the voice".
+- With an answer that read something and matched nothing, the voice says "I cannot read this code. Hold it closer." The answer read digits, a brand, a name, or an item below the confidence. When recognition by sight asked for the still, the voice says "I do not know this product." in its place. One appearance of a product or a code gets one such line, and not one line for each still. See "A guard for the voice".
+- A call that fails, and a call with no answer in 8 seconds, make no sound. The server logs `label call failed`, and the rules get the input `label` with `error`. In the session of 2026-11-14 such a call ended 12 seconds after the nod that added the product, and the shopper heard "I cannot read this code." with nothing in the hand.
+- A label frame for a product that already has its name goes to no call. `productNamed` in `src/sessions/code.ts` is the test: a product prompt is open, or a yes or a no answered a product prompt in the last 8 seconds, or sight, a barcode, or a label match named a product in the last 3 seconds. The log line is `label frame dropped: the product is already named. seq=<n> session=<id>`, at `info` level. The rules get no input, and the drop does not count for the 5 seconds between two calls. The phone holds a still back behind a prompt, so the still of an old request can arrive after the answer. The contract has no message that takes a request back.
 - One label call runs at a time for each session, and a session starts at most one call each 5 seconds. A label frame that arrives during a call, or too early, is dropped with a `label frame dropped` warning.
 - A label frame of a session that rests, is paid, or ended is dropped with no call.
 - With `REQUIRE_BLUR=1` the server drops a label frame with `blurred: false`. With `SAVE_FRAMES` it saves each label frame that it accepts.
@@ -1195,11 +1200,11 @@ The audit of 2026-11-14: each line that the server speaks with no action of the 
 | Line | Trigger | Limit of its rule | Guard |
 |---|---|---|---|
 | `glance.new`, `glance.inCart`: the product prompt. Sound `warning` with a warning | The second `identified` result in a row for one product, a barcode of the store, a label match, or a sure still | One for each appearance of the product (R1). A new product takes the place of the prompt (R2): by sight with its second result in a row, and at once with a barcode or a label match | always |
-| `glance.unknown`: "I do not know this product." | An `unknown` result, or a failed label read of a still that sight asked for | One for each appearance (R13). It waits for a still | one for each appearance, then 20 s and 3 s |
+| `glance.unknown`: "I do not know this product." | An `unknown` result, or a label answer that matched nothing for a still that sight asked for | One for each appearance (R13). It waits for a still | one for each appearance, then 20 s and 3 s |
 | `glance.partial`: "I can see part of it. ..." | An `unsure` result with an aim hint | One each 5 seconds. None while a barcode has the voice, and none while the server waits for a still or its label call | 20 s for one hint text, 3 s |
 | `glance.ambiguous`: the look-alike line | The second `ambiguous` result in a row with the same candidates, with no open prompt of a candidate | One for each appearance of the same candidates | 20 s, 3 s |
 | `barcode.notInStore` | A barcode of the phone that the store list does not hold | One for each appearance of that code | 20 s, 3 s, new chance after 3 s |
-| `barcode.unreadable`: "I cannot read this code. Hold it closer." | A label read that matched nothing or failed | None of its own. Before the guard: one each 10 seconds | one for each appearance, then 20 s and 3 s |
+| `barcode.unreadable`: "I cannot read this code. Hold it closer." | A label answer that read something and matched nothing. A call that failed or gave no answer has no line | None of its own. Before the guard: one each 10 seconds | one for each appearance, then 20 s and 3 s |
 | `checkout.empty`, `checkout.busy` | A kiosk code with an empty cart, or of a busy kiosk | One for each appearance of the code | 20 s, 3 s, new chance after 3 s |
 | `checkout.offer`: the pay prompt. Sound `found` | A kiosk code with items in the cart. Again after a cart change, after the product of R17 left the view, and when the code comes back after the head window | One for each of these events | always |
 | `spotcheck.ask`, `spotcheck.thanks` | A kiosk that asks for a spot check, and the product of the check | One for each check, and one more when its product leaves the cart | always |

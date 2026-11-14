@@ -370,7 +370,7 @@ it('an item of the model below LABEL_MIN_CONFIDENCE gives no product', async () 
   phone.sendFrame(label, JPEG);
   expect(await phone.next(isSpeak)).toMatchObject({ text: 'I cannot read this code. Hold it closer.' });
 });
-it('a label that selects no item, and a label call that fails, give the unreadable line', async () => {
+it('a label that selects no item gives the unreadable line, and a label call that fails gives no line', async () => {
   const unknown = await shop({ labelReader: labelReaderOf({ ...nutellaLabel, brand: 'Rigoni', name: 'Nocciolata' }) });
   unknown.phone.sendFrame(label, JPEG);
   expect(await unknown.phone.next(isSpeak)).toMatchObject({ text: 'I cannot read this code. Hold it closer.' });
@@ -380,8 +380,19 @@ it('a label that selects no item, and a label call that fails, give the unreadab
     labelReader: labelReaderOf(new Error('503 overloaded')), log: { level: 'info', stream: { write: (line) => { lines.push(line); } } },
   });
   failed.phone.sendFrame(label, JPEG);
-  expect(await failed.phone.next(isSpeak)).toMatchObject({ text: 'I cannot read this code. Hold it closer.' });
-  expect(lines.join('')).toMatch(/label call failed. seq=9 Error: 503 overloaded/);
+  await vi.waitFor(() => expect(lines.join('')).toMatch(/label call failed. seq=9 Error: 503 overloaded/));
+  await serverReadAll(failed.phone);
+  expect(failed.phone.messages.filter(isSpeak)).toEqual([]);
+});
+it('a label frame that arrives while a product prompt is open reaches no reader', async () => {
+  const reader = labelReaderOf(nutellaLabel);
+  const lines: string[] = [];
+  const { phone } = await shop({ labelReader: reader, log: { level: 'info', stream: { write: (line) => { lines.push(line); } } } });
+  phone.send({ t: 'barcode.seen', code: NUTELLA, source: 'barcode' });
+  await phone.next(isEvent('glance.pending'));
+  phone.sendFrame(label, JPEG);
+  await vi.waitFor(() => expect(lines.join('')).toContain('label frame dropped: the product is already named. seq=9'));
+  expect(reader.calls).toEqual([]);
 });
 it('with REQUIRE_BLUR a label frame that is not blurred does not reach the reader', async () => {
   const reader = labelReaderOf(nutellaLabel);

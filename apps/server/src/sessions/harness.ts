@@ -68,8 +68,8 @@ export type Harness = {
   kiosk(opts?: { busy?: boolean; spotCheck?: boolean }): void;
   /** A barcode after its lookup. */
   barcode(outcome: BarcodeOutcome): void;
-  /** A label frame that arrived, that gave no product, or that showed no product. */
-  label(read: 'started' | 'failed' | 'empty'): void;
+  /** A label frame that arrived, that gave no product, that showed no product, or whose call gave no answer. */
+  label(read: 'started' | 'failed' | 'empty' | 'error'): void;
   /** prompt.done for the current prompt. */
   done(): void;
   /** Defaults: 'head', and the prompt of the last done(). */

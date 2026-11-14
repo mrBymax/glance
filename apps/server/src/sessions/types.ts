@@ -183,9 +183,10 @@ export type RuleInputBody =
   | { type: 'barcode'; outcome: BarcodeOutcome }
   /**
    * A label frame arrived (`started`), its read gave no product of the store (`failed`),
-   * or the model read nothing in it (`empty`): the still showed no product.
+   * the model read nothing in it (`empty`): the still showed no product,
+   * or the call gave no answer (`error`): it was late, or it failed.
    */
-  | { type: 'label'; read: 'started' | 'failed' | 'empty' };
+  | { type: 'label'; read: 'started' | 'failed' | 'empty' | 'error' };
 export type RuleInput = RuleInputBody & { now: number };
 
 export type SpeakEffect = {

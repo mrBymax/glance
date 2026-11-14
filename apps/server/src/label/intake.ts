@@ -5,16 +5,11 @@ import type { StoreList } from '../products/storeList';
 import { type ReferenceImages, selectReferences } from '../reference/images';
 import { saveFrameWith } from '../recognition/intake';
 import type { FrameSaver } from '../recognition/save';
+import { productNamed } from '../sessions/code';
 import type { SessionRuntime } from '../sessions/runtime';
 import { type FrameHandler, frameLogLine } from '../ws/device';
 import { matchLabel } from './match';
-import type { LabelAnswer, LabelReader, LabelReference } from './reader';
-
-/**
- * A label call carries the still and the reference pictures, so it gets more time than a frame call.
- * Measured on 2026-11-14: 1.2 to 3.8 s, and 3 of 4 calls ran into the old limit of 4 s while frame calls ran.
- */
-export const LABEL_TIMEOUT_MS = 8000;
+import { LABEL_TIMEOUT_MS, type LabelAnswer, type LabelReader, type LabelReference } from './reader';
 
 /**
  * A session starts at most one label call in this time. The phone takes at most one still each 6 seconds,
@@ -46,9 +41,11 @@ type Mark = { gtin: string; resolve: (captured: CapturedReference) => void; end:
 /**
  * Takes each frame with the kind `label`: one model call reads it, and the answer must select one item of the store list.
  * A match goes the way of a barcode of the phone. An answer with no digits, no brand, no name, and no item gives the rules
- * the input `label` with `empty`: the still showed no product, so the voice says nothing. Each other end gives `failed`.
+ * the input `label` with `empty`: the still showed no product, so the voice says nothing. A call that is late or that
+ * fails gives `error`, and the voice says nothing. Each other end gives `failed`.
  * One call runs at a time for each session, and a session starts at most one call each 5 seconds.
- * A label frame that arrives too early, or for a session that does not shop, is dropped with no call.
+ * A label frame that arrives too early, for a session that does not shop, or for a product that already has its name,
+ * is dropped with no call. The phone holds a still back behind a prompt, so a still can arrive after the answer.
  * `capture` marks a session: its next label frame becomes a reference picture of one store item, with no call
  * and no input for the rules. `stopAll` ends each call and each mark, for the close of the app.
  */
@@ -115,6 +112,7 @@ export function createLabelHandler(deps: {
 
     let gtin: string | null = null;
     let empty = false;
+    let answered = false;
     let referenceCount = 0;
     try {
       const { references: store } = deps;
@@ -125,6 +123,7 @@ export function createLabelHandler(deps: {
           return reader.read(jpeg, { signal: abort.signal, references });
         });
       const answer: LabelAnswer = await Promise.race([reading, late]);
+      answered = true;
       // What the model read, so that a person can see why a still gave no product.
       deps.log.info(`label answer seq=${seq} digits=${JSON.stringify(answer.digits)} brand=${JSON.stringify(answer.brand)} name=${JSON.stringify(answer.name)} confidence=${answer.confidence} item=${answer.item ?? 'null'} itemConfidence=${answer.itemConfidence} session=${session.id}`);
       empty = answer.digits.length === 0 && answer.brand === null && answer.name === null && answer.item === null;
@@ -141,7 +140,9 @@ export function createLabelHandler(deps: {
 
     deps.log.info(`label session=${session.id} seq=${seq} match=${gtin ?? 'none'} ms=${Math.round(performance.now() - startedAt)} references=${referenceCount}`);
     const result = gtin === null ? 'dropped' : await deps.report(session, gtin, 'label');
-    if (result !== 'product' && !session.stopped) session.dispatch({ type: 'label', read: empty ? 'empty' : 'failed' });
+    if (result === 'product' || session.stopped) return;
+    const read = answered ? (empty ? 'empty' : 'failed') : 'error';
+    session.dispatch({ type: 'label', read });
   };
 
   const onFrame: FrameHandler = (session, frame) => {
@@ -174,6 +175,11 @@ export function createLabelHandler(deps: {
       return;
     }
     const now = deps.clock.now();
+    // A still or its label call cannot add to a name that the shopper heard, and its line would come seconds late.
+    if (productNamed(session.state, now)) {
+      deps.log.info(`label frame dropped: the product is already named. seq=${header.seq} session=${session.id}`);
+      return;
+    }
     for (const [id, at] of startedAt) if (now - at >= LABEL_EVERY_MS) startedAt.delete(id);
     const last = startedAt.get(session.id);
     if (last !== undefined) {

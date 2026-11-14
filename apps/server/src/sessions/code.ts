@@ -1,4 +1,4 @@
-import { TIMING } from '@glance/shared';
+import { LABEL_TIMEOUT_MS } from '../label/reader';
 import { BARCODE_LOOKUP_MS } from '../products/resolver';
 import type { FrameCode } from '../recognition/result';
 import { isConfirmed } from './checkout';
@@ -33,8 +33,11 @@ export const STILL_REQUEST_WAIT_MS = 30000;
  * for a still (measured on 2026-11-14), and the upload follows. A phone that takes no still sends nothing.
  */
 export const STILL_ANSWER_MS = 5000;
-/** The voice of recognition waits this time for the end of a label call: the time of the call, and the lookup of its item. */
-export const LABEL_ANSWER_MS = TIMING.recognitionTimeoutMs + BARCODE_LOOKUP_MS;
+/**
+ * The voice of recognition waits this time for the end of a label call: the time of the call, and the lookup of its item.
+ * A shorter wait speaks the unknown line while the call still runs.
+ */
+export const LABEL_ANSWER_MS = LABEL_TIMEOUT_MS + BARCODE_LOOKUP_MS;
 
 export function newCodeState(): CodeState {
   return {
@@ -62,16 +65,26 @@ export function codeQuiet(s: SessionState, now: number): boolean {
 }
 
 /**
+ * True while the product in the hand has its name: a product prompt is open, the shopper answered one in the last
+ * 8 seconds, or sight, a code, or a label match named a product in the last 3 seconds.
+ * A still, and the label call of a still, can add nothing then. The function reads the state and does not change it.
+ */
+export function productNamed(s: SessionState, now: number): boolean {
+  if (s.prompt?.kind === 'product') return true;
+  if (Object.values(s.seen).some((at) => now - at < PRODUCT_KNOWN_MS)) return true;
+  const answeredAt = (s as { code?: Partial<CodeState> }).code?.answeredAt ?? null;
+  return answeredAt !== null && now - answeredAt < STILL_AFTER_ANSWER_MS;
+}
+
+/**
  * The limits that each still request has. They do not depend on the reason for the still.
  * A still is the exception: it costs the head-motion stream for seconds, so the rules ask for none
  * while a nod can answer a prompt, and none for a product that is known.
  */
 function stillAllowed(s: SessionState, now: number): boolean {
   if (isConfirmed(s)) return false;
-  if (s.prompt?.kind === 'product') return false;
-  if (Object.values(s.seen).some((at) => now - at < PRODUCT_KNOWN_MS)) return false;
+  if (productNamed(s, now)) return false;
   const state = codeOf(s);
-  if (state.answeredAt !== null && now - state.answeredAt < STILL_AFTER_ANSWER_MS) return false;
   if (state.acceptedAt !== null && now - state.acceptedAt < CODE_ACCEPTED_MS) return false;
   // A barcode on a shelf label, or one that is too far away, stays in view. Without the long wait it would get a still each 6 seconds.
   const every = state.stillsOpen >= STILLS_BEFORE_WAIT ? STILL_REQUEST_WAIT_MS : STILL_REQUEST_EVERY_MS;

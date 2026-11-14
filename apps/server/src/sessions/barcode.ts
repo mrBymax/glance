@@ -46,6 +46,8 @@ export function onBarcode(turn: Turn, input: Extract<RuleInput, { type: 'barcode
 /**
  * A label frame: the still of a package that the phone could not read. The model reads it outside the rules.
  * While the call runs, the voice of recognition is quiet. A still with no product in it gets no line.
+ * A call that gave no answer gets no line: in the session of 2026-11-14 a call ended after 8 seconds, and
+ * "I cannot read this code." played 12 seconds after the shopper put the product down.
  * A read that failed gets one line: the unknown line when it waits for this still, else the unreadable line.
  * The guard of guard.ts lets one such line through for each appearance, so a product that stays in view gets no line for each still.
  */
@@ -62,8 +64,9 @@ export function onLabel(turn: Turn, input: Extract<RuleInput, { type: 'label' }>
 
   const unknownWaits = code.unknownHeldAt !== null;
   endStillWait(s);
-  if (input.read === 'empty') {
-    // The still showed no product, so recognition by sight has the voice again at once.
+  if (input.read === 'empty' || input.read === 'error') {
+    // The still showed no product, or nobody read it. Recognition by sight has the voice again at once:
+    // the next frame with a product that it cannot name starts the unknown rule again.
     code.at = null;
     return;
   }
