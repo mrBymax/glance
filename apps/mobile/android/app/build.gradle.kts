@@ -27,7 +27,7 @@ android {
         manifestPlaceholders["mwdat_client_token"] = local("mwdat_client_token", "0")
         buildConfigField("String", "SERVER_URL", "\"${local("glance.serverUrl", "http://10.0.2.2:8080")}\"")
         buildConfigField("String", "UI_DEV_URL", "\"${local("glance.uiDevUrl", "")}\"")
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.metaglance.android.support.GlanceTestRunner"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -70,4 +70,5 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.uiautomator)
 }

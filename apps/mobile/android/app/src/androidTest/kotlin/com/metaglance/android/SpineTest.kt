@@ -78,7 +78,9 @@ class SpineTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) 
         }
         waitUntil("frames go out", STEP_MS, ::state) { traffic.frames.size >= 2 }
         val frame = traffic.frames.first()
-        assertTrue("The long side of an upload is ${maxOf(frame.header.w, frame.header.h)}.", maxOf(frame.header.w, frame.header.h) <= MAX_LONG_SIDE)
+        // Each upload is the center crop of the 720 x 1280 stream, and face detection ran on it.
+        assertEquals(UPLOAD_SIZE, frame.header.w to frame.header.h)
+        assertTrue("An upload went out with no face detection.", traffic.frames.all { it.header.blurred })
 
         val pending = waitFor("the product prompt arrives", PROMPT_MS, ::state) { traffic.event<ServerEvent.GlancePending>() }
         assertEquals(PRODUCT_ID, pending.product.id)
@@ -173,7 +175,7 @@ class SpineTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) 
 
     private companion object {
         const val PRODUCT_ID = "oat-drink-1l"
-        const val MAX_LONG_SIDE = 768
+        val UPLOAD_SIZE = 494 to 768
         const val START_MS = 15_000L
         const val STEP_MS = 10_000L
 

@@ -70,6 +70,7 @@ abstract class MockDeviceKitTestCase<T : Activity>(activityClass: Class<T>) {
         }
         onMain {
             glance.mockGlasses.disable()
+            glance.datLink.debugClearOverrides()
             glance.datLink.initialize(bluetoothGranted = false)
             glance.datLog = {}
         }

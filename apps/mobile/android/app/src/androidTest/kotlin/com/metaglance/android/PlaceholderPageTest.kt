@@ -1,13 +1,11 @@
 package com.metaglance.android
 
-import android.view.View
-import android.view.ViewGroup
-import android.webkit.WebView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.metaglance.android.session.ProfileStore
 import com.metaglance.android.support.MockDeviceKitTestCase
 import com.metaglance.android.support.TestClips
 import com.metaglance.android.support.TrafficRecorder
+import com.metaglance.android.support.WebPage
 import com.metaglance.android.support.requireFakeServer
 import com.metaglance.android.support.waitFor
 import com.metaglance.android.support.waitUntil
@@ -16,9 +14,6 @@ import com.metaglance.core.contract.IntentKind
 import com.metaglance.core.contract.IntentSource
 import com.metaglance.core.contract.PageToNative
 import com.metaglance.core.contract.ServerEvent
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -33,6 +28,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PlaceholderPageTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) {
     private val traffic = TrafficRecorder()
+    private val page = WebPage { scenarioRule.scenario }
     private var placeholderBefore = false
 
     @Before
@@ -85,9 +81,7 @@ class PlaceholderPageTest : MockDeviceKitTestCase<MainActivity>(MainActivity::cl
 
     @Test
     fun aReloadedPageGetsTheStateAndTheProfileAgain() {
-        js("window.__beforeReload = true")
-        scenarioRule.scenario.onActivity { webView(it).reload() }
-        waitUntil("the page loads again", STEP_MS) { js("typeof window.__beforeReload") == "undefined" }
+        page.reload()
         awaitText("state", "\"registration\"")
         awaitText("profile", "\"speechRate\"")
     }
@@ -122,9 +116,7 @@ class PlaceholderPageTest : MockDeviceKitTestCase<MainActivity>(MainActivity::cl
         startAndAwaitPrompt()
         // One reload is not enough: the page lost its messages only in some reloads.
         repeat(RELOADS) {
-            js("window.__beforeReload = true")
-            scenarioRule.scenario.onActivity { webView(it).reload() }
-            waitUntil("the page loads again", STEP_MS) { js("typeof window.__beforeReload") == "undefined" }
+            page.reload()
             awaitText("state", "\"stream\": \"streaming\"")
             awaitText("profile", "\"speechRate\"")
             awaitText("log", "< {\"t\":\"snapshot\"")
@@ -144,44 +136,17 @@ class PlaceholderPageTest : MockDeviceKitTestCase<MainActivity>(MainActivity::cl
         return pending.promptId
     }
 
-    private fun clickButton(label: String) {
-        val found = js("(() => { const b = [...document.querySelectorAll('#buttons button')].find((x) => x.textContent === '$label'); if (b) b.click(); return !!b; })()")
-        assertEquals("The page has no button \"$label\".", "true", found)
-    }
+    private fun clickButton(label: String) = page.clickButton(label)
 
-    private fun awaitText(elementId: String, part: String, timeoutMs: Long = STEP_MS) {
-        val read = { js("document.getElementById('$elementId')?.textContent ?? ''") }
-        waitUntil("#$elementId shows $part", timeoutMs, read) { part in read() }
-    }
+    private fun awaitText(elementId: String, part: String, timeoutMs: Long = STEP_MS) = page.awaitText(elementId, part, timeoutMs)
 
-    /** Runs JavaScript in the page and returns the result as text. A string result comes back without its quotes. */
-    private fun js(script: String): String {
-        val done = CountDownLatch(1)
-        var result = ""
-        scenarioRule.scenario.onActivity { activity ->
-            webView(activity).evaluateJavascript(script) { value ->
-                result = value ?: ""
-                done.countDown()
-            }
-        }
-        assertTrue("The page did not answer: $script", done.await(JS_MS, TimeUnit.MILLISECONDS))
-        return if (result.startsWith("\"")) Json.decodeFromString<String>(result) else result
-    }
-
-    private fun webView(activity: MainActivity): WebView = checkNotNull(find(activity.findViewById(android.R.id.content))) { "The activity has no WebView." }
-
-    private fun find(view: View): WebView? = when (view) {
-        is WebView -> view
-        is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { find(view.getChildAt(it)) }
-        else -> null
-    }
+    private fun js(script: String): String = page.js(script)
 
     private companion object {
         const val PRODUCT_ID = "oat-drink-1l"
         const val STEP_MS = 10_000L
         const val START_MS = 15_000L
         const val PROMPT_MS = 20_000L
-        const val JS_MS = 5_000L
         const val RELOADS = 8
     }
 }

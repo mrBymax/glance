@@ -24,6 +24,9 @@ class TrafficRecorder : SessionController.Tap {
     /** The codes of the error events of the app itself. */
     val nativeErrors = CopyOnWriteArrayList<String>()
 
+    /** The lines of the app itself, which the phone voice speaks. */
+    val localLines = CopyOnWriteArrayList<String>()
+
     override fun onToServer(message: DeviceToServer, sent: Boolean) {
         (if (sent) toServer else notSent).add(message)
     }
@@ -38,6 +41,10 @@ class TrafficRecorder : SessionController.Tap {
 
     override fun onNativeError(error: NativeError) {
         nativeErrors.add(error.code)
+    }
+
+    override fun onLocalLine(text: String) {
+        localLines.add(text)
     }
 
     fun events(): List<ServerEvent> = fromServer.filterIsInstance<ServerToDevice.Event>().mapNotNull { Codec.decodeServerEvent(it.event) }
