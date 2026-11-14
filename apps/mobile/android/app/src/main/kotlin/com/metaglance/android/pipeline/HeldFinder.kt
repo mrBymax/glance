@@ -91,7 +91,8 @@ class HeldFinder private constructor(private val detector: ObjectDetector) {
         } catch (e: RuntimeException) {
             log("held crop off: the detector did not start: ${e.message}")
             null
-        } catch (e: UnsatisfiedLinkError) {
+        } catch (e: LinkageError) {
+            // The native library of MediaPipe did not load on this phone.
             log("held crop off: the detector did not start: ${e.message}")
             null
         }
