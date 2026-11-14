@@ -21,8 +21,12 @@ describe('copyProblems', () => {
     ]) expect(copyProblems([text]), text).toHaveLength(1);
   });
   it('flags banned characters, marketing words, and long sentences', () => {
-    expect(copyProblems(['Look — then nod.'])).toHaveLength(1);
-    expect(copyProblems(['A “smart” cart.'])).toHaveLength(1);
+    expect(copyProblems(['Look \u2014 then nod.'])).toHaveLength(1);
+    expect(copyProblems(['A \u201Csmart\u201D cart.'])).toHaveLength(1);
+    // One character of each range, and the two ends of the first range.
+    for (const banned of ['\u2010', '\u2015', '\u2018', '\u2026', '\u2192', '\u2212', '\u00D7', '\u2022', '\u25A0', '\u2713', '\u{1F600}']) {
+      expect(copyProblems([`A ${banned} B.`]), banned.codePointAt(0)?.toString(16)).toHaveLength(1);
+    }
     expect(copyProblems(['Pay now!'])).toHaveLength(1);
     expect(copyProblems(['Glance is a seamless checkout.'])).toHaveLength(1);
     expect(copyProblems([`${Array(26).fill('word').join(' ')}.`])).toHaveLength(1);

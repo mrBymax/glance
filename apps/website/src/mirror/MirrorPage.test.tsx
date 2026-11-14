@@ -141,7 +141,10 @@ it('plays the clip of each new caption, and skips a caption with no clip', async
   await start(d);
   emit(d, line('c-1', 'With a clip.', 'https://glance.example/api/speech/abc.mp3'));
   emit(d, line('c-2', 'With no clip.', null));
-  await waitFor(() => expect(d.played).toEqual(['https://glance.example/api/speech/abc.mp3']));
+  emit(d, line('c-3', 'With the next clip.', 'https://glance.example/api/speech/def.mp3'));
+  // The queue plays in order. So the second clip in this list shows that the caption with no clip gave none.
+  await waitFor(() => expect(d.played).toHaveLength(2));
+  expect(d.played).toEqual(['https://glance.example/api/speech/abc.mp3', 'https://glance.example/api/speech/def.mp3']);
 });
 it('resolves a clip path against the origin of the page', async () => {
   const d = deps();

@@ -8,7 +8,8 @@ const item = { id: 'false-yes', label: 'False yes in the walk test', value: null
 it('accepts the committed file, and its text passes the copy rules', () => {
   const numbers = parseNumbers(numbersJson);
   expect(numbers.items.length).toBeGreaterThan(0);
-  expect(copyProblems(numbers.items.flatMap((i) => [i.label, i.note]))).toEqual([]);
+  // The page also shows the context sentence, so a late edit of it must pass the same rules.
+  expect(copyProblems([numbers.context ?? '', ...numbers.items.flatMap((i) => [i.label, i.note])])).toEqual([]);
 });
 it('rejects a value that is not null or a finite number, and names the item', () => {
   expect(() => parseNumbers({ context: null, items: [{ ...item, value: '0' }] })).toThrow(/false-yes/);
