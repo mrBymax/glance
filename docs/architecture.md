@@ -297,7 +297,7 @@ stateDiagram-v2
 ## Parts that do not exist yet
 
 - No path of the server checks the token of a session or of a kiosk.
-- The server never sends the events `glance.ambiguous`, `budget.exceeded`, and `checkout.spotcheck`. Its one `error` event has the code `recognition.slow`, after 3 failed recognition calls in a row, so it never comes in fake mode. Each other `error` event comes from the Android app, with a code that starts with `native.`.
+- The server never sends the events `glance.ambiguous`, `budget.exceeded`, and `checkout.spotcheck`. It sends two `error` events: `kiosk.busy` for a kiosk that another session holds, and `recognition.slow` after 3 failed recognition calls in a row, which never comes in fake mode. Each other `error` event comes from the Android app, with a code that starts with `native.`.
 - Nobody has run the touchpad, the voice, and the volume keys with the real glasses. The app has each path, and the tests use mock glasses. With the real glasses a session attaches Speech only after the probe sets `ProbeDecisions.SPEECH` to true.
 - The intent `ask` has no effect on the server.
 - The server never sends `biometric.request`, and it drops `biometric.result`. The Android app has its side of both messages, and its tests use the fake server of the app.
