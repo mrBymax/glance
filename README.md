@@ -30,7 +30,7 @@ One shop runs from the first glance to the mock payment with the fake server. No
 | `apps/mobile/android` | The Android app `com.metaglance.android`: a Gradle project with the modules `core` and `app`, and a fake server in `tools/fake-server`. |
 | `apps/mobile/ui` | `@glance/phone-ui`: the phone UI that the Android app shows in a WebView. |
 | `apps/website` | `@glance/website`: the landing page, the privacy page, the kiosk page, and the mirror page. |
-| `apps/display-pow` | Empty. |
+| `apps/display-pow` | `@glance/display-pow`: the Display HUD mockup, one screen on the Display toolkit. It plays a recording, or it follows a live session. |
 | `agents` | `recognition.md`, the instruction for the recognition model. |
 | `skills` | The agent skills of the project (part "Agent Skills"). |
 | `scripts/hooks` | The pre-commit checks (part "Hooks"). |
@@ -68,7 +68,7 @@ npm run typecheck    # runs the TypeScript compiler on each workspace, with no o
 npm run lint         # runs ESLint on each JavaScript and TypeScript file
 ```
 
-To check one workspace, add its name: `npm test --workspace @glance/shared`. The names are `@glance/shared`, `@glance/server`, `@glance/phone-ui`, and `@glance/website`.
+To check one workspace, add its name: `npm test --workspace @glance/shared`. The names are `@glance/shared`, `@glance/server`, `@glance/phone-ui`, `@glance/website`, and `@glance/display-pow`.
 
 No test calls a vendor, and no test needs a key.
 
