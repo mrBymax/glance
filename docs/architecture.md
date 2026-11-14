@@ -235,6 +235,7 @@ stateDiagram-v2
 - The server never sends the events `glance.ambiguous`, `budget.exceeded`, `checkout.spotcheck`, and `error`. An `error` event comes only from the Android app, with a code that starts with `native.`.
 - The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
 - `biometric.request` and `biometric.result` have no effect.
-- The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
+- The mirror page, the landing page, and the privacy page of the website are placeholders.
+- The Display HUD in `apps/display-pow` has its state and its feeds, and no screen. Nothing sends an intent with the source `hud` yet.
 - The phone UI has the session screen only. No screen shows the pay prompt or the receipt.
 - The server has English lines only.
