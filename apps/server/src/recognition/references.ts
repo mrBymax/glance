@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { GoogleGenAI, type Part, PartMediaResolutionLevel } from '@google/genai';
 import { type Product, normalizeGtin } from '@glance/shared';
 import type { Clock } from '../clock';
@@ -86,6 +87,26 @@ export function createPictureUploader(deps: { apiKey: string; fetch?: typeof fet
     const file = await ai.files.upload({ file: new Blob([new Uint8Array(jpeg)], { type: 'image/jpeg' }), config: { mimeType: 'image/jpeg' } });
     if (!file.uri) throw new Error('The Files API gave no address for a reference picture.');
     return { fileData: { fileUri: file.uri, mimeType: 'image/jpeg' }, mediaResolution: { level: PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW } };
+  };
+}
+
+/**
+ * One upload for each picture, for the frame calls and the label calls together. A picture is known by its bytes.
+ * The part is made again after 24 hours, as the parts of the frame calls are. An upload that failed is not kept.
+ */
+export function sharePictureParts(upload: PicturePart, clock: Clock): PicturePart {
+  const held = new Map<string, { part: Promise<Part>; at: number }>();
+  return (jpeg) => {
+    const key = createHash('sha256').update(jpeg).digest('hex');
+    const now = clock.now();
+    const known = held.get(key);
+    if (known && now - known.at < FRAME_REFERENCES_MAX_AGE_MS) return known.part;
+    const part = upload(jpeg);
+    held.set(key, { part, at: now });
+    part.catch(() => {
+      if (held.get(key)?.part === part) held.delete(key);
+    });
+    return part;
   };
 }
 

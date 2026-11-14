@@ -25,6 +25,7 @@ import { type ReferenceImages, createFolderReferences } from './reference/images
 import { ScriptPlayer, readFakeScript } from './recognition/fake';
 import type { Recognizer } from './recognition/gemini';
 import { createFrameHandler, saveFrameWith } from './recognition/intake';
+import type { PicturePart } from './recognition/references';
 import type { FrameSaver } from './recognition/save';
 import { SessionRegistry } from './sessions/registry';
 import type { RuntimeDeps } from './sessions/runtime';
@@ -57,6 +58,8 @@ export type AppDeps = {
   saveFrame?: FrameSaver;
   /** The reference pictures of the store items. Without it the app reads and writes the folder of REFERENCE_DIR. */
   references?: ReferenceImages;
+  /** Makes the file part of a reference picture for a label call. Without it a label call sends the bytes of its pictures. */
+  picturePart?: PicturePart;
 };
 
 type Closer = () => void | Promise<void>;
@@ -278,6 +281,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     requireBlur: config.requireBlur,
     saveFrame,
     references,
+    ...(deps.picturePart ? { picturePart: deps.picturePart } : {}),
   });
   app.closers.add(() => readLabel.stopAll());
   const onStreamFrame: FrameHandler = player ? logFrame : deps.onFrame ?? recognize ?? (() => undefined);

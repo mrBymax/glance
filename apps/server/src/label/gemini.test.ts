@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { PartMediaResolutionLevel } from '@google/genai';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { StoreEntry } from '../products/storeEntries';
 import { LABEL_TEMPLATE_PATH, buildLabelInstruction, createGeminiLabelReader, labelResponseSchema } from './gemini';
@@ -95,6 +96,18 @@ it('sends each reference picture before the still, with its item in a text part 
     { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } },
   ]);
   expect(calls[0]!.body.generationConfig).not.toHaveProperty('mediaResolution');
+});
+it('sends a reference picture that the Files API holds as its file, with no bytes of the picture', async () => {
+  const front = new Uint8Array([0xff, 0xd8, 1, 0xff, 0xd9]);
+  const file = { fileData: { fileUri: 'https://files.example/front', mimeType: 'image/jpeg' }, mediaResolution: { level: PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW } };
+  await reader().read(JPEG, { signal: signal(), references: [{ gtin: '6438574558384', name: 'Paper cups', jpeg: front, file }] });
+  const contents = calls[0]!.body.contents as { parts: unknown[] }[];
+  expect(contents[0]!.parts).toEqual([
+    { text: 'Reference picture of item 6438574558384: Paper cups' },
+    { fileData: { fileUri: 'https://files.example/front', mimeType: 'image/jpeg' }, mediaResolution: { level: 'MEDIA_RESOLUTION_LOW' } },
+    { text: 'The photo to read' },
+    { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } },
+  ]);
 });
 it('with no reference picture the request is the still and one text part', async () => {
   for (const opts of [{ signal: signal() }, { signal: signal(), references: [] }]) {

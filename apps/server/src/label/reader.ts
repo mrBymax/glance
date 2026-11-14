@@ -1,3 +1,4 @@
+import type { Part } from '@google/genai';
 import { z } from 'zod';
 
 /**
@@ -21,8 +22,11 @@ export type LabelAnswer = {
   itemConfidence: number;
 };
 
-/** One reference picture of a store item, for the compare with the still. `name` is the name of the item in the store list. */
-export type LabelReference = { gtin: string; name: string; jpeg: Uint8Array };
+/**
+ * One reference picture of a store item, for the compare with the still. `name` is the name of the item in the store list.
+ * `file` is the picture as a file of the Files API. With it, the request holds no bytes of the picture.
+ */
+export type LabelReference = { gtin: string; name: string; jpeg: Uint8Array; file?: Part };
 
 /** Reads the label of one still. `references` are the reference pictures of store items. A call that fails rejects. */
 export interface LabelReader {

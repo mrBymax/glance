@@ -8,7 +8,7 @@ import type { StoreEntry } from '../products/storeEntries';
 import { type ReferenceImages, createFolderReferences } from '../reference/images';
 import {
   FRAME_REFERENCES_CHECK_MS, FRAME_REFERENCES_MAX_AGE_MS, MAX_FRAME_REFERENCES, MAX_FRAME_REFERENCE_BYTES, type PicturePart,
-  createFrameReferences, createPictureUploader, loadFrameReferences, refreshOnChange,
+  createFrameReferences, createPictureUploader, loadFrameReferences, refreshOnChange, sharePictureParts,
 } from './references';
 
 const dev = readCatalogFile(fileURLToPath(new URL('../../catalog/catalog.dev.json', import.meta.url)));
@@ -226,4 +226,33 @@ it('reads the folder again at once when the server adds or removes a picture', a
   expect(await watched.remove(NUTELLA)).toBe(1);
   await vi.waitFor(() => expect(held.current()).toEqual([]));
   expect(lines.map((line) => line.replace(/^.*pictures, /, ''))).toEqual(['0 in a frame call', '1 in a frame call', '0 in a frame call']);
+});
+
+it('shares one upload of a picture between the frame calls and the label calls, for 24 hours', async () => {
+  const uploads: number[] = [];
+  const upload: PicturePart = async (bytes) => {
+    uploads.push(bytes[0]!);
+    return { fileData: { fileUri: `files/${uploads.length}`, mimeType: 'image/jpeg' } };
+  };
+  const shared = sharePictureParts(upload, { now: () => now });
+  const [first, again, other] = await Promise.all([shared(jpeg(1)), shared(jpeg(1)), shared(jpeg(2))]);
+  expect(uploads).toEqual([1, 2]);
+  expect(again).toBe(first);
+  expect(other).toEqual({ fileData: { fileUri: 'files/2', mimeType: 'image/jpeg' } });
+  now += FRAME_REFERENCES_MAX_AGE_MS - 1;
+  expect(await shared(jpeg(1))).toBe(first);
+  // The Files API deletes a picture after 48 hours.
+  now += 1;
+  expect(await shared(jpeg(1))).toEqual({ fileData: { fileUri: 'files/3', mimeType: 'image/jpeg' } });
+});
+it('does not keep an upload that failed', async () => {
+  let fail = true;
+  const upload: PicturePart = async () => {
+    if (fail) throw new Error('503');
+    return { fileData: { fileUri: 'files/1', mimeType: 'image/jpeg' } };
+  };
+  const shared = sharePictureParts(upload, { now: () => now });
+  await expect(shared(jpeg(1))).rejects.toThrow('503');
+  fail = false;
+  expect(await shared(jpeg(1))).toEqual({ fileData: { fileUri: 'files/1', mimeType: 'image/jpeg' } });
 });

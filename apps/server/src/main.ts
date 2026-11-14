@@ -20,7 +20,7 @@ import { type StoreList, readStoreListFile } from './products/storeList';
 import { ELEVENLABS_MODEL, createSynthesize } from './speech/elevenlabs';
 import { FakeScriptError } from './recognition/fake';
 import { RECOGNITION_TEMPLATE_PATH, type Recognizer, createGeminiRecognizer } from './recognition/gemini';
-import { createFrameReferences, createPictureUploader, refreshOnChange } from './recognition/references';
+import { createFrameReferences, createPictureUploader, refreshOnChange, sharePictureParts } from './recognition/references';
 import { createFrameSaver } from './recognition/save';
 import { createFolderReferences } from './reference/images';
 
@@ -98,10 +98,12 @@ async function main(): Promise<void> {
   const folder = createFolderReferences(config.referenceDir, systemClock);
   // The app does not exist yet, and a line of the first read must go to its log.
   let logReferences: (line: string) => void = (line) => console.error(line);
+  // The frame calls and the label calls share the upload of each picture.
+  const picturePart = frameCallKey === null ? null : sharePictureParts(createPictureUploader({ apiKey: frameCallKey }), systemClock);
   const frameReferences = createFrameReferences({
     store: folder, entries: storeEntries, products: catalog.products, dir: config.referenceDir, clock: systemClock,
     perItem: frameCallKey === null ? 0 : config.recognitionReferences,
-    ...(frameCallKey === null ? {} : { picturePart: createPictureUploader({ apiKey: frameCallKey }) }),
+    ...(picturePart === null ? {} : { picturePart }),
     log: (line) => logReferences(line),
   });
   const recognizer = openRecognizer(config, catalog, storeEntries, frameReferences.current);
@@ -111,6 +113,7 @@ async function main(): Promise<void> {
   const app = await buildApp({
     config, clock: systemClock, store, catalog, storeList, productInfo, storeEntries,
     references: refreshOnChange(folder, frameReferences),
+    ...(picturePart === null ? {} : { picturePart }),
     ...(recognizer ? { recognizer } : {}), ...(labelReader ? { labelReader } : {}), ...(ask ? { ask } : {}), ...(synthesize ? { synthesize } : {}),
     ...(config.saveFramesDir === null ? {} : { saveFrame: createFrameSaver(config.saveFramesDir) }),
   });

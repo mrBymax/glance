@@ -4,6 +4,7 @@ import type { BarcodeReport } from '../products/barcodes';
 import type { StoreList } from '../products/storeList';
 import { type ReferenceImages, selectReferences } from '../reference/images';
 import { saveFrameWith } from '../recognition/intake';
+import type { PicturePart } from '../recognition/references';
 import type { FrameSaver } from '../recognition/save';
 import { productNamed } from '../sessions/code';
 import type { SessionRuntime } from '../sessions/runtime';
@@ -62,6 +63,12 @@ export function createLabelHandler(deps: {
   saveFrame: FrameSaver | null;
   /** The reference pictures of the store items. null: the label call gets the still alone, and no capture works. */
   references: ReferenceImages | null;
+  /**
+   * Makes the file part of a reference picture. With none, each label call sends the bytes of its pictures.
+   * Measured on 2026-11-14 with the bytes in the request: 1.4 to 1.9 s for a call with 3 pictures, and 2.0 to 8 s
+   * for a call with 12 pictures (1.1 MB as base64), while a frame call with the same 12 pictures as files took 1.5 to 2.8 s.
+   */
+  picturePart?: PicturePart;
 }): FrameHandler & { stopAll(): void; capture(session: SessionRuntime, gtin: string): Promise<CapturedReference> } {
   /** The call of each session that runs now. */
   const running = new Map<string, AbortController>();
@@ -75,9 +82,15 @@ export function createLabelHandler(deps: {
     try {
       const names = new Map((await deps.storeList.all()).map((item) => [item.gtin, item.name]));
       const selected = selectReferences(await store.all(), [...names.keys()]);
-      return await Promise.all(selected.map(async (picture) => ({
-        gtin: picture.gtin, name: names.get(picture.gtin)!, jpeg: await store.read(picture),
-      })));
+      return await Promise.all(selected.map(async (picture) => {
+        const jpeg = await store.read(picture);
+        const file = await deps.picturePart?.(jpeg).catch((error: unknown) => {
+          // The request then holds the bytes of this picture.
+          deps.log.warn(`reference picture not uploaded. gtin=${picture.gtin} ${error instanceof Error ? error.message : String(error)} session=${sessionId}`);
+          return undefined;
+        });
+        return { gtin: picture.gtin, name: names.get(picture.gtin)!, jpeg, ...(file ? { file } : {}) };
+      }));
     } catch (error) {
       deps.log.warn(`reference pictures not read. ${error instanceof Error ? error.message : String(error)} session=${sessionId}`);
       return [];
@@ -114,12 +127,17 @@ export function createLabelHandler(deps: {
     let empty = false;
     let answered = false;
     let referenceCount = 0;
+    let fileCount = 0;
+    // The bytes of the images in the request: the still, and each reference picture that is no file.
+    let inlineBytes = jpeg.length;
     try {
       const { references: store } = deps;
       const reading = store === null
         ? reader.read(jpeg, { signal: abort.signal })
         : referencesFor(store, session.id).then((references) => {
           referenceCount = references.length;
+          fileCount = references.filter((reference) => reference.file !== undefined).length;
+          for (const reference of references) if (reference.file === undefined) inlineBytes += reference.jpeg.length;
           return reader.read(jpeg, { signal: abort.signal, references });
         });
       const answer: LabelAnswer = await Promise.race([reading, late]);
@@ -138,7 +156,7 @@ export function createLabelHandler(deps: {
     }
     if (session.stopped) return;
 
-    deps.log.info(`label session=${session.id} seq=${seq} match=${gtin ?? 'none'} ms=${Math.round(performance.now() - startedAt)} references=${referenceCount}`);
+    deps.log.info(`label session=${session.id} seq=${seq} match=${gtin ?? 'none'} ms=${Math.round(performance.now() - startedAt)} references=${referenceCount} files=${fileCount} inlineBytes=${inlineBytes}`);
     const result = gtin === null ? 'dropped' : await deps.report(session, gtin, 'label');
     if (result === 'product' || session.stopped) return;
     const read = answered ? (empty ? 'empty' : 'failed') : 'error';

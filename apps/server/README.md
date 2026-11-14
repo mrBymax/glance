@@ -767,7 +767,7 @@ A frame with the kind `label` is the still of a package that the phone could not
 - One label call runs at a time for each session, and a session starts at most one call each 5 seconds. A label frame that arrives during a call, or too early, is dropped with a `label frame dropped` warning.
 - A label frame of a session that rests, is paid, or ended is dropped with no call.
 - With `REQUIRE_BLUR=1` the server drops a label frame with `blurred: false`. With `SAVE_FRAMES` it saves each label frame that it accepts.
-- Each label frame gets the frame log line at `info` level, and each call gets `label session=<id> seq=<n> match=<13 digits|none> ms=<n> references=<n>`, with the number of reference pictures in the request. Before it, the line `label answer seq=<n> digits=[...] brand=... name=... confidence=<n> item=<13 digits|null> itemConfidence=<n> session=<id>` shows what the model read, so a person can see why a still gave no product.
+- Each label frame gets the frame log line at `info` level, and each call gets `label session=<id> seq=<n> match=<13 digits|none> ms=<n> references=<n> files=<n> inlineBytes=<n>`. `references` is the number of reference pictures in the request, `files` is the number of them that the request holds as a file of the Files API, and `inlineBytes` counts the JPEG bytes that the request carries: the still, and each picture that is no file. Before it, the line `label answer seq=<n> digits=[...] brand=... name=... confidence=<n> item=<13 digits|null> itemConfidence=<n> session=<id>` shows what the model read, so a person can see why a still gave no product.
 - With real recognition, each label call is one paid Gemini call. The phone sends at most one still each 6 seconds by default. A person can set that gap on the phone, down to 2 seconds, and the limit of 5 seconds on the server holds for a phone that sends more.
 
 ### Reference pictures
@@ -841,15 +841,26 @@ The label call with pictures:
 - A reference part has the media resolution `MEDIA_RESOLUTION_LOW` of its part. `@google/genai` 3.3.0 has this field (`Part.mediaResolution`), and the documentation of Gemini gives it to Gemini 3 models and later, with 280 tokens for one image. The still keeps the default, because the digits under a barcode are small.
 - A call gets at most 3 pictures of one item: the newest ones.
 - A call gets at most 24 pictures and at most 9 MB of JPEG bytes. The Gemini API takes 20 MB in one request with inline data. Base64 makes 12 MB of 9 MB, and the still and the instruction fit in the rest. 24 pictures cost 6720 tokens.
+- With real recognition, a picture goes out as a file of the Files API, as in a frame call, and the request carries the bytes of the still alone. `sharePictureParts` in `src/recognition/references.ts` keeps one upload for each picture, by its bytes, for the frame calls and the label calls together, for 24 hours. A picture that the frame calls do not hold is sent to the Files API in the label call that needs it first, inside the 8 seconds of that call. A picture whose upload fails goes out as bytes, with the log line `reference picture not uploaded. gtin=<13 digits> <message> session=<id>`.
+- A server that gets a label reader with no uploader sends the bytes of each picture, as before. Only a test builds such a server.
 - When the limits leave pictures out, each item gets its newest picture before an item gets a second one. The order is that of the store list.
 - Only an item of the store list gets its pictures into a call.
 - A reference store that fails costs the pictures of that call, with the log line `reference pictures not read. <message> session=<id>`. The call still runs.
 - `agents/label.md` says: a reference picture can show the item from another side or in other light, the background of a reference picture means nothing, and `item` is the product of a reference picture or the match of the store list text. The model reads `digits`, `brand`, and `name` only from the photo to read.
 - `matchLabel` does not change: digits with a right check digit first, then `item` from `LABEL_MIN_CONFIDENCE` on, then the words.
 - Recognition by sight also gets reference pictures, with limits of its own. See "Reference pictures in a frame call".
-- The upload of the pictures is part of the 8 seconds of a label call. With many large pictures on a slow line, a call can fail with `no answer in 8000 ms`. Then remove pictures.
 
-Measured in the tests of 2026-11-14: the label call with 3 reference pictures ran with the real model. The calls took 1.4 to 1.9 seconds. `gemini-3.5-flash-lite` takes the media resolution of a part.
+Measured in the tests of 2026-11-14, with the bytes of each picture in the request. `gemini-3.5-flash-lite` takes the media resolution of a part.
+
+| Reference pictures in a label call | Calls | Time of a call | Frame calls at the same time, median |
+|---|---|---|---|
+| 0 or 3 (3 pictures are 0.3 MB as base64) | 12 | 1.2 to 1.9 s | 1.1 to 1.4 s |
+| 12 (0.85 MB of JPEG, 1.1 MB as base64) | 17 | 11 calls of 2.0 to 6.8 s, and 6 with no answer in the limit of their test (4 s, then 8 s) | 1.5 to 2.8 s, and 4.0 s one time |
+
+- The frame calls of the second row held the same 12 pictures as files, and took 1.5 to 2.8 seconds in the median. So the pictures in the model do not cost the seconds. The bytes in the request are the part that only the label call had.
+- The call with no answer in 8 seconds ran while the frame calls failed too: 6 frame calls ran into their 4 seconds in the 5 seconds before it, and 10 during it. The log does not show if the line or the API was slow then.
+- No label call with the pictures as files has run with the real model. In the next session, `files=12` and a small `inlineBytes` in the `label` line show the new request, and `ms` shows its time. If `ms` stays above 3 seconds with `files=12`, the bytes were not the cause.
+- The SDK call gives no time to the first byte. A stream call would give one, and the server does not make one.
 
 A database in place of the folder. `ReferenceImages` in `src/reference/images.ts` is the interface:
 

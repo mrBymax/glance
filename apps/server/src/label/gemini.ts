@@ -54,14 +54,14 @@ export const referencePicturePart = (jpeg: Uint8Array): Part => ({
 
 /**
  * The parts of one request. With reference pictures, each picture follows a text part that names its item, and the
- * still is the last image.
+ * still is the last image. A picture that the Files API holds goes out as its file.
  */
 export function labelParts(jpeg: Uint8Array, references: readonly LabelReference[]): Part[] {
   if (references.length === 0) return [jpegPart(jpeg), { text: 'Read this label.' }];
   return [
     ...references.flatMap((reference): Part[] => [
       { text: `Reference picture of item ${reference.gtin}: ${reference.name}` },
-      referencePicturePart(reference.jpeg),
+      reference.file ?? referencePicturePart(reference.jpeg),
     ]),
     { text: 'The photo to read' },
     jpegPart(jpeg),

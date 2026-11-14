@@ -2,6 +2,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_PROFILE } from '@glance/shared';
 import type { BarcodeReport } from '../products/barcodes';
+import type { PicturePart } from '../recognition/references';
 import type { ReferenceImage, ReferenceImages } from '../reference/images';
 import type { StoreList } from '../products/storeList';
 import { PRODUCT_KNOWN_MS, STILL_AFTER_ANSWER_MS } from '../sessions/code';
@@ -65,12 +66,13 @@ function memoryReferences(pictures: [string, Uint8Array][] = []): ReferenceImage
   };
 }
 
-function handler(reader: LabelReader | null, over: { references?: ReferenceImages; requireBlur?: boolean } = {}) {
+function handler(reader: LabelReader | null, over: { references?: ReferenceImages; requireBlur?: boolean; picturePart?: PicturePart } = {}) {
   const write = (line: string): void => { lines.push(line); };
   return createLabelHandler({
     reader, storeList, report, log: { info: write, warn: write } as unknown as FastifyBaseLogger,
     minConfidence: 0.6, minItemConfidence: 0.7, requireBlur: over.requireBlur ?? false, saveFrame: null, clock: { now: () => now },
     references: over.references ?? null,
+    ...(over.picturePart ? { picturePart: over.picturePart } : {}),
   });
 }
 const pending = (): { reader: LabelReader; answer: (value: LabelAnswer) => void; signals: AbortSignal[] } => {
@@ -241,7 +243,40 @@ it('gives the label call the reference pictures of the store items, with the nam
     { gtin: '3017624010701', name: 'Nutella', jpeg: back },
     { gtin: '3017624010701', name: 'Nutella', jpeg: front },
   ]);
-  await vi.waitFor(() => expect(lines.join('\n')).toMatch(/label session=s-1 seq=4 match=none ms=\d+ references=2/));
+  // With no uploader, the request holds the bytes of each picture and of the still.
+  await vi.waitFor(() => expect(lines.join('\n')).toMatch(/label session=s-1 seq=4 match=none ms=\d+ references=2 files=0 inlineBytes=9$/m));
+});
+it('gives the label call each reference picture as a file of the Files API, so the request holds the bytes of the still alone', async () => {
+  const front = new Uint8Array([1, 2, 3]);
+  const back = new Uint8Array([4, 5]);
+  const references = memoryReferences([['3017624010701', front], ['3017624010701', back]]);
+  const read = vi.fn<LabelReader['read']>(async () => NO_LABEL);
+  const picturePart: PicturePart = async (jpeg) => ({ fileData: { fileUri: `files/${jpeg[0]}`, mimeType: 'image/jpeg' } });
+  handler({ read }, { references, picturePart })(session, { header, jpeg: JPEG });
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+  expect(read.mock.calls[0]![1].references).toEqual([
+    { gtin: '3017624010701', name: 'Nutella', jpeg: back, file: { fileData: { fileUri: 'files/4', mimeType: 'image/jpeg' } } },
+    { gtin: '3017624010701', name: 'Nutella', jpeg: front, file: { fileData: { fileUri: 'files/1', mimeType: 'image/jpeg' } } },
+  ]);
+  await vi.waitFor(() => expect(lines.join('\n')).toMatch(/label session=s-1 seq=4 match=none ms=\d+ references=2 files=2 inlineBytes=4$/m));
+});
+it('sends the bytes of a reference picture when its upload fails', async () => {
+  const front = new Uint8Array([1, 2, 3]);
+  const back = new Uint8Array([4, 5]);
+  const references = memoryReferences([['3017624010701', front], ['3017624010701', back]]);
+  const read = vi.fn<LabelReader['read']>(async () => NO_LABEL);
+  const picturePart: PicturePart = async (jpeg) => {
+    if (jpeg[0] === 4) throw new Error('503 overloaded');
+    return { fileData: { fileUri: 'files/1', mimeType: 'image/jpeg' } };
+  };
+  handler({ read }, { references, picturePart })(session, { header, jpeg: JPEG });
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+  expect(read.mock.calls[0]![1].references).toEqual([
+    { gtin: '3017624010701', name: 'Nutella', jpeg: back },
+    { gtin: '3017624010701', name: 'Nutella', jpeg: front, file: { fileData: { fileUri: 'files/1', mimeType: 'image/jpeg' } } },
+  ]);
+  expect(lines.join('\n')).toContain('reference picture not uploaded. gtin=3017624010701 503 overloaded session=s-1');
+  await vi.waitFor(() => expect(lines.join('\n')).toMatch(/references=2 files=1 inlineBytes=6$/m));
 });
 it('reads the label with no picture when the reference store fails', async () => {
   const references: ReferenceImages = { ...memoryReferences(), all: async () => { throw new Error('disk gone'); } };
