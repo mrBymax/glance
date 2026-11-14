@@ -67,6 +67,29 @@ class FrameCodecTest {
         assertNull(decoded.source)
     }
 
+    @Test fun `carries the context image of a crop after the JPEG, and writes its byte count into the header`() {
+        val context = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x09, 0xFF.toByte(), 0xD9.toByte())
+        val crop = header.copy(view = FrameView.CROP, crop = FrameCrop(2, 4, 576, 768), source = FrameSize(720, 1280))
+        val message = FrameCodec.encode(crop, jpeg, context)
+        assertTrue(String(message, Charsets.ISO_8859_1).contains("\"source\":{\"w\":720,\"h\":1280},\"contextBytes\":5}"))
+        assertArrayEquals(context, message.copyOfRange(message.size - 5, message.size))
+        val (decoded, body) = FrameCodec.decode(message)
+        assertEquals(crop.copy(contextBytes = 5), decoded)
+        assertArrayEquals(jpeg, body)
+        assertArrayEquals(context, FrameCodec.context(message))
+    }
+
+    @Test fun `a frame with no context image has none, and the byte count never comes from the caller`() {
+        val message = FrameCodec.encode(header.copy(contextBytes = 3), jpeg)
+        assertFalse(String(message, Charsets.ISO_8859_1).contains("contextBytes"))
+        assertNull(FrameCodec.context(message))
+        assertArrayEquals(jpeg, FrameCodec.decode(message).second)
+    }
+
+    @Test fun `rejects a context image that is no JPEG`() {
+        assertThrows(FrameFormatError::class.java) { FrameCodec.decode(FrameCodec.encode(header, jpeg, byteArrayOf(1, 2, 3))) }
+    }
+
     @Test fun `rejects a message shorter than 4 bytes`() {
         assertThrows(FrameFormatError::class.java) { FrameCodec.decode(byteArrayOf(0, 0)) }
     }

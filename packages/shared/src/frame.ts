@@ -4,6 +4,9 @@ import { z } from 'zod';
 //   bytes 0 to 3      the header length N, unsigned 32-bit big-endian
 //   bytes 4 to 4+N    the header as UTF-8 JSON
 //   the rest          the JPEG, which starts with 0xFF 0xD8
+// A crop can carry a second JPEG behind the first one: the context image, which is the whole source image in a
+// small size. The header field contextBytes has its byte count. A JPEG reader stops at the end of the first image,
+// so a server that does not know the field reads the body as the crop.
 
 export const FrameHeaderSchema = z.object({
   seq: z.number().int().min(0),
@@ -24,6 +27,8 @@ export const FrameHeaderSchema = z.object({
   }).optional(),
   // The size of the source image: the stream frame or the still photo, before the phone cropped or scaled it.
   source: z.object({ w: z.number().int().positive(), h: z.number().int().positive() }).optional(),
+  // The byte count of the context image at the end of the message. encodeFrame writes it.
+  contextBytes: z.number().int().positive().optional(),
 });
 export type FrameHeader = z.infer<typeof FrameHeaderSchema>;
 
@@ -38,24 +43,33 @@ export const MAX_FRAME_HEADER_BYTES = 1024;
 
 const LENGTH_BYTES = 4;
 
-/** Builds a frame message. It does not check the JPEG bytes. */
-export function encodeFrame(header: FrameHeader, jpeg: Uint8Array): Uint8Array {
-  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+/**
+ * Builds a frame message. It does not check the JPEG bytes.
+ * `context` is the context image of a crop. Its byte count goes into the header as contextBytes, in place of a
+ * value of the caller.
+ */
+export function encodeFrame(header: FrameHeader, jpeg: Uint8Array, context?: Uint8Array): Uint8Array {
+  const { contextBytes: _, ...fields } = header;
+  const headerBytes = new TextEncoder().encode(JSON.stringify(context ? { ...fields, contextBytes: context.length } : fields));
   if (headerBytes.length > MAX_FRAME_HEADER_BYTES) {
     throw new FrameFormatError(`The frame header has ${headerBytes.length} bytes. The limit is ${MAX_FRAME_HEADER_BYTES}.`);
   }
-  const message = new Uint8Array(LENGTH_BYTES + headerBytes.length + jpeg.length);
+  const message = new Uint8Array(LENGTH_BYTES + headerBytes.length + jpeg.length + (context?.length ?? 0));
   new DataView(message.buffer).setUint32(0, headerBytes.length, false);
   message.set(headerBytes, LENGTH_BYTES);
   message.set(jpeg, LENGTH_BYTES + headerBytes.length);
+  if (context) message.set(context, LENGTH_BYTES + headerBytes.length + jpeg.length);
   return message;
 }
 
+const startsAsJpeg = (bytes: Uint8Array): boolean => bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8;
+
 /**
- * Reads a frame message. The returned JPEG is a view on the message, with no copy.
+ * Reads a frame message. The returned JPEG and the context image are views on the message, with no copy.
+ * `context` is there only for a header with contextBytes.
  * Throws FrameFormatError for each message that does not have the layout above.
  */
-export function decodeFrame(message: Uint8Array): { header: FrameHeader; jpeg: Uint8Array } {
+export function decodeFrame(message: Uint8Array): { header: FrameHeader; jpeg: Uint8Array; context?: Uint8Array } {
   if (message.length < LENGTH_BYTES) {
     throw new FrameFormatError('The frame message is shorter than 4 bytes.');
   }
@@ -80,9 +94,15 @@ export function decodeFrame(message: Uint8Array): { header: FrameHeader; jpeg: U
     throw new FrameFormatError('The frame header does not have the fields of a frame header.');
   }
 
-  const jpeg = message.subarray(jpegStart);
-  if (jpeg.length < 2 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) {
+  const contextBytes = header.data.contextBytes ?? 0;
+  const jpeg = message.subarray(jpegStart, message.length - contextBytes);
+  if (!startsAsJpeg(jpeg)) {
     throw new FrameFormatError('The frame body does not start with the JPEG start bytes.');
   }
-  return { header: header.data, jpeg };
+  if (contextBytes === 0) return { header: header.data, jpeg };
+  const context = message.subarray(message.length - contextBytes);
+  if (!startsAsJpeg(context)) {
+    throw new FrameFormatError('The context image does not start with the JPEG start bytes.');
+  }
+  return { header: header.data, jpeg, context };
 }

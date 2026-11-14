@@ -73,7 +73,8 @@ class DeviceSocket(
     /** Returns false while the socket is down. A message never waits for a later connection. */
     fun send(message: DeviceToServer): Boolean = current()?.send(Codec.encode(message)) ?: false
 
-    fun sendFrame(header: FrameHeader, jpeg: ByteArray): Boolean = current()?.send(FrameCodec.encode(header, jpeg).toByteString()) ?: false
+    /** `context` is the context image of a crop: see `FrameCodec.encode`. */
+    fun sendFrame(header: FrameHeader, jpeg: ByteArray, context: ByteArray? = null): Boolean = current()?.send(FrameCodec.encode(header, jpeg, context).toByteString()) ?: false
 
     private fun current(): WebSocket? = synchronized(lock) { if (open) socket else null }
 

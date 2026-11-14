@@ -37,6 +37,40 @@ describe('frame codec', () => {
     const crop = encodeFrame({ ...header, view: 'crop', crop: { x: 0, y: 0, w: 0, h: 10 } } as unknown as FrameHeader, jpeg);
     expect(() => decodeFrame(crop)).toThrow(FrameFormatError);
   });
+  it('carries the context image of a crop after the JPEG, and writes its byte count into the header', () => {
+    const context = new Uint8Array([0xff, 0xd8, 0x09, 0xff, 0xd9]);
+    const crop = { ...header, view: 'crop', crop: { x: 2, y: 4, w: 576, h: 768 }, source: { w: 720, h: 1280 } } as const;
+    const decoded = decodeFrame(encodeFrame(crop, jpeg, context));
+    expect(decoded.header).toEqual({ ...crop, contextBytes: 5 });
+    expect(decoded.jpeg).toEqual(jpeg);
+    expect(decoded.context).toEqual(context);
+  });
+  it('a frame with no context image has no context, and no byte count in its header', () => {
+    const decoded = decodeFrame(encodeFrame(header, jpeg));
+    expect(decoded.context).toBeUndefined();
+    expect(decoded.header).toEqual(header);
+    // The byte count of the header comes from the context image, and never from the caller.
+    expect(decodeFrame(encodeFrame({ ...header, contextBytes: 3 }, jpeg)).header).toEqual(header);
+  });
+  it('rejects a context image that is no JPEG, and a byte count that leaves no JPEG before it', () => {
+    expect(() => decodeFrame(encodeFrame(header, jpeg, new Uint8Array([1, 2, 3])))).toThrow(FrameFormatError);
+    // A header that says that the whole body is the context image.
+    const headerBytes = new TextEncoder().encode(JSON.stringify({ ...header, contextBytes: jpeg.length }));
+    const message = new Uint8Array(4 + headerBytes.length + jpeg.length);
+    new DataView(message.buffer).setUint32(0, headerBytes.length, false);
+    message.set(headerBytes, 4);
+    message.set(jpeg, 4 + headerBytes.length);
+    expect(() => decodeFrame(message)).toThrow(FrameFormatError);
+  });
+  it('an older server reads a frame with a context image as one JPEG that starts with the crop', () => {
+    const context = new Uint8Array([0xff, 0xd8, 0x09, 0xff, 0xd9]);
+    const message = encodeFrame(header, jpeg, context);
+    // What a server of before does: it drops the header field that it does not know, and takes the body as the JPEG.
+    const n = new DataView(message.buffer).getUint32(0, false);
+    const body = message.subarray(4 + n);
+    expect([...body.subarray(0, jpeg.length)]).toEqual([...jpeg]);
+    expect(body.length).toBe(jpeg.length + context.length);
+  });
   it('writes the header length as 4 big-endian bytes', () => {
     const message = encodeFrame(header, jpeg);
     const n = new DataView(message.buffer, message.byteOffset).getUint32(0, false);

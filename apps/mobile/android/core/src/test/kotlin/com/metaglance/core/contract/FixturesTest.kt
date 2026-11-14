@@ -84,7 +84,7 @@ class FixturesTest {
                 "server-to-device" to 7,
                 "bridge-page-to-native" to 11,
                 "bridge-native-to-page" to 4,
-                "frame-headers" to 4,
+                "frame-headers" to 5,
                 "rest" to 8
             ),
             counts()
