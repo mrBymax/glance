@@ -92,6 +92,25 @@ it('does not announce the captions of a snapshot', async () => {
   await waitFor(() => expect(politeRegion()).toHaveTextContent('A new line.'));
   expect(politeRegion()).not.toHaveTextContent('An old line.');
 });
+it('does not announce the captions of a later snapshot of the same session', async () => {
+  const missed = { id: 'c-missed', text: 'A line from the time with no connection.', lang: 'en', priority: 'normal', url: null } as const;
+  renderWithUi(<SessionScreen />, { messages: [
+    { t: 'snapshot', session: { ...SNAPSHOT, captions: [] } },
+    { t: 'snapshot', session: { ...SNAPSHOT, captions: [missed] } },
+    eventMessage('caption', { id: 'c-new', text: 'A new line.' }),
+  ] });
+  await waitFor(() => expect(politeRegion()).toHaveTextContent('A new line.'));
+  expect(politeRegion()).not.toHaveTextContent(missed.text);
+});
+it('announces a caption again when an event changes its text after a snapshot', async () => {
+  const old = { id: 'c-1', text: 'An old line.', lang: 'en', priority: 'normal', url: null } as const;
+  renderWithUi(<SessionScreen />, { messages: [
+    { t: 'snapshot', session: { ...SNAPSHOT, captions: [old] } },
+    eventMessage('caption', { id: 'c-1', text: 'A changed line.' }),
+  ] });
+  await waitFor(() => expect(politeRegion()).toHaveTextContent('A changed line.'));
+  expect(politeRegion()).not.toHaveTextContent('An old line.');
+});
 it('sends ui.ready one time, after it listens to the bridge', () => {
   const { bridge } = renderWithUi(<SessionScreen />);
   expect(bridge.sent).toEqual([{ t: 'ui.ready' }]);

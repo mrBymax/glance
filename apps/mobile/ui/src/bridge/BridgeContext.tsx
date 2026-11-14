@@ -1,6 +1,6 @@
 import type { GlanceBridge, PageToNative } from '@glance/shared';
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, type ReactNode } from 'react';
-import { useSpokenText } from '../components/useSpokenText';
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
+import { snapshotCaptionsOf, useSpokenText, type SnapshotCaptions } from '../components/useSpokenText';
 import { initialUiState, reduce, type UiAction, type UiState } from '../state/uiState';
 import { stringsFor, type Strings } from '../text/strings';
 
@@ -21,11 +21,15 @@ export function BridgeProvider(props: { bridge: GlanceBridge; children: ReactNod
   const { bridge, children } = props;
   const [state, dispatch] = useReducer(reduce, initialUiState);
   const strings = stringsFor(state.profile.lang);
-  useSpokenText(state, strings);
+  const snapshotCaptions = useRef<SnapshotCaptions>(new Map());
+  useSpokenText(state, strings, snapshotCaptions);
 
   useEffect(() => {
     // The host answers ui.ready at once, so the page must listen first.
-    const unsubscribe = bridge.subscribe(dispatch);
+    const unsubscribe = bridge.subscribe((message) => {
+      if (message.t === 'snapshot') snapshotCaptions.current = snapshotCaptionsOf(message.session.captions);
+      dispatch(message);
+    });
     bridge.send({ t: 'ui.ready' });
     return unsubscribe;
   }, [bridge]);
