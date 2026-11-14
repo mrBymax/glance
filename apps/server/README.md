@@ -14,6 +14,8 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/clock.ts` | The time source of the runtime. |
 | `src/main.ts` | Opens the store, starts the server, and closes it on `SIGTERM` and `SIGINT`. |
 | `src/catalog/catalog.ts` | `readCatalogFile` reads a catalog file, and `indexCatalog` finds a product by its ID. |
+| `src/catalog/check.ts` | `checkCatalog` finds the errors of a catalog file. See "Catalog". |
+| `scripts/catalog-check.ts`, `scripts/catalog-seed.ts` | `npm run catalog:check` and `npm run catalog:seed`. See "Catalog". |
 | `catalog/catalog.dev.json` | The dev catalog with four products. The tests use its IDs and prices. |
 | `src/recognition/` | The recognition of a frame, and the script player that stands in for it. See "Recognition" and "Fake mode". |
 | `agents/recognition.md` (repository root) | The instruction for the recognition model, with the placeholder `{{catalog}}`. |
@@ -27,7 +29,7 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/ws/device.ts` | The socket of the phone. See "Device socket". |
 | `src/testing.ts` | Test helpers: an app on a free port, a reader for an events stream, and a phone on the device socket. |
 
-Parts that do not exist yet: the catalog seed, the spot check, and the fingerprint check.
+Parts that do not exist yet: the spot check and the fingerprint check.
 
 ## Run it
 
@@ -83,7 +85,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 - The flag `--fake` turns both fake switches on. A variable that is set wins over the flag.
 - Each path is relative to the working directory, which is `apps/server`. The server also reads `../../agents/recognition.md` from there when recognition is real.
 - With a missing key the server prints `config: <message>` and exits with code 1. The message names the variable and the switch that removes the need.
-- With `MONGODB_URI` the products come from the database, and `CATALOG_PATH` has no effect. If the database holds no product, the server prints `products is empty. Run npm run catalog:seed.` and exits with code 1. The seed command does not exist yet.
+- With `MONGODB_URI` the products come from the database, and `CATALOG_PATH` has no effect. If the database holds no product, the server prints `products is empty. Run npm run catalog:seed.` and exits with code 1. See "Catalog" for the seed.
 
 ## Fake mode
 
@@ -261,6 +263,59 @@ A catalog file is a JSON array. Each entry is a `Product` of `@glance/shared`. P
 - `readCatalogFile` stops at the first entry that fails the schema. Its message names the file, the index of the entry, and the ID.
 - `indexCatalog` rejects a catalog that holds one ID two times.
 - In `allergens`, `null` means "no data", and an empty list means "no allergen". The potato crisps of the dev catalog have no data.
+
+### Check a catalog
+
+```bash
+npm run catalog:check --workspace @glance/server                              # the file of CATALOG_PATH
+npm run catalog:check --workspace @glance/server -- catalog/catalog.json
+npm run catalog:check --workspace @glance/server -- catalog/catalog.json --lang it
+# warning: potato-crisps: no allergen data
+# warning: catalog: 4 products, the demo needs 12
+# catalog: 4 products, 0 errors, 2 warnings
+```
+
+The command prints one line for each finding and then the counts. Its exit code is 1 with one error or more. Each message starts with the product ID, with `entry <index>` for an entry with no ID, or with `catalog`.
+
+Errors:
+
+- The file holds no JSON array, or an entry fails `ProductSchema`. The message names the field.
+- Two entries have one ID. The check keeps the first one.
+- A price is 0.
+- A look-alike does not exist, is the product itself, or does not list the product back.
+- No look-alike pair differs in price or in allergens (spec section 11.3). A product with no allergen data differs from its look-alike only by its price.
+- A GTIN has another length than 8, 12, 13, or 14 digits, or a wrong GS1 check digit.
+- With `--lang it`: `name`, `spokenName`, `spokenPack`, or `spokenPackDetailed` has no Italian text.
+
+Warnings:
+
+- A product has no allergen data.
+- A `visual` text has fewer than 20 characters, a line break, or a vertical bar. The recognition prompt prints each product on one line, with bars between its fields.
+- The catalog has fewer than 12 products.
+
+### Seed
+
+```bash
+npm run catalog:seed --workspace @glance/server -- catalog/catalog.dev.json --no-clips
+# seed: no MONGODB_URI, products not stored
+# seed: --no-clips is set, no clip made
+# seed: 4 products, 0 clips, 0 failed
+```
+
+`catalog:seed` reads `apps/server/.env`. It does these steps:
+
+1. It runs the check, prints its lines, and stops on an error.
+2. With `MONGODB_URI` it replaces the products of the database. Without it, it stores nothing: the memory store reads `CATALOG_PATH` at each start of the server.
+3. It makes the speech clips of the lines that each shop needs, one at a time, in `SPEECH_CACHE_DIR`. With `--no-clips` or `FAKE_SPEECH=1` it makes no clip.
+4. It prints the counts. Its exit code is 1 if a clip failed.
+
+The clips:
+
+- `seedLines` in `src/speech/seed.ts` lists the texts: 3 for each product (the glance line with and with no hint, and the "in your cart" line) and 27 lines that have no product. That is 39 texts for the dev catalog and 63 for 12 products.
+- The texts are in English, for the default profile. A line with a total, the pay prompt, and each line for another input than the nod get their clips during the shop.
+- Each text with no clip in the cache is one paid ElevenLabs call. Before the calls, the command prints the number of lines and characters. A second run makes no call for the clips that exist.
+- A clip belongs to one voice. A new `ELEVENLABS_VOICE_EN` makes each clip again.
+- The seed needs no Gemini key. With `--no-clips` it needs no ElevenLabs key.
 
 ## Rules
 
