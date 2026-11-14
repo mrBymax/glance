@@ -342,6 +342,18 @@ class DatLink(
         }
     }
 
+    /**
+     * Runs a call that adds a capability to a session. The SDK returns its errors as a `DatResult`, but with
+     * DAT 1.0.1 `addInputs` threw an IllegalStateException ("Could not get shared DWA channel") for a session that
+     * mock glasses had just ended with a fold. The app must not stop for that. Returns null after such a failure.
+     */
+    private inline fun <T> sdkCall(what: String, call: () -> T): T? = try {
+        call()
+    } catch (e: IllegalStateException) {
+        log("$what failed: ${e.message}")
+        null
+    }
+
     private fun requireInitialized(action: String): Boolean {
         if (!initialized) log("$action: dat is not initialized")
         return initialized
@@ -460,6 +472,10 @@ class DatLink(
             private set
         private var cameraScope: CoroutineScope? = null
         private var cameraRequested = false
+
+        /** When the app asked for the camera, and when its stream first reached STREAMING. */
+        private var cameraAtMs: Long? = null
+        private var streamingAtMs: Long? = null
         private var autoAttached = false
 
         private var motion: Motion? = null
@@ -504,6 +520,30 @@ class DatLink(
         fun stop() {
             if (stopRequested) return
             stopRequested = true
+            if (stopWaitMs() <= 0) {
+                stopNow()
+                return
+            }
+            log("session: the stream just started, so the stop waits")
+            runScope.launch {
+                // The stream can reach STREAMING during the wait, and then the wait starts again from that time.
+                val giveUpAtMs = SystemClock.elapsedRealtime() + MAX_STOP_WAIT_MS
+                while (true) {
+                    val waitMs = minOf(stopWaitMs(), giveUpAtMs - SystemClock.elapsedRealtime())
+                    if (waitMs <= 0) break
+                    delay(waitMs)
+                }
+                stopNow()
+            }
+        }
+
+        /** The time that a stop must still wait, so that it does not meet the start of the video decoder. */
+        private fun stopWaitMs(): Long {
+            val startedAtMs = streamingAtMs ?: cameraAtMs ?: return 0
+            return startedAtMs + STOP_AFTER_STREAM_START_MS - SystemClock.elapsedRealtime()
+        }
+
+        private fun stopNow() {
             camera?.stop()
             session.stop()
             // The stream collectors end here, so no later stream state arrives. The snapshot gets the end states
@@ -544,6 +584,7 @@ class DatLink(
 
         private fun attachCamera() {
             cameraRequested = true
+            cameraAtMs = SystemClock.elapsedRealtime()
             session.addCamera(StreamConfiguration(videoQuality = VideoQuality.HIGH, frameRate = STREAM_FPS)).fold(
                 onSuccess = { added ->
                     camera = added
@@ -563,6 +604,7 @@ class DatLink(
 
         private fun onStreamState(state: StreamState) {
             log("stream $state")
+            if (state == StreamState.STREAMING && streamingAtMs == null) streamingAtMs = SystemClock.elapsedRealtime()
             if (isCurrent) _snapshot.update { it.copy(stream = state.toCore()) }
             // The BirdSpotter sample of Meta attaches its sensors at the same point.
             if (state == StreamState.STREAMING && autoAttach && !autoAttached && !stopRequested) {
@@ -578,7 +620,7 @@ class DatLink(
                 log("motion: it is attached")
                 return
             }
-            session.addMotion(MotionConfiguration(samplingRate = MotionSamplingRate.HZ_30)).fold(
+            sdkCall("add motion") { session.addMotion(MotionConfiguration(samplingRate = MotionSamplingRate.HZ_30)) }?.fold(
                 onSuccess = { added ->
                     motion = added
                     motionSampleCount = 0
@@ -629,7 +671,7 @@ class DatLink(
                 return
             }
             inputSources = sources
-            session.addInputs(InputsConfiguration(sources = sources, consumeBack = true)).fold(
+            sdkCall("add inputs") { session.addInputs(InputsConfiguration(sources = sources, consumeBack = true)) }?.fold(
                 onSuccess = { added ->
                     inputs = added
                     val collectors = childScope().also { inputsScope = it }
@@ -664,13 +706,20 @@ class DatLink(
             if (isCurrent) _snapshot.update { it.copy(inputsActive = state == InputsState.ACTIVE) }
             if (state == InputsState.ACTIVE) inputsRevival.onStarted()
             if (stopped && inputsRevival.onStopped(byApp = !canRevive)) {
-                log("revive inputs ${inputsRevival.attempts}")
-                val old = inputsScope
-                inputs = null
-                session.removeInputs().onFailure { error, _ -> fault(DatFault.Area.INPUTS, error) }
-                attachInputs(inputSources)
-                // This function runs in a collector of the old scope, so the cancel comes last.
-                old?.cancel()
+                val attempt = inputsRevival.attempts
+                val stoppedInputs = inputs
+                // Inputs also stops when the glasses end the session, a moment before the session reports it.
+                // So the revival waits, as for Motion and Speech, and then reads the session state again.
+                runScope.launch {
+                    delay(REVIVE_DELAY_MS)
+                    if (!canRevive || inputs !== stoppedInputs) return@launch
+                    log("revive inputs $attempt")
+                    val old = inputsScope
+                    inputs = null
+                    session.removeInputs().onFailure { error, _ -> fault(DatFault.Area.INPUTS, error) }
+                    attachInputs(inputSources)
+                    old?.cancel()
+                }
             }
         }
 
@@ -683,7 +732,7 @@ class DatLink(
                 log("speech: the microphone permission is not granted")
                 return
             }
-            session.addSpeech().fold(
+            sdkCall("add speech") { session.addSpeech() }?.fold(
                 onSuccess = { added ->
                     speech = added
                     runScope.subscribe { added.transcriptions.collect { result -> result?.let { onTranscription(added, it) } } }
@@ -781,6 +830,13 @@ class DatLink(
         const val STREAM_FPS = 7
         const val NS_PER_SECOND = 1_000_000_000L
         const val REVIVE_DELAY_MS = 750L
+
+        // Measured with DAT 1.0.1 and mock glasses on a Nothing Phone (1), Android 15: a stop at the moment the
+        // stream reaches STREAMING ends the app process. The video decoder of the SDK calls MediaCodec.reset on its
+        // own thread while the stop releases the same codec, and the system aborts in the destructor of MediaCodec
+        // (MediaCodec.cpp, CHECK_EQ(mState, UNINITIALIZED)). So a stop waits until the stream is this old.
+        const val STOP_AFTER_STREAM_START_MS = 1000L
+        const val MAX_STOP_WAIT_MS = 3000L
         const val MOTION_COUNT_LOG_MS = 3000L
         const val EVENT_BUFFER = 16
         const val MOTION_BUFFER = 64

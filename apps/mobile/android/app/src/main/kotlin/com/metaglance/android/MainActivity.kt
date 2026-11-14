@@ -5,7 +5,6 @@ import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -102,8 +101,6 @@ class MainActivity : AppCompatActivity() {
                 openOutside(request.url)
                 return true
             }
-
-            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = bridge.onPageStarted()
         }
         val frame = FrameLayout(this).apply { fitsSystemWindows = true }
         frame.addView(webView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
