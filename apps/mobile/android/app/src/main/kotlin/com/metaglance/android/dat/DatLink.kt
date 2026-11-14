@@ -319,6 +319,8 @@ class DatLink(
         return Wearables.createSession(SpecificDeviceSelector(id)).fold(
             onSuccess = { session ->
                 frameCount = 0
+                // The state lines can miss a state that lasts a very short time, so each new session has this line.
+                log("session created")
                 val run = SessionRun(session, withCamera, autoAttach)
                 current = run
                 run.start()

@@ -339,10 +339,12 @@ class DeviceStatesTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class
     }
 
     /**
-     * The number of DAT sessions that started in this test. `DatLink` logs each session state, and only a new
-     * session reports `STARTING`: a session that resumes goes from `PAUSED` to `STARTED`.
+     * The number of DAT sessions that started in this test. `DatLink` logs one line for each session that it
+     * creates. A session that resumes is not new. The state lines are no count: the state comes from a
+     * `StateFlow`, which can drop a state that lasts a very short time. A count of the lines `session STARTING`
+     * gave 1 for two sessions in one run of many.
      */
-    private fun datSessionStarts(): Int = datLog.count { it == "session STARTING" }
+    private fun datSessionStarts(): Int = datLog.count { it == "session created" }
 
     private fun state(): String = "native=$native ${traffic.summary()} dat=${datLog.takeLast(LOG_TAIL)}"
 
