@@ -1,6 +1,6 @@
 // Integration test 3: the Android app with mock glasses on the test phone, against the fake server.
 //
-// It starts apps/server with fake recognition and fake speech on port 8080 (or GLANCE_TEST_PORT), lets the phone reach it through
+// It starts apps/server with fake recognition, fake speech, and fake product details on port 8080 (or GLANCE_TEST_PORT), lets the phone reach it through
 // "adb reverse", builds the phone UI, builds and installs the debug APK and its test APK, runs the instrumented
 // tests, and then removes the reverse and stops the server. No step calls a vendor.
 //
@@ -38,7 +38,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Blocked, pickSerial, reverseTarget, testPort } from './device.mjs';
+import { Blocked, fakeSwitchesOn, pickSerial, reverseTarget, testPort } from './device.mjs';
 import { makeClips, makeKioskClip } from './make-clips.mjs';
 
 const PORT = testPort(process.env.GLANCE_TEST_PORT);
@@ -162,10 +162,10 @@ async function health() {
   }
 }
 
-/** Starts the server with both fake switches. It gets no vendor key, so it cannot call a vendor. */
+/** Starts the server with each fake switch. It gets no vendor key, so it cannot call a vendor, and it does not call Open Food Facts. */
 async function startServer(logFile) {
   if (!(await portIsFree(PORT))) throw new Error(`Port ${PORT} is in use. Stop the process that holds it, or set GLANCE_TEST_PORT to a free port.`);
-  const env = { ...process.env, PORT: String(PORT), FAKE_RECOGNITION: scriptFile, FAKE_SPEECH: '1' };
+  const env = { ...process.env, PORT: String(PORT), FAKE_RECOGNITION: scriptFile, FAKE_SPEECH: '1', FAKE_PRODUCT_INFO: '1' };
   for (const name of ['GEMINI_API_KEY', 'ELEVENLABS_API_KEY', 'ELEVENLABS_VOICE_EN', 'ELEVENLABS_VOICE_IT', 'MONGODB_URI', 'SAVE_FRAMES']) delete env[name];
   const child = spawn(process.execPath, ['--import', 'tsx', 'src/main.ts'], { cwd: serverDir, env, stdio: ['ignore', 'pipe', 'pipe'] });
   const log = createWriteStream(logFile);
@@ -181,9 +181,9 @@ async function startServer(logFile) {
     if (exited) throw new Error(`The server stopped at its start. Log: ${logFile}\n${readFileSync(logFile, 'utf8')}`);
     const answer = await health();
     if (answer) {
-      if (answer.fakeRecognition !== true || answer.fakeSpeech !== true) {
+      if (!fakeSwitchesOn(answer)) {
         await stopServer(child);
-        throw new Error(`The server on port ${PORT} does not run with both fake switches: ${JSON.stringify(answer)}`);
+        throw new Error(`The server on port ${PORT} does not run with each fake switch: ${JSON.stringify(answer)}`);
       }
       return child;
     }

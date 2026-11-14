@@ -44,3 +44,11 @@ export function reverseTarget(reverseListOutput, port) {
   }
   return null;
 }
+
+/**
+ * True when the answer of GET /healthz says that the server can call no vendor and no product database.
+ * A server from before the barcode lookup has no switch for the product details, so a missing one is not a failure.
+ */
+export function fakeSwitchesOn(health) {
+  return health.fakeRecognition === true && health.fakeSpeech === true && health.fakeProductInfo !== false;
+}

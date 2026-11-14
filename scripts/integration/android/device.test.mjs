@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { pickSerial, reverseTarget, testPort } from './device.mjs';
+import { fakeSwitchesOn, pickSerial, reverseTarget, testPort } from './device.mjs';
 
 const ONE = 'List of devices attached\n00023156K005488\tdevice\n\n';
 const TWO = 'List of devices attached\n00023156K005488\tdevice\nemulator-5554\tdevice\n';
@@ -39,4 +39,13 @@ test('reads the target of a reverse entry of the phone', () => {
   assert.equal(reverseTarget(list, 8081), 'tcp:8081');
   assert.equal(reverseTarget(list, 808), null);
   assert.equal(reverseTarget('', 8080), null);
+});
+
+test('a server counts as fake only with each fake switch that it reports', () => {
+  assert.equal(fakeSwitchesOn({ fakeRecognition: true, fakeSpeech: true, fakeProductInfo: true }), true);
+  // A server from before the barcode lookup reports no switch for the product details.
+  assert.equal(fakeSwitchesOn({ fakeRecognition: true, fakeSpeech: true }), true);
+  assert.equal(fakeSwitchesOn({ fakeRecognition: true, fakeSpeech: true, fakeProductInfo: false }), false);
+  assert.equal(fakeSwitchesOn({ fakeRecognition: false, fakeSpeech: true, fakeProductInfo: true }), false);
+  assert.equal(fakeSwitchesOn({ fakeRecognition: true, fakeProductInfo: true }), false);
 });
