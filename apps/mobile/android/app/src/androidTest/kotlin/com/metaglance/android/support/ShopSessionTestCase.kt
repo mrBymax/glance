@@ -12,6 +12,7 @@ import com.metaglance.core.contract.PageToNative
 import com.metaglance.core.contract.ServerEvent
 import com.metaglance.core.contract.SessionStatus
 import com.metaglance.core.contract.StreamStatus
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.After
@@ -52,10 +53,11 @@ abstract class ShopSessionTestCase : MockDeviceKitTestCase<MainActivity>(MainAct
 
     protected fun page(message: PageToNative) = onMain { glance.session.onPageMessage(message) }
 
-    /** Sends the profile patch of the page that selects the main yes input. */
+    protected fun mainYesPatch(mainYes: MainYes): JsonObject = buildJsonObject { put("mainYes", GlanceJson.encodeToJsonElement(MainYes.serializer(), mainYes)) }
+
+    /** Sends the profile patch of the page that selects the main yes input, and waits until the profile has it. */
     protected fun selectMainYes(mainYes: MainYes) {
-        val wire = GlanceJson.encodeToJsonElement(MainYes.serializer(), mainYes)
-        page(PageToNative.ProfileSet(buildJsonObject { put("mainYes", wire) }))
+        page(PageToNative.ProfileSet(mainYesPatch(mainYes)))
         waitUntil("the profile has the main yes $mainYes", STEP_MS, ::state) { glance.profileStore.profile.mainYes == mainYes }
     }
 

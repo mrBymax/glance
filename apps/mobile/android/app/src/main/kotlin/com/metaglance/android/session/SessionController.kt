@@ -39,6 +39,7 @@ import com.metaglance.core.input.KeyInput
 import com.metaglance.core.input.MainYesResolver
 import com.metaglance.core.input.PromptTracker
 import com.metaglance.core.input.TouchInput
+import com.metaglance.core.input.VoiceInput
 import com.metaglance.core.net.DeviceSocket
 import com.metaglance.core.net.GlanceApi
 import com.metaglance.core.net.Scheduler
@@ -46,6 +47,7 @@ import com.metaglance.core.state.ConnectionAnnouncer
 import com.metaglance.core.state.DatDon
 import com.metaglance.core.state.DatFault
 import com.metaglance.core.state.DatLinkState
+import com.metaglance.core.state.DatPermission
 import com.metaglance.core.state.DatSession
 import com.metaglance.core.state.DatSnapshot
 import com.metaglance.core.state.DatStream
@@ -186,6 +188,12 @@ class SessionController(
         }
         // The answer of the touchpad carries the last finished prompt, and the server decides if it counts.
         scope.launch { dat.touches.collect { send(TouchInput.intentFor(it, prompts.lastFinishedPromptId())) } }
+        // The server maps the words to intents. A result while a line plays is the line itself, not the shopper.
+        scope.launch {
+            dat.transcripts.collect { transcript ->
+                VoiceInput.onTranscript(transcript, speech.isMuted(SystemClock.elapsedRealtime()))?.let { send(it) }
+            }
+        }
         scope.launch {
             while (true) {
                 delay(TICK_MS)
@@ -220,7 +228,11 @@ class SessionController(
                 send(DeviceToServer.Intent(IntentKind.STOP, IntentSource.PHONE))
                 stopDat()
             }
-            is PageToNative.Intent -> send(DeviceToServer.Intent(message.kind, IntentSource.PHONE, message.promptId))
+            is PageToNative.Intent -> {
+                // The question of the shopper comes through the microphone of the glasses.
+                if (message.kind == IntentKind.ASK) requestMicrophone()
+                send(DeviceToServer.Intent(message.kind, IntentSource.PHONE, message.promptId))
+            }
             is PageToNative.CartEdit -> send(DeviceToServer.CartEdit(message.productId, message.qty))
             is PageToNative.ProfileSet -> onProfilePatch(message.patch)
             is PageToNative.DataDelete -> deleteData()
@@ -501,9 +513,19 @@ class SessionController(
         // The selection of the shopper changes only when the profile holds the value of the patch.
         if (patch["mainYes"] == GlanceJson.encodeToJsonElement(MainYes.serializer(), patched.mainYes)) {
             store.wantedMainYes = patched.mainYes
+            if (patched.mainYes == MainYes.VOICE) requestMicrophone()
             // The shopper can select an input that does not work on these glasses.
             if (mainYesResolved) resolveMainYes()
         }
+    }
+
+    /**
+     * Asks for the microphone permission of the glasses when a session can use Speech and the permission is
+     * missing. The bridge has no message for it, so the selection of the voice and the intent `ask` start it.
+     */
+    private fun requestMicrophone() {
+        if (!dat.ready || !dat.usesSpeech || dat.snapshot.value.microphonePermission == DatPermission.GRANTED) return
+        activity?.requestMicrophonePermission()
     }
 
     private fun setProfile(value: Profile) {
@@ -622,6 +644,9 @@ class SessionController(
         }
         if (datRunning) {
             if (snapshot.stream == DatStream.STREAMING && !sawStreaming) onFirstStreaming()
+            // A capability can start late: Speech starts when the shopper allows the microphone during a session.
+            // Then the input that the shopper selected can work now.
+            if (mainYesResolved && snapshot.stream == DatStream.STREAMING && profile.mainYes != store.wantedMainYes) resolveMainYes()
             // A stream that ended by itself cannot start again, and its DAT session has no other use.
             val streamEnded = snapshot.stream == DatStream.STOPPED || snapshot.stream == DatStream.CLOSED
             if (sawStreaming && streamEnded && !stopCalled) {

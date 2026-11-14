@@ -61,6 +61,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var microphoneAsked = false
+    private val microphoneRequest = registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
+        microphoneAsked = false
+        // The bridge has no message for this permission. A denied request leaves Speech off, and the main yes
+        // falls back to another input.
+        glance.datLink.onPermissionResult(Permission.MICROPHONE, result)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         volumeControlStream = AudioManager.STREAM_MUSIC
@@ -110,6 +118,16 @@ class MainActivity : AppCompatActivity() {
 
     /** Asks for the camera permission of the glasses. The SDK shows the request in the Meta AI app. */
     fun requestCameraPermission() = cameraRequest.launch(Permission.CAMERA)
+
+    /**
+     * Asks for the microphone permission of the glasses, which Speech needs. The SDK shows the request in the
+     * Meta AI app. A request that still waits for its answer is not sent again.
+     */
+    fun requestMicrophonePermission() {
+        if (microphoneAsked) return
+        microphoneAsked = true
+        microphoneRequest.launch(Permission.MICROPHONE)
+    }
 
     /**
      * The native side of pocket mode: a dim screen with no system bars. The page draws the black screen and

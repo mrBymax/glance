@@ -166,6 +166,12 @@ class DatLink(
     /** True after `initialize` started the SDK, or found MockDeviceKit enabled. */
     val ready: Boolean get() = initialized
 
+    /**
+     * True when a session attaches Speech. `ProbeDecisions.SPEECH` is the result of the probe on the real glasses.
+     * Mock glasses always have Speech, so that mock mode has the voice input before the probe ran.
+     */
+    val usesSpeech: Boolean get() = ProbeDecisions.SPEECH || _snapshot.value.mock
+
     /** A compatibility that `debugOverride` set in place of the value of the SDK. */
     private var compatibilityOverride: DatCompatibility? = null
     private var appFlows: Job? = null
@@ -271,6 +277,8 @@ class DatLink(
             }
         }
         log("$label permission $value")
+        // The shopper can allow the microphone while a session runs.
+        if (permission == Permission.MICROPHONE && value == DatPermission.GRANTED) current?.onMicrophoneGranted()
     }
 
     /**
@@ -676,8 +684,13 @@ class DatLink(
                 autoAttached = true
                 if (ProbeDecisions.MOTION) attachMotion()
                 if (ProbeDecisions.INPUTS) attachInputs(ProbeDecisions.INPUT_SOURCES)
-                if (ProbeDecisions.SPEECH) attachSpeech()
+                if (usesSpeech) attachSpeech()
             }
+        }
+
+        /** Attaches Speech to a stream that started before the microphone permission was granted. */
+        fun onMicrophoneGranted() {
+            if (autoAttached && speech == null && !stopRequested && usesSpeech) attachSpeech()
         }
 
         fun attachMotion() {
