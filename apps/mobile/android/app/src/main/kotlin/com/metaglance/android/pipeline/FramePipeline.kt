@@ -53,7 +53,8 @@ class FramePipeline(
     private val onBarcode: (CodeRead) -> Unit = {},
     private val onLabelStill: () -> Unit = {},
     private val findFaces: ((RawFrame) -> FaceResult)? = null,
-    private val crop: Boolean = false,
+    /** It has no effect: each upload is the full frame. `SessionController` still passes it. */
+    @Suppress("UNUSED_PARAMETER") crop: Boolean = false,
     /** Gives the number of the next upload. Without it, this pipeline counts its uploads from 1. */
     private val nextSeq: (() -> Int)? = null,
     private val label: LabelPolicy = LabelPolicy(),
@@ -100,7 +101,7 @@ class FramePipeline(
         if (skip != null) return
 
         val faces = times.of("faces") { findFaces?.invoke(picked) ?: FaceResult.NotRun }
-        val prepared = times.of("pixelate") { FramePrep.prepare(picked, faces, crop) }
+        val prepared = times.of("pixelate") { FramePrep.prepare(picked, faces) }
         if (prepared == null) {
             log("frame dropped: face detection failed")
             return
