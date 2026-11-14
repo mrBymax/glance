@@ -87,6 +87,11 @@ export class SessionRegistry {
     // No session holds a kiosk after a restart, so another shopper can have this kiosk now.
     // The shopper keeps the cart and starts the checkout again at the code.
     if (record.checkout && record.checkout.step !== 'paying') closeCheckout(record);
+    await this.deps.restoreProducts?.([...new Set([
+      ...record.cart.items.map((item) => item.productId), ...record.adds,
+      ...(record.prompt?.kind === 'product' ? [record.prompt.productId] : []),
+      ...(record.lastAdd ? [record.lastAdd.productId] : []),
+    ])]);
     const session = new SessionRuntime(this.deps, record);
     this.sessions.set(id, session);
     // The payment timer of the old process is gone, so this payment can never finish. No order exists for it.

@@ -1,0 +1,23 @@
+{
+  "code": "7394376616037",
+  "product": {
+    "code": "7394376616037",
+    "product_name": "iKaffe",
+    "product_name_en": "OAT-LY! iKAFFE BARISTA EDITION",
+    "brands": "Oatly",
+    "quantity": "1 L",
+    "allergens_tags": [
+      "en:gluten"
+    ],
+    "traces_tags": [
+      "en:gluten"
+    ],
+    "ingredients_analysis_tags": [
+      "en:palm-oil-free",
+      "en:vegan",
+      "en:vegetarian"
+    ]
+  },
+  "status": 1,
+  "status_verbose": "product found"
+}

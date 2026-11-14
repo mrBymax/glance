@@ -6,7 +6,10 @@ import { buildSystemInstruction, recognitionResponseSchema, userText } from './p
 
 const dev = readCatalogFile(fileURLToPath(new URL('../../catalog/catalog.dev.json', import.meta.url)));
 const template = 'Rules.\n{{catalog}}\nEnd.';
-type Schema = { required: string[]; properties: Record<string, { enum?: string[]; anyOf?: unknown[]; items?: { enum: string[] } }> };
+type Schema = {
+  required: string[];
+  properties: Record<string, { enum?: string[]; anyOf?: unknown[]; items?: { enum: string[] }; required?: string[]; properties?: Record<string, unknown> }>;
+};
 
 it('lists each product with ID, name, brand, pack size, and look', () => {
   const text = buildSystemInstruction(template, dev);
@@ -36,11 +39,16 @@ it('rejects a template with no placeholder', () => {
 });
 it('limits the answer to the catalog IDs', () => {
   const schema = recognitionResponseSchema(['a', 'b']) as Schema;
-  expect(schema.required).toEqual(['status', 'productId', 'candidates', 'confidence', 'aimHint', 'gesture']);
+  expect(schema.required).toEqual(['status', 'productId', 'candidates', 'confidence', 'aimHint', 'gesture', 'code']);
   expect(schema.properties.status!.enum).toEqual(['identified', 'ambiguous', 'unsure', 'unknown', 'none']);
   expect(schema.properties.productId!.anyOf).toEqual([{ type: 'string', enum: ['a', 'b'] }, { type: 'null' }]);
   expect(schema.properties.candidates!.items!.enum).toEqual(['a', 'b']);
   expect(schema.properties.aimHint!.enum).toEqual(['none', 'left', 'right', 'up', 'down', 'closer', 'farther', 'turn']);
+});
+it('asks for the code of the frame', () => {
+  const { code } = (recognitionResponseSchema(['a']) as Schema).properties;
+  expect(code!.required).toEqual(['visible', 'digits']);
+  expect(code!.properties).toEqual({ visible: { type: 'boolean' }, digits: { type: ['string', 'null'] } });
 });
 it('writes the exclude list', () => {
   expect(userText([])).toBe('Exclude: none.');
@@ -52,6 +60,16 @@ it('the instruction file has the catalog placeholder', () => {
 it('the instruction file names each status, each aim hint, and each gesture of the answer', () => {
   const text = readFileSync('../../agents/recognition.md', 'utf8');
   const words = ['identified', 'ambiguous', 'unsure', 'unknown', 'none', 'left', 'right', 'up', 'down', 'closer', 'farther', 'turn',
-    'thumbs_up', 'thumbs_down', 'candidates', 'aimHint', 'confidence', 'productId', 'Exclude'];
+    'thumbs_up', 'thumbs_down', 'candidates', 'aimHint', 'confidence', 'productId', 'Exclude', 'code', 'visible', 'digits'];
   for (const word of words) expect(text).toContain(word);
+});
+it('the instruction file tells the model not to guess a digit, and to answer none for the barcode side', () => {
+  const text = readFileSync('../../agents/recognition.md', 'utf8');
+  expect(text).toContain('Never guess a digit');
+  expect(text).toMatch(/barcode side[^.]*`none`/);
+});
+it('the instruction file keeps the code to a product that a hand holds, so a shelf label asks for no still', () => {
+  const text = readFileSync('../../agents/recognition.md', 'utf8');
+  expect(text).toMatch(/`visible`: true when a hand holds a product up/);
+  expect(text).toMatch(/shelf label[^.]*false/);
 });

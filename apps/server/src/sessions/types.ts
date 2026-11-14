@@ -28,7 +28,8 @@ export type Line =
   | { key: 'device.cameraOff' } | { key: 'device.regularCheckout' } | { key: 'device.paused' }
   | { key: 'device.battery'; percent: 20 | 10 }
   | { key: 'net.backOnline' } | { key: 'recognition.slow' }
-  | { key: 'ask.listening' } | { key: 'ask.noProduct' } | { key: 'ask.failed' } | { key: 'ask.answer'; text: string };
+  | { key: 'ask.listening' } | { key: 'ask.noProduct' } | { key: 'ask.failed' } | { key: 'ask.answer'; text: string }
+  | { key: 'barcode.notInStore' } | { key: 'barcode.unreadable' };
 
 /** doneAt is the time when the phone reported the end of the clip, or null while the clip plays. */
 export type PromptState =
@@ -44,6 +45,31 @@ export type CheckoutState = {
   kiosk: KioskRef; step: 'spotcheck' | 'offered' | 'suspended' | 'biometric' | 'paying'; suspendedBy: string | null;
   /** The product that the shopper must show in the step spotcheck. null in each other step. */
   spotProductId: string | null;
+};
+
+/** What the lookup of a barcode gave. `productId` is in the index of the rules: a catalog product or a scanned one. */
+export type BarcodeOutcome =
+  | { kind: 'product'; productId: string }
+  /** The code is right, and the store does not sell it. `gtin` has 13 digits. */
+  | { kind: 'notInStore'; gtin: string }
+  /** No GTIN of 8, 12, or 13 digits with a right check digit. */
+  | { kind: 'invalid' };
+
+/** The barcode side of a session. Each time is a clock value, or null for "never". */
+export type CodeState = {
+  /** The last barcode report, label frame, or frame in which the model saw a code. The voice of recognition is quiet after it. */
+  at: number | null;
+  /** The last frame in which the model saw a code. */
+  visibleAt: number | null;
+  /** The last code that was read: a product, or a code that the store does not sell. */
+  acceptedAt: number | null;
+  stillRequestAt: number | null;
+  /** The still requests since the last code that was read. */
+  stillsOpen: number;
+  /** The last line for a label frame that gave no product. */
+  unreadableAt: number | null;
+  /** The last code that the store does not sell, with the time of its last report. */
+  miss: { gtin: string; at: number } | null;
 };
 
 /** The rule numbers in the comments are those of spec section 6.2. Each time is a clock value in milliseconds. */
@@ -96,6 +122,8 @@ export type SessionState = {
   /** The battery level of the last spoken warning. A level above 20 percent sets it to null. */
   batteryWarned: 20 | 10 | null;
   lastReceipt: Receipt | null;
+  /** A session that an older server stored has no value here. Read it through `codeOf` of code.ts. */
+  code: CodeState;
 };
 
 export type RuleInputBody =
@@ -117,7 +145,11 @@ export type RuleInputBody =
   /** Speech of the shopper that is no command. */
   | { type: 'question'; text: string }
   /** The answer to the last `ask` effect, or null when no answer came. */
-  | { type: 'answer'; text: string | null };
+  | { type: 'answer'; text: string | null }
+  /** A barcode after its lookup. The phone reports a code one time each second while it is in view. */
+  | { type: 'barcode'; outcome: BarcodeOutcome }
+  /** A label frame arrived (`started`), or its read gave no product of the store (`failed`). */
+  | { type: 'label'; read: 'started' | 'failed' };
 export type RuleInput = RuleInputBody & { now: number };
 
 export type SpeakEffect = {
@@ -133,7 +165,9 @@ export type Effect =
   /** The runtime asks the phone for a fingerprint check. The phone answers with `biometric.result`. */
   | { type: 'biometric.request' }
   /** The runtime asks the model and answers with an `answer` input. */
-  | { type: 'ask'; question: string; product: Product };
+  | { type: 'ask'; question: string; product: Product }
+  /** The runtime asks the phone for one still of a barcode. The phone answers with `barcode.seen` or with a label frame. */
+  | { type: 'still.request' };
 
 /** secondLookWaitMs: how long the look-alike line waits for the result of a still. 0 means that it does not wait. */
 export type RuleContext = { catalog: CatalogIndex; secondLookWaitMs: number };

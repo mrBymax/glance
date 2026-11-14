@@ -56,3 +56,25 @@ it('never turns another status into identified', () => {
     expect(result.productId).toBeNull();
   }
 });
+it('keeps the code of the frame with each status', () => {
+  const code = { visible: true, digits: '8076800195057' };
+  expect(normalizeResult(raw({ status: 'none', code }), ctx).code).toEqual(code);
+  expect(normalizeResult(raw({ status: 'identified', productId: OAT, code }), ctx).code).toEqual(code);
+  expect(normalizeResult(raw({ status: 'identified', productId: 'cola-zero', code }), ctx)).toMatchObject({ status: 'unknown', code });
+  expect(normalizeResult(raw({ status: 'identified', productId: OAT, code }), { ...ctx, exclude: [OAT] }))
+    .toEqual({ ...NO_RESULT, code });
+});
+it('removes the spaces of the digits, and drops digits that are no digits', () => {
+  expect(normalizeResult(raw({ code: { visible: true, digits: '8 076800 195057' } }), ctx).code)
+    .toEqual({ visible: true, digits: '8076800195057' });
+  expect(normalizeResult(raw({ code: { visible: true, digits: '80768O0195057' } }), ctx).code).toEqual({ visible: true, digits: null });
+  expect(normalizeResult(raw({ code: { visible: true, digits: '' } }), ctx).code).toEqual({ visible: true, digits: null });
+});
+it('counts a code with digits as visible', () => {
+  expect(normalizeResult(raw({ code: { visible: false, digits: '73513537' } }), ctx).code).toEqual({ visible: true, digits: '73513537' });
+});
+it('reads an answer with no code, or with a bad code, as a frame with no code', () => {
+  const { code: _code, ...old } = raw({ status: 'identified', productId: OAT });
+  expect(normalizeResult(old, ctx)).toEqual(raw({ status: 'identified', productId: OAT }));
+  expect(normalizeResult(raw({ status: 'unknown', code: { visible: 'yes' } }), ctx)).toEqual(raw({ status: 'unknown' }));
+});

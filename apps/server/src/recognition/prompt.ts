@@ -20,7 +20,7 @@ export function buildSystemInstruction(template: string, products: readonly Prod
 }
 
 /**
- * The JSON Schema of the answer: the six fields of spec section 11.1.
+ * The JSON Schema of the answer: the six fields of spec section 11.1, and the code of the frame.
  * The product fields take only the given IDs, so the model cannot write an ID outside the catalog.
  */
 export function recognitionResponseSchema(productIds: readonly string[]): unknown {
@@ -32,6 +32,7 @@ export function recognitionResponseSchema(productIds: readonly string[]): unknow
     confidence: z.number().min(0).max(1),
     aimHint: AimHintSchema,
     gesture: z.enum(['none', 'thumbs_up', 'thumbs_down']),
+    code: z.object({ visible: z.boolean(), digits: z.string().nullable() }),
   }));
 }
 

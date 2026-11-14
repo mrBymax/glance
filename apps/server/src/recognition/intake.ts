@@ -28,6 +28,8 @@ export function saveFrameWith(saveFrame: FrameSaver | null, log: Pick<FastifyBas
  */
 export function createFrameHandler(deps: {
   recognizer: Recognizer; clock: Clock; log: FastifyBaseLogger;
+  /** Gets the digits of the code of a result, as the model read them. */
+  onCode: (session: SessionRuntime, digits: string) => void;
   /** 3 recognition calls of the session failed in a row. */
   onSlow: (session: SessionRuntime) => void;
   /** Drop each frame that did not go through face detection on the phone. */
@@ -58,6 +60,7 @@ export function createFrameHandler(deps: {
       // These lines give the server share of the time from glance to voice.
       deps.log.info(`recognition session=${session.id} seq=${info.seq} status=${result.status} ms=${info.ms}`);
       session.dispatch({ type: 'recognition', result, still: info.still });
+      if (result.code.digits !== null) deps.onCode(session, result.code.digits);
     },
     onSlow: () => deps.onSlow(session),
     log: (line) => deps.log.warn(`${line} session=${session.id}`),

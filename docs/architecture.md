@@ -1,6 +1,6 @@
 # Architecture
 
-This file describes the parts of Meta Glance that exist and work on the branch `feat/overnight-build`. The design, with the parts that do not exist yet, is in `docs/superpowers/specs/2026-11-13-meta-glance-design.md`.
+This file describes the parts of Meta Glance that exist and work on the branch `feat/barcode-lookup`, which starts from `feat/overnight-build`. The design, with the parts that do not exist yet, is in `docs/superpowers/specs/2026-11-13-meta-glance-design.md`. The design of the barcode scan is `docs/superpowers/specs/2026-11-14-barcode-lookup-design.md`.
 
 Each name in this file is a name in the code. Each message type is a schema in `packages/shared/src`.
 
@@ -11,6 +11,7 @@ flowchart LR
   glasses["Glasses, or mock glasses"]
   gemini["Gemini"]
   eleven["ElevenLabs"]
+  off["Open Food Facts"]
 
   subgraph phone["Phone"]
     app["Android app: apps/mobile/android"]
@@ -22,6 +23,8 @@ flowchart LR
     rest["REST paths and event streams: /api"]
     runtime["SessionRuntime with the rules in step"]
     recognition["RecognitionWorker, or ScriptPlayer in fake mode"]
+    label["Label handler"]
+    products["ProductResolver with the StoreList"]
     speech["Speech clips: ClipCache"]
     kiosks["KioskService and the mock payment"]
     bus["EventBus"]
@@ -52,6 +55,13 @@ flowchart LR
   socket -- "frames" --> recognition
   recognition -- "one JPEG for each call" --> gemini
   recognition -- "recognition result" --> runtime
+  socket -- "barcode.seen" --> products
+  recognition -- "digits of a code" --> products
+  socket -- "frames with the kind label" --> label
+  label -- "one still for each call" --> gemini
+  label -- "code of the matched store item" --> products
+  products -- "product read by code, when the cache has none" --> off
+  products -- "barcode with its outcome" --> runtime
   runtime -- "a question with the data of one product" --> gemini
   socket -- "intent, prompt.done, device.state, cart.edit, profile.set, question, biometric.result" --> runtime
   rest -- "intent, cart.edit, profile.set" --> runtime
@@ -60,7 +70,7 @@ flowchart LR
   runtime -- "payment.start" --> kiosks
   runtime -- "text of a line" --> speech
   speech -- "text of a new line" --> eleven
-  runtime -- "speak, session.rest, session.end, biometric.request" --> socket
+  runtime -- "speak, session.rest, session.end, biometric.request, still.request" --> socket
   runtime -- "ServerEvent, caption" --> bus
   kiosks -- "KioskEvent" --> bus
   bus --> socket
@@ -72,19 +82,20 @@ flowchart LR
 
 | Part | Folder | Task |
 |---|---|---|
-| Contract | `packages/shared` | Each message type as a zod schema, one JSON fixture for each message variant, `TIMING`, the frame codec, and the kiosk code helpers. |
+| Contract | `packages/shared` | Each message type as a zod schema, one JSON fixture for each message variant, `TIMING`, the frame codec, the kiosk code helpers, and the GTIN helpers. |
 | Android app | `apps/mobile/android` | Connects to the glasses through the DAT SDK, sends frames and answers to the server, plays the lines, and hosts the phone UI. |
 | Phone UI | `apps/mobile/ui` | The setup screen links the glasses. The session screen shows the current prompt, the last lines as text, the cart, the pay prompt, the receipt, and the settings. It has no network code: each message goes through a `GlanceBridge`. |
-| Server | `apps/server` | Recognizes the product in a frame, runs the cart rules, writes the spoken lines, answers a question about a product, and runs the checkout with a mock payment. |
+| Server | `apps/server` | Recognizes the product in a frame, finds the product of a barcode, runs the cart rules, writes the spoken lines, answers a question about a product, and runs the checkout with a mock payment. |
 | Website | `apps/website` | The kiosk page shows the code that starts a checkout, and then the cart and the result. The mirror page shows the spoken lines and the cart of one session, and plays the speech clips. The landing page and the privacy page show fixed text and make no call to the server. |
 | Display HUD | `apps/display-pow` | A mockup of the screen for glasses with a display. It shows the pending product, the total, and the last line of one session, and it sends a yes or a no. Without a session it plays a recording. |
 
 Facts that the diagram does not show:
 
-- The server is the only part that changes a cart or computes a total. Each price comes from the catalog of the server.
+- The server is the only part that changes a cart or computes a total. Each price comes from the catalog or from the store list of the server.
 - The Android app has its own Kotlin classes for the messages, in `apps/mobile/android/core/src/main/kotlin/com/metaglance/core/contract`. A Kotlin test decodes each fixture of `packages/shared/fixtures`.
 - The phone UI uses `AndroidBridge` in the WebView and `BrowserBridge` in each other browser. With the query flag `api`, `BrowserBridge` talks to the server with REST calls and the event stream. A session then needs no phone.
-- With `FAKE_RECOGNITION`, the server makes no Gemini call. A `ScriptPlayer` gives the rules the results and the kiosk sightings of a script file.
+- With `FAKE_RECOGNITION`, the server makes no Gemini call. A `ScriptPlayer` gives the rules the results, the kiosk sightings, and the barcodes of a script file.
+- With `FAKE_PRODUCT_INFO`, the server makes no call to Open Food Facts. The details of a scanned product come from fixture files. The flag `--fake` turns the three fake switches on.
 - With `FAKE_SPEECH`, the server makes no ElevenLabs call. Each line has `url: null`, and the phone reads the text with its own voice.
 - Mock glasses are MockDeviceKit of the DAT SDK. The app uses them through `MockGlassesController`.
 - The `EventBus` has one topic for each session and one topic for each kiosk. It delivers inside the server process only.
@@ -98,7 +109,7 @@ Facts that the diagram does not show:
 | Page | Android app | `window.GlanceNative.postMessage(json)` | `PageToNative` |
 | Android app | Page | `window.__glanceReceive(json)` | `NativeToPage` |
 | Android app | Server | Text message on the device socket | `DeviceToServer` |
-| Android app | Server | Binary message on the device socket | A frame: 4 bytes with the header length, a `FrameHeader` as JSON, and a JPEG |
+| Android app | Server | Binary message on the device socket | A frame: 4 bytes with the header length, a `FrameHeader` as JSON, and a JPEG. The kind of the header is `frame`, `still`, or `label` |
 | Server | Android app | Text message on the device socket | `ServerToDevice` |
 | Android app, browser | Server | `POST /api/sessions` | `CreateSessionRequest`, answer `CreateSessionResponse` |
 | Android app, browser, mirror page, Display HUD | Server | `GET /api/sessions/:id` | Answer `SessionSnapshot` |
@@ -176,11 +187,11 @@ Rules of this path:
 - The server writes each line in the language of the profile, English or Italian. `speak` and `caption` carry that language as `lang`. A profile patch with a new language gives `cart.updated` with each cart name in that language.
 - The runtime sends the lines in the order of the rules. A line waits for its clip, and a clip that fails gives `url: null`.
 - After each step with an event, the runtime writes the session to the store.
-- In fake mode no frame goes to a worker. The server decodes each frame, logs it, and drops it. The `ScriptPlayer` dispatches the recognition results.
+- In fake mode no frame goes to a worker. The server decodes each frame, logs it, and drops it. The `ScriptPlayer` dispatches the recognition results. A frame with the kind `label` goes to a fake label reader.
 
 A result with the status `ambiguous` gives no prompt. The server sends the event `glance.ambiguous` with the candidates and speaks "I cannot tell which oat drink this is. Turn the front to me." If the pending product is one of the candidates, `glance.cleared` comes first, so a yes cannot add it.
 
-The Android app takes a still photo after each `glance.ambiguous`. The contract has no message that asks for a still, so the event is the signal for the phone. With `SECOND_LOOK_WAIT_MS` above 0 on the server, the look-alike line waits for the result of that still. The default is 0: the line plays at once, and the result of a still counts as the result of a stream frame. The diagram shows a server with a wait.
+The Android app takes a still photo after each `glance.ambiguous`. The message `still.request` of the contract asks only for the still of a barcode, so for look-alike products the event is the signal for the phone. With `SECOND_LOOK_WAIT_MS` above 0 on the server, the look-alike line waits for the result of that still. The default is 0: the line plays at once, and the result of a still counts as the result of a stream frame. The diagram shows a server with a wait.
 
 ```mermaid
 sequenceDiagram
@@ -208,6 +219,99 @@ sequenceDiagram
 ```
 
 The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. When an add takes the total over the budget of the profile, the event `budget.exceeded` follows `cart.updated`, and the added line has the sound `warning`. The server README lists each rule from R1 to R24.
+
+## A barcode scan and a label frame
+
+The shopper can show the barcode of a product in place of its front. Three readers can find the code: the barcode scanner of the phone, the text reader of the phone, and the model on the server. This section describes the contract and the server. The steps of the phone in the diagrams are those of the design, and `apps/mobile/android/README.md` says which of them exist.
+
+The diagram shows a code that the phone read.
+
+```mermaid
+sequenceDiagram
+  participant App as Android app
+  participant Socket as Device socket
+  participant Resolver as ProductResolver
+  participant List as StoreList
+  participant Off as Open Food Facts
+  participant Runtime as SessionRuntime
+
+  App->>Socket: barcode.seen with code and source, one time each second while the code is in view
+  Note over Socket: normalizeGtin: 13 digits and a right check digit
+  Socket->>Resolver: resolve(gtin)
+  alt a catalog product has the code
+    Resolver-->>Socket: the catalog product
+  else
+    Resolver->>List: byGtin(gtin)
+    List-->>Resolver: the item with its price, or nothing
+    Resolver->>Off: GET /api/v2/product/<code>, unless the cache has the answer
+    Off-->>Resolver: names, allergens, diets
+    Note over Resolver: the lookup has 2500 ms. Late or failed details give the name of the store and no allergen data
+    Resolver-->>Socket: the product gtin-<13 digits>, or null
+  end
+  alt a product
+    Socket->>Runtime: dispatch(barcode, outcome product)
+    Note over Runtime: the path of an identified product: one prompt for each appearance (R1)
+    Runtime->>Socket: event glance.pending, speak the glance line with the price of the store
+  else the store does not sell the code
+    Socket->>Runtime: dispatch(barcode, outcome notInStore)
+    Runtime->>Socket: speak "This product is not in this store.", one time for each appearance
+  else a wrong check digit
+    Socket->>Runtime: dispatch(barcode, outcome invalid), which has no effect
+  end
+```
+
+The second diagram shows a code that only the model sees. The recognition call of each stream frame also answers `code`, with `visible` and `digits`.
+
+```mermaid
+sequenceDiagram
+  participant App as Android app
+  participant Socket as Device socket
+  participant Worker as RecognitionWorker
+  participant Label as Label handler
+  participant Gemini
+  participant Runtime as SessionRuntime
+
+  App->>Socket: binary frame
+  Socket->>Worker: submit(frame)
+  Worker->>Gemini: recognition call
+  Gemini-->>Worker: status, and code with visible true and digits null
+  Worker->>Runtime: dispatch(recognition)
+  Note over Runtime: the second frame with a code inside 2 seconds, no code read in the last 3 seconds, no request in the last 6 seconds (30 seconds after 2 requests with no code read)
+  Runtime->>Socket: still.request with the purpose label
+  Socket->>App: still.request
+  Note over App: one still. The scanner and the text reader of the phone read it first
+  alt the phone reads a code
+    App->>Socket: barcode.seen
+  else
+    App->>Socket: binary frame with the kind label
+    Socket->>Label: label frame
+    Label->>Runtime: dispatch(label, started)
+    Label->>Gemini: label call with agents/label.md, default media resolution, 4 seconds
+    Gemini-->>Label: digits, brand, name, packSize, confidence
+    Note over Label: matchLabel selects one item of the store list, or none
+    alt one item
+      Label->>Runtime: the lookup of barcode.seen, then dispatch(barcode, outcome product)
+      Runtime->>Socket: event glance.pending, speak the glance line
+    else no item, or the call failed
+      Label->>Runtime: dispatch(label, failed)
+      Runtime->>Socket: speak "I cannot read this code. Hold it closer.", at most one time each 10 seconds
+    end
+  end
+```
+
+Rules of this path:
+
+- The store list decides what the store sells and at which price. It is the file of `STORE_LIST_PATH`, behind the interface `StoreList`, so an ERP client can take its place.
+- A catalog product with the `gtin` of the code wins over the store list. It keeps the price and the spoken texts of the catalog.
+- Each other product is built from the store item and the details of Open Food Facts. Its ID is `gtin-<13 digits>`, and `ScannedProducts` keeps it for the process. The rules find it by that ID as they find a catalog product: the cart, the warnings, the snapshot, a question, and the spot check need no change. No client sees a new type.
+- Open Food Facts answers are kept for 30 days, and "not found" for 1 day, in memory and in files. After a failed read the next request for that code waits 30 seconds, and after the status 429 each code waits 60 seconds. The server never asks for a code that starts with `2`, `02`, or `04`: only one store knows such a code.
+- An empty allergen list of Open Food Facts counts as no data. The shopper then hears "Allergen data is missing for this product." when the profile lists an allergen or a diet.
+- Digits that the model read count only with a right check digit and a product of the catalog or the store list. Then one frame is enough. The model never causes the line "This product is not in this store."
+- A label gives a product only when its answer selects exactly one item of the store list: by digits with a right check digit, or by each word of the brand, half of the words of the name, and each number of the name. Free text of the model never becomes a product.
+- One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight speaks no unknown line and no aim hint. The recognition instruction also gives the status `none` to a package shown with its barcode side.
+- A label call is one more Gemini call. The server asks for a still at most one time each 6 seconds for a session, and each 30 seconds after 2 requests with no code read. It starts at most one label call each 5 seconds for a session, and none for a session that does not shop.
+- A lookup result that arrives after the result of a later report of another code is dropped.
+- In fake mode a script step `barcode` reports a code as the phone does, a `result` step can set `code`, and the field `label` of the script is the answer of the label reader. With `FAKE_PRODUCT_INFO` the details come from fixture files, and no call goes to Open Food Facts.
 
 ## A question about a product
 
@@ -386,6 +490,9 @@ Missing parts:
 - A browser client has no fingerprint check and no microphone. Its checkout above 50 EUR ends after 30 seconds with no payment, and its question window closes with no question.
 - The Display HUD shows the product prompt, the total, and the last line. It has no view for the pay prompt, the receipt, the look-alike candidates, or the spot check.
 - A snapshot has no field for the spot check, and a `KioskEvent` does not name the product of the spot check.
+- The prices of `apps/server/catalog/store-list.dev.json` are invented for the demo. A real shop needs the list of the store, or an ERP client behind `StoreList`.
+- The server does not count its calls to Open Food Facts, which allows 15 product reads each minute for one address. The guards are the cache, the wait after a failed read, and the pause after the status 429.
+- A UPC-E code needs the phone: `barcode.seen` has no format field, and the server reads 8 digits as EAN-8.
 - `apps/server/catalog/catalog.json` holds 12 product slots with `FILL_` texts and the price 0. A person must fill them. The default catalog is `catalog.dev.json` with four products.
 - The products of both catalog files have no Italian texts, except the oat drink of `catalog.dev.json`. A product with no Italian text keeps its English text.
 - In the Italian phone UI, the words of Astryx itself and the debug panel stay English. The voice commands stay English in each language.
@@ -397,3 +504,5 @@ Checks that nobody did:
 - No native speaker has read the Italian lines of the server or the Italian table of the phone UI.
 - Nobody has checked the Display HUD in the Display simulator or on glasses with a display. The checks ran in a browser.
 - No replay of a frame set has run with the real recognition service, and no test has run the store tests against a MongoDB server.
+- Nobody has read a barcode with the real glasses, so the distance at which the phone or the model reads a code is not known.
+- The label call and the `code` field of the recognition call have not run with the real model. The server code has made no call to Open Food Facts: the tests use a fetch function of their own and fixture files.

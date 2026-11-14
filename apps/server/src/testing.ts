@@ -12,13 +12,18 @@ import { indexCatalog, readCatalogFile } from './catalog/catalog';
 import { systemClock } from './clock';
 import { loadConfig } from './config';
 import { MemoryStore } from './db/memory';
+import { createFakeProductInfo } from './products/fakeProductInfo';
+import { readStoreListFile } from './products/storeList';
 
 const DEV_CATALOG = fileURLToPath(new URL('../catalog/catalog.dev.json', import.meta.url));
+const DEV_STORE_LIST = fileURLToPath(new URL('../catalog/store-list.dev.json', import.meta.url));
+const PRODUCT_FIXTURES = fileURLToPath(new URL('../fixtures/product-info', import.meta.url));
 
 export type TestApp = { app: FastifyInstance; base: string; wsBase: string; store: MemoryStore; close(): Promise<void> };
 
 /**
- * Starts the app on a free port of 127.0.0.1, with a memory store and the dev catalog.
+ * Starts the app on a free port of 127.0.0.1, with a memory store, the dev catalog, the dev store list,
+ * and the product details of the fixtures, so no test calls Open Food Facts.
  * The config has fake speech, a payment of 10 ms, and a speech cache in a new temp directory that close() removes. `env` changes it, and `over` replaces dependencies of the app.
  */
 export async function testApp(env: Record<string, string> = {}, over: Partial<AppDeps> = {}): Promise<TestApp> {
@@ -28,8 +33,13 @@ export async function testApp(env: Record<string, string> = {}, over: Partial<Ap
   const removeCacheDir = (): void => rmSync(cacheDir, { recursive: true, force: true });
   let app: FastifyInstance;
   try {
-    const config = loadConfig({ FAKE_SPEECH: '1', GEMINI_API_KEY: 'test', PAYMENT_DELAY_MS: '10', SPEECH_CACHE_DIR: cacheDir, ...env }, []);
-    app = await buildApp({ config, clock: systemClock, store, catalog: indexCatalog(products), log: false, ...over });
+    const config = loadConfig({
+      FAKE_SPEECH: '1', FAKE_PRODUCT_INFO: '1', GEMINI_API_KEY: 'test', PAYMENT_DELAY_MS: '10', SPEECH_CACHE_DIR: cacheDir, ...env,
+    }, []);
+    app = await buildApp({
+      config, clock: systemClock, store, catalog: indexCatalog(products), log: false,
+      storeList: readStoreListFile(DEV_STORE_LIST), productInfo: createFakeProductInfo(PRODUCT_FIXTURES), ...over,
+    });
     await app.listen({ host: '127.0.0.1', port: 0 });
     // The port is known only now, and the session answer builds the socket address from this value.
     if (env.PUBLIC_BASE_URL === undefined) config.publicBaseUrl = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;

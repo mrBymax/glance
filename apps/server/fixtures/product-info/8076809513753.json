@@ -1,0 +1,25 @@
+{
+  "code": "8076809513753",
+  "product": {
+    "code": "8076809513753",
+    "product_name": "Barilla PESTO alla GENOVESE",
+    "product_name_en": "Barilla PESTO alla GENOVESE",
+    "product_name_it": "Pesto alla genovese",
+    "brands": "Barilla",
+    "quantity": "190 g",
+    "allergens_tags": [
+      "en:milk",
+      "en:nuts"
+    ],
+    "traces_tags": [
+      "en:nuts"
+    ],
+    "ingredients_analysis_tags": [
+      "en:palm-oil-free",
+      "en:non-vegan",
+      "en:maybe-vegetarian"
+    ]
+  },
+  "status": 1,
+  "status_verbose": "product found"
+}

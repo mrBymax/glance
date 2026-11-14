@@ -8,6 +8,13 @@ import { type Config, ConfigError, loadConfig } from './config';
 import { MemoryStore } from './db/memory';
 import { MongoStore } from './db/mongo';
 import type { Store } from './db/store';
+import { LABEL_TEMPLATE_PATH, createGeminiLabelReader } from './label/gemini';
+import type { LabelReader } from './label/reader';
+import { createFakeProductInfo } from './products/fakeProductInfo';
+import { createOpenFoodFactsInfo } from './products/openFoodFacts';
+import type { ProductInfo } from './products/productInfo';
+import { priceConflicts } from './products/resolver';
+import { type StoreList, readStoreListFile } from './products/storeList';
 import { ELEVENLABS_MODEL, createSynthesize } from './speech/elevenlabs';
 import { FakeScriptError } from './recognition/fake';
 import { RECOGNITION_TEMPLATE_PATH, type Recognizer, createGeminiRecognizer } from './recognition/gemini';
@@ -39,6 +46,27 @@ function openRecognizer(config: Config, catalog: CatalogIndex): Recognizer | und
   });
 }
 
+/** The reader of label stills, or undefined with fake recognition. It uses the key and the model of recognition. */
+function openLabelReader(config: Config): LabelReader | undefined {
+  if (config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
+  return createGeminiLabelReader({
+    apiKey: config.geminiApiKey, model: config.geminiModel, template: readFileSync(LABEL_TEMPLATE_PATH, 'utf8'),
+  });
+}
+
+function openStoreList(config: Config): StoreList {
+  try {
+    return readStoreListFile(config.storeListPath);
+  } catch (error) {
+    throw new StartError((error as Error).message);
+  }
+}
+
+function openProductInfo(config: Config): ProductInfo {
+  if (config.fakeProductInfo) return createFakeProductInfo();
+  return createOpenFoodFactsInfo({ baseUrl: config.offBaseUrl, userAgent: config.productInfoUserAgent, cacheDir: config.productCacheDir });
+}
+
 /** The answers to spoken questions, or undefined with fake recognition. It uses the key and the model of recognition. */
 function openAsk(config: Config): AppDeps['ask'] {
   if (config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
@@ -53,15 +81,22 @@ async function main(): Promise<void> {
   const catalog = indexCatalog(await store.listProducts());
   const recognizer = openRecognizer(config, catalog);
   const ask = openAsk(config);
+  const labelReader = openLabelReader(config);
+  const storeList = openStoreList(config);
+  const storeItems = await storeList.all();
   // loadConfig has checked that the key exists when FAKE_SPEECH is off.
   const synthesize = config.fakeSpeech || config.elevenlabsApiKey === null ? undefined : createSynthesize(config.elevenlabsApiKey);
   const app = await buildApp({
-    config, clock: systemClock, store, catalog, ...(recognizer ? { recognizer } : {}), ...(ask ? { ask } : {}), ...(synthesize ? { synthesize } : {}),
+    config, clock: systemClock, store, catalog, storeList, productInfo: openProductInfo(config),
+    ...(recognizer ? { recognizer } : {}), ...(labelReader ? { labelReader } : {}), ...(ask ? { ask } : {}), ...(synthesize ? { synthesize } : {}),
     ...(config.saveFramesDir === null ? {} : { saveFrame: createFrameSaver(config.saveFramesDir) }),
   });
   app.addHook('onClose', () => store.close());
   app.log.info(`store: ${config.mongodbUri === null ? 'memory' : 'mongo'}`);
   app.log.info(`catalog: ${catalog.products.length} products`);
+  app.log.info(`store list: ${config.storeListPath}, ${storeItems.length} items`);
+  app.log.info(config.fakeProductInfo ? 'product info: fake' : `product info: ${config.offBaseUrl}, cache in ${config.productCacheDir}`);
+  for (const line of priceConflicts(catalog.products, storeItems)) app.log.warn(line);
   app.log.info(config.fakeRecognition === null
     ? `recognition: ${config.geminiModel}, blur ${config.requireBlur ? 'required' : 'not required'}`
     : `recognition: fake, script ${config.fakeRecognition}`);

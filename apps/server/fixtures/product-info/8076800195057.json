@@ -1,0 +1,26 @@
+{
+  "code": "8076800195057",
+  "product": {
+    "code": "8076800195057",
+    "product_name": "Spaghetti Nº5",
+    "product_name_en": "Spaghetti Nº5",
+    "product_name_it": "Spaghetti n.5",
+    "brands": "Barilla, BARILLA NORGE ASbarilla",
+    "quantity": "500 g",
+    "allergens_tags": [
+      "en:gluten"
+    ],
+    "traces_tags": [
+      "en:eggs",
+      "en:mustard",
+      "en:soybeans"
+    ],
+    "ingredients_analysis_tags": [
+      "en:palm-oil-free",
+      "en:maybe-vegan",
+      "en:vegetarian"
+    ]
+  },
+  "status": 1,
+  "status_verbose": "product found"
+}

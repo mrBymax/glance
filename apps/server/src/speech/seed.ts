@@ -14,6 +14,7 @@ const FIXED_KEYS: readonly FixedKey[] = [
   'net.backOnline', 'recognition.slow',
   'ask.listening', 'ask.noProduct', 'ask.failed',
   'spotcheck.thanks',
+  'barcode.notInStore', 'barcode.unreadable',
 ];
 
 const AIM_HINTS = ['left', 'right', 'up', 'down', 'closer', 'farther', 'turn'] as const;

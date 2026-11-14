@@ -171,4 +171,6 @@ export const LINES_IT: LineTemplates = {
   'ask.noProduct': () => 'Solleva un prodotto, poi chiedi.',
   'ask.failed': () => 'Non ho una risposta.',
   'ask.answer': (line) => line.text,
+  'barcode.notInStore': () => 'Questo prodotto non è in questo negozio.',
+  'barcode.unreadable': () => 'Non riesco a leggere questo codice. Avvicinalo.',
 };

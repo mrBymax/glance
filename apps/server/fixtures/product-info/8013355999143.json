@@ -1,0 +1,29 @@
+{
+  "code": "8013355999143",
+  "product": {
+    "code": "8013355999143",
+    "product_name": "Gocciole classiche pav 500 gr",
+    "product_name_en": "Gocciole",
+    "product_name_it": "Gocciole chocolate",
+    "brands": "Pavesi",
+    "quantity": "500 g",
+    "allergens_tags": [
+      "en:gluten",
+      "en:milk",
+      "en:soybeans"
+    ],
+    "traces_tags": [
+      "en:eggs",
+      "en:mustard",
+      "en:nuts",
+      "en:sesame-seeds"
+    ],
+    "ingredients_analysis_tags": [
+      "en:palm-oil-free",
+      "en:non-vegan",
+      "en:vegetarian"
+    ]
+  },
+  "status": 1,
+  "status_verbose": "product found"
+}

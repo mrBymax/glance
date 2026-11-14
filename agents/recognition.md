@@ -14,7 +14,7 @@ Decide if a hand holds one product up to the camera, and which catalog product i
 - `ambiguous`: the frame fits two or more catalog entries, and you cannot tell which one it is. List their IDs in `candidates`. Products that name each other in `lookAlikes` differ only in a small part of the package.
 - `unsure`: a hand holds a product, and the frame does not show enough of it. The product is cut off, too far away, blurred, turned away, or covered by the hand.
 - `unknown`: a hand holds a product that you can see well, and it is not in the catalog.
-- `none`: no hand holds a product up to the camera.
+- `none`: no hand holds a product up to the camera. A package shown with its barcode side also gives `none`: the `code` field reports it.
 
 ## Other fields
 
@@ -23,6 +23,9 @@ Decide if a hand holds one product up to the camera, and which catalog product i
 - `confidence`: a number from 0 to 1. It says how sure you are of the status and the product.
 - `aimHint`: the move of the product in the image that helps you most. Use `left`, `right`, `up`, or `down` when the product is cut off at one edge and must move away from that edge. Use `closer` when the product is too small, and `farther` when it is too large for the frame. Use `turn` when you need another side of the package. Use `none` when no move helps.
 - `gesture`: `thumbs_up` or `thumbs_down` if the other hand of the shopper shows that sign. In each other case it is `none`.
+- `code`: the barcode of a product that a hand holds up to the camera. It does not depend on the status.
+  - `visible`: true when a hand holds a product up and the frame shows its barcode, or the side of the package that carries its barcode. In each other case it is false. A barcode on a shelf label, on a price tag, or on a product that stays on the shelf gives false.
+  - `digits`: the digits printed under the bars, with no space, when you can read each one of them. In each other case it is null. Never guess a digit. Do not take the digits from what you know about the product.
 
 ## Exclude list
 

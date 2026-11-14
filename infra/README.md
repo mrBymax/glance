@@ -41,6 +41,10 @@ flowchart LR
 | `DOMAIN` | The host name with no scheme, for example `glance.example.com`. |
 | `PUBLIC_BASE_URL` | `https://` plus `DOMAIN`. The server builds the socket address and the clip addresses from it. |
 | `FAKE_RECOGNITION`, `FAKE_SPEECH` | `1` for a server that needs no key. Clear both for the real services, and set the two keys and `ELEVENLABS_VOICE_EN`. |
+| `STORE_LIST_PATH` | The items that the store sells, with the barcode and the price of each. |
+| `FAKE_PRODUCT_INFO` | `1` for a server that makes no call to Open Food Facts. Open Food Facts needs no key. |
+| `PRODUCT_INFO_USER_AGENT` | The contact that Open Food Facts asks for: the name of the app, its version, and an address. |
+| `PRODUCT_CACHE_DIR` | `/data/speech/products`. The user of the image can write only to the volume of the speech clips. |
 | `DEMO_KEY` | A random word of 12 characters or more. Without it the mirror page cannot find the session of the phone. |
 | `REQUIRE_BLUR` | `1` when the phone runs face detection. |
 | `SECOND_LOOK_WAIT_MS` | `2500` when the phone sends a still for look-alike products. Empty means off. |

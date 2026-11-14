@@ -1,3 +1,6 @@
+import { DEFAULT_OFF_BASE_URL, DEFAULT_PRODUCT_CACHE_DIR, DEFAULT_PRODUCT_INFO_USER_AGENT } from './products/openFoodFacts';
+import { DEFAULT_STORE_LIST_PATH } from './products/storeList';
+
 export type Config = {
   port: number;
   publicBaseUrl: string;
@@ -27,6 +30,14 @@ export type Config = {
   secondLookWaitMs: number;
   /** The key of GET /api/demo/latest, or null. Without it that path answers 404. */
   demoKey: string | null;
+  /** The file with the items that the store sells. */
+  storeListPath: string;
+  /** Read the product details from fixtures, with no call to Open Food Facts. */
+  fakeProductInfo: boolean;
+  offBaseUrl: string;
+  /** The User-Agent of each call to Open Food Facts. */
+  productInfoUserAgent: string;
+  productCacheDir: string;
 };
 
 export class ConfigError extends Error {}
@@ -37,7 +48,7 @@ export const DEFAULT_CATALOG_PATH = 'catalog/catalog.dev.json';
 
 /**
  * Reads the settings from the environment and the command line.
- * The flag --fake turns both fake switches on. A variable that is set wins over the flag.
+ * The flag --fake turns the three fake switches on. A variable that is set wins over the flag.
  * Paths are relative to the working directory, which is apps/server.
  */
 export function loadConfig(env: Record<string, string | undefined>, argv: readonly string[]): Config {
@@ -63,6 +74,12 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
   const fakeRecognition = fakeRecognitionValue === '1' ? DEFAULT_FAKE_SCRIPT : fakeRecognitionValue;
   const fakeSpeechValue = read('FAKE_SPEECH');
   const fakeSpeech = fakeSpeechValue === null ? fakeFlag : fakeSpeechValue === '1';
+  const fakeProductInfoValue = read('FAKE_PRODUCT_INFO');
+  const fakeProductInfo = fakeProductInfoValue === null ? fakeFlag : fakeProductInfoValue === '1';
+  const offBaseUrl = read('OFF_BASE_URL') ?? DEFAULT_OFF_BASE_URL;
+  if (!/^https?:\/\//.test(offBaseUrl)) {
+    throw new ConfigError(`OFF_BASE_URL must start with "http://" or "https://". Got "${offBaseUrl}".`);
+  }
 
   const mediaResolution = read('GEMINI_MEDIA_RESOLUTION') ?? 'default';
   if (mediaResolution !== 'default' && mediaResolution !== 'low') {
@@ -90,6 +107,11 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     paymentDelayMs: readNumber('PAYMENT_DELAY_MS', 1500, 0, 600_000, true),
     secondLookWaitMs: readNumber('SECOND_LOOK_WAIT_MS', 0, 0, 10_000, true),
     demoKey: read('DEMO_KEY'),
+    storeListPath: read('STORE_LIST_PATH') ?? DEFAULT_STORE_LIST_PATH,
+    fakeProductInfo,
+    offBaseUrl,
+    productInfoUserAgent: read('PRODUCT_INFO_USER_AGENT') ?? DEFAULT_PRODUCT_INFO_USER_AGENT,
+    productCacheDir: read('PRODUCT_CACHE_DIR') ?? DEFAULT_PRODUCT_CACHE_DIR,
   };
 
   if (config.fakeRecognition === null && config.geminiApiKey === null) {

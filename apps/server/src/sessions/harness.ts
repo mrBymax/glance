@@ -7,7 +7,7 @@ import {
 import { indexCatalog, readCatalogFile } from '../catalog/catalog';
 import { NO_RESULT, type RecognitionResult } from '../recognition/result';
 import { createSessionState, step } from './step';
-import type { Effect, RuleContext, RuleInputBody, SessionState, SpeakEffect } from './types';
+import type { BarcodeOutcome, Effect, RuleContext, RuleInputBody, SessionState, SpeakEffect } from './types';
 
 export const OAT = 'oat-drink-1l', BARISTA = 'oat-drink-barista-1l', RYE = 'rye-bread', CRISPS = 'potato-crisps';
 export const KIOSK: KioskRef = { id: 'kiosk-1', name: 'Checkout 3', store: 'Demo Market' };
@@ -60,6 +60,10 @@ export type Harness = {
   result(part: Partial<RecognitionResult>): void;
   /** kiosk.seen for KIOSK. */
   kiosk(opts?: { busy?: boolean; spotCheck?: boolean }): void;
+  /** A barcode after its lookup. */
+  barcode(outcome: BarcodeOutcome): void;
+  /** A label frame that arrived, or that gave no product. */
+  label(read: 'started' | 'failed'): void;
   /** prompt.done for the current prompt. */
   done(): void;
   /** Defaults: 'head', and the prompt of the last done(). */
@@ -131,6 +135,12 @@ export function harness(
     },
     kiosk(kioskOpts = {}) {
       h.send({ type: 'kiosk.seen', kiosk: KIOSK, busy: kioskOpts.busy ?? false, spotCheck: kioskOpts.spotCheck ?? false });
+    },
+    barcode(outcome) {
+      h.send({ type: 'barcode', outcome });
+    },
+    label(read) {
+      h.send({ type: 'label', read });
     },
     done() {
       if (!h.state.prompt) throw new Error('harness: done() needs a current prompt.');

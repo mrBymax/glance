@@ -1,5 +1,6 @@
 import { type Product, TIMING, toProductRef } from '@glance/shared';
 import { isConfirmed, passSpotCheck, suspendCheckoutFor } from './checkout';
+import { codeQuiet, onFrameCode } from './code';
 import { say } from './say';
 import { type Turn, emit, nextPromptId, promptProductInView, qtyInCart, speak } from './turn';
 import type { RuleInput } from './types';
@@ -16,6 +17,7 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
   if (s.phase !== 'shopping' && s.phase !== 'checkout') return;
   const { result } = input;
   if (result.status !== 'none') s.lastTargetAt = now;
+  onFrameCode(turn, result.code);
 
   // The sharp second look. The phone took this still because of a glance.ambiguous event.
   if (input.still && ctx.secondLookWaitMs > 0) {
@@ -47,7 +49,8 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
   }
 }
 
-function onIdentified(turn: Turn, productId: string): void {
+/** For a product that recognition named, and for the product of a barcode. */
+export function onIdentified(turn: Turn, productId: string): void {
   const { s, now, ctx } = turn;
   const product = ctx.catalog.get(productId);
   if (!product) return;
@@ -95,9 +98,10 @@ function openProductPrompt(turn: Turn, product: Product): void {
 }
 
 // R13. The time moves with each unknown result, so one appearance gives one line.
+// No line while the shopper shows a barcode: the barcode path speaks then.
 function onUnknown(turn: Turn): void {
   const { s, now } = turn;
-  if (promptProductInView(s, now)) return;
+  if (promptProductInView(s, now) || codeQuiet(s, now)) return;
   if (s.unknownAt === null || now - s.unknownAt >= TIMING.viewMs) {
     emit(turn, { type: 'glance.unknown' });
     speak(turn, say({ key: 'glance.unknown' }));
@@ -161,7 +165,8 @@ export function expireSecondLook(turn: Turn): void {
 function onAimHint(turn: Turn, aimHint: RecognitionInput['result']['aimHint']): void {
   const { s, now } = turn;
   if (aimHint === 'none') return;
-  if (promptProductInView(s, now)) return;
+  // A shopper who shows a barcode must not hear "Turn the front to me."
+  if (promptProductInView(s, now) || codeQuiet(s, now)) return;
   if (s.aimHintAt !== null && now - s.aimHintAt < TIMING.aimHintEveryMs) return;
   s.aimHintAt = now;
   emit(turn, { type: 'glance.hint', aimHint });

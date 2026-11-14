@@ -7,11 +7,14 @@ import { indexCatalog, readCatalogFile } from './catalog/catalog';
 import { systemClock } from './clock';
 import { loadConfig } from './config';
 import { MemoryStore } from './db/memory';
+import { createFakeProductInfo } from './products/fakeProductInfo';
+import { DEFAULT_STORE_LIST_PATH, readStoreListFile } from './products/storeList';
 import { NO_RESULT } from './recognition/result';
 
 const products = readCatalogFile(fileURLToPath(new URL('../catalog/catalog.dev.json', import.meta.url)));
 const deps = (): AppDeps => ({
   config: loadConfig({}, ['--fake']), clock: systemClock, store: new MemoryStore(products), catalog: indexCatalog(products), log: false,
+  storeList: readStoreListFile(DEFAULT_STORE_LIST_PATH), productInfo: createFakeProductInfo(),
 });
 
 const app = await buildApp(deps());
@@ -19,7 +22,9 @@ afterAll(() => app.close());
 
 it('answers the health check', async () => {
   const res = await app.inject({ method: 'GET', url: '/healthz' });
-  expect(res.json()).toEqual({ ok: true, fakeRecognition: true, fakeSpeech: true, store: 'memory', saveFrames: false });
+  expect(res.json()).toEqual({
+    ok: true, fakeRecognition: true, fakeSpeech: true, fakeProductInfo: true, store: 'memory', saveFrames: false,
+  });
 });
 it('names the MongoDB store in the health check as the start log does', async () => {
   // buildApp opens no connection: the store of the test stays the memory store.
@@ -92,4 +97,12 @@ it('runs each close function when the app closes', async () => {
   other.closers.add(() => { closed += 1; });
   await other.close();
   expect(closed).toBe(1);
+});
+it('reports a real product reader in the health check', async () => {
+  const real = await buildApp({ ...deps(), config: loadConfig({ FAKE_PRODUCT_INFO: '0' }, ['--fake']) });
+  try {
+    expect((await real.inject({ method: 'GET', url: '/healthz' })).json()).toMatchObject({ fakeProductInfo: false });
+  } finally {
+    await real.close();
+  }
 });

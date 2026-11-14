@@ -1,7 +1,9 @@
 import { EMPTY_CART, type Profile, TIMING } from '@glance/shared';
 import { onAnswer, onCartEdit, onPromptDone, onUndo } from './answers';
 import { expireAskWindow, onAnswerText, onQuestion } from './ask';
+import { onBarcode, onLabel } from './barcode';
 import { expireCheckout, onBiometricResult, onKioskSeen, onPaymentResult } from './checkout';
+import { newCodeState } from './code';
 import { onDeviceState, onGeneralIntent, onProfileSet, onRecognitionSlow, onSocketOpen, restWhenIdle } from './general';
 import { expireSecondLook, onRecognition } from './glance';
 import { type Turn, emit } from './turn';
@@ -37,6 +39,7 @@ export function createSessionState(profile: Profile, now: number): SessionState 
     device: null,
     batteryWarned: null,
     lastReceipt: null,
+    code: newCodeState(),
   };
 }
 
@@ -94,6 +97,12 @@ export function step(state: SessionState, input: RuleInput, ctx: RuleContext): {
       break;
     case 'answer':
       onAnswerText(turn, input);
+      break;
+    case 'barcode':
+      onBarcode(turn, input);
+      break;
+    case 'label':
+      onLabel(turn, input);
       break;
     case 'tick':
       break;

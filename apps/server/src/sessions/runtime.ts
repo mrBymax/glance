@@ -24,6 +24,11 @@ export type RuntimeDeps = {
   startPayment: (session: SessionRuntime, kiosk: KioskRef, totalCents: number) => void;
   /** Answers a question about one product. A call that fails rejects. */
   ask: (question: string, product: Product, lang: Lang) => Promise<string>;
+  /**
+   * Runs before a stored session becomes a runtime, with each product ID that its state names.
+   * The index of the rules lost its scanned products with the old process, and this brings them back.
+   */
+  restoreProducts?: (productIds: string[]) => Promise<void>;
   /** Runs after each step, with the state from before the step. */
   afterStep: (session: SessionRuntime, before: SessionState) => void;
 };
@@ -99,6 +104,10 @@ export class SessionRuntime {
           break;
         case 'ask':
           this.ask(effect.question, effect.product);
+          break;
+        case 'still.request':
+          // Not through the outbox: the code is in view now, and a line that waits for its clip must not hold the request.
+          this.sink?.send({ t: 'still.request', purpose: 'label' });
           break;
       }
     }

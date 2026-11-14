@@ -42,6 +42,8 @@ export const LINE_DEFAULTS: Record<Line['key'], LineDefault> = {
   'ask.noProduct': line('normal', false),
   'ask.failed': line('low', false),
   'ask.answer': line('low', false),
+  'barcode.notInStore': line('normal', false),
+  'barcode.unreadable': line('normal', false),
 };
 
 /** Makes the speak effect of a line with the defaults of its key. */
