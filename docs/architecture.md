@@ -154,7 +154,7 @@ sequenceDiagram
 
 Rules of this path:
 
-- The phone uploads one frame each 500 ms at most. The JPEG has the quality 80 and a long side of 768 pixels at most.
+- The phone uploads one frame each 500 ms at most. The JPEG has the quality 80 and a long side of 768 pixels at most. It is the center of the camera frame (80 percent of the width, 70 percent of the height), and the phone pixelates each face in it before the upload.
 - The upload stops while the socket is down, while an earlier frame is not sent yet, and while the glasses are off the face.
 - The recognition worker runs one call at a time for each session. While a call runs, the newest frame waits, and a call that takes 4 seconds is dropped.
 - Results for one product inside 3 seconds belong to one appearance, and one appearance gets one prompt.
@@ -234,7 +234,6 @@ stateDiagram-v2
 - No path of the server checks the token of a session or of a kiosk.
 - The server never sends the events `glance.ambiguous`, `budget.exceeded`, `checkout.spotcheck`, and `error`. An `error` event comes only from the Android app, with a code that starts with `native.`.
 - The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
-- The Android app runs no face detection. Each frame has `blurred: false` in its header.
 - `biometric.request` and `biometric.result` have no effect.
 - The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
 - The phone UI has the session screen only. No screen shows the pay prompt or the receipt.

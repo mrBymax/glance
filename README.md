@@ -129,7 +129,8 @@ Build the phone UI first, because the Gradle build copies `apps/mobile/ui/dist` 
 - With more than one phone attached, set `ANDROID_SERIAL` to the serial of the test phone before `installDebug`.
 - The app reads the server address from `glance.serverUrl` in `local.properties`. The default is `http://10.0.2.2:8080`, which is the host machine as an emulator sees it.
 - A phone on USB reaches a server on this machine with `adb -s <serial> reverse tcp:8080 tcp:8080` and `glance.serverUrl=http://127.0.0.1:8080`.
-- The debug build has two screens: "Glance" with the phone UI, and "Glance Probe" with the checks for the glasses and for mock glasses.
+- The debug build has three screens: "Glance" with the phone UI, "Glance Mock" with the menu of mock mode, and "Glance Probe" with the checks for the glasses and for mock glasses.
+- `./gradlew :core:test :app:assembleDemo` builds the signed APK for the testers. It needs a keystore: see "The demo build" in `apps/mobile/android/README.md`.
 - `tools/fake-server` holds a small server for work on the app alone. Start it with `node server.mjs`, and test it with `npm test` in that folder.
 
 ## Branches and commits
