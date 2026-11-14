@@ -29,3 +29,15 @@ it('makes one clip at a time and counts each clip that failed', async () => {
   expect(clipUrl.mock.calls).toEqual([['a', 'en'], ['b', 'en'], ['c', 'en']]);
   expect(most).toBe(1);
 });
+it('lists the Italian lines for the language it', () => {
+  const lines = seedLines(dev, 'it');
+  expect(lines).toHaveLength(31 + 3 * dev.length);
+  expect(lines).toContain('Bevanda di avena, un litro, uno e ottantanove. Annuisci per aggiungere.');
+  expect(lines).toContain('Saltato.');
+  expect(lines).not.toContain('Skipped.');
+});
+it('asks for each clip in the language of the lines', async () => {
+  const clipUrl = vi.fn(async () => 'http://localhost/a.mp3');
+  expect(await makeClips(['a'], clipUrl, 'it')).toEqual({ made: 1, failed: 0 });
+  expect(clipUrl.mock.calls).toEqual([['a', 'it']]);
+});

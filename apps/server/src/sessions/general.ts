@@ -1,4 +1,4 @@
-import { type DeviceState, type IntentKind, TIMING } from '@glance/shared';
+import { type DeviceState, type IntentKind, TIMING, localize } from '@glance/shared';
 import { openAskWindow } from './ask';
 import { closeCheckout, isConfirmed, isPaying } from './checkout';
 import { say } from './say';
@@ -81,7 +81,19 @@ export function onSocketOpen(turn: Turn): void {
 }
 
 export function onProfileSet(turn: Turn, input: Extract<RuleInput, { type: 'profile.set' }>): void {
-  turn.s.profile = { ...turn.s.profile, ...input.patch };
+  const { s, ctx } = turn;
+  const before = s.profile.lang;
+  s.profile = { ...s.profile, ...input.patch };
+  const { lang } = s.profile;
+  if (lang === before || s.cart.items.length === 0) return;
+
+  // A cart line holds its name as text, so a new language writes each name again. The total stays.
+  const items = s.cart.items.map((item) => {
+    const product = ctx.catalog.get(item.productId);
+    return product ? { ...item, name: localize(product.name, lang) } : item;
+  });
+  s.cart = { ...s.cart, items };
+  emit(turn, { type: 'cart.updated', cart: s.cart, change: null });
 }
 
 /** The intents that are no answer to a prompt. */

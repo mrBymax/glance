@@ -200,3 +200,36 @@ it('makes a snapshot with the pay prompt, the kiosk, and the last 20 captions', 
   expect(snapshot).toMatchObject({ phase: 'checkout', kiosk: KIOSK });
   expect(snapshot.captions.map((c) => c.id)).toEqual(captions.slice(5).map((c) => c.id));
 });
+it('a language change writes the cart names again', () => {
+  const h = harness({ cart: [OAT] });
+  h.send({ type: 'profile.set', patch: { lang: 'it' } });
+  expect(h.state.cart.items[0]!.name).toBe('Bevanda di avena');
+  expect(h.event('cart.updated')).toMatchObject({ change: null });
+});
+it('a language change keeps the quantities and the total, and a product with no Italian name keeps its English name', () => {
+  const h = harness({ cart: [OAT, RYE] });
+  h.send({ type: 'cart.edit', productId: OAT, qty: 3 });
+  h.send({ type: 'profile.set', patch: { lang: 'it' } });
+  expect(h.state.cart.items.map((item) => [item.name, item.qty])).toEqual([['Bevanda di avena', 3], ['Rye bread', 1]]);
+  expect(h.state.cart.totalCents).toBe(3 * 189 + 260);
+  expect(h.event('cart.updated')!.cart).toEqual(h.state.cart);
+  h.send({ type: 'profile.set', patch: { lang: 'en' } });
+  expect(h.state.cart.items[0]!.name).toBe('Oat drink');
+});
+it('a profile patch with the same language, or with no language, gives no cart event', () => {
+  const h = harness({ cart: [OAT] });
+  h.send({ type: 'profile.set', patch: { lang: 'en' } });
+  expect(h.effects).toEqual([]);
+  h.send({ type: 'profile.set', patch: { detail: 'brief' } });
+  expect(h.effects).toEqual([]);
+  const empty = harness();
+  empty.send({ type: 'profile.set', patch: { lang: 'it' } });
+  expect(empty.effects).toEqual([]);
+});
+it('after a language change the next product gets its Italian name in the cart and in the prompt', () => {
+  const h = harness({ profile: { lang: 'it' } });
+  h.see(OAT);
+  expect(h.event('glance.pending')!.product.name).toBe('Bevanda di avena');
+  h.done(); h.yes('head');
+  expect(h.state.cart.items[0]!.name).toBe('Bevanda di avena');
+});

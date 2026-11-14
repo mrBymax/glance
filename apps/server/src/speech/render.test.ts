@@ -1,10 +1,11 @@
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
-import { DEFAULT_PROFILE, type ProfilePatch, type Warning } from '@glance/shared';
+import { DEFAULT_PROFILE, EU_ALLERGENS, type ProfilePatch, type Warning } from '@glance/shared';
 import { indexCatalog, readCatalogFile } from '../catalog/catalog';
 import { LINE_DEFAULTS } from '../sessions/say';
 import type { Line } from '../sessions/types';
 import { LINES_EN } from './lines.en';
+import { LINES_IT } from './lines.it';
 import { renderLine } from './render';
 
 const catalog = indexCatalog(readCatalogFile(fileURLToPath(new URL('../../catalog/catalog.dev.json', import.meta.url))));
@@ -117,8 +118,88 @@ it('reads the cart and the total', () => {
   expect(text({ key: 'info.total', itemCount: 3, totalCents: 639 })).toBe('Three items. Total six thirty-nine.');
   expect(text({ key: 'info.total', itemCount: 1, totalCents: 189 })).toBe('One item. Total one eighty-nine.');
 });
-it('gives the English text for Italian until the Italian lines exist', () => {
-  expect(text({ key: 'glance.unknown' }, { lang: 'it' })).toBe('I do not know this product.');
+it('speaks Italian lines', () => {
+  const italian = (line: Line) => renderLine(line, { ...DEFAULT_PROFILE, lang: 'it' });
+  expect(italian({ key: 'session.start' })).toBe('Fotocamera accesa. Solleva un prodotto per sentire il prezzo.');
+  expect(italian(glance(false))).toBe('Bevanda di avena, un litro, uno e ottantanove.');
+  expect(italian(glance(true))).toBe('Bevanda di avena, un litro, uno e ottantanove. Annuisci per aggiungere.');
+  expect(italian(added)).toBe('Aggiunto: bevanda di avena. Totale quattro e quarantanove.');
+  expect(italian({ key: 'checkout.offer', kiosk: KIOSK, itemCount: 3, totalCents: 639 }))
+    .toBe('Checkout 3, Demo Market. Tre articoli, sei euro e trentanove. Annuisci per pagare.');
+});
+
+const it_ = (line: Line, patch: ProfilePatch = {}) => text(line, { ...patch, lang: 'it' });
+
+it('has one Italian template for each line key', () => {
+  expect(Object.keys(LINES_IT).sort()).toEqual(Object.keys(LINE_DEFAULTS).sort());
+});
+it('gives an Italian text that differs from the English text for each line with no parameter', () => {
+  const fixed: Line[] = [
+    { key: 'session.start' }, { key: 'session.rest' }, { key: 'glance.unknown' }, { key: 'glance.skipped' }, { key: 'undo.nothing' },
+    { key: 'hint.holdAgain' }, { key: 'hint.holdAgainForAnother' }, { key: 'hint.lookAtCode' }, { key: 'checkout.empty' },
+    { key: 'checkout.busy' }, { key: 'checkout.cancelled' }, { key: 'checkout.failed' }, { key: 'checkout.biometric' },
+    { key: 'info.help' }, { key: 'device.cameraOff' }, { key: 'device.regularCheckout' }, { key: 'device.paused' },
+    { key: 'net.backOnline' }, { key: 'recognition.slow' }, { key: 'ask.listening' }, { key: 'ask.noProduct' }, { key: 'ask.failed' },
+  ];
+  for (const line of fixed) {
+    expect(it_(line)).not.toBe(text(line));
+    expect(it_(line)).toMatch(/^\p{Lu}.*\.$/u);
+  }
+});
+it('speaks the Italian lines of a shop', () => {
+  expect(it_(inCart(1))).toBe('Bevanda di avena. Nel carrello: un pezzo. Annuisci per aggiungerne ancora. Scuoti la testa per togliere.');
+  expect(it_(inCart(2))).toBe('Bevanda di avena. Nel carrello: due pezzi. Annuisci per aggiungerne ancora. Scuoti la testa per togliere.');
+  expect(it_({ key: 'cart.removed', product: oat, totalCents: 260 })).toBe('Tolto: bevanda di avena. Totale due e sessanta.');
+  expect(it_({ key: 'glance.partial', aimHint: 'left' })).toBe("Ne vedo solo una parte. Spostalo un po' a sinistra.");
+  expect(it_({ key: 'glance.partial', aimHint: 'turn' })).toBe('Ne vedo solo una parte. Mostrami il davanti.');
+  expect(it_({ key: 'checkout.offer', kiosk: KIOSK, itemCount: 1, totalCents: 260 }))
+    .toBe('Checkout 3, Demo Market. Un articolo, due euro e sessanta. Annuisci per pagare.');
+  expect(it_({ key: 'checkout.paid', totalCents: 639 }))
+    .toBe('Pagato. Sei euro e trentanove. La ricevuta è sul telefono. Fotocamera spenta.');
+  expect(it_({ key: 'checkout.biometric' })).toBe("Oltre cinquanta euro. Conferma con l'impronta sul telefono.");
+  expect(it_({ key: 'hint.lookAtCode' })).toBe('Guarda il codice della cassa, poi annuisci.');
+  expect(it_({ key: 'info.help' }))
+    .toBe('Solleva un prodotto per sentire il prezzo. Annuisci per aggiungerlo. Guarda il codice di una cassa e annuisci per pagare.');
+  expect(it_({ key: 'info.total', itemCount: 3, totalCents: 639 })).toBe('Tre articoli. Totale sei e trentanove.');
+  expect(it_({ key: 'info.total', itemCount: 1, totalCents: 189 })).toBe('Un articolo. Totale uno e ottantanove.');
+  expect(it_({ key: 'info.cart', items: [{ product: oat, qty: 2 }], more: true, totalCents: 378 }))
+    .toBe('Bevanda di avena, due. E altro sul telefono. Totale tre e settantotto.');
+  expect(it_({ key: 'device.battery', percent: 20 })).toBe('Batteria degli occhiali al venti per cento.');
+  expect(it_({ key: 'ask.answer', text: 'Contiene glutine.' })).toBe('Contiene glutine.');
+});
+it('speaks the brief and the detailed level in Italian', () => {
+  expect(it_(glance(false), { detail: 'brief' })).toBe('Bevanda di avena, uno e ottantanove.');
+  expect(it_(added, { detail: 'brief' })).toBe('Aggiunto: bevanda di avena.');
+  expect(it_(glance(true), { detail: 'detailed' }))
+    .toBe('Oatly bevanda di avena, cartone da un litro, un euro e ottantanove. Contiene glutine. Annuisci per aggiungere.');
+});
+it('names the main yes input of the shopper in Italian', () => {
+  expect(it_(glance(true), { mainYes: 'touch' })).toBe('Bevanda di avena, un litro, uno e ottantanove. Tocca due volte per aggiungere.');
+  expect(it_(glance(true), { mainYes: 'voice' })).toBe("Bevanda di avena, un litro, uno e ottantanove. Di' add per aggiungere.");
+  expect(it_(glance(true), { mainYes: 'phone' })).toBe('Bevanda di avena, un litro, uno e ottantanove. Premi Aggiungi sul telefono.');
+  expect(it_(glance(true), { mainYes: 'key' })).toBe('Bevanda di avena, un litro, uno e ottantanove. Premi volume su per aggiungere.');
+  expect(it_(glance(true), { yesGesture: 'shake' })).toBe('Bevanda di avena, un litro, uno e ottantanove. Scuoti la testa per aggiungere.');
+  expect(it_(inCart(1), { mainYes: 'touch' })).toBe('Bevanda di avena. Nel carrello: un pezzo. Tocca due volte per aggiungerne ancora.');
+  expect(it_({ key: 'info.help' }, { mainYes: 'touch' }))
+    .toBe('Solleva un prodotto per sentire il prezzo. Tocca due volte per aggiungere. Guarda il codice di una cassa. Tocca due volte per pagare.');
+});
+it('speaks the warnings, the budget line, and the look-alike line in Italian', () => {
+  expect(it_(warned([{ kind: 'allergen', allergens: ['gluten', 'milk', 'nuts'] }], true)))
+    .toBe('Bevanda di avena, un litro, uno e ottantanove. Attenzione: contiene glutine, latte e frutta a guscio. Annuisci per aggiungere.');
+  expect(it_(warned([{ kind: 'diet', diet: 'vegan' }, { kind: 'diet', diet: 'vegetarian' }])))
+    .toBe('Bevanda di avena, un litro, uno e ottantanove. Attenzione: non per vegani. Attenzione: non per vegetariani.');
+  expect(it_(warned([{ kind: 'allergenDataMissing' }])))
+    .toBe('Bevanda di avena, un litro, uno e ottantanove. Mancano i dati sugli allergeni di questo prodotto.');
+  expect(it_({ key: 'cart.added', product: oat, totalCents: 2110, budgetCents: 2000 }))
+    .toBe('Aggiunto: bevanda di avena. Totale ventuno e dieci. Hai superato il budget di venti euro.');
+  expect(it_({ key: 'glance.ambiguous', products: [oat, rye] }))
+    .toBe('Non distinguo tra bevanda di avena e rye bread. Mostrami il davanti.');
+  expect(it_({ key: 'glance.ambiguous', products: [oat] })).toBe('Non riesco a distinguere questo prodotto. Mostrami il davanti.');
+});
+it('has an Italian name for each allergen', () => {
+  const all = { ...oat, allergens: [...EU_ALLERGENS] };
+  const line = it_({ key: 'glance.new', product: all, hint: false, warnings: [] }, { detail: 'detailed' });
+  expect(line).toContain('Contiene glutine, crostacei, uova, pesce, arachidi, soia, latte, frutta a guscio, sedano, senape, sesamo, solfiti, lupini e molluschi.');
 });
 
 const warned = (warnings: Warning[], hint = false): Line => ({ key: 'glance.new', product: oat, hint, warnings });

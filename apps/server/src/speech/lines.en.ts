@@ -15,25 +15,26 @@ const AIM: Record<Extract<Line, { key: 'glance.partial' }>['aimHint'], string> =
   turn: 'Turn the front to me.',
 };
 
-function capitalize(text: string): string {
+export function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** Joins the sentences that are not empty. */
-function sentences(...parts: string[]): string {
+export function sentences(...parts: string[]): string {
   return parts.filter((part) => part !== '').join(' ');
 }
 
-function startsWithBrand(name: string, product: Product): boolean {
+export function startsWithBrand(name: string, product: Product): boolean {
   return name.toLowerCase().startsWith(product.brand.toLowerCase());
 }
 
-function nameAtStart(product: Product, profile: Profile): string {
+/** The spoken name in the language of the profile. */
+export function nameAtStart(product: Product, profile: Profile): string {
   return localize(product.spokenName, profile.lang);
 }
 
 /** A brand keeps its capital letter. Each other name starts in lower case inside a sentence. */
-function nameInside(product: Product, profile: Profile): string {
+export function nameInside(product: Product, profile: Profile): string {
   return insideSentence(nameAtStart(product, profile), product);
 }
 
@@ -69,7 +70,7 @@ function warningList(words: readonly string[]): string {
   return `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
 }
 
-function hasAllergenWarning(warnings: readonly Warning[]): boolean {
+export function hasAllergenWarning(warnings: readonly Warning[]): boolean {
   return warnings.some((warning) => warning.kind === 'allergen');
 }
 
@@ -119,7 +120,7 @@ function glanceNew(line: Extract<Line, { key: 'glance.new' }>, profile: Profile)
   return sentences(`${name}, ${pack}, ${spokenPrice(product.priceCents, lang, 'short')}.`, warning, hint);
 }
 
-/** The table "Spoken lines" of Plan 1, with its text rules. */
+/** The English text of each line of the table "Spoken lines" of Plan 1, with its text rules. */
 export const LINES_EN: LineTemplates = {
   'session.start': () => 'Camera on. Hold a product up to hear its price.',
   'session.rest': () => 'Camera off. Your cart is safe.',

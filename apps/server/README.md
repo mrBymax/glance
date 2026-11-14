@@ -80,7 +80,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `FAKE_SPEECH` | off | `1` means on. |
 | `ELEVENLABS_API_KEY` | not set | Needed when `FAKE_SPEECH` is off. |
 | `ELEVENLABS_VOICE_EN` | not set | Needed when `FAKE_SPEECH` is off. |
-| `ELEVENLABS_VOICE_IT` | not set | The voice for Italian. |
+| `ELEVENLABS_VOICE_IT` | not set | The voice for Italian lines. With no value, they get the English voice. |
 | `SPEECH_CACHE_DIR` | `.cache/speech` | The folder for speech clips. |
 | `SAVE_FRAMES` | not set | A directory for frames. When it is set, the server writes each frame there. See "Stored frames". Keep it not set for the demo and on the deployed server. |
 | `PAYMENT_DELAY_MS` | `1500` | The length of the mock payment. |
@@ -339,6 +339,7 @@ npm run catalog:seed --workspace @glance/server -- catalog/catalog.dev.json --no
 # seed: no MONGODB_URI, products not stored
 # seed: --no-clips is set, no clip made
 # seed: 4 products, 0 clips, 0 failed
+npm run catalog:seed --workspace @glance/server -- catalog/catalog.json --lang it      # also the Italian clips
 ```
 
 `catalog:seed` reads `apps/server/.env`. It does these steps:
@@ -350,8 +351,9 @@ npm run catalog:seed --workspace @glance/server -- catalog/catalog.dev.json --no
 
 The clips:
 
-- `seedLines` in `src/speech/seed.ts` lists the texts: 3 for each product (the glance line with and with no hint, and the "in your cart" line) and 27 lines that have no product. That is 39 texts for the dev catalog and 63 for 12 products.
-- The texts are in English, for the default profile. A line with a total, the pay prompt, and each line for another input than the nod get their clips during the shop.
+- `seedLines` in `src/speech/seed.ts` lists the texts: 3 for each product (the glance line with and with no hint, and the "in your cart" line) and 31 lines that have no product. That is 43 texts for the dev catalog and 67 for 12 products.
+- With `--lang it`, the check runs with `--lang it` and stops the seed when a product has no Italian text. Then the seed makes the English clips and the same number of Italian clips, with the voice `ELEVENLABS_VOICE_IT`. The dev catalog fails that check: only the oat drink has Italian texts.
+- With no `--lang`, the texts are in English, for the default profile. A line with a total, the pay prompt, and each line for another input than the nod get their clips during the shop.
 - Each text with no clip in the cache is one paid ElevenLabs call. Before the calls, the command prints the number of lines and characters. A second run makes no call for the clips that exist.
 - A clip belongs to one voice. A new `ELEVENLABS_VOICE_EN` makes each clip again.
 - The seed needs no Gemini key. With `--no-clips` it needs no ElevenLabs key.
@@ -608,7 +610,7 @@ sequenceDiagram
 
 ## Spoken text
 
-The rules select a line by its key, and `renderLine(line, profile)` in `src/speech/render.ts` writes its text. `lines.en.ts` holds one template for each key, with the text of the table "Spoken lines" of the plan.
+The rules select a line by its key, and `renderLine(line, profile)` in `src/speech/render.ts` writes its text in the language of the profile. `lines.en.ts` holds one template for each key, with the text of the table "Spoken lines" of the plan. `lines.it.ts` holds the Italian templates.
 
 - `spokenPrice` in `numbers.ts` writes a price as words. The short form is "one eighty-nine". The full form is "one euro eighty-nine". The pay prompt and the paid line use the full form.
 - `yesPhrases` in `phrases.ts` names the input of the shopper: "Nod to add.", "Double tap to add.", "Say add.", "Press Add on your phone.", or "Press volume up to add.". A shopper with `headGestures: false` gets the phone phrases.
@@ -619,7 +621,19 @@ The rules select a line by its key, and `renderLine(line, profile)` in `src/spee
 - The warning texts are "Warning: contains gluten, milk and nuts.", "Warning: not vegan.", "Warning: not vegetarian.", and "Allergen data is missing for this product." They equal the texts of the phone UI.
 - At the level `detailed`, an allergen warning names each allergen of the product, and the "Contains" sentence is left out.
 - With no allergen in the profile, the voice says nothing about allergens for a product with no allergen data. It never says that a product is safe.
-- The profile language `it` gives the English text. The Italian lines do not exist yet.
+
+Italian, for the profile language `it`:
+
+- Each line has an Italian text, and `speak.lang` and `caption.lang` are `it`. A native speaker has not read `lines.it.ts` yet.
+- A product name, a pack text, and a kiosk name come from the data. A product with no Italian text keeps its English text.
+- `numberToWords` writes an Italian number as one word: "ventuno", "ventitré", "centottanta", "milleduecentotrentaquattro".
+- The short price is "uno e ottantanove", and "uno e zero cinque" for 1.05. The full price is "un euro e ottantanove", "venti euro", "sei euro e cinque centesimi", or "novantanove centesimi".
+- No sentence agrees with the gender of a product name: "Aggiunto: bevanda di avena.", "Nel carrello: due pezzi.", "Annuisci per aggiungerne ancora."
+- The look-alike line names both products: "Non distinguo tra bevanda di avena e rye bread. Mostrami il davanti." An Italian name starts with the words that two look-alike products share, so the line has no common name.
+- The warnings are "Attenzione: contiene glutine, latte e frutta a guscio.", "Attenzione: non per vegani.", "Attenzione: non per vegetariani.", and "Mancano i dati sugli allergeni di questo prodotto."
+- Voice commands stay English. The yes phrases for the voice input are "Di' add per aggiungere." and "Di' pay per pagare."
+- A profile patch that changes the language writes each cart name again in the new language, and gives the event `cart.updated` with `change: null`.
+- The answer to a question comes from the model in the language of the profile.
 
 ## Storage
 

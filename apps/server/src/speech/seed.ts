@@ -20,8 +20,10 @@ const AIM_HINTS = ['left', 'right', 'up', 'down', 'closer', 'farther', 'turn'] a
 /**
  * The texts that the seed makes clips for: the lines that a shop with the default profile is sure to need.
  * A line with a total or an item count is not in the list, because its text depends on the cart.
+ * `lang` selects the language of the texts. The default is the language of the default profile.
  */
-export function seedLines(products: readonly Product[]): string[] {
+export function seedLines(products: readonly Product[], lang: Lang = DEFAULT_PROFILE.lang): string[] {
+  const profile = { ...DEFAULT_PROFILE, lang };
   const lines: Line[] = [
     ...products.flatMap((product): Line[] => [
       { key: 'glance.new', product, hint: true, warnings: [] },
@@ -34,16 +36,19 @@ export function seedLines(products: readonly Product[]): string[] {
     ...AIM_HINTS.map((aimHint): Line => ({ key: 'glance.partial', aimHint })),
   ];
   // Two products with one spoken name, pack, and price give one text, and one clip serves both.
-  return [...new Set(lines.map((line) => renderLine(line, DEFAULT_PROFILE)))];
+  return [...new Set(lines.map((line) => renderLine(line, profile)))];
 }
 
-/** Asks for the clip of each text, one at a time. A clip that the cache already holds counts as made. */
+/**
+ * Asks for the clip of each text, one at a time. A clip that the cache already holds counts as made.
+ * `lang` is the language of the texts. It selects the voice.
+ */
 export async function makeClips(
-  lines: readonly string[], clipUrl: (text: string, lang: Lang) => Promise<string | null>,
+  lines: readonly string[], clipUrl: (text: string, lang: Lang) => Promise<string | null>, lang: Lang = DEFAULT_PROFILE.lang,
 ): Promise<{ made: number; failed: number }> {
   let made = 0;
   for (const text of lines) {
-    if ((await clipUrl(text, DEFAULT_PROFILE.lang)) !== null) made += 1;
+    if ((await clipUrl(text, lang)) !== null) made += 1;
   }
   return { made, failed: lines.length - made };
 }
