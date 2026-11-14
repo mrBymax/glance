@@ -1,0 +1,20 @@
+{
+  "code": "5449000000996",
+  "product": {
+    "code": "5449000000996",
+    "product_name": "Coca-Cola Original",
+    "product_name_en": "Coca-Cola",
+    "product_name_it": "Coca-Cola",
+    "brands": "COCA-COLA SERVICES SA/NV",
+    "quantity": "330 ml",
+    "allergens_tags": [],
+    "traces_tags": [],
+    "ingredients_analysis_tags": [
+      "en:palm-oil-free",
+      "en:maybe-vegan",
+      "en:vegetarian"
+    ]
+  },
+  "status": 1,
+  "status_verbose": "product found"
+}

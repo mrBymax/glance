@@ -1,0 +1,104 @@
+import type { Lang, Product } from '@glance/shared';
+import type { CatalogIndex } from '../catalog/catalog';
+import { numberToWords } from '../speech/numbers';
+import type { ProductDetails } from './productInfo';
+import type { StoreItem } from './storeList';
+
+const SCANNED_ID = /^gtin-(\d{13})$/;
+
+/** The ID of a product that came from a barcode and that the catalog does not hold. */
+export function scannedProductId(gtin13: string): string {
+  return `gtin-${gtin13}`;
+}
+
+/** The 13 digits of the ID of a scanned product, or null for each other ID. */
+export function gtinOfScannedId(productId: string): string | null {
+  return SCANNED_ID.exec(productId)?.[1] ?? null;
+}
+
+/**
+ * The scanned products of this process, by ID. Each session shares them: a product is the same for each shopper.
+ * A restart loses them, and the registry of the sessions resolves the products of a stored session again.
+ */
+export class ScannedProducts {
+  private readonly byId = new Map<string, Product>();
+
+  get(id: string): Product | undefined {
+    return this.byId.get(id);
+  }
+
+  /** A newer product with the same ID takes the place of the older one. */
+  put(product: Product): void {
+    this.byId.set(product.id, product);
+  }
+}
+
+/**
+ * The index that the rules use: the catalog, and then the scanned products.
+ * `products` stays the catalog alone, so the recognition prompt and the clip seed hold no scanned product.
+ */
+export function withScanned(catalog: CatalogIndex, scanned: ScannedProducts): CatalogIndex {
+  return { products: catalog.products, get: (id) => catalog.get(id) ?? scanned.get(id) };
+}
+
+type Unit = 'g' | 'kg' | 'ml' | 'cl' | 'l';
+/** The singular and the plural of each unit. */
+const UNITS: Record<Lang, Record<Unit, [string, string]>> = {
+  en: { g: ['gram', 'grams'], kg: ['kilogram', 'kilograms'], ml: ['millilitre', 'millilitres'], cl: ['centilitre', 'centilitres'], l: ['litre', 'litres'] },
+  it: { g: ['grammo', 'grammi'], kg: ['chilo', 'chili'], ml: ['millilitro', 'millilitri'], cl: ['centilitro', 'centilitri'], l: ['litro', 'litri'] },
+};
+const MAX_SPOKEN_PACK = 9999;
+
+/**
+ * A pack size as words: "500 g" is "five hundred grams" and "cinquecento grammi".
+ * It knows one number with at most one decimal digit and the units g, kg, ml, cl, and l. Each other text stays as it is.
+ */
+export function spokenPack(packSize: string, lang: Lang): string {
+  const match = /^(\d+)(?:[.,](\d))?\s*(g|kg|ml|cl|l)$/i.exec(packSize.trim());
+  if (!match) return packSize;
+  const whole = Number(match[1]);
+  if (whole > MAX_SPOKEN_PACK) return packSize;
+  const [singular, plural] = UNITS[lang][match[3]!.toLowerCase() as Unit];
+  if (match[2] !== undefined) {
+    return `${numberToWords(whole, lang)} ${lang === 'it' ? 'virgola' : 'point'} ${numberToWords(Number(match[2]), lang)} ${plural}`;
+  }
+  if (whole === 1) return `${lang === 'it' ? 'un' : 'one'} ${singular}`;
+  return `${numberToWords(whole, lang)} ${plural}`;
+}
+
+/** The pack of a product when no source gives its size. */
+const UNKNOWN_PACK = { packSize: '1 pc', spoken: { en: 'one pack', it: 'una confezione' } };
+
+/**
+ * Builds the product of a store item. The store gives the price, and its brand and pack size when it has them.
+ * The database gives the name in each language, the allergens, and the diets. `details` is null when it gave nothing:
+ * the product then has the name of the store and no allergen data.
+ * A product with no brand at all gets its name as the brand, so the detailed line says the name one time.
+ */
+export function scannedProduct(item: StoreItem, details: ProductDetails | null): Product {
+  const name = {
+    en: details?.name.en ?? details?.name.any ?? item.name,
+    it: details?.name.it ?? details?.name.any ?? item.name,
+  };
+  const packSize = item.packSize ?? details?.quantity ?? null;
+  const pack = packSize === null
+    ? UNKNOWN_PACK.spoken
+    : { en: spokenPack(packSize, 'en'), it: spokenPack(packSize, 'it') };
+  return {
+    id: scannedProductId(item.gtin),
+    gtin: item.gtin,
+    name,
+    spokenName: name,
+    brand: item.brand ?? details?.brand ?? name.en,
+    packSize: packSize ?? UNKNOWN_PACK.packSize,
+    spokenPack: pack,
+    spokenPackDetailed: pack,
+    priceCents: item.priceCents,
+    allergens: details?.allergens ?? null,
+    vegan: details?.vegan ?? null,
+    vegetarian: details?.vegetarian ?? null,
+    // The recognition prompt never lists a scanned product, so this text only fills the field.
+    visual: `Scanned by its barcode ${item.gtin}.`,
+    lookAlikes: [],
+  };
+}

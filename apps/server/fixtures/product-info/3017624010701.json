@@ -1,0 +1,26 @@
+{
+  "code": "3017624010701",
+  "product": {
+    "code": "3017624010701",
+    "product_name": "Nutella",
+    "product_name_en": "Nutella",
+    "product_name_it": "",
+    "brands": "Ferrero",
+    "quantity": "400.0 g",
+    "allergens_tags": [
+      "en:nuts"
+    ],
+    "traces_tags": [
+      "en:milk",
+      "en:nuts",
+      "en:soybeans"
+    ],
+    "ingredients_analysis_tags": [
+      "en:palm-oil-content-unknown",
+      "en:vegan-status-unknown",
+      "en:vegetarian-status-unknown"
+    ]
+  },
+  "status": 1,
+  "status_verbose": "product found"
+}

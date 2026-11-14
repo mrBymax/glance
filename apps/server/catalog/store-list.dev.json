@@ -1,0 +1,12 @@
+[
+  { "gtin": "3017624010701", "priceCents": 399, "name": "Nutella", "brand": "Ferrero", "packSize": "400 g" },
+  { "gtin": "80177173", "priceCents": 45, "name": "Nutella", "brand": "Ferrero", "packSize": "15 g" },
+  { "gtin": "8076800195057", "priceCents": 109, "name": "Spaghetti n.5", "brand": "Barilla", "packSize": "500 g" },
+  { "gtin": "8076809513753", "priceCents": 289, "name": "Pesto alla genovese", "brand": "Barilla", "packSize": "190 g" },
+  { "gtin": "8001250120120", "priceCents": 159, "name": "Spaghetti n.12", "brand": "De Cecco", "packSize": "500 g" },
+  { "gtin": "8000500037560", "priceCents": 119, "name": "Kinder Bueno", "brand": "Kinder", "packSize": "43 g" },
+  { "gtin": "8013355999143", "priceCents": 279, "name": "Gocciole", "brand": "Pavesi", "packSize": "500 g" },
+  { "gtin": "5449000000996", "priceCents": 99, "name": "Coca-Cola", "brand": "Coca-Cola", "packSize": "330 ml" },
+  { "gtin": "8002270014901", "priceCents": 89, "name": "Acqua minerale", "brand": "San Pellegrino", "packSize": "1 L" },
+  { "gtin": "7394376616037", "priceCents": 229, "name": "Barista oat drink", "brand": "Oatly", "packSize": "1 L" }
+]

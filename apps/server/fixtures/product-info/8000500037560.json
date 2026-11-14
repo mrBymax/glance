@@ -1,0 +1,24 @@
+{
+  "code": "8000500037560",
+  "product": {
+    "code": "8000500037560",
+    "product_name": "bueno",
+    "product_name_en": "bueno",
+    "brands": "Kinder",
+    "quantity": "43g",
+    "allergens_tags": [
+      "en:gluten",
+      "en:milk",
+      "en:nuts",
+      "en:soybeans"
+    ],
+    "traces_tags": [],
+    "ingredients_analysis_tags": [
+      "en:palm-oil",
+      "en:non-vegan",
+      "en:vegetarian"
+    ]
+  },
+  "status": 1,
+  "status_verbose": "product found"
+}
