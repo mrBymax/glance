@@ -2,7 +2,27 @@
 
 The Display HUD mockup of Meta Glance, for glasses with a display. It is a Vite app with React 19 and the Display toolkit `@wearables-ui-toolkit/mrbd`.
 
-The project has its state and its feeds. It has no screen yet: `index.html` loads `src/main.tsx`, and that file does not exist. So `npm run dev` shows an empty page, and `npm run build` fails.
+It has one screen: the camera status, the pending product with its price and its warnings, the prompt, the total, and the last caption. While a product is pending, the buttons Add and Skip (or Remove) answer the prompt.
+
+## Run
+
+Run each command at the repository root, after `npm install`.
+
+```bash
+npm run dev --workspace @glance/display-pow -- --port 5175 --strictPort   # the phone UI and the website use 5173 and 5174
+npm run build --workspace @glance/display-pow                             # typecheck, then the static build in apps/display-pow/dist
+```
+
+Open `http://localhost:5175/` for the recorded mode. It needs no server.
+
+For the live mode, start the fake server and create a session. The second command prints the address of the HUD.
+
+```bash
+npm run dev:fake --workspace @glance/server    # port 8080, no key, no vendor call
+node -e "fetch('http://localhost:8080/api/sessions',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(r=>r.json()).then(j=>console.log('http://localhost:5175/?s='+j.sessionId+'&t='+j.token+'&api=http://localhost:8080'))"
+```
+
+The fake script offers the oat drink after about 3 seconds. Add changes the total to `1.89 EUR, 1 item`.
 
 ## Parts
 
@@ -16,7 +36,11 @@ flowchart LR
   reduce --> state["HudState"]
   snapshot --> state
   state --> view["hudState.ts: hudView"]
-  state --> mock["hudState.ts: mockAnswer, recorded mode only"]
+  view --> page["HudPage.tsx: the screen"]
+  page -- "answer, recorded mode" --> mock
+  page -- "answer, live mode" --> intent["feed.ts: postIntent"]
+  intent -- "WebIntentRequest, source hud" --> server
+  mock["hudState.ts: mockAnswer, recorded mode only"]
   mock -- "ServerEvent" --> reduce
 ```
 
@@ -24,6 +48,9 @@ flowchart LR
 |---|---|
 | `src/hudState.ts` | `reduceHud` turns each `ServerEvent` into a `HudState`. `hudFromSnapshot` builds the same state from a `SessionSnapshot`. `hudView` gives each text of the screen. `mockAnswer` plays the server for an answer in recorded mode. |
 | `src/feed.ts` | `readFeedParams` selects the mode. `playRecording` plays a recording again and again. `openLive` follows a live session. `postIntent` sends an answer to the server. |
+| `src/HudPage.tsx` | The screen: one `Page` with one `ScrollView`, one `Panel`, and one `ButtonRail`. It starts the feed of the mode and sends each answer. |
+| `src/main.tsx` | Renders `HudPage` in the toolkit `App`. |
+| `src/app.css` | The layout rules. Each value is a toolkit token. |
 | `src/recordings/mainTake.json` | The recording: two products, one unknown product, and the camera stop. It holds no answer. |
 
 All types of the messages come from `@glance/shared`.
@@ -48,6 +75,10 @@ A live session uses three paths of the server, each with `?token=<token>`:
 
 ## Gotchas
 
+- The dock with the two buttons exists only while a product is pending. The runtime audit of the toolkit rejects a dock with no enabled action. When the dock appears, the toolkit puts the focus on Add, unless the focus is on the status region. After an answer the focus is on no element until the next key or the next product.
+- A failed answer in live mode shows the toast `Not sent. Try again.` Nobody checked this toast in a browser.
+- The gap of `.content-inset` is `calc(var(--uit-spacing-large) + var(--uit-spacing-xsmall))`. The structure check of the toolkit rejects each other gap for a stack with labels and text. The class `fact-group` keeps each label near its values.
+- With a caption of two lines, the status region scrolls. The product and the total stay in view at 600 x 600.
 - `openLive` opens the stream first. It gets the snapshot after each open of the stream, so a reconnect gives a fresh state. An event that arrives while the snapshot is on its way is applied one more time after the snapshot.
 - The HUD ignores a message that is not JSON, and an event type that `@glance/shared` does not know.
 - A `glance.cleared` clears the product only if its prompt ID is the ID of the pending product.
@@ -63,6 +94,17 @@ Run each command at the repository root, after `npm install`.
 ```bash
 npm test --workspace @glance/display-pow         # runs the tests of the state and the feeds
 npm run typecheck --workspace @glance/display-pow
+node skills/mrbd-ui-toolkit/library/uit-screen-architecture-web/scripts/validate-app-structure.mjs apps/display-pow/src   # the structure check of the toolkit
 ```
+
+The runtime audit of the toolkit needs the dev server and a Chrome with a debug port, with the HUD in its one tab at 600 x 600:
+
+```bash
+node skills/mrbd-ui-toolkit/library/uit-screen-architecture-web/scripts/audit-runtime.mjs http://127.0.0.1:9222
+```
+
+The audit has no finding while a product with no warning is pending. It has one kind of finding in the other states: the caption repeats a text of the screen. Examples are `Camera on` and `Warning: contains gluten.` The caption is the spoken line, and the spoken line names the same facts, so the finding stays.
+
+No test renders the screen. Nobody checked the screen in the Display simulator or on glasses.
 
 No test opens a network connection. The tests of `openLive` and `postIntent` use stubs for `EventSource` and `fetch`.
