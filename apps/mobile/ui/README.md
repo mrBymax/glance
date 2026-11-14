@@ -125,6 +125,7 @@ flowchart LR
   screen["SessionScreen"]
   banner["StateBanner"]
   card["PromptCard"]
+  lookalike["LookAlikeNotice"]
   captions["CaptionList"]
   cart["CartList"]
   checkout["CheckoutSheet"]
@@ -142,6 +143,7 @@ flowchart LR
   setup --> banner
   screen --> banner
   screen --> card
+  screen --> lookalike
   screen --> captions
   screen --> cart
   screen --> checkout
@@ -164,6 +166,8 @@ flowchart LR
 - `PromptCard` sends one answer for each prompt ID, and then it disables both buttons. A second answer can undo an add on the server.
 - `PromptCard` shows one warning banner for each entry of `prompt.warnings`. `warningText` in `src/text/format.ts` writes the sentence that the voice speaks: "Warning: contains gluten and milk.", "Warning: not vegan.", or "Allergen data is missing for this product.". With no warning the card shows nothing, and it never says that a product is safe.
 - The server sends `budget.exceeded` one time, when an add crosses the budget. `reduce` keeps the warning, and `CartList` shows "Warning: over your budget." with the total of the cart and the budget above the total. The warning ends when a `cart.updated` has a total at or under the budget, and when a new budget is `null` or not under the total.
+- `glance.ambiguous` sets `lookAlikes`. While no product prompt is current, the prompt area shows `LookAlikeNotice`: "I cannot tell which product this is.", "Turn the front to me.", and the name and the pack size of each candidate. It shows no price, because the voice never guesses a price. The next `glance.pending`, the next `cart.updated`, and a snapshot clear it.
+- `useStrings()` gives the strings to a component that needs no other part of `useUi()`. With no `BridgeProvider` above, it gives the English strings.
 - A snapshot replaces the session data, and it clears the error, the budget warning, and the look-alike list.
 - An error stays until a sign of recovery: a stream that starts, a new prompt, a snapshot, a payment, or `local.attempt`. `send` runs `local.attempt` before `setup.register`, `setup.requestCamera`, and `session.start`.
 - The list of captions holds the last 20, and the screen shows the last 4. A caption with a known ID replaces the old one.

@@ -9,6 +9,7 @@ import { useUi } from '../bridge/BridgeContext';
 import { CaptionList } from '../components/CaptionList';
 import { CartList } from '../components/CartList';
 import { CheckoutSheet } from '../components/CheckoutSheet';
+import { LookAlikeNotice } from '../components/LookAlikeNotice';
 import { PocketMode } from '../components/PocketMode';
 import { PromptCard } from '../components/PromptCard';
 import { SettingsSheet } from '../components/SettingsSheet';
@@ -29,12 +30,17 @@ export function SessionScreen() {
     setEndOpen(false);
   };
   if (isPocket) return <PocketMode onLeave={() => setPocket(false)} />;
+  const promptArea = () => {
+    if (state.prompt?.kind === 'product') return <PromptCard prompt={state.prompt} />;
+    if (state.lookAlikes) return <LookAlikeNotice candidates={state.lookAlikes} />;
+    return <Text>{strings.idleHint}</Text>;
+  };
   return (
     <VStack as="main" padding={4} gap={4}>
       <StateBanner />
       <Heading level={1}>{strings.appTitle}</Heading>
       <StatusRow />
-      {state.prompt?.kind === 'product' ? <PromptCard prompt={state.prompt} /> : <Text>{strings.idleHint}</Text>}
+      {promptArea()}
       <CaptionList />
       <CartList />
       <HStack gap={2} wrap="wrap">
