@@ -159,3 +159,23 @@ it('speaks the budget line of the spec', () => {
   expect(text(over, { detail: 'brief' })).toBe(line);
   expect(text({ ...over, budgetCents: 2050 })).toBe('Added oat drink. Total twenty-one ten. That is over your budget of twenty euros fifty.');
 });
+it('speaks the look-alike lines', () => {
+  const barista = catalog.get('oat-drink-barista-1l')!;
+  expect(text({ key: 'glance.ambiguous', products: [oat, barista] }))
+    .toBe('I cannot tell which oat drink this is. Turn the front to me.');
+  expect(text({ key: 'glance.ambiguous', products: [barista, oat] }))
+    .toBe('I cannot tell which oat drink this is. Turn the front to me.');
+  expect(text({ key: 'glance.ambiguous', products: [oat, rye] }))
+    .toBe('I cannot tell if this is oat drink or rye bread. Turn the front to me.');
+  expect(text({ key: 'glance.ambiguous', products: [oat, rye, crisps] }))
+    .toBe('I cannot tell if this is oat drink or rye bread. Turn the front to me.');
+});
+it('finds the common name of look-alike products with no case, and keeps a brand at its start', () => {
+  const named = (spoken: string) => ({ ...oat, spokenName: { en: spoken } });
+  expect(text({ key: 'glance.ambiguous', products: [named('Oat drink'), named('Barista OAT drink'), named('Organic Oat Drink')] }))
+    .toBe('I cannot tell which oat drink this is. Turn the front to me.');
+  expect(text({ key: 'glance.ambiguous', products: [named('Oatly oat drink'), named('Oatly oat drink')] }))
+    .toBe('I cannot tell which Oatly oat drink this is. Turn the front to me.');
+  expect(text({ key: 'glance.ambiguous', products: [named('Soy drink'), named('Oat drink')] }))
+    .toBe('I cannot tell which drink this is. Turn the front to me.');
+});

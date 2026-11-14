@@ -30,8 +30,7 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
       onAimHint(turn, result.aimHint);
       return;
     case 'ambiguous':
-      // Until the look-alike answer exists, the shopper turns the package so that the next frame can tell.
-      onAimHint(turn, 'turn');
+      onAmbiguous(turn, result.candidates);
       return;
   }
 }
@@ -54,6 +53,10 @@ function openProductPrompt(turn: Turn, product: Product): void {
   if (s.prompt?.kind === 'product') emit(turn, { type: 'glance.cleared', promptId: s.prompt.id });
 
   suspendCheckoutFor(turn, product.id);
+
+  // The model named one product, so the look-alike appearance is over. A later ambiguous result gets its line again.
+  s.ambiguousKey = null;
+  s.ambiguousAt = null;
 
   const id = nextPromptId(s);
   const qty = qtyInCart(s, product.id);
@@ -84,6 +87,32 @@ function onUnknown(turn: Turn): void {
     speak(turn, say({ key: 'glance.unknown' }));
   }
   s.unknownAt = now;
+}
+
+// The time moves with each ambiguous result, so one appearance gives one line.
+function onAmbiguous(turn: Turn, candidates: readonly string[]): void {
+  const { s, now, ctx } = turn;
+  const products = candidates.flatMap((id) => ctx.catalog.get(id) ?? []);
+  if (products.length < 2) return;
+
+  if (s.prompt?.kind === 'product') {
+    if (candidates.includes(s.prompt.productId)) {
+      // The shopper cannot add a product that the model is no longer sure of.
+      emit(turn, { type: 'glance.cleared', promptId: s.prompt.id });
+      s.prompt = null;
+    } else if (promptProductInView(s, now)) {
+      return;
+    }
+  }
+
+  const key = products.map((product) => product.id).sort().join(' ');
+  const sameAppearance = s.ambiguousKey === key && s.ambiguousAt !== null && now - s.ambiguousAt < TIMING.viewMs;
+  s.ambiguousKey = key;
+  s.ambiguousAt = now;
+  if (sameAppearance) return;
+
+  emit(turn, { type: 'glance.ambiguous', candidates: products.map((product) => toProductRef(product, s.profile.lang)) });
+  speak(turn, say({ key: 'glance.ambiguous', products }));
 }
 
 function onAimHint(turn: Turn, aimHint: RecognitionInput['result']['aimHint']): void {

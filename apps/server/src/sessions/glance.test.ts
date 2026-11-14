@@ -94,13 +94,94 @@ it('does not change the state that it gets', () => {
   expect(h.state).toEqual(before);
 });
 
-it('asks to turn the product for an ambiguous result, and says nothing for an unsure result with no aim hint', () => {
+it('says nothing for an unsure result with no aim hint', () => {
   const h = harness();
   h.result({ status: 'unsure' });
   expect(h.effects).toEqual([]);
+});
+it('says that it cannot tell look-alike products apart, one time for each appearance', () => {
+  const h = harness();
   h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
-  expect(h.event('glance.hint')).toEqual({ type: 'glance.hint', aimHint: 'turn' });
-  expect(h.speak()!.line).toEqual({ key: 'glance.partial', aimHint: 'turn' });
+  expect(h.events()).toEqual(['glance.ambiguous']);
+  expect(h.event('glance.ambiguous')!.candidates.map((c) => c.id)).toEqual([OAT, BARISTA]);
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+  h.advance(500); h.result({ status: 'ambiguous', candidates: [BARISTA, OAT] });
+  expect(h.effects).toEqual([]);
+  h.advance(500); h.see(BARISTA);
+  expect(h.state.prompt).toMatchObject({ productId: BARISTA });
+});
+it('ends a prompt for a product that the model is no longer sure of', () => {
+  const h = harness();
+  h.see(OAT); h.done();
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.events()).toEqual(['glance.cleared', 'glance.ambiguous']);
+  h.yes('voice');
+  expect(h.state.cart).toEqual(EMPTY_CART);
+});
+it('gives the look-alike answer with the product references of the contract, and with the defaults of its line', () => {
+  const h = harness();
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.event('glance.ambiguous')).toEqual({
+    type: 'glance.ambiguous',
+    candidates: [
+      { id: OAT, name: 'Oat drink', packSize: '1 L', priceCents: 189 },
+      { id: BARISTA, name: 'Barista oat drink', packSize: '1 L', priceCents: 229 },
+    ],
+  });
+  expect(h.speak()).toMatchObject({ priority: 'normal', sound: null, interrupt: false, promptId: null });
+  expect((h.speak()!.line as { products: { id: string }[] }).products.map((p) => p.id)).toEqual([OAT, BARISTA]);
+  expect(h.state.prompt).toBeNull();
+});
+it('says nothing for look-alike products while the product of another prompt is in view', () => {
+  const h = harness();
+  h.see(RYE); h.advance(500);
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.effects).toEqual([]);
+  expect(h.state.prompt).toMatchObject({ productId: RYE });
+  h.advance(T.viewMs);
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.events()).toEqual(['glance.ambiguous']);
+  expect(h.state.prompt).toMatchObject({ productId: RYE });
+});
+it('gives one look-alike answer while the products stay in view, and a new one for a new appearance', () => {
+  const h = harness();
+  const ambiguous = () => h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  ambiguous();
+  for (let elapsed = 0; elapsed < 2 * T.viewMs; elapsed += 500) { h.advance(500); ambiguous(); }
+  expect(h.all.filter((e) => e.type === 'speak')).toHaveLength(1);
+  h.advance(T.viewMs); ambiguous();
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+});
+it('gives a new look-alike answer for other candidates', () => {
+  const h = harness();
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, RYE] });
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+  expect(h.event('glance.ambiguous')!.candidates.map((c) => c.id)).toEqual([OAT, RYE]);
+});
+it('gives the look-alike answer again when the model named one candidate in between', () => {
+  const h = harness();
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  h.advance(500); h.see(OAT);
+  expect(h.state.prompt).toMatchObject({ productId: OAT });
+  h.advance(500); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.events()).toEqual(['glance.cleared', 'glance.ambiguous']);
+  expect(h.lines()).toEqual(['glance.ambiguous']);
+  expect(h.state.prompt).toBeNull();
+});
+it('starts with no look-alike appearance', () => {
+  expect(harness().state).toMatchObject({ ambiguousKey: null, ambiguousAt: null });
+});
+it('gives no aim hint for look-alike products', () => {
+  const h = harness();
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.event('glance.hint')).toBeUndefined();
+  expect(h.state.aimHintAt).toBeNull();
+});
+it('says nothing for candidates that the catalog does not hold', () => {
+  const h = harness();
+  h.result({ status: 'ambiguous', candidates: [OAT, 'no-such-product'] });
+  expect(h.effects).toEqual([]);
 });
 it('says nothing for an unknown result while the product of the current prompt is in view', () => {
   const h = harness();

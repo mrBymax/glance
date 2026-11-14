@@ -134,6 +134,7 @@ curl -s -X POST http://localhost:8080/api/sessions -H "content-type: application
 curl -N "http://localhost:8080/api/sessions/<sessionId>/events?token=<token>"
 # after 3 seconds: glance.pending for the oat drink. Answer it with its promptId:
 curl -s -X POST "http://localhost:8080/api/sessions/<sessionId>/intents?token=<token>" -H "content-type: application/json" -d '{"kind":"yes","source":"phone","promptId":"<promptId>"}'
+# at second 33: glance.ambiguous for the two oat drinks.
 # at second 40: checkout.offered. The same call with its promptId gives checkout.paid.
 ```
 
@@ -367,7 +368,7 @@ flowchart LR
 |---|---|
 | `types.ts` | `SessionState`, `RuleInput`, `Effect`, and `Line`, a spoken line before it has a text |
 | `step.ts` | `createSessionState`, `step`, and the rules that depend on time alone |
-| `glance.ts` | Recognition results: the glance prompt, the unknown line, and the aim hint |
+| `glance.ts` | Recognition results: the glance prompt, the unknown line, the look-alike answer, and the aim hint |
 | `answers.ts` | The answers: yes, no, undo, the cart edit, and `accepts`, which tells if an answer counts |
 | `checkout.ts` | The kiosk code, the pay prompt, and the result of the payment |
 | `general.ts` | The device state, the profile patch, and the intents stop, repeat, total, cart, and help |
@@ -388,6 +389,7 @@ The rules that exist:
 - A product in the cart gets the prompt for "add another" (R11).
 - A glance prompt carries the warnings of its product for the profile of the shopper. See "Allergen guard".
 - An unknown product gets one line for each appearance (R13). An aim hint plays at most one time each 5 seconds.
+- An `ambiguous` result gets the look-alike answer, and never a prompt. See "Look-alike products".
 - A yes or a no counts only with the ID of the current prompt (R3). From the head it also needs a finished prompt, the product in view, and the head window (R4). From voice, touchpad, key, or camera it needs a finished prompt (R5). From the phone or the HUD it needs the ID alone (R6).
 - An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
 - After an add, a no removes that unit for 8 seconds, and a second yes gets one hint (R10). On the prompt for "add another", a no removes one unit (R11).
@@ -420,6 +422,19 @@ The rules that exist:
 - The event `glance.pending`, the lines `glance.new` and `glance.inCart`, and the prompt of the snapshot carry the list.
 - A glance line with a warning has the sound `warning`.
 - A profile patch does not change a prompt that is already spoken. The snapshot computes the list with the profile of that moment.
+
+### Look-alike products
+
+An `ambiguous` result names two or more candidates. The model cannot tell which of them the frame shows.
+
+- If the product of the current prompt is one of the candidates, the prompt ends with `glance.cleared`. The shopper cannot add a product that the model is no longer sure of.
+- If the current prompt is for another product, and that product is in view, the result has no effect.
+- In each other case the event `glance.ambiguous` carries the candidates as product references, and the voice speaks the line `glance.ambiguous`. The line has the priority `normal`, no sound, and no interrupt. It is no prompt, so a yes adds nothing.
+- One appearance gets one line. Results with the same candidates, each less than 3 seconds after the one before, are one appearance. The order of the candidates does not count.
+- A new product prompt ends the appearance. If the model then gives the same `ambiguous` result again, the prompt ends and the line plays again.
+- The line names the words that end each spoken name: "I cannot tell which oat drink this is. Turn the front to me." Names with no common last word give "I cannot tell if this is oat drink or rye bread. Turn the front to me.", with the first two candidates.
+- The line and the event say no price.
+- The default script of fake mode has such a result at second 33.
 
 ### Budget guard
 

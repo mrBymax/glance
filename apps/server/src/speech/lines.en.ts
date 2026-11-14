@@ -34,7 +34,23 @@ function nameAtStart(product: Product, profile: Profile): string {
 
 /** A brand keeps its capital letter. Each other name starts in lower case inside a sentence. */
 function nameInside(product: Product, profile: Profile): string {
-  const name = nameAtStart(product, profile);
+  return insideSentence(nameAtStart(product, profile), product);
+}
+
+/**
+ * The longest run of words that ends each name, compared with no case. Empty when the names share no last word.
+ * The words come from the first name.
+ */
+function commonEnd(names: readonly string[]): string {
+  const [first = [], ...others] = names.map((name) => name.split(' '));
+  let count = 0;
+  while (count < first.length && others.every((words) => (
+    count < words.length && words[words.length - 1 - count]!.toLowerCase() === first[first.length - 1 - count]!.toLowerCase()
+  ))) count += 1;
+  return count === 0 ? '' : first.slice(-count).join(' ');
+}
+
+function insideSentence(name: string, product: Product): string {
   return startsWithBrand(name, product) ? name : name.charAt(0).toLowerCase() + name.slice(1);
 }
 
@@ -115,6 +131,13 @@ export const LINES_EN: LineTemplates = {
     return sentences(`${nameAtStart(line.product, profile)}.`, count, warning, phrases.addAnother, phrases.remove);
   },
   'glance.unknown': () => 'I do not know this product.',
+  'glance.ambiguous': (line, profile) => {
+    const [first, second] = line.products;
+    if (!first || !second) return 'I cannot tell which product this is. Turn the front to me.';
+    const common = commonEnd(line.products.map((product) => nameAtStart(product, profile)));
+    if (common !== '') return `I cannot tell which ${insideSentence(common, first)} this is. Turn the front to me.`;
+    return `I cannot tell if this is ${nameInside(first, profile)} or ${nameInside(second, profile)}. Turn the front to me.`;
+  },
   'glance.partial': (line) => `I can see part of it. ${AIM[line.aimHint]}`,
   'glance.skipped': () => 'Skipped.',
   'cart.added': (line, profile) => {

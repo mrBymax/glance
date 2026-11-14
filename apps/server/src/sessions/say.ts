@@ -11,6 +11,7 @@ export const LINE_DEFAULTS: Record<Line['key'], LineDefault> = {
   'glance.new': line('normal', true),
   'glance.inCart': line('normal', true),
   'glance.unknown': line('normal', false),
+  'glance.ambiguous': line('normal', false),
   'glance.partial': line('normal', false),
   'glance.skipped': line('normal', true),
   'cart.added': line('normal', true, 'added'),

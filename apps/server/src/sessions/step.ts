@@ -24,6 +24,8 @@ export function createSessionState(profile: Profile, now: number): SessionState 
     lastDone: null,
     unknownAt: null,
     aimHintAt: null,
+    ambiguousKey: null,
+    ambiguousAt: null,
     kioskSeen: null,
     mutedKioskId: null,
     checkout: null,

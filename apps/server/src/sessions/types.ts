@@ -11,6 +11,7 @@ export type Line =
   | { key: 'glance.new'; product: Product; hint: boolean; warnings: Warning[] }
   | { key: 'glance.inCart'; product: Product; qty: number; warnings: Warning[] }
   | { key: 'glance.unknown' } | { key: 'glance.skipped' }
+  | { key: 'glance.ambiguous'; products: Product[] }
   | { key: 'glance.partial'; aimHint: Exclude<AimHint, 'none'> }
   | { key: 'cart.added'; product: Product; totalCents: number; budgetCents: number | null }
   | { key: 'cart.removed'; product: Product; totalCents: number }
@@ -60,6 +61,9 @@ export type SessionState = {
   /** R13. */
   unknownAt: number | null;
   aimHintAt: number | null;
+  /** The sorted candidate IDs of the last ambiguous result, with one space between two IDs. */
+  ambiguousKey: string | null;
+  ambiguousAt: number | null;
   /** said: the voice gave the "busy" or "empty" line for this appearance of the code. */
   kioskSeen: { kioskId: string; at: number; said: boolean } | null;
   /** R18. */
