@@ -12,8 +12,9 @@ it('uses the defaults', () => {
     storeListPath: 'catalog/store-list.dev.json', fakeProductInfo: false, offBaseUrl: 'https://world.openfoodfacts.org',
     productInfoUserAgent: 'MetaGlance/0.1 (https://github.com/mrBymax/glance)', productCacheDir: '.cache/products',
     referenceDir: 'catalog/reference', recognitionConcurrency: 8, recognitionReferences: 3,
-    recognitionPipeline: 'frame', verifyMinConfidence: 0.9,
+    recognitionPipeline: 'frame', verifyMinConfidence: 0.9, speechWarmUp: true,
   });
+  expect(loadConfig({ ...KEYS, SPEECH_WARM_UP: '0' }, []).speechWarmUp).toBe(false);
   expect(loadConfig({ ...KEYS, REFERENCE_DIR: '/data/reference' }, []).referenceDir).toBe('/data/reference');
 });
 it('reads the demo key, and an empty value counts as not set', () => {

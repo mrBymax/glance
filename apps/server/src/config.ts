@@ -34,6 +34,8 @@ export type Config = {
   elevenlabsApiKey: string | null;
   voiceId: { en: string | null; it: string | null };
   speechCacheDir: string;
+  /** Make the clips of the product prompts of each store item at the start. It has no effect with fake speech. */
+  speechWarmUp: boolean;
   /** A directory for frames, or null. The server stores no frame without it. */
   saveFramesDir: string | null;
   paymentDelayMs: number;
@@ -133,6 +135,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     elevenlabsApiKey: read('ELEVENLABS_API_KEY'),
     voiceId: { en: read('ELEVENLABS_VOICE_EN'), it: read('ELEVENLABS_VOICE_IT') },
     speechCacheDir: read('SPEECH_CACHE_DIR') ?? '.cache/speech',
+    speechWarmUp: read('SPEECH_WARM_UP') !== '0',
     saveFramesDir: read('SAVE_FRAMES'),
     paymentDelayMs: readNumber('PAYMENT_DELAY_MS', 1500, 0, 600_000, true),
     secondLookWaitMs: readNumber('SECOND_LOOK_WAIT_MS', 0, 0, 10_000, true),

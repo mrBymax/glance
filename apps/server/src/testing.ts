@@ -40,6 +40,8 @@ export async function testApp(env: Record<string, string> = {}, over: Partial<Ap
   try {
     const config = loadConfig({
       FAKE_SPEECH: '1', FAKE_PRODUCT_INFO: '1', GEMINI_API_KEY: 'test', PAYMENT_DELAY_MS: '10', SPEECH_CACHE_DIR: cacheDir,
+      // A test with a speech stub counts its calls, so the clips of the start are off unless the test asks for them.
+      SPEECH_WARM_UP: '0',
       REFERENCE_DIR: referenceDir, ...env,
     }, []);
     app = await buildApp({

@@ -16,7 +16,10 @@ export function createClipUrl(deps: {
   publicBaseUrl: string | (() => string);
   /** Gets one line for each clip that failed. The default is console.error. */
   log?: (line: string) => void;
-}): (text: string, lang: Lang) => Promise<string | null> {
+}): ((text: string, lang: Lang) => Promise<string | null>) & {
+  /** True when the clip of a text exists. It makes no call. With fake speech no clip exists. */
+  has(text: string, lang: Lang): boolean;
+} {
   const log = deps.log ?? ((line: string) => console.error(line));
   /** The requests that run now, by clip key. Two calls for one clip share one request. */
   const running = new Map<string, Promise<boolean>>();
@@ -31,17 +34,23 @@ export function createClipUrl(deps: {
     }
   };
 
-  return async (text, lang) => {
+  /** The clip key of a text, or null when the server makes no clip for it. */
+  const keyOf = (text: string, lang: Lang): { hash: string; voice: string } | null => {
     if (deps.fake || deps.synthesize === null) return null;
     const voice = deps.voiceId[lang] ?? deps.voiceId.en;
-    if (voice === null) return null;
+    return voice === null ? null : { hash: clipKey(text, lang, voice, ELEVENLABS_MODEL), voice };
+  };
 
-    const hash = clipKey(text, lang, voice, ELEVENLABS_MODEL);
+  const clipUrl = async (text: string, lang: Lang): Promise<string | null> => {
+    const key = keyOf(text, lang);
+    const { synthesize } = deps;
+    if (key === null || synthesize === null) return null;
+    const { hash, voice } = key;
     if (!deps.cache.has(hash)) {
       let request = running.get(hash);
       if (!request) {
         // A failed request leaves the map, so the next call for this text tries again.
-        request = make(hash, text, voice, deps.synthesize).finally(() => running.delete(hash));
+        request = make(hash, text, voice, synthesize).finally(() => running.delete(hash));
         running.set(hash, request);
       }
       if (!(await request)) return null;
@@ -49,4 +58,10 @@ export function createClipUrl(deps: {
     const base = typeof deps.publicBaseUrl === 'function' ? deps.publicBaseUrl() : deps.publicBaseUrl;
     return `${base.replace(/\/+$/, '')}/api/speech/${hash}.mp3`;
   };
+  return Object.assign(clipUrl, {
+    has: (text: string, lang: Lang): boolean => {
+      const key = keyOf(text, lang);
+      return key !== null && deps.cache.has(key.hash);
+    },
+  });
 }

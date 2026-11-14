@@ -17,7 +17,7 @@ import { type LabelReader, NO_LABEL } from './label/reader';
 import { createBarcodeReports } from './products/barcodes';
 import type { ProductInfo } from './products/productInfo';
 import { ProductResolver } from './products/resolver';
-import { ScannedProducts, gtinOfScannedId, scannedProduct, withScanned } from './products/scanned';
+import { ScannedProducts, gtinOfScannedId, scannedProduct, scannedProductId, withScanned } from './products/scanned';
 import { type StoreEntry, notInCatalog, readStoreEntries } from './products/storeEntries';
 import type { StoreList } from './products/storeList';
 import { startWarmUp } from './products/warmup';
@@ -30,6 +30,7 @@ import { SessionRegistry } from './sessions/registry';
 import type { RuntimeDeps } from './sessions/runtime';
 import { ClipCache } from './speech/clips';
 import type { Synthesize } from './speech/elevenlabs';
+import { createClipWarmUp } from './speech/prewarm';
 import { createClipUrl } from './speech/service';
 import { type FrameHandler, frameLogLine, registerDeviceSocket } from './ws/device';
 
@@ -167,6 +168,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     catalog: deps.catalog, storeList: deps.storeList, info: deps.productInfo, scanned, log: (line) => app.log.warn(line),
   });
   const reportBarcode = createBarcodeReports({ resolver, log: app.log });
+  const clipUrl = createClipUrl({
+    fake: config.fakeSpeech,
+    cache: clips,
+    synthesize: deps.synthesize ?? null,
+    voiceId: config.voiceId,
+    // The test helper sets the address after the server has its port, so each call reads it.
+    publicBaseUrl: () => config.publicBaseUrl,
+    log: (line) => app.log.warn(line),
+  });
+  // The prompt of a store item must not wait for its clip. Each clip that the cache does not hold is one paid call,
+  // so fake speech and SPEECH_WARM_UP=0 make none.
+  const clipWarmUp = config.fakeSpeech || !config.speechWarmUp || !deps.synthesize ? null
+    : createClipWarmUp({ clipUrl, hasClip: clipUrl.has, log: (line) => app.log.info(line) });
+  if (clipWarmUp) {
+    app.closers.add(() => clipWarmUp.stop());
+    clipWarmUp.add(notInCatalog(storeEntries, deps.catalog.products).flatMap((entry) => scanned.get(scannedProductId(entry.item.gtin)) ?? []));
+  }
   // Not awaited: the start of the server does not wait for Open Food Facts. The fixtures of FAKE_PRODUCT_INFO need no read.
   if (!config.fakeProductInfo) {
     const warmUp = startWarmUp({
@@ -174,6 +192,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       resolver: {
         resolve: async (gtin) => {
           const product = await resolver.resolve(gtin);
+          // The product database can give the pack size, which is a part of a prompt line.
+          if (product) clipWarmUp?.add([product]);
           await deps.onProductRead?.(gtin);
           return product;
         },
@@ -191,15 +211,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     biometricAboveCents: config.biometricAboveCents,
     store: deps.store,
     bus,
-    clipUrl: createClipUrl({
-      fake: config.fakeSpeech,
-      cache: clips,
-      synthesize: deps.synthesize ?? null,
-      voiceId: config.voiceId,
-      // The test helper sets the address after the server has its port, so each call reads it.
-      publicBaseUrl: () => config.publicBaseUrl,
-      log: (line) => app.log.warn(line),
-    }),
+    clipUrl,
     startPayment: payments,
     ask,
     restoreProducts: async (productIds) => {
