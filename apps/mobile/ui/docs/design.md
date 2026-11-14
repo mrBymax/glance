@@ -12,7 +12,7 @@ The phone is the companion screen of a shopper who wears the glasses. The voice 
 
 ## Research
 
-Refero research on 2026-11-14: 5 style searches, 2 full styles, 11 screen searches, 1 flow search, 8 screenshots inspected. `docs/research/2026-11-13-ui-references.md` holds the research of the day before, and this direction keeps its screen notes.
+Refero research on 2026-11-14: 5 style searches, 2 full styles, 11 screen searches, 1 flow search, 8 screenshots inspected. For the logo, on 2026-11-15: 3 screen searches and 3 screenshots inspected. `docs/research/2026-11-13-ui-references.md` holds the research of the day before, and this direction keeps its screen notes.
 
 | Reference | Refero ID | What it shows | What Glance takes |
 |---|---|---|---|
@@ -26,6 +26,9 @@ Refero research on 2026-11-14: 5 style searches, 2 full styles, 11 screen search
 | The Outsiders readiness | screen `bad04d5d-93d3-4244-a586-065dff2199dd` | One huge numeral owns the top of the screen | The price and the total are the largest text on their screen |
 | shadcn | style `200b455f-0b23-459c-99dc-421439de886b` | Monochrome shell, black primary and pale gray secondary actions, white panels with a hairline, color only in data | The shell: ink on a light gray canvas, white cards, color only for a state |
 | Nothing | style `ef592ebd-48db-497b-935f-e0fdd0ef40ec` | Achromatic stages, one signal color kept for small active marks | Color is a signal, never decoration. Rejected: its 11 px mono labels and its serif headlines. |
+| Subo welcome | screen `b5e74bc1-b55c-44db-a761-ebe79ab36bf7` | The symbol and the word mark at the top of the first screen, a short headline under them, one action | The setup screen opens with the logo and a short `h1` under it. Rejected: its centered stack and its dark gradient. |
+| Brilliant welcome | screen `1eb249bd-3bc6-46b5-93db-da23a8e59dbd` | The brand mark alone with large clear space, one black full-width action | The logo gets room on the first screen, and the only black button stays the action of the step. |
+| Fuse wallet home | screen `0d7254bd-f954-4946-a19d-6228f9659e33` | A small title at the left edge of the header, the content on the same left edge below it | The logo in the session header starts on the left edge of the status pills and of the cards. |
 
 ## Reference lock
 
@@ -33,7 +36,7 @@ Refero research on 2026-11-14: 5 style searches, 2 full styles, 11 screen search
 - Preserve: (1) one large numeral on each screen: the price, the total, the amount to pay; (2) black is the action that commits (Add, Pay, Start shopping, Done), pale gray is the other choice; (3) color only for a state, and each state also has a word and an icon; (4) full-width rows for lists and choices, never chips that cut a word; (5) captions in a dark transcript window, like subtitles.
 - Borrow only: the status pills of Brink, and the fixed transcript window of Voicenotes.
 - Role rules: the Neutral yellow fill means a warning (allergen, diet, budget) and nothing else. Green means paid. Red means a failure. Blue means information (look-alike notice, spot check, fingerprint step). The accent ink is for the one action that commits.
-- Media: no photography and no illustration. Lucide line icons, the icon set of the Neutral theme, mark each fact. The glasses glyph in an ink disc is the only mark of identity.
+- Media: no photography and no illustration. Lucide line icons, the icon set of the Neutral theme, mark each fact. The logo of the project (the Meta symbol and the word mark "Glance", from `assets/Glance.svg`) is the only mark of identity. A glyph in a disc marks a step or a state, never Glance.
 - Reject: chat bubbles for the captions, a lilac or blue gradient, a glowing voice orb, cards with soft shadows for each list row, segmented controls with five options, text under 14 px, a color as the only signal.
 
 ## Decision ledger
@@ -56,6 +59,10 @@ Refero research on 2026-11-14: 5 style searches, 2 full styles, 11 screen search
 | Receipt: a green check, "Paid", the amount, the lines, order and time, the demo line | Square receipt (prior research) | Green = paid | The paid state reads in one look and the details follow as a ledger. |
 | Setup, notification step: a bell glyph, one sentence of purpose, one primary button | The camera step of this screen | Card, primary Button | The step has the form of the two steps before it. A denied permission shows on the ready step as a warning with a secondary button, so Start shopping stays the only black button. |
 | End as one full row under the cart | Brink actions | Secondary Button | Pocket mode is gone: a shop runs with the screen off. The row holds one action, so the button takes the width. |
+| The logo replaces the glasses glyph and the text "Glance" in the session header, 30 px high, as the `h1` | Owner request, Fuse wallet home | Logo | The website and the app show one logo. The symbol starts on the left edge of the status pills, and its middle is on the middle of the Settings button. |
+| The setup screen opens with the logo at 40 px, 24 px more room above it, and the `h1` "Set up in four steps" under it | Owner request, Subo welcome, Brilliant welcome | Logo, Heading | The first screen gives the logo a moment. The `h1` no longer repeats the name in the logo, and it says what the screen does. The logo stays on the left edge of the steps and the card. |
+| The light file in the light scheme, the dark file with the white word mark in the dark scheme | Website, `assets/Glance Dark.svg` | Logo | The ink word mark gives 12.89:1 on the light canvas, the white one 17.22:1 on the dark canvas. |
+| No logo on the receipt and on the waiting card | The receipt view of this screen | | The receipt names the store that gets paid, and it fills a 360 x 800 screen. A mark would push Done below the fold. |
 
 ## Tokens
 
@@ -82,7 +89,8 @@ Measured in Chrome at 360 px and a root font of 100 percent:
 | Role | Size | Weight |
 |---|---|---|
 | Price, amount to pay | 2.625 rem (42 px) | 700, tabular digits |
-| Screen title (h1) | 1.625 rem (26 px) | 600 |
+| Screen title (h1) of the setup screen | 1.625 rem (26 px) | 600 |
+| Logo | 40 px high on the first screen, 30 px in the session header, in px at each font scale | |
 | Product name, "Paid", total of the cart | 1.625 rem (26 px) | 700 |
 | Section title (h2): Captions, Cart, Settings | 1.375 rem (22 px) | 600 |
 | Captions | 1.1875 rem (19 px) | 500 for the newest line, 400 for the older lines |
@@ -102,9 +110,18 @@ Astryx spacing is in `rem`, so at a root font of 200 percent each inset doubles:
 
 ## Motion
 
-- A new caption fades in over `--duration-medium` (300 ms). Each caption line keeps one size, so the older lines only move up inside the window. Nothing else in the page moves by itself.
+- A new caption fades in over `--duration-medium` (300 ms). Each caption line keeps one size, so the older lines only move up inside the window.
+- On the first screen of a load, the logo fades in and rises 0.5 rem over `--duration-slow` with `--ease-entrance`. It plays once for each load of the page. Nothing else in the page moves by itself.
 - The sheets and dialogs use the motion of Astryx, which caps each move at 200 ms with reduced motion.
-- With `prefers-reduced-motion: reduce`, the caption has no fade.
+- With `prefers-reduced-motion: reduce`, the caption and the logo have no fade.
+
+## Logo rule
+
+- Use only `src/assets/logo-light.svg` and `src/assets/logo-dark.svg`, through `Logo`. Do not redraw, recolor, or crop the logo, and do not use the symbol alone in the page.
+- The light file goes on the light canvas, the dark file on the dark canvas. A `<picture>` selects it with `prefers-color-scheme`.
+- The logo is an image with the name "Meta Glance". Where it is the only content of the `h1`, the heading takes that name. Where an `h1` with text follows it, the logo stays outside the heading.
+- Keep a clear space of half the height of the logo between the logo and the next text or control: 20 px on the setup screen, 15 px in the session header.
+- The page never shows the symbol without the word mark. Only the Android launcher icon and the splash screen use the symbol alone: see `apps/mobile/android/README.md`.
 
 ## Accessibility rules of the design
 

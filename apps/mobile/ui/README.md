@@ -217,7 +217,8 @@ stateDiagram-v2
   session --> setup: local.reset, or a native state before the notification step
 ```
 
-- `loading` shows until the host sends the first `native.state`.
+- `loading` shows until the host sends the first `native.state`. It shows the logo as its `h1`, and a spinner.
+- The setup screen opens with the logo, then the `h1` "Set up in four steps". See "Logo".
 - The list of steps shows only the four labels. The text and the button of the current step sit below the list, under a heading with the label of the step. Inside a vertical step the content is indented, and "Start shopping" did not fit at a root font size of 200 percent on a 360 px screen.
 - Step 1, link: the page says that Meta AI opens, what to confirm there, and how to return. If the Meta AI app is missing, the step shows a link to its Play Store page (`META_AI_STORE_URL`). With no network it shows the cause as a warning and Try again. While the registration runs, it shows a spinner with "Waiting for Meta AI." and no button. The taps of the jump to Meta AI show as a numbered list.
 - Step 2, camera: the page states the purpose of the camera before it asks. A denied permission adds a warning above the purpose, and the button asks again.
@@ -240,7 +241,7 @@ Each action that the shopper can do with the head or the voice also has a button
 End asks first, because the server takes no input for a session that ended.
 
 - The dock of Ask and Undo sticks to the bottom of the screen while the page scrolls. At a large font scale its buttons take two rows, so it scrolls with the page there (`src/styles/glance.css`).
-- Settings is an icon button with the name "Settings" at the end of the title row.
+- The header of the session screen holds the logo as its `h1`, and Settings: an icon button with the name "Settings" at the end of the row.
 - The captions show in a dark window of fixed height (`CaptionList`). It scrolls to its newest line, so a new caption moves no other content of the page. The newest line is in full ink, and the older lines are gray.
 
 "Ask a question" needs no prompt ID. The Android app relays the intent, and `BrowserBridge` posts it as each other intent. The server opens a question window of 10 seconds for it and says "Listening." A browser has no microphone, so with `BrowserBridge` the window closes with no question.
@@ -248,6 +249,20 @@ End asks first, because the server takes no input for a session that ended.
 The page plays no vibration and sends no message for one. The Android app selects each pattern itself, from the events of the server and the state of the camera, because the page does not run while the screen is off. `apps/mobile/android/README.md` has the rule in "A session".
 
 The page has no mode for a phone in a pocket. A shop continues with the screen off and the phone locked, so the shopper presses the power button. See "The session service" in `apps/mobile/android/README.md`.
+
+### Logo
+
+The page shows the logo of the project: the Meta symbol and the word mark "Glance". `Logo` in `src/components/Logo.tsx` draws it.
+
+- `src/assets/logo-light.svg` has a word mark in ink (`#1c2b33`), for the light scheme. `src/assets/logo-dark.svg` has a white word mark, for the dark scheme. A `<picture>` selects the file with `prefers-color-scheme`, as the Astryx theme does with its mode `system`. So the logo follows the system scheme with the rest of the page.
+- Both files come from `assets/Glance.svg` and `assets/Glance Dark.svg` at the root of the repository, with the method of the build script of the website. Each source file holds a PNG of 3157 x 2105 px as the fill of the symbol, and weighs 357 kB. The copy keeps each path and each color, holds that fill as a WebP of 800 px, and crops the view box to the drawing (5866 x 1040 units). Each copy weighs 24 kB. The build bundles both files, so the page loads no remote file.
+- On 2026-11-15 headless Chrome drew each source file and its copy at 587 x 104 px. The two pictures differed only in the antialiasing of the edges.
+- The logo has three places: the loading screen (40 px high, as the `h1`), the setup screen (40 px high, above the `h1`), and the header of the session screen (30 px high, as the `h1`). The receipt and the waiting card have no logo: the receipt names the store that gets paid, and it fills a 360 x 800 screen.
+- The height is in CSS pixels, not in `rem`: a logotype keeps its size at each font scale, and its text alternative carries the name. The `img` has a `width` and a `height`, so the page keeps its box before the file loads.
+- The text alternative is "Meta Glance" (`logoName`), in both languages. Each screen has one `h1`. Where the logo is the `h1`, the heading has the name "Meta Glance".
+- On the first screen of a load, the logo fades in and rises 8 px over `--duration-slow`. It plays once for each load: when the loading screen played it, the setup screen shows the logo at the same place with no fade. With `prefers-reduced-motion: reduce` it does not play.
+- Contrast, measured on 2026-11-15: the word mark gives 12.89:1 on the light canvas (`#f1f1f1`) and 17.22:1 on the dark canvas (`#1b1b1b`). The blue of the symbol gives 3.29:1 to 4.81:1 on the light canvas and 3.17:1 to 4.64:1 on the dark canvas.
+- The project is independent of Meta. The symbol in the logo is the Meta symbol, by the choice of the owner. The page uses no other Meta asset.
 
 ### Debug panel
 
@@ -335,7 +350,7 @@ npx eslint apps/mobile/ui
 
 ## Accessibility checks
 
-`src/a11y.test.tsx` opens 13 scenes of the app: the setup steps with both notification states, the session, the checkout sheet, the receipt, the settings sheet, the end dialog, a banner with an action, and the debug panel. For each scene it expects one `main` landmark, one `h1`, a name for each control, no control that the 48 px rules do not cover, and no `Switch`, `Slider`, or `StatusDot`. One more test expects that the assertive live region stays empty.
+`src/a11y.test.tsx` opens 13 scenes of the app: the setup steps with both notification states, the session, the checkout sheet, the receipt, the settings sheet, the end dialog, a banner with an action, and the debug panel. For each scene it expects one `main` landmark, one `h1`, one image with the name "Meta Glance", a name for each control, no control that the 48 px rules do not cover, and no `Switch`, `Slider`, or `StatusDot`. One more test expects that the assertive live region stays empty.
 
 jsdom has no layout and no colors. Measure these three in a browser, at 360 x 800 px with a touch device, on `?replay=1&ready=1`:
 
@@ -356,6 +371,8 @@ On 2026-11-14 headless Chrome ran check 2 with two scanned products (names of 80
 After the redesign, on the same day, a script in headless Chrome ran checks 1 and 2 and measured the contrast of each text: 24 scenes (each setup step, the session with each prompt and banner, a cart of 1 and of 7 lines, the checkout, the fingerprint step, the payment, the receipt, the settings sheet, pocket mode, the end dialog, and `?replay=1`), at 360 x 800 and 412 x 915, in light and dark mode, at 100 and 200 percent, in English and in Italian. In all 384 pictures no element ended right of the screen, the page did not scroll sideways, no label was cut, and no control was below 48 x 48 px. The lowest contrast of a text was 5.22:1 (the End button of the end dialog in dark mode). The ring of an empty check box, of a radio, and of the budget field measured 5.41:1 in light mode and 5.65:1 in dark mode.
 
 Pocket mode is gone since that run, and the setup has a notification step. Later on the same day, headless Chrome took the notification step, the ready step with denied notifications, the ready step, and the session screen at 360 x 800, in light and dark mode, at 100 percent and in English. In these 8 pictures no element ended right of the screen. Nobody measured these scenes at 200 percent, at 412 x 915, or in Italian.
+
+On 2026-11-15, after the change to the logo, headless Chrome took the link step, the ready step, and the session screen with a product prompt (`?replay=1&ready=1`), at 360 x 800 and 412 x 915, in light and dark mode, at 100 and 200 percent, in English and in Italian. In these 48 pictures no element ended right of the screen, the page did not scroll sideways, each page had one `h1`, and the file of the logo matched the scheme. The logo and the Settings button had a gap of 103 px or more. Nobody measured the logo on a phone in the WebView.
 
 ## Touch targets of 48 px
 

@@ -5,7 +5,7 @@ export const LANGUAGE_NAMES: Record<Lang, string> = { en: 'English', it: 'Italia
 
 /** Each string of the phone UI, in English. */
 export const EN = {
-  appTitle: 'Glance',
+  logoName: 'Meta Glance',
   idleHint: 'Hold a product up to hear its price.',
   add: 'Add',
   skip: 'Skip',
@@ -21,7 +21,7 @@ export const EN = {
   items: (count: number) => (count === 1 ? '1 item' : `${count} items`),
   cartStatus: (count: number, total: string) => (count === 0 ? 'Cart: empty.' : `Cart: ${count === 1 ? '1 item' : `${count} items`}, ${total}.`),
 
-  setupTitle: 'Set up Glance',
+  setupTitle: 'Set up in four steps',
   setupSteps: 'Setup',
   loading: 'Starting Glance.',
   stepLink: 'Link glasses',
@@ -169,7 +169,7 @@ export type Strings = typeof EN;
  * A native speaker must read this table before a release.
  */
 export const IT: Strings = {
-  appTitle: 'Glance',
+  logoName: 'Meta Glance',
   idleHint: 'Solleva un prodotto per sentire il prezzo.',
   add: 'Aggiungi',
   skip: 'Salta',
@@ -185,7 +185,7 @@ export const IT: Strings = {
   items: (count) => (count === 1 ? '1 articolo' : `${count} articoli`),
   cartStatus: (count, total) => (count === 0 ? 'Carrello: vuoto.' : `Carrello: ${count === 1 ? '1 articolo' : `${count} articoli`}, ${total}.`),
 
-  setupTitle: 'Configura Glance',
+  setupTitle: 'Configura in quattro passi',
   setupSteps: 'Configurazione',
   loading: 'Avvio di Glance.',
   stepLink: 'Collega gli occhiali',

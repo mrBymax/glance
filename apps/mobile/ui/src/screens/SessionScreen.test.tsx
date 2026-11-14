@@ -16,7 +16,9 @@ const politeRegion = () => document.querySelector('[data-astryx-live-region="pol
 it('shows the idle hint and an empty cart before the first glance', () => {
   renderWithUi(<SessionScreen />);
   expect(screen.getByRole('main')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { level: 1, name: 'Glance' })).toBeInTheDocument();
+  // The main heading is the logo, so its text alternative names it.
+  const heading = screen.getByRole('heading', { level: 1, name: 'Meta Glance' });
+  expect(heading).toContainElement(screen.getByRole('img', { name: 'Meta Glance' }));
   expect(screen.getByText('Hold a product up to hear its price.')).toBeInTheDocument();
   expect(screen.getByText('Your cart is empty.')).toBeInTheDocument();
 });
