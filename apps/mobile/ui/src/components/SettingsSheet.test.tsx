@@ -76,6 +76,13 @@ it('names the source of the product data in Italian', async () => {
   expect(link).toHaveAttribute('href', OPEN_FOOD_FACTS_URL);
   expect(link).toHaveTextContent(/^Apri il sito$/);
 });
+it('puts the source of the product data after each other control of the sheet', async () => {
+  const { sheet } = await open();
+  const link = sheet.getByRole('link', { name: 'Open website of Open Food Facts' });
+  const controls = [...sheet.getAllByRole('button'), ...sheet.getAllByRole('radio'), ...sheet.getAllByRole('checkbox')];
+  for (const control of controls) expect(control.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(sheet.getByText('Product data: Open Food Facts (ODbL)').compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
 it('opens the source in a new tab of a browser, so that the session stays', async () => {
   const { sheet } = await open();
   const link = sheet.getByRole('link', { name: 'Open website of Open Food Facts' });
