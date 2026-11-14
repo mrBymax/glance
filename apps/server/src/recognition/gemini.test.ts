@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { type Part, PartMediaResolutionLevel } from '@google/genai';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { indexCatalog, readCatalogFile } from '../catalog/catalog';
 import type { StoreEntry } from '../products/storeEntries';
@@ -60,7 +61,7 @@ it('sends one frame, the exclude list, the catalog, and the answer schema', asyn
 
   const contents = body.contents as { parts: { inlineData?: { mimeType: string; data: string }; text?: string }[] }[];
   expect(contents).toHaveLength(1);
-  // One image: recognition by sight makes one call for each frame, so it gets no reference picture.
+  // One image: this recognizer has no reference picture.
   expect(contents[0]!.parts).toEqual([
     { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } },
     { text: 'Exclude: rye-bread.' },
@@ -140,4 +141,31 @@ it('rejects when the caller aborts the call', async () => {
   await vi.waitFor(() => expect(fetchStub).toHaveBeenCalledTimes(1));
   abort.abort();
   await expect(call).rejects.toThrow(/aborted/);
+});
+it('puts the reference pictures before the frame, and their rules into the instruction', async () => {
+  const picture = {
+    inlineData: { mimeType: 'image/jpeg', data: Buffer.from([0xff, 0xd8, 1, 0xff, 0xd9]).toString('base64') },
+    mediaResolution: { level: PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW },
+  };
+  let references: Part[] = [{ text: 'Reference picture of gtin-6438574558384: Paper cups' }, picture];
+  const withPictures = createGeminiRecognizer({
+    apiKey: 'test-key', model: 'gemini-3.5-flash-lite', mediaResolution: 'default', minConfidence: 0.6,
+    catalog, storeEntries: [cups], template, fetch: fetchStub, references: () => references,
+  });
+  await withPictures.recognize(JPEG, opts({ exclude: ['rye-bread'] }));
+  references = [];
+  await withPictures.recognize(JPEG, opts());
+
+  const parts = calls.map((call) => (call.body.contents as { parts: unknown[] }[])[0]!.parts);
+  const frame = { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } };
+  expect(parts[0]).toEqual([
+    { text: 'Reference picture of gtin-6438574558384: Paper cups' }, picture,
+    { text: 'The frame' }, frame, { text: 'Exclude: rye-bread.' },
+  ]);
+  // The pictures can leave the folder while the server runs. The request is then the one of a server with no picture.
+  expect(parts[1]).toEqual([frame, { text: 'Exclude: none.' }]);
+  const instructions = calls.map((call) => JSON.stringify(call.body.systemInstruction));
+  expect(instructions[0]).toContain('## Reference pictures');
+  expect(instructions[1]).not.toContain('## Reference pictures');
+  expect(calls[0]!.body.generationConfig).not.toHaveProperty('mediaResolution');
 });

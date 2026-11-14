@@ -108,6 +108,16 @@ it('the instruction file tells the model not to guess a digit, and to answer non
   expect(text).toContain('Never guess a digit');
   expect(text).toMatch(/barcode side[^.]*`none`/);
 });
+it('adds the rules for reference pictures only for a call that holds some', () => {
+  const plain = buildSystemInstruction(template, dev, entries);
+  expect(plain).not.toContain('Reference pictures');
+  const text = buildSystemInstruction(template, dev, entries, true);
+  expect(text.startsWith(plain)).toBe(true);
+  expect(text).toMatch(/## Reference pictures/);
+  expect(text).toMatch(/The last image is the frame/);
+  expect(text).toMatch(/background means nothing/);
+  expect(text).toMatch(/Never answer about a product that only a reference picture shows/);
+});
 it('the instruction file keeps the code to a product that a hand holds, so a shelf label asks for no still', () => {
   const text = readFileSync('../../agents/recognition.md', 'utf8');
   expect(text).toMatch(/`visible`: true when a hand holds a product up/);

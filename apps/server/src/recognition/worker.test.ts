@@ -268,3 +268,15 @@ it('stop ends each call', async () => {
   expect(three.heldBytes()).toBe(0);
   expect(onSlow).not.toHaveBeenCalled();
 });
+it('a frame that a newer frame replaces while it waits is no failed call', async () => {
+  const twelve = makeWorker(12);
+  for (let seq = 1; seq <= 40; seq += 1) twelve.submit(frame(seq));
+  expect(calls).toHaveLength(12);
+  for (const call of calls.slice(0, 12)) call.resolve(ok);
+  await flush();
+  // Frames 13 to 39 waited and gave their place to a newer frame. Frame 40 got the first free call.
+  expect(results.map((entry) => entry.info.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  expect(calls).toHaveLength(13);
+  expect(logs).toEqual([]);
+  expect(onSlow).not.toHaveBeenCalled();
+});

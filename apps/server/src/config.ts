@@ -1,6 +1,6 @@
 import { DEFAULT_OFF_BASE_URL, DEFAULT_PRODUCT_CACHE_DIR, DEFAULT_PRODUCT_INFO_USER_AGENT } from './products/openFoodFacts';
 import { DEFAULT_STORE_LIST_PATH } from './products/storeList';
-import { DEFAULT_REFERENCE_DIR } from './reference/images';
+import { DEFAULT_REFERENCE_DIR, REFERENCES_FOR_ITEM } from './reference/images';
 
 export type Config = {
   port: number;
@@ -14,6 +14,8 @@ export type Config = {
   geminiMediaResolution: 'default' | 'low';
   /** The number of recognition calls that one session runs at the same time. */
   recognitionConcurrency: number;
+  /** The number of reference pictures of one store item in a frame call. 0: a frame call gets no picture. */
+  recognitionReferences: number;
   minConfidence: number;
   /** The confidence that the label reader needs for the store item that it chose. */
   labelMinConfidence: number;
@@ -103,7 +105,8 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     geminiApiKey: read('GEMINI_API_KEY'),
     geminiModel: read('GEMINI_MODEL') ?? 'gemini-3.5-flash-lite',
     geminiMediaResolution: mediaResolution,
-    recognitionConcurrency: readNumber('RECOGNITION_CONCURRENCY', 3, 1, 6, true),
+    recognitionConcurrency: readNumber('RECOGNITION_CONCURRENCY', 8, 1, 12, true),
+    recognitionReferences: readNumber('RECOGNITION_REFERENCES', 3, 0, REFERENCES_FOR_ITEM, true),
     minConfidence: readNumber('RECOGNITION_MIN_CONFIDENCE', 0.6, 0, 1, false),
     labelMinConfidence: readNumber('LABEL_MIN_CONFIDENCE', 0.7, 0, 1, false),
     requireBlur: read('REQUIRE_BLUR') === '1',

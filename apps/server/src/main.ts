@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import type { Part } from '@google/genai';
 import { ANSWERS_TEMPLATE_PATH, answerQuestion } from './ask/ask';
 import { createGeminiGenerate } from './ask/gemini';
 import { type AppDeps, buildApp } from './app';
@@ -19,7 +20,9 @@ import { type StoreList, readStoreListFile } from './products/storeList';
 import { ELEVENLABS_MODEL, createSynthesize } from './speech/elevenlabs';
 import { FakeScriptError } from './recognition/fake';
 import { RECOGNITION_TEMPLATE_PATH, type Recognizer, createGeminiRecognizer } from './recognition/gemini';
+import { createFrameReferences, createPictureUploader, refreshOnChange } from './recognition/references';
 import { createFrameSaver } from './recognition/save';
+import { createFolderReferences } from './reference/images';
 
 class StartError extends Error {}
 
@@ -35,7 +38,9 @@ async function openStore(config: Config): Promise<Store> {
 }
 
 /** The real recognizer, or undefined with fake recognition. loadConfig has checked that the key exists. */
-function openRecognizer(config: Config, catalog: CatalogIndex, entries: readonly StoreEntry[]): Recognizer | undefined {
+function openRecognizer(
+  config: Config, catalog: CatalogIndex, entries: readonly StoreEntry[], references: () => readonly Part[],
+): Recognizer | undefined {
   if (config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
   return createGeminiRecognizer({
     apiKey: config.geminiApiKey,
@@ -45,6 +50,7 @@ function openRecognizer(config: Config, catalog: CatalogIndex, entries: readonly
     catalog,
     storeEntries: notInCatalog(entries, catalog.products),
     template: readFileSync(RECOGNITION_TEMPLATE_PATH, 'utf8'),
+    references,
   });
 }
 
@@ -87,12 +93,24 @@ async function main(): Promise<void> {
   // One read of the store list for the whole run: recognition and the label reader build their instructions from it.
   const storeEntries = await readStoreEntries(storeList, productInfo, (line) => console.error(line));
   const storeItems = storeEntries.map((entry) => entry.item);
-  const recognizer = openRecognizer(config, catalog, storeEntries);
+  // Fake recognition makes no frame call, so it gets no part and no upload.
+  const frameCallKey = config.fakeRecognition === null ? config.geminiApiKey : null;
+  const folder = createFolderReferences(config.referenceDir, systemClock);
+  // The app does not exist yet, and a line of the first read must go to its log.
+  let logReferences: (line: string) => void = (line) => console.error(line);
+  const frameReferences = createFrameReferences({
+    store: folder, entries: storeEntries, products: catalog.products, dir: config.referenceDir, clock: systemClock,
+    perItem: frameCallKey === null ? 0 : config.recognitionReferences,
+    ...(frameCallKey === null ? {} : { picturePart: createPictureUploader({ apiKey: frameCallKey }) }),
+    log: (line) => logReferences(line),
+  });
+  const recognizer = openRecognizer(config, catalog, storeEntries, frameReferences.current);
   const labelReader = openLabelReader(config, storeEntries);
   // loadConfig has checked that the key exists when FAKE_SPEECH is off.
   const synthesize = config.fakeSpeech || config.elevenlabsApiKey === null ? undefined : createSynthesize(config.elevenlabsApiKey);
   const app = await buildApp({
     config, clock: systemClock, store, catalog, storeList, productInfo, storeEntries,
+    references: refreshOnChange(folder, frameReferences),
     ...(recognizer ? { recognizer } : {}), ...(labelReader ? { labelReader } : {}), ...(ask ? { ask } : {}), ...(synthesize ? { synthesize } : {}),
     ...(config.saveFramesDir === null ? {} : { saveFrame: createFrameSaver(config.saveFramesDir) }),
   });
@@ -100,8 +118,9 @@ async function main(): Promise<void> {
   app.log.info(`store: ${config.mongodbUri === null ? 'memory' : 'mongo'}`);
   app.log.info(`catalog: ${catalog.products.length} products`);
   app.log.info(`store list: ${config.storeListPath}, ${storeItems.length} items`);
-  const pictures = [...(await app.references.all()).values()];
-  app.log.info(`reference pictures: ${config.referenceDir}, ${pictures.length} items, ${pictures.flat().length} pictures`);
+  logReferences = (line) => app.log.info(line);
+  // The first read logs the pictures. A later change of the folder gets the same line again.
+  await frameReferences.refresh();
   app.log.info(config.fakeProductInfo ? 'product info: fake' : `product info: ${config.offBaseUrl}, cache in ${config.productCacheDir}`);
   for (const line of priceConflicts(catalog.products, storeItems)) app.log.warn(line);
   app.log.info(config.fakeRecognition === null

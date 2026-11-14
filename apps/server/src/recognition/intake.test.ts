@@ -119,12 +119,12 @@ it('reports a recognizer that fails 3 times in a row, and keeps the socket open'
   phone.send({ t: 'intent', kind: 'help', source: 'phone' });
   expect(await phone.next((m) => m.t === 'speak' && m.priority === 'low')).toBeDefined();
 });
-it('runs 3 calls of one session at the same time, and the next frame waits', async () => {
+it('runs 8 calls of one session at the same time, and the next frame waits', async () => {
   recognize.mockImplementation(() => new Promise(() => undefined));
-  for (const seq of [1, 2, 3, 4]) phone.sendFrame({ seq, ts: seq, w: 576, h: 768, blurred: true }, JPEG);
+  for (let seq = 1; seq <= 9; seq += 1) phone.sendFrame({ seq, ts: seq, w: 576, h: 768, blurred: true }, JPEG);
   phone.send({ t: 'intent', kind: 'help', source: 'phone' });
   await phone.next((m) => m.t === 'speak');
-  expect(recognize).toHaveBeenCalledTimes(3);
+  expect(recognize).toHaveBeenCalledTimes(8);
 });
 it('with RECOGNITION_CONCURRENCY=1 one call runs at a time', async () => {
   recognize.mockImplementation(() => new Promise(() => undefined));

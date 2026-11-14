@@ -101,7 +101,8 @@ curl http://localhost:8080/healthz
 - In fake mode a script stands in for recognition, and the kiosk `Checkout 3` with the code `K3X7` exists from the start.
 - `npm run dev --workspace @glance/server` reads `apps/server/.env`. With both keys and no fake switch, each frame is one paid Gemini call, and each new line is one paid ElevenLabs call.
 - `STORE_LIST_PATH` is the file with the items that the store sells: the barcode, the price, and the name of each. The default is `catalog/store-list.dev.json`, as a path from `apps/server`. A barcode that the file does not hold gets the line "This product is not in this store."
-- `RECOGNITION_CONCURRENCY` is the number of recognition calls that one session runs at the same time, from 1 to 6. The default is 3. The rate limit of the Gemini key must allow that for each shopper.
+- `RECOGNITION_CONCURRENCY` is the number of recognition calls that one session runs at the same time, from 1 to 12. The default is 8. The rate limit of the Gemini key must allow that for each shopper.
+- `RECOGNITION_REFERENCES` is the number of reference pictures of one store item in each recognition call for a frame, from 0 to 3. The default is 3, and `0` means none.
 - `LABEL_MIN_CONFIDENCE` is the confidence from which the server takes the store item that the label call chose, from 0 to 1. The default is 0.7.
 - `REFERENCE_DIR` is the folder with the reference pictures of the store items. The default is `catalog/reference`, as a path from `apps/server`.
 - `FAKE_PRODUCT_INFO=1` makes the server read the allergens and the diets of a scanned product from `apps/server/fixtures/product-info`, with no call to Open Food Facts. The flag `--fake` of `dev:fake` turns it on.

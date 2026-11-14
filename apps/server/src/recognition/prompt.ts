@@ -7,12 +7,30 @@ const CATALOG_PLACEHOLDER = '{{catalog}}';
 const STORE_ITEMS_PLACEHOLDER = '{{storeItems}}';
 
 /**
+ * The rules for a call that starts with reference pictures. A call with no picture does not get them,
+ * so its instruction is the one of a server with no picture.
+ */
+const REFERENCE_RULES = `
+
+## Reference pictures
+
+The request starts with reference pictures: photos of the real package of some products, each after a line with the ID of its product. The last image is the frame.
+
+- A reference picture can show the package from another side, at another size, or in other light. Its background means nothing.
+- If a hand in the frame holds a product, and the shape, the colors, and the print of its package match the reference pictures of one product, use \`identified\` with that ID. This holds also when the text in the frame is too small to read.
+- A package that is only similar to a reference picture gives \`unsure\`, or \`unknown\` when you can see that it is another product.
+- Never answer about a product that only a reference picture shows. The status, the aim hint, and the code are about the frame alone.`;
+
+/**
  * Puts the catalog and the store items into the instruction template, one line for each product.
  * A store item has the ID of a scanned product, and no look: the store list does not describe a package.
  * Its brand and pack size come from the store list, else from the details of the product database.
  * No line holds a price: the model names a product, and the price comes from the catalog or the store list.
+ * `withReferences` adds the rules for reference pictures at the end.
  */
-export function buildSystemInstruction(template: string, products: readonly Product[], storeEntries: readonly StoreEntry[]): string {
+export function buildSystemInstruction(
+  template: string, products: readonly Product[], storeEntries: readonly StoreEntry[], withReferences = false,
+): string {
   for (const placeholder of [CATALOG_PLACEHOLDER, STORE_ITEMS_PLACEHOLDER]) {
     if (!template.includes(placeholder)) throw new Error(`The recognition instruction has no ${placeholder} placeholder.`);
   }
@@ -26,9 +44,10 @@ export function buildSystemInstruction(template: string, products: readonly Prod
     return `- id: ${scannedProductId(item.gtin)} | name: ${item.name}${brand === null ? '' : ` | brand: ${brand}`}${pack === null ? '' : ` | pack: ${pack}`}`;
   });
   // A function as the replacement keeps a "$" of a product text as it is.
-  return template
+  const text = template
     .replace(CATALOG_PLACEHOLDER, () => (lines.length > 0 ? lines.join('\n') : '(The catalog is empty.)'))
     .replace(STORE_ITEMS_PLACEHOLDER, () => (storeLines.length > 0 ? storeLines.join('\n') : '(The store has no other items.)'));
+  return withReferences ? text + REFERENCE_RULES : text;
 }
 
 /**

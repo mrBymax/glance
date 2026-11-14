@@ -47,7 +47,8 @@ flowchart LR
 | `PRODUCT_CACHE_DIR` | `/data/speech/products`. The user of the image can write only to the volume of the speech clips. |
 | `DEMO_KEY` | A random word of 12 characters or more. Without it the mirror page cannot find the session of the phone. |
 | `REFERENCE_DIR` | `/data/speech/reference`. The reference pictures of the store items, on the volume of the speech clips. A picture can show a room and people. |
-| `RECOGNITION_CONCURRENCY` | The number of recognition calls that one session runs at the same time, from 1 to 6. Empty means 3. The rate limit of the Gemini key must allow that for each shopper. |
+| `RECOGNITION_CONCURRENCY` | The number of recognition calls that one session runs at the same time, from 1 to 12. Empty means 8. The rate limit of the Gemini key must allow that for each shopper. |
+| `RECOGNITION_REFERENCES` | The number of reference pictures of one store item in each recognition call for a frame, from 0 to 3. Empty means 3. `0` means none. |
 | `REQUIRE_BLUR` | `1` when the phone runs face detection. |
 | `SECOND_LOOK_WAIT_MS` | `2500` when the phone sends a still for look-alike products. Empty means off. |
 

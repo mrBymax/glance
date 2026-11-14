@@ -16,6 +16,7 @@
     "live:probe": "tsx --env-file-if-exists=.env scripts/live-probe.ts",
     "smoke": "tsx scripts/smoke.ts",
     "reference": "tsx --env-file-if-exists=.env scripts/reference.ts",
+    "reference:probe": "tsx --env-file-if-exists=.env scripts/reference-probe.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

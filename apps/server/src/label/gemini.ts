@@ -42,19 +42,26 @@ export function labelResponseSchema(gtins: readonly string[]): unknown {
   }));
 }
 
-const jpegPart = (jpeg: Uint8Array): Part => ({ inlineData: { mimeType: 'image/jpeg', data: Buffer.from(jpeg).toString('base64') } });
+export const jpegPart = (jpeg: Uint8Array): Part => ({ inlineData: { mimeType: 'image/jpeg', data: Buffer.from(jpeg).toString('base64') } });
+
+/**
+ * The image part of one reference picture. It has the low media resolution of its part (280 tokens for a Gemini 3
+ * model): the model compares the package as a whole and reads no small print in it.
+ */
+export const referencePicturePart = (jpeg: Uint8Array): Part => ({
+  ...jpegPart(jpeg), mediaResolution: { level: PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW },
+});
 
 /**
  * The parts of one request. With reference pictures, each picture follows a text part that names its item, and the
- * still is the last image. A reference picture gets the low media resolution of its part (280 tokens for a Gemini 3
- * model): the model compares the package as a whole and reads no small print in it.
+ * still is the last image.
  */
 export function labelParts(jpeg: Uint8Array, references: readonly LabelReference[]): Part[] {
   if (references.length === 0) return [jpegPart(jpeg), { text: 'Read this label.' }];
   return [
     ...references.flatMap((reference): Part[] => [
       { text: `Reference picture of item ${reference.gtin}: ${reference.name}` },
-      { ...jpegPart(reference.jpeg), mediaResolution: { level: PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW } },
+      referencePicturePart(reference.jpeg),
     ]),
     { text: 'The photo to read' },
     jpegPart(jpeg),

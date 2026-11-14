@@ -1,5 +1,6 @@
-import { GoogleGenAI, MediaResolution } from '@google/genai';
+import { GoogleGenAI, MediaResolution, type Part } from '@google/genai';
 import { type CatalogIndex, indexCatalog } from '../catalog/catalog';
+import { jpegPart } from '../label/gemini';
 import { scannedProduct } from '../products/scanned';
 import type { StoreEntry } from '../products/storeEntries';
 import { buildSystemInstruction, recognitionResponseSchema, userText } from './prompt';
@@ -14,6 +15,15 @@ export interface Recognizer {
 export const RECOGNITION_TEMPLATE_PATH = '../../agents/recognition.md';
 
 /**
+ * The parts of one request: the frame and the exclude line. With reference pictures, their parts come first,
+ * and the frame follows the text "The frame", so the model can tell the frame from a picture.
+ */
+export function recognitionParts(jpeg: Uint8Array, exclude: readonly string[], references: readonly Part[]): Part[] {
+  const frame = [jpegPart(jpeg), { text: userText(exclude) }];
+  return references.length === 0 ? frame : [...references, { text: 'The frame' }, ...frame];
+}
+
+/**
  * One generateContent call for each frame, with no state between the calls.
  * The call shape matches the type definitions of @google/genai 3.3.0.
  */
@@ -25,11 +35,17 @@ export function createGeminiRecognizer(deps: {
    * by the ID of a scanned product. A script that tests the catalog alone gives an empty list.
    */
   storeEntries: readonly StoreEntry[];
+  /**
+   * The parts of the reference pictures as they are now, read at the start of each call. See references.ts.
+   * With none, and with an empty list, the request holds the frame alone.
+   */
+  references?: () => readonly Part[];
   /** In place of the global fetch, for a test. */
   fetch?: typeof fetch;
 }): Recognizer {
   const ai = new GoogleGenAI({ apiKey: deps.apiKey, ...(deps.fetch ? { httpOptions: { fetch: deps.fetch } } : {}) });
   const systemInstruction = buildSystemInstruction(deps.template, deps.catalog.products, deps.storeEntries);
+  const instructionWithReferences = buildSystemInstruction(deps.template, deps.catalog.products, deps.storeEntries, true);
   // Each product that the model can name. The check of an answer needs only the IDs.
   const known = indexCatalog([
     ...deps.catalog.products, ...deps.storeEntries.map((entry) => scannedProduct(entry.item, entry.details)),
@@ -40,14 +56,12 @@ export function createGeminiRecognizer(deps: {
     async recognize(jpeg, opts) {
       // A still is the sharp second look at a package, so it keeps the default resolution.
       const low = deps.mediaResolution === 'low' && !opts.still;
+      const references = deps.references?.() ?? [];
       const response = await ai.models.generateContent({
         model: deps.model,
-        contents: [
-          { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(jpeg).toString('base64') } },
-          { text: userText(opts.exclude) },
-        ],
+        contents: recognitionParts(jpeg, opts.exclude, references),
         config: {
-          systemInstruction,
+          systemInstruction: references.length > 0 ? instructionWithReferences : systemInstruction,
           responseMimeType: 'application/json',
           responseJsonSchema: responseSchema,
           abortSignal: opts.signal,
