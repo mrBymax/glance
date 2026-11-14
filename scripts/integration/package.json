@@ -1,11 +1,21 @@
 {
   "name": "glance-integration",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
+  "description": "Tools of the integration tests. No app depends on them.",
   "engines": { "node": ">=22.12" },
   "scripts": {
     "server-kotlin": "node server-kotlin.mjs",
-    "server-web": "node server-web.mjs"
+    "server-web": "node server-web.mjs",
+    "android:clips": "node android/make-clips.mjs",
+    "android:spine": "node android/run-spine.mjs",
+    "android:state": "node android/run-spine.mjs --suite state",
+    "android:page": "node android/run-spine.mjs --suite page",
+    "android:integration": "node android/run-spine.mjs --integration"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "puppeteer-core": "25.17.0"

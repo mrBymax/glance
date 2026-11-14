@@ -88,6 +88,10 @@ class StateMapperTest {
         assertEquals(Registration.UNAVAILABLE, native(live.copy(bluetoothGranted = false)).registration)
     }
 
+    @Test fun `gives mock glasses their registration with no Bluetooth permission`() {
+        assertEquals(Registration.REGISTERED, native(live.copy(bluetoothGranted = false, mock = true)).registration)
+    }
+
     @Test fun `sets updateRequired for the glasses only`() {
         fun update(c: DatCompatibility, app: Boolean = false) = native(live.copy(device = device.copy(compatibility = c), glassesAppUpdateRequired = app)).device!!.updateRequired
         assertTrue(update(DatCompatibility.DEVICE_UPDATE_REQUIRED))

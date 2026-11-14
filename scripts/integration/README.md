@@ -13,8 +13,11 @@ npm install --prefix scripts/integration  # puppeteer-core, for the test of the 
 |---|---|
 | `node scripts/integration/server-kotlin.mjs` | The server and the Kotlin client of the Android app |
 | `node scripts/integration/server-web.mjs` | The server, the phone UI with `BrowserBridge`, and the kiosk page |
+| `node scripts/integration/android/run-spine.mjs --integration` | The Android app with mock glasses on the test phone: the spine, the device states, and the phone UI in the WebView |
 
 The exit code of each script is 0 for a pass, and the last line is `result: pass` or `result: fail`.
+
+The Android runner differs. It uses port 8080 and `adb reverse`, it needs the phone, `adb`, FFmpeg, and the JDK, and its last line starts with `PASS` or `FAIL`. Its `qrcode` package is in the same `package.json`. See "Instrumented tests" in `apps/mobile/android/README.md`.
 
 ## The server and the Kotlin client
 

@@ -16,6 +16,7 @@ object FramePrep {
     /**
      * Crops, scales, and converts one frame for the upload. The output size follows the size of each frame,
      * because the glasses can lower the resolution during a stream.
+     * Each face of `Found` is pixelated in the output. A face outside the crop is not in the output.
      * Returns null when face detection failed: a frame that can show a face does not leave the phone.
      */
     fun prepare(frame: RawFrame, faces: FaceResult, crop: Boolean): PreparedFrame? {
@@ -23,6 +24,9 @@ object FramePrep {
         val rect = if (crop) FrameGeometry.centerCrop(frame.width, frame.height) else FrameGeometry.full(frame.width, frame.height)
         val (outWidth, outHeight) = FrameGeometry.outputSize(rect)
         val argb = I420.cropScaleToArgb(frame.i420, frame.width, frame.height, rect, outWidth, outHeight)
+        if (faces is FaceResult.Found) {
+            Pixelate.apply(argb, outWidth, outHeight, faces.boxes.mapNotNull { FrameGeometry.mapBox(it, rect, outWidth, outHeight) })
+        }
         return PreparedFrame(argb, outWidth, outHeight, blurred = faces is FaceResult.Found)
     }
 }

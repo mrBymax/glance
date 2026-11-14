@@ -23,15 +23,19 @@ class WebBridge(private val webView: WebView, private val onMessage: (PageToNati
         webView.addJavascriptInterface(Port(), Bridge.INTERFACE_NAME)
     }
 
-    /** Gives a message to the page. Before the first `ui.ready` of a page, the page has no receiver, and the message is dropped. */
+    /**
+     * Gives a message to the page. Nothing goes out before the first `ui.ready`. A page that loads again has no
+     * receiver until its own `ui.ready`: a message in that time is dropped in the page, and the answer to
+     * `ui.ready` brings the state again.
+     *
+     * The bridge does not use `onPageStarted` to know that a page has no receiver yet. Measured on a Nothing Phone (1):
+     * for a page that loads again, that call and the `ui.ready` of the new page are 1 to 7 ms apart, and in 2 of 20
+     * loads the page posted `ui.ready` first. A flag that `onPageStarted` clears can so stay cleared for the new page.
+     * In one test run a page that loaded again got its state and then no snapshot.
+     */
     fun send(message: NativeToPage) {
         if (!ready || closed) return
-        webView.evaluateJavascript(Bridge.receiveCall(message), null)
-    }
-
-    /** A new page loads. It has no receiver until it sends `ui.ready`. */
-    fun onPageStarted() {
-        ready = false
+        webView.evaluateJavascript("if (window.__glanceReceive) " + Bridge.receiveCall(message), null)
     }
 
     /** Call it before the WebView is destroyed. */

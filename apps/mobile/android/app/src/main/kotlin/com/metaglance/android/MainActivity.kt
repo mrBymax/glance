@@ -5,7 +5,6 @@ import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -13,17 +12,28 @@ import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.WindowManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewAssetLoader
+import com.meta.wearable.dat.core.Wearables
+import com.meta.wearable.dat.core.types.Permission
+import com.meta.wearable.dat.core.types.PermissionError
 import com.metaglance.android.bridge.UiAssetsHandler
 import com.metaglance.android.bridge.WebBridge
+import com.metaglance.core.state.NativeErrors
 import java.io.IOException
+import kotlinx.coroutines.launch
 
 /**
  * The one screen of the app: a WebView with the phone UI, or with the placeholder page.
@@ -35,6 +45,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pageUrl: String
 
     private val glance: GlanceApp get() = application as GlanceApp
+
+    private var afterBluetooth: (Boolean) -> Unit = {}
+    private val bluetoothRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        onBluetoothAnswer(granted)
+    }
+    private val cameraRequest = registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
+        glance.datLink.onPermissionResult(Permission.CAMERA, result)
+        result.onFailure { error, _ ->
+            // A missing Meta AI app is in `metaAiInstalled` of the state, and the page has a screen for it.
+            if (error != PermissionError.META_AI_NOT_INSTALLED) glance.session.reportError(NativeErrors.PERMISSION_FAILED)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +82,56 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         glance.datLink.handleIntent(this, intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val dat = glance.datLink
+        // The first resume asks for Bluetooth, because the SDK does not start without it. Mock glasses need none.
+        if (!glance.bluetoothAsked && !dat.ready && !glance.mockGlasses.enabled) {
+            glance.bluetoothAsked = true
+            if (glance.askBluetoothAtStart) requestBluetooth {}
+        }
+        // The shopper returns from Meta AI through this path, and a permission can be new.
+        if (dat.ready) lifecycleScope.launch { dat.refreshPermissions() }
+    }
+
+    /**
+     * Asks for the Bluetooth permission of Android, starts the SDK with the answer, and then calls `then`.
+     * Android shows its prompt two times at most. After that, the answer is "denied" with no prompt.
+     */
+    fun requestBluetooth(then: (Boolean) -> Unit) {
+        afterBluetooth = then
+        if (bluetoothGranted()) onBluetoothAnswer(true) else bluetoothRequest.launch(Manifest.permission.BLUETOOTH_CONNECT)
+    }
+
+    /** Asks for the camera permission of the glasses. The SDK shows the request in the Meta AI app. */
+    fun requestCameraPermission() = cameraRequest.launch(Permission.CAMERA)
+
+    /**
+     * The native side of pocket mode: a dim screen with no system bars. The page draws the black screen and
+     * blocks the touches. `SessionController` keeps the screen on.
+     */
+    fun setPocket(on: Boolean) {
+        window.attributes = window.attributes.apply {
+            screenBrightness = if (on) POCKET_BRIGHTNESS else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
+        val bars = WindowCompat.getInsetsController(window, window.decorView)
+        if (on) {
+            bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            bars.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            bars.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    private fun onBluetoothAnswer(granted: Boolean) {
+        glance.datLink.initialize(granted)
+        // Meta AI can have opened this activity before the SDK ran.
+        if (granted) glance.datLink.handleIntent(this, intent)
+        val then = afterBluetooth
+        afterBluetooth = {}
+        then(granted)
     }
 
     override fun onDestroy() {
@@ -102,8 +174,6 @@ class MainActivity : AppCompatActivity() {
                 openOutside(request.url)
                 return true
             }
-
-            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = bridge.onPageStarted()
         }
         val frame = FrameLayout(this).apply { fitsSystemWindows = true }
         frame.addView(webView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -143,5 +213,6 @@ class MainActivity : AppCompatActivity() {
         const val PAGE_URL = "https://appassets.androidplatform.net/index.html"
         const val UI_ROOT = "ui"
         const val PLACEHOLDER_ROOT = "placeholder"
+        const val POCKET_BRIGHTNESS = 0.01f
     }
 }

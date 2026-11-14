@@ -56,6 +56,7 @@ import com.metaglance.core.image.I420
 import com.metaglance.core.image.RawFrame
 import com.metaglance.core.input.TouchEvent
 import com.metaglance.core.input.Transcript
+import com.metaglance.core.state.DatCompatibility
 import com.metaglance.core.state.DatDevice
 import com.metaglance.core.state.DatFault
 import com.metaglance.core.state.DatLinkState
@@ -158,6 +159,15 @@ class DatLink(
         private set
 
     private var initialized = false
+
+    /** Counts the calls of `initialize`. An answer to a permission check of an earlier count is out of date. */
+    private var initializeCount = 0
+
+    /** True after `initialize` started the SDK, or found MockDeviceKit enabled. */
+    val ready: Boolean get() = initialized
+
+    /** A compatibility that `debugOverride` set in place of the value of the SDK. */
+    private var compatibilityOverride: DatCompatibility? = null
     private var appFlows: Job? = null
     private var deviceId: DeviceIdentifier? = null
     private var current: SessionRun? = null
@@ -171,9 +181,25 @@ class DatLink(
      */
     fun initialize(bluetoothGranted: Boolean) {
         val mock = MockDeviceKit.getInstance(app).isEnabled
+        initializeCount += 1
         _snapshot.update { it.copy(bluetoothGranted = bluetoothGranted, mock = mock) }
         if (!mock) {
-            if (!bluetoothGranted) return
+            if (!bluetoothGranted) {
+                // The SDK does not run. MockDeviceKit can have run before, and its state must not stay.
+                initialized = false
+                appFlows?.cancel()
+                selectDevice = {}
+                deviceId = null
+                _snapshot.update {
+                    it.copy(
+                        registration = DatRegistration.UNAVAILABLE,
+                        cameraPermission = DatPermission.UNKNOWN,
+                        microphonePermission = DatPermission.UNKNOWN,
+                        device = if (current == null) null else it.device
+                    )
+                }
+                return
+            }
             var failure: WearablesError? = null
             Wearables.initialize(app).onFailure { error, _ ->
                 if (error != WearablesError.ALREADY_INITIALIZED) failure = error
@@ -210,8 +236,12 @@ class DatLink(
     /** Reads the camera permission and the microphone permission from the SDK. */
     suspend fun refreshPermissions() {
         if (!requireInitialized("permissions")) return
+        val count = initializeCount
         for (permission in Permission.entries) {
-            onPermissionResult(permission, Wearables.checkPermissionStatus(permission))
+            val result = Wearables.checkPermissionStatus(permission)
+            // The check suspends. A change between mock glasses and the SDK in that time makes its answer wrong.
+            if (count != initializeCount) return
+            onPermissionResult(permission, result)
         }
     }
 
@@ -342,6 +372,47 @@ class DatLink(
         }
     }
 
+    /**
+     * Reports a fault as if the SDK reported it, for the mock menu and the tests. MockDeviceKit has no call for a
+     * stream error. A `STREAM` fault also stops the session, as the glasses do after such an error.
+     */
+    fun debugFault(fault: DatFault) {
+        log("debug fault ${fault.area.name.lowercase(Locale.US)} ${fault.name}")
+        _faults.tryEmit(fault)
+        if (fault.area == DatFault.Area.STREAM) current?.stop()
+    }
+
+    /**
+     * Sets a value that MockDeviceKit cannot set: a missing Meta AI app, or the compatibility of the device.
+     * A null argument changes nothing. `debugClearOverrides` removes the compatibility again.
+     */
+    fun debugOverride(metaAiInstalled: Boolean? = null, compatibility: DatCompatibility? = null) {
+        metaAiInstalled?.let(::setMetaAiInstalled)
+        if (compatibility != null) {
+            compatibilityOverride = compatibility
+            _snapshot.update { it.copy(device = it.device?.copy(compatibility = compatibility)) }
+        }
+        log("debug override metaAiInstalled=$metaAiInstalled compatibility=$compatibility")
+    }
+
+    fun debugClearOverrides() {
+        compatibilityOverride = null
+        setMetaAiInstalled(true)
+        selectDevice()
+    }
+
+    /**
+     * Runs a call that adds a capability to a session. The SDK returns its errors as a `DatResult`, but with
+     * DAT 1.0.1 `addInputs` threw an IllegalStateException ("Could not get shared DWA channel") for a session that
+     * mock glasses had just ended with a fold. The app must not stop for that. Returns null after such a failure.
+     */
+    private inline fun <T> sdkCall(what: String, call: () -> T): T? = try {
+        call()
+    } catch (e: IllegalStateException) {
+        log("$what failed: ${e.message}")
+        null
+    }
+
     private fun requireInitialized(action: String): Boolean {
         if (!initialized) log("$action: dat is not initialized")
         return initialized
@@ -395,11 +466,17 @@ class DatLink(
     }
 
     private fun setDevice(device: Device?) {
-        val value = device?.toCore()
+        val override = compatibilityOverride
+        val value = device?.toCore()?.let { if (override == null) it else it.copy(compatibility = override) }
         val before = _snapshot.value.device
         if (value == before) return
         _snapshot.update { it.copy(device = value) }
         log(if (value == null) "device none" else deviceLine(value))
+        // The SDK answers a permission check only with connected glasses (PermissionError.NO_DEVICE and
+        // NO_DEVICE_WITH_CONNECTION). A check at the start of the app can come before the link, so it runs again here.
+        if (value?.link == DatLinkState.CONNECTED && before?.link != DatLinkState.CONNECTED) {
+            scope.launch { refreshPermissions() }
+        }
     }
 
     private fun deviceLine(d: DatDevice): String = "device ${d.name} link=${d.link} battery=${d.battery} don=${d.don} hinge=${d.hinge} thermal=${d.thermal}"
@@ -460,6 +537,10 @@ class DatLink(
             private set
         private var cameraScope: CoroutineScope? = null
         private var cameraRequested = false
+
+        /** When the app asked for the camera, and when its stream first reached STREAMING. */
+        private var cameraAtMs: Long? = null
+        private var streamingAtMs: Long? = null
         private var autoAttached = false
 
         private var motion: Motion? = null
@@ -504,6 +585,30 @@ class DatLink(
         fun stop() {
             if (stopRequested) return
             stopRequested = true
+            if (stopWaitMs() <= 0) {
+                stopNow()
+                return
+            }
+            log("session: the stream just started, so the stop waits")
+            runScope.launch {
+                // The stream can reach STREAMING during the wait, and then the wait starts again from that time.
+                val giveUpAtMs = SystemClock.elapsedRealtime() + MAX_STOP_WAIT_MS
+                while (true) {
+                    val waitMs = minOf(stopWaitMs(), giveUpAtMs - SystemClock.elapsedRealtime())
+                    if (waitMs <= 0) break
+                    delay(waitMs)
+                }
+                stopNow()
+            }
+        }
+
+        /** The time that a stop must still wait, so that it does not meet the start of the video decoder. */
+        private fun stopWaitMs(): Long {
+            val startedAtMs = streamingAtMs ?: cameraAtMs ?: return 0
+            return startedAtMs + STOP_AFTER_STREAM_START_MS - SystemClock.elapsedRealtime()
+        }
+
+        private fun stopNow() {
             camera?.stop()
             session.stop()
             // The stream collectors end here, so no later stream state arrives. The snapshot gets the end states
@@ -544,6 +649,7 @@ class DatLink(
 
         private fun attachCamera() {
             cameraRequested = true
+            cameraAtMs = SystemClock.elapsedRealtime()
             session.addCamera(StreamConfiguration(videoQuality = VideoQuality.HIGH, frameRate = STREAM_FPS)).fold(
                 onSuccess = { added ->
                     camera = added
@@ -563,6 +669,7 @@ class DatLink(
 
         private fun onStreamState(state: StreamState) {
             log("stream $state")
+            if (state == StreamState.STREAMING && streamingAtMs == null) streamingAtMs = SystemClock.elapsedRealtime()
             if (isCurrent) _snapshot.update { it.copy(stream = state.toCore()) }
             // The BirdSpotter sample of Meta attaches its sensors at the same point.
             if (state == StreamState.STREAMING && autoAttach && !autoAttached && !stopRequested) {
@@ -578,7 +685,7 @@ class DatLink(
                 log("motion: it is attached")
                 return
             }
-            session.addMotion(MotionConfiguration(samplingRate = MotionSamplingRate.HZ_30)).fold(
+            sdkCall("add motion") { session.addMotion(MotionConfiguration(samplingRate = MotionSamplingRate.HZ_30)) }?.fold(
                 onSuccess = { added ->
                     motion = added
                     motionSampleCount = 0
@@ -629,7 +736,7 @@ class DatLink(
                 return
             }
             inputSources = sources
-            session.addInputs(InputsConfiguration(sources = sources, consumeBack = true)).fold(
+            sdkCall("add inputs") { session.addInputs(InputsConfiguration(sources = sources, consumeBack = true)) }?.fold(
                 onSuccess = { added ->
                     inputs = added
                     val collectors = childScope().also { inputsScope = it }
@@ -664,13 +771,20 @@ class DatLink(
             if (isCurrent) _snapshot.update { it.copy(inputsActive = state == InputsState.ACTIVE) }
             if (state == InputsState.ACTIVE) inputsRevival.onStarted()
             if (stopped && inputsRevival.onStopped(byApp = !canRevive)) {
-                log("revive inputs ${inputsRevival.attempts}")
-                val old = inputsScope
-                inputs = null
-                session.removeInputs().onFailure { error, _ -> fault(DatFault.Area.INPUTS, error) }
-                attachInputs(inputSources)
-                // This function runs in a collector of the old scope, so the cancel comes last.
-                old?.cancel()
+                val attempt = inputsRevival.attempts
+                val stoppedInputs = inputs
+                // Inputs also stops when the glasses end the session, a moment before the session reports it.
+                // So the revival waits, as for Motion and Speech, and then reads the session state again.
+                runScope.launch {
+                    delay(REVIVE_DELAY_MS)
+                    if (!canRevive || inputs !== stoppedInputs) return@launch
+                    log("revive inputs $attempt")
+                    val old = inputsScope
+                    inputs = null
+                    session.removeInputs().onFailure { error, _ -> fault(DatFault.Area.INPUTS, error) }
+                    attachInputs(inputSources)
+                    old?.cancel()
+                }
             }
         }
 
@@ -683,7 +797,7 @@ class DatLink(
                 log("speech: the microphone permission is not granted")
                 return
             }
-            session.addSpeech().fold(
+            sdkCall("add speech") { session.addSpeech() }?.fold(
                 onSuccess = { added ->
                     speech = added
                     runScope.subscribe { added.transcriptions.collect { result -> result?.let { onTranscription(added, it) } } }
@@ -781,6 +895,13 @@ class DatLink(
         const val STREAM_FPS = 7
         const val NS_PER_SECOND = 1_000_000_000L
         const val REVIVE_DELAY_MS = 750L
+
+        // Measured with DAT 1.0.1 and mock glasses on a Nothing Phone (1), Android 15: a stop at the moment the
+        // stream reaches STREAMING ends the app process. The video decoder of the SDK calls MediaCodec.reset on its
+        // own thread while the stop releases the same codec, and the system aborts in the destructor of MediaCodec
+        // (MediaCodec.cpp, CHECK_EQ(mState, UNINITIALIZED)). So a stop waits until the stream is this old.
+        const val STOP_AFTER_STREAM_START_MS = 1000L
+        const val MAX_STOP_WAIT_MS = 3000L
         const val MOTION_COUNT_LOG_MS = 3000L
         const val EVENT_BUFFER = 16
         const val MOTION_BUFFER = 64

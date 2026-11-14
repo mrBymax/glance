@@ -14,6 +14,7 @@ import com.metaglance.android.audio.ExoLinePlayer
 import com.metaglance.android.audio.PhoneVoice
 import com.metaglance.android.dat.DatLink
 import com.metaglance.android.dat.ProbeDecisions
+import com.metaglance.android.pipeline.FaceFinder
 import com.metaglance.android.pipeline.FramePipeline
 import com.metaglance.core.audio.SpeechQueue
 import com.metaglance.core.contract.Codec
@@ -29,6 +30,7 @@ import com.metaglance.core.contract.PageToNative
 import com.metaglance.core.contract.Profile
 import com.metaglance.core.contract.Profiles
 import com.metaglance.core.contract.ServerToDevice
+import com.metaglance.core.frame.FrameHeader
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.image.UploadGate
@@ -45,6 +47,7 @@ import com.metaglance.core.state.DatLinkState
 import com.metaglance.core.state.DatSession
 import com.metaglance.core.state.DatSnapshot
 import com.metaglance.core.state.DatStream
+import com.metaglance.core.state.HapticPatterns
 import com.metaglance.core.state.NativeError
 import com.metaglance.core.state.NativeErrors
 import com.metaglance.core.state.StateMapper
@@ -82,7 +85,8 @@ class SessionController(
     private val app: Application,
     private val scope: CoroutineScope,
     val dat: DatLink,
-    val store: ProfileStore
+    val store: ProfileStore,
+    private val vibrate: (LongArray) -> Unit
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val audio = app.getSystemService(AudioManager::class.java)
@@ -103,7 +107,11 @@ class SessionController(
     private var socket: DeviceSocket? = null
     private var socketOpen = false
     private var closeSocketJob: Job? = null
+
+    /** `debugDropSocket` sets it. No socket opens before this time. */
+    private var socketBlockedUntilMs = 0L
     private var phoneOnline = true
+    private var pocketOn = false
 
     private val voice = PhoneVoice(app)
     private val player = ExoLinePlayer(app, voice) { url -> api().clipUrl(url) }
@@ -135,7 +143,32 @@ class SessionController(
     private var waitingForGlasses = false
     private var restartsInARow = 0
     private var restartNotBeforeMs = 0L
+
+    /** Counts the starts and the stops that the app asked for. A stop that waits for its cause reads it. */
+    private var stopTicket = 0
     private var lastDeviceState: DeviceState? = null
+
+    /**
+     * Sees each message between the app and the server. The instrumented tests read the traffic through it.
+     * The controller calls it on the main thread and on the frame thread, and it changes nothing.
+     */
+    interface Tap {
+        /** `sent` is false when the socket was down, so the message went nowhere. */
+        fun onToServer(message: DeviceToServer, sent: Boolean)
+
+        fun onFrame(header: FrameHeader, jpegBytes: Int, sent: Boolean)
+
+        fun onFromServer(message: ServerToDevice)
+
+        /** An error event of the app itself, which goes to the page and not to the server. */
+        fun onNativeError(error: NativeError)
+
+        /** A line of the app itself, which the phone voice speaks. */
+        fun onLocalLine(text: String)
+    }
+
+    @Volatile
+    var tap: Tap? = null
 
     private val _nativeState = MutableStateFlow(mapNativeState(dat.snapshot.value))
     val nativeState: StateFlow<NativeState> = _nativeState.asStateFlow()
@@ -152,7 +185,10 @@ class SessionController(
         scope.launch {
             while (true) {
                 delay(TICK_MS)
-                announcer.onTick(SystemClock.elapsedRealtime())?.let(speech::sayLocal)
+                announcer.onTick(SystemClock.elapsedRealtime())?.let { line ->
+                    tap?.onLocalLine(line)
+                    speech.sayLocal(line)
+                }
             }
         }
     }
@@ -160,7 +196,9 @@ class SessionController(
     fun attachPage(send: (NativeToPage) -> Unit, activity: MainActivity) {
         page = send
         this.activity = activity
-        if (datRunning) keepScreenOn(true)
+        // A new activity has a new page, and that page is not in pocket mode.
+        pocketOn = false
+        refreshScreen()
     }
 
     /** A new activity can attach before the old one is destroyed. So only the attached activity detaches. */
@@ -182,17 +220,84 @@ class SessionController(
             is PageToNative.CartEdit -> send(DeviceToServer.CartEdit(message.productId, message.qty))
             is PageToNative.ProfileSet -> onProfilePatch(message.patch)
             is PageToNative.DataDelete -> deleteData()
-            is PageToNative.SetupRegister,
-            is PageToNative.SetupRequestCamera,
-            is PageToNative.SetupOpenUpdate,
-            is PageToNative.PocketSet,
-            is PageToNative.Haptic -> log("page message with no handler yet: $message")
+            is PageToNative.SetupRegister -> setupRegister()
+            is PageToNative.SetupRequestCamera -> setupRequestCamera()
+            is PageToNative.SetupOpenUpdate -> activity?.let(dat::openUpdate)
+            is PageToNative.PocketSet -> {
+                pocketOn = message.on
+                activity?.setPocket(message.on)
+                refreshScreen()
+            }
+            // Kotlin never vibrates by itself: the page selects each pattern.
+            is PageToNative.Haptic -> if (profile.haptics) vibrate(HapticPatterns.timings(message.pattern))
         }
     }
 
     /** The volume keys are no input yet. */
     @Suppress("UNUSED_PARAMETER")
     fun onVolumeKey(up: Boolean): Boolean = false
+
+    /** Sends an `error` event to the page. The activity uses it for a failure that it sees itself. */
+    fun reportError(error: NativeError) = sendError(error)
+
+    /** Stops the camera stream, as `session.rest` of the server does. The server session and the socket stay. */
+    fun stopCamera() = stopDat()
+
+    /** Makes the detector read the stored sensitivity again. A prompt that is open keeps its head window. */
+    fun applySensitivity() {
+        headInput = newHeadInput()
+    }
+
+    /**
+     * Closes the socket, and connects again only after `forMs`. For the mock menu and the tests: it is the state
+     * "Server not reachable" with no change to the network of the phone.
+     */
+    fun debugDropSocket(forMs: Long) {
+        val dropped = socket
+        if (dropped == null) {
+            log("debug drop: no socket")
+            return
+        }
+        log("debug drop: the socket stays closed for $forMs ms")
+        val nowMs = SystemClock.elapsedRealtime()
+        socketBlockedUntilMs = nowMs + forMs
+        closeSocketJob?.cancel()
+        closeSocketJob = null
+        dropped.close()
+        socket = null
+        socketOpen = false
+        announcer.onSocketDown(nowMs)
+        refreshNativeState()
+        scope.launch {
+            delay(forMs)
+            if (socket == null && serverSession?.live == true) openSocket()
+        }
+    }
+
+    private fun setupRegister() {
+        val activity = activity ?: return
+        if (dat.ready) {
+            dat.register(activity)
+            return
+        }
+        // The SDK does not run yet, because the Bluetooth permission is missing. The activity asks for it again.
+        activity.requestBluetooth { granted ->
+            when {
+                !granted -> sendError(NativeErrors.BLUETOOTH_DENIED)
+                dat.ready -> dat.register(activity)
+                else -> sendError(NativeErrors.REGISTRATION_FAILED)
+            }
+        }
+    }
+
+    private fun setupRequestCamera() {
+        val activity = activity ?: return
+        if (dat.ready) {
+            activity.requestCameraPermission()
+        } else {
+            sendError(if (dat.snapshot.value.bluetoothGranted) NativeErrors.PERMISSION_FAILED else NativeErrors.BLUETOOTH_DENIED)
+        }
+    }
 
     private fun onUiReady() {
         toPage(NativeToPage.NativeStateChanged(_nativeState.value))
@@ -274,7 +379,7 @@ class SessionController(
     }
 
     private fun openSocket() {
-        if (socket != null) return
+        if (socket != null || SystemClock.elapsedRealtime() < socketBlockedUntilMs) return
         val session = serverSession ?: return
         val url = try {
             api().socketUrl(session.wsUrl)
@@ -336,6 +441,7 @@ class SessionController(
     }
 
     private fun onServerMessage(message: ServerToDevice) {
+        tap?.onFromServer(message)
         when (message) {
             is ServerToDevice.Speak -> {
                 message.promptId?.let(prompts::onPromptSpoken)
@@ -408,6 +514,7 @@ class SessionController(
     }
 
     private fun deleteData() {
+        stopTicket += 1
         waitingForGlasses = false
         stopDat()
         val session = serverSession
@@ -432,6 +539,7 @@ class SessionController(
 
     private fun startDat() {
         if (datRunning) return
+        stopTicket += 1
         sessionErrors.clear()
         streamErrors.clear()
         stopByApp = false
@@ -445,12 +553,13 @@ class SessionController(
             return
         }
         datRunning = true
-        keepScreenOn(true)
+        refreshScreen()
         startPipeline()
     }
 
     /** Stops the DAT session because the app, the page, or the server asked for it. No error event follows. */
     private fun stopDat() {
+        stopTicket += 1
         waitingForGlasses = false
         if (!datRunning) return
         stopByApp = true
@@ -462,19 +571,31 @@ class SessionController(
         pipelineJob?.cancel()
         // The frame work runs on one background thread. dat.frames keeps only the newest frame, so nothing queues.
         pipelineJob = scope.launch(Dispatchers.Default.limitedParallelism(1)) {
+            val faces = FaceFinder()
             val pipeline = FramePipeline(
                 gate = {
                     val link = socket
                     UploadGate.check(link?.isOpen == true, link?.queuedBytes() ?: 0, worn(dat.snapshot.value))
                 },
-                onKioskText = { text -> socket?.send(DeviceToServer.KioskSeen(text)) },
-                onUpload = { header, jpeg -> socket?.sendFrame(header, jpeg) },
+                onKioskText = { text ->
+                    val message = DeviceToServer.KioskSeen(text)
+                    val sent = socket?.send(message) == true
+                    tap?.onToServer(message, sent)
+                },
+                onUpload = { header, jpeg ->
+                    val sent = socket?.sendFrame(header, jpeg) == true
+                    tap?.onFrame(header, jpeg.size, sent)
+                },
+                // Each upload is the center of the frame, with each face pixelated.
+                findFaces = { faces.find(it) },
+                crop = true,
                 log = ::log
             )
             try {
                 dat.frames.collect { pipeline.onFrame(it) }
             } finally {
                 pipeline.close()
+                faces.close()
             }
         }
     }
@@ -528,18 +649,36 @@ class SessionController(
         when (fault.area) {
             DatFault.Area.SESSION -> sessionErrors.add(fault.name)
             DatFault.Area.STREAM -> streamErrors.add(fault.name)
+            // The page reads "no internet" from `network`. A missing Meta AI app is in `metaAiInstalled`.
+            DatFault.Area.REGISTRATION -> if (fault.name in REGISTRATION_FAILURES) sendError(NativeErrors.REGISTRATION_FAILED)
             else -> Unit
         }
     }
 
     private fun onDatStopped(snapshot: DatSnapshot) {
         datRunning = false
-        keepScreenOn(false)
+        refreshScreen()
         pipelineJob?.cancel()
         pipelineJob = null
         mainYesJob?.cancel()
         mainYesJob = null
-        val facts = StopFacts(stopByApp, sessionErrors.toSet(), streamErrors.toSet(), snapshot.device?.link, snapshot.device?.hinge)
+        if (stopByApp) {
+            onStopCause(StopFacts(true, sessionErrors.toSet(), streamErrors.toSet(), snapshot.device?.link, snapshot.device?.hinge))
+            return
+        }
+        // The session can stop before the device reports why. Mock glasses that fold report SESSION_ENDED_BY_DEVICE
+        // and STOPPED first, and the closed hinge after them. So the cause is read a short time after the stop.
+        val ticket = stopTicket
+        scope.launch {
+            delay(STOP_SETTLE_MS)
+            // A new start, or a stop that the app asked for, came first. The old stop has no use then.
+            if (ticket != stopTicket || datRunning) return@launch
+            val device = dat.snapshot.value.device
+            onStopCause(StopFacts(false, sessionErrors.toSet(), streamErrors.toSet(), device?.link, device?.hinge))
+        }
+    }
+
+    private fun onStopCause(facts: StopFacts) {
         val cause = StopCauses.classify(facts)
         log("dat session stopped: $cause session=$sessionErrors stream=$streamErrors")
         val error = if (cause == StopCause.OTHER && INSUFFICIENT_SDK in sessionErrors) NativeErrors.SDK_TOO_OLD else NativeErrors.forStop(cause)
@@ -569,11 +708,14 @@ class SessionController(
     }
 
     private fun send(message: DeviceToServer) {
-        if (socket?.send(message) != true) log("not sent, the socket is down: ${Codec.encode(message).take(MAX_LOGGED_CHARS)}")
+        val sent = socket?.send(message) == true
+        tap?.onToServer(message, sent)
+        if (!sent) log("not sent, the socket is down: ${Codec.encode(message).take(MAX_LOGGED_CHARS)}")
     }
 
     private fun sendError(error: NativeError) {
         log("error ${error.code}")
+        tap?.onNativeError(error)
         toPage(NativeToPage.Event(NativeErrors.toEvent(error)))
     }
 
@@ -595,9 +737,14 @@ class SessionController(
         store.serverSession = session
     }
 
-    private fun keepScreenOn(on: Boolean) {
+    /** The screen stays on while a DAT session runs, and in pocket mode. */
+    private fun refreshScreen() {
         val window = activity?.window ?: return
-        if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (datRunning || pocketOn) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     private fun watchPhoneNetwork() {
@@ -637,8 +784,12 @@ class SessionController(
         const val CLOSE_AFTER_END_MS = 5000L
         const val MAIN_YES_DELAY_MS = 5000L
         const val RESTART_DELAY_MS = 2000L
+        const val STOP_SETTLE_MS = 500L
         const val MAX_RESTARTS_IN_A_ROW = 5
         const val MAX_LOGGED_CHARS = 120
         const val INSUFFICIENT_SDK = "INSUFFICIENT_SDK_VERSION"
+
+        /** The names of `RegistrationError` that mean a registration that did not work. */
+        val REGISTRATION_FAILURES = setOf("FAILED_TO_REGISTER", "UNKNOWN")
     }
 }
