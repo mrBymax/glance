@@ -53,10 +53,10 @@ Copy `dist/` to any static host: GitHub Pages, Netlify, Vercel, an S3 bucket, or
 | Text and layout of the diagram of the parts | `DIAGRAM` in `src/content/site.ts`, and `src/sections/PartsDiagram.tsx` for the coordinates |
 | Order of the sections and the links of the sticky bar | `SECTIONS` in `src/content/site.ts`, and `src/App.tsx` |
 | Colors, type sizes, spacing | `src/styles/site.css` (Astryx tokens only) |
-| The animation of the hero | `src/hero/` (camera distance, lights, sway, and tilt at the top of `animation.ts`) |
-| Motion of the page | `src/motion/` (the reveal on scroll and the hover of actions and cards) |
+| The animation of the hero | `src/hero/` (camera distance, lights, and speed at the top of `animation.ts`) |
+| Motion of the page | `src/motion/Reveal.tsx` (the reveal on scroll) |
 
-Each claim of the copy comes from `README.md`, `docs/architecture.md`, and the design spec of the repository. Keep it true to the build. The section "A prototype, said plainly" lists what is a demo, and it must change when the build changes.
+Meta Glance is a protocol: a place shows a Glance code, the glasses read it, and a nod confirms. The copy presents it so: the loop, the use cases, the store demo, how to build on it. Each mechanic in the copy comes from `docs/architecture.md` and `apps/website/README.md` of the app branch. Use cases other than the checkout are what the protocol enables. The page states no test log, no availability, no price, no partner, and no certification.
 
 ## Asset pipeline
 
@@ -106,11 +106,12 @@ LCP was 448 to 508 ms over two runs (the poster of the hero) and CLS was 0. Thes
 - `dist/` holds all four GLB files, but the page fetches one. `metaGlancePlayer.js` names each variant with `new URL(..., import.meta.url)`, so Vite copies each of them.
 - The animation, the logo files, and the font are Meta assets or hold the mark of Meta: the clip starts from the Meta logo, `assets/Glance.svg` holds the same symbol, and Optimistic is a typeface of Meta. The owner asked for all three. Ask the Meta mentors before the page goes public, as `apps/website/README.md` on the app branch also says.
 - The hero fills the first viewport with the header. Its height is `100dvh` (with `100vh` before it) less `--site-header-measured`, which `SiteHeader` measures, and less its top margin, between 34 rem and 68 rem. The CSS default of that variable is the header height at the default font size, so the first paint does not move.
-- After the clip, the card of the hero sways slowly and tilts toward a fine pointer. With reduced motion it stands still. The canvas draws no frame while the hero is out of view.
+- The clip plays once at 1.25 times its speed, 4.8 seconds, and rests on its last frame, so it needs no pause control (WCAG 2.2.2). With reduced motion it does not play. The canvas draws no frame while the hero is out of view.
+- Nothing that a person clicks moves: buttons, links, and cards keep their place on hover and on press.
 - Each reveal starts from the server HTML, so the text is visible before the script runs. An element below the viewport hides after hydration and appears when it scrolls in. The reader never sees it hide.
 - The diagram of the parts has two drawings: a wide one for a figure of 70 rem or more, and a tall one below. The text of each is 18.5 units, and each drawing shows only where that is 14 px or more.
 - Headless Chrome needs `--enable-unsafe-swiftshader --use-angle=swiftshader` for WebGL. Those flags slow the first paint by seconds, so `scripts/check-page.mjs` measures the load in a Chrome with its default flags.
 - SwiftShader caps a texture at 8192 px. A full-page screenshot of a taller page repeats its top, so capture the page one viewport at a time.
-- The hero and the status band nest a `Theme` of Astryx with `mode="dark"`. In the dark scheme, where the canvas is dark as well, `site.css` paints them with `--color-background-surface`.
+- The hero and the captions windows nest a `Theme` of Astryx with `mode="dark"`. In the dark scheme, where the canvas is dark as well, `site.css` paints them with `--color-background-surface`.
 - `src/content/site.ts` is the only place for text. The tests in `src/App.test.tsx` check the order of the section headings, so a new heading needs a change there too.
 - With `prefers-reduced-motion: reduce` or Save-Data, the hero loads no Three.js and shows the poster. The play button still loads it on request.
