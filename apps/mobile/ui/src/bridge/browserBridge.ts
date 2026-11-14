@@ -68,6 +68,8 @@ export class BrowserBridge implements GlanceBridge {
   private session: ServerSession | null = null;
   // True from a stream error to the next open of the stream. An answer to a REST call does not end it.
   private streamLost = false;
+  // Grows with each start, each end, and each delete. A POST /api/sessions that answers for an older number is stale.
+  private startAttempt = 0;
 
   constructor(options: BrowserBridgeOptions) {
     this.apiBase = options.apiBase;
@@ -128,6 +130,7 @@ export class BrowserBridge implements GlanceBridge {
         this.inject({ t: 'profile', profile: this.profile });
         return;
       case 'session.end':
+        this.startAttempt += 1;
         this.post('/intents', { kind: 'stop', source: 'phone' });
         this.setNative({ session: 'stopped', stream: 'stopped' });
         return;
@@ -184,12 +187,20 @@ export class BrowserBridge implements GlanceBridge {
     // A second start message while the first POST is open must not make a second session.
     if (this.native.session === 'starting') return;
     this.setNative({ session: 'starting' });
-    void this.createSession();
+    this.startAttempt += 1;
+    void this.createSession(this.startAttempt);
   }
 
-  private async createSession(): Promise<void> {
+  private async createSession(attempt: number): Promise<void> {
     const response = await this.request('POST', '/api/sessions', { profile: this.profile });
     const created = response?.ok ? CreateSessionResponseSchema.safeParse(await jsonOf(response)) : null;
+    if (attempt !== this.startAttempt) {
+      // The shopper ended the session or deleted the data while the call was open. The page must not get this session.
+      if (created?.success) {
+        void this.request('DELETE', `/api/sessions/${enc(created.data.sessionId)}`, undefined, created.data.token);
+      }
+      return;
+    }
     if (!created?.success) {
       this.setNative({ session: 'idle' });
       return;
@@ -248,6 +259,7 @@ export class BrowserBridge implements GlanceBridge {
   }
 
   private deleteData(): void {
+    this.startAttempt += 1;
     if (this.session) void this.request('DELETE', this.pathOf(this.session), undefined, this.session.token);
     this.forgetSession();
     // The Android app sends the profile and then the native state after it deletes the data.

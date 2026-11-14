@@ -90,6 +90,7 @@ Rules of `BrowserBridge` that a reader does not see at once:
 - A stream error, or a call with no answer, sets `network` to `offline` in the fake native state. The next `open` of the stream sets `online`.
 - An answer with a status of 400 or more logs `bridge: <method> <path> failed with <status>`. The line holds no token.
 - Two fast `session.start` messages make one session. The fake native state says `starting` until the server answers.
+- A `session.end` or a `data.delete` while `POST /api/sessions` is open makes that call stale. When the server answers with a session, the bridge sends `DELETE /api/sessions/:id` for it, and the page does not get it.
 - `data.delete` sends `DELETE /api/sessions/:id`, forgets the session, and sets the profile to the default.
 - `bridge.sent` holds each message of the page. `bridge.inject(message)` delivers a message to the page. Tests and the debug panel use both.
 
@@ -133,7 +134,7 @@ flowchart LR
 - A snapshot replaces the session data, and it clears the error, the budget warning, and the look-alike list.
 - An error stays until a sign of recovery: a stream that starts, a new prompt, a snapshot, a payment, or `local.attempt`. `send` runs `local.attempt` before `setup.register`, `setup.requestCamera`, and `session.start`.
 - The list of captions holds the last 20, and the screen shows the last 4. A caption with a known ID replaces the old one.
-- `useSpokenText` announces each new caption, and the line `Cart: 2 items, 4.49 EUR.` after each cart change. It does not announce the captions of the snapshot that brings a session.
+- `useSpokenText` announces each new caption, and the line `Cart: 2 items, 4.49 EUR.` after each cart change. It does not announce the captions of a snapshot, also when the snapshot loads again after a lost connection. `BridgeProvider` gives it the captions of the last snapshot.
 - Each string of the page is in `src/text/strings.ts`. `src/text/format.ts` formats an amount as `1.89 EUR`.
 
 The field `checkout` follows the checkout events:

@@ -76,6 +76,19 @@ it('creates one session for two fast start messages', async () => {
   await vi.waitFor(() => expect(sources.sources).toHaveLength(1));
   expect(http.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
 });
+it.each([
+  ['data.delete', 'idle'],
+  ['session.end', 'stopped'],
+] as const)('removes a session that the server makes after %s', async (t, session) => {
+  const { bridge, seen, http, sources } = online();
+  bridge.send({ t: 'session.start' });
+  bridge.send({ t });
+  await vi.waitFor(() => expect(http.calls.at(-1)).toMatchObject({ method: 'DELETE', url: `${path}${q}` }));
+  expect(http.calls).toHaveLength(2);
+  expect(sources.sources).toEqual([]);
+  expect(bridge.sessionQuery()).toBeNull();
+  expect(lastNative(seen)).toMatchObject({ session, stream: 'stopped' });
+});
 it('relays each event of the stream and drops what it cannot parse', async () => {
   const { seen, sources } = await started();
   sources.sources[0]?.emit('message', JSON.stringify(eventFixture('glance.pending')));
