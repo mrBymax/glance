@@ -51,7 +51,7 @@ import org.junit.runner.RunWith
  *
  * Row 17 has the two states that come from the server. The failed payment is here. It needs a kiosk that declines
  * each payment, and a clip with the code of that kiosk: `scripts/integration/android/run-spine.mjs` makes both for
- * each run. The server has no rule yet that reports slow recognition, so no test reaches that state.
+ * each run. Slow recognition is in `RecognitionSlowTest`.
  */
 @RunWith(AndroidJUnit4::class)
 class DeviceStatesTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) {

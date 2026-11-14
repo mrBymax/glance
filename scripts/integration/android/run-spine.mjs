@@ -4,9 +4,12 @@
 // "adb reverse", builds the phone UI, builds and installs the debug APK and its test APK, runs the instrumented
 // tests, and then removes the reverse and stops the server. No step calls a vendor.
 //
+// A second server runs for each run: the fake server of the app, apps/mobile/android/tools/fake-server, on a free
+// port of 127.0.0.1. A test uses it for a message that the server of apps/server cannot send on request.
+//
 // The three tests of the brief are three suites, and the other inputs have a suite of their own:
 //   spine  SpineTest: one shop from the first frame to the payment
-//   state  DeviceStatesTest and SetupFlowTest: each device and error state
+//   state  DeviceStatesTest, SetupFlowTest, and RecognitionSlowTest: each device and error state
 //   page   PhoneUiPageTest: the phone UI in the WebView
 //   input  VolumeKeysTest, TouchpadInputTest, and VoiceCommandsTest: the volume keys, the touchpad, and the voice
 //
@@ -23,7 +26,7 @@
 // Exit status: 0 = each test passed, 1 = a failure, 2 = the phone is locked or not attached,
 // 3 = no failure, but a test was skipped.
 import { spawn, spawnSync } from 'node:child_process';
-import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { closeSync, createWriteStream, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -40,12 +43,14 @@ const SPINE_CLASS = `${APP_ID}.SpineTest`;
 const STATES_CLASS = `${APP_ID}.DeviceStatesTest`;
 const SUITES = {
   spine: [SPINE_CLASS],
-  state: [STATES_CLASS, `${APP_ID}.SetupFlowTest`],
+  state: [STATES_CLASS, `${APP_ID}.SetupFlowTest`, `${APP_ID}.RecognitionSlowTest`],
   page: [`${APP_ID}.PhoneUiPageTest`],
   input: [`${APP_ID}.VolumeKeysTest`, `${APP_ID}.TouchpadInputTest`, `${APP_ID}.VoiceCommandsTest`],
 };
 /** The clip of the kiosk that declines each payment, in the cache folder of the app. */
 const FAIL_KIOSK_CLIP = 'kiosk-fail.mp4';
+/** The fake server of the app sends its first product prompt after this time, so a test run sees none. */
+const NO_PROMPT_MS = 60 * 60_000;
 const MEDIA_STREAM = '3';
 const SERVER_START_MS = 30_000;
 const TEST_TIMEOUT_MS = 10 * 60_000;
@@ -62,6 +67,7 @@ const root = resolve(here, '../../..');
 const serverDir = join(root, 'apps/server');
 const androidDir = join(root, 'apps/mobile/android');
 const scriptFile = join(here, 'spine-script.json');
+const appFakeDir = join(androidDir, 'tools/fake-server');
 const logDir = join(tmpdir(), 'glance-integration');
 
 class Blocked extends Error {}
@@ -169,6 +175,50 @@ async function startServer(logFile) {
   throw new Error(`The server did not answer in ${SERVER_START_MS} ms. Log: ${logFile}`);
 }
 
+function freePort() {
+  return new Promise((done, fail) => {
+    const probe = createServer();
+    probe.once('error', fail);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => done(port));
+    });
+  });
+}
+
+/**
+ * Starts the fake server of the app on a free port of 127.0.0.1. It is a process of its own, because this script
+ * waits for the tests in a call that blocks, and a server in this process would not answer in that time.
+ * Its log goes to the file with no pipe, for the same reason. Returns the process and the address.
+ */
+async function startAppFake(logFile) {
+  const port = await freePort();
+  const url = `http://127.0.0.1:${port}`;
+  const log = openSync(logFile, 'w');
+  const env = { ...process.env, PORT: String(port), HOST: '127.0.0.1', FIRST_PROMPT_MS: String(NO_PROMPT_MS) };
+  delete env.SAVE_FRAMES;
+  const child = spawn(process.execPath, ['server.mjs'], { cwd: appFakeDir, env, stdio: ['ignore', log, log] });
+  closeSync(log);
+  let exited = false;
+  child.once('exit', () => {
+    exited = true;
+  });
+
+  const end = Date.now() + SERVER_START_MS;
+  while (Date.now() < end) {
+    if (exited) throw new Error(`The fake server of the app stopped at its start. Log: ${logFile}
+${readFileSync(logFile, 'utf8')}`);
+    try {
+      if ((await fetch(`${url}/debug/log`, { signal: AbortSignal.timeout(2000) })).ok) return { child, port, url };
+    } catch {
+      // The server does not listen yet.
+    }
+    await new Promise((done) => setTimeout(done, 250));
+  }
+  await stopServer(child);
+  throw new Error(`The fake server of the app did not answer in ${SERVER_START_MS} ms. Log: ${logFile}`);
+}
+
 function stopServer(child) {
   return new Promise((done) => {
     if (child.exitCode !== null || child.signalCode !== null) {
@@ -256,10 +306,10 @@ function readTests(output) {
 }
 
 /** Runs the tests. Returns `passed`, and the tests that did not run because a condition of theirs did not hold. */
-function runTests(classes, failKioskText) {
+function runTests(classes, failKioskText, appFakeUrl) {
   const target = classes === null ? [] : ['-e', 'class', classes.join(',')];
   const kiosk = failKioskText === null ? [] : ['-e', 'failKioskText', `'${failKioskText}'`, '-e', 'failKioskClip', FAIL_KIOSK_CLIP];
-  const output = adb(['shell', 'am', 'instrument', '-w', '-r', ...target, ...kiosk, TEST_RUNNER], { allowFailure: true, timeout: TEST_TIMEOUT_MS });
+  const output = adb(['shell', 'am', 'instrument', '-w', '-r', ...target, ...kiosk, '-e', 'fakeServerUrl', appFakeUrl, TEST_RUNNER], { allowFailure: true, timeout: TEST_TIMEOUT_MS });
   const tests = readTests(output);
   const skipped = tests.filter((test) => test.status === TEST_IGNORED || test.status === TEST_ASSUMPTION_FAILED);
   for (const test of tests) {
@@ -288,14 +338,19 @@ function serverSawSpine(logFile) {
 async function runOnce(target, index) {
   const logFile = join(logDir, `server-${Date.now()}-${index}.log`);
   const server = await startServer(logFile);
+  let appFake = null;
   let result;
   try {
+    appFake = await startAppFake(logFile.replace(/.log$/, '-app-fake.log'));
     adb(['reverse', `tcp:${PORT}`, `tcp:${PORT}`]);
+    adb(['reverse', `tcp:${appFake.port}`, `tcp:${appFake.port}`]);
     const needsFailKiosk = target.classes === null || target.classes.some((name) => name.startsWith(STATES_CLASS));
-    result = runTests(target.classes, needsFailKiosk ? await addFailKiosk() : null);
+    result = runTests(target.classes, needsFailKiosk ? await addFailKiosk() : null, appFake.url);
   } finally {
     adb(['reverse', '--remove', `tcp:${PORT}`], { allowFailure: true });
+    if (appFake) adb(['reverse', '--remove', `tcp:${appFake.port}`], { allowFailure: true });
     adb(['shell', `run-as ${APP_ID} rm -f cache/${FAIL_KIOSK_CLIP}`], { allowFailure: true });
+    if (appFake) await stopServer(appFake.child);
     await stopServer(server);
   }
   // The log file is complete only after the server stopped.
