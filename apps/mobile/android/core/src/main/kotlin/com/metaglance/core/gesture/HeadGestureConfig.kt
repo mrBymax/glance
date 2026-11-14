@@ -29,7 +29,8 @@ enum class Sensitivity { GENTLE, NORMAL, FIRM }
  *
  * The test of 2026-11-14 with the glasses gave the nods of one person: strokes of 0.14 to 0.39 rad, top rates of
  * 1.3 to 3.0 rad/s, and 300 to 830 ms for a pair. In one answer the head also turned by 0.2 to 0.4 rad at
- * 1 rad/s, which is the reason for the form of `dominance`. No recording of the samples exists.
+ * 1 rad/s, which is the reason for the form of `dominance`. `src/test/resources/motion` holds four recordings of
+ * that day, of two persons: 9 nods with strokes of 0.10 to 0.51 rad and top rates of 1.35 to 2.50 rad/s.
  */
 data class HeadGestureConfig(
     val pitchAxis: Axis,

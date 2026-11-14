@@ -5,8 +5,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-// No recording exists before a session with the glasses records one. After the first such session, raise this value.
-private const val MIN_RECORDINGS = 0
+// The recordings of the test of 2026-11-14. Raise this value with each recording that the folder gets.
+private const val MIN_RECORDINGS = 4
 
 /**
  * Replays the motion files of `src/test/resources/motion` through the detector, with the accelerometer columns.
@@ -14,10 +14,12 @@ private const val MIN_RECORDINGS = 0
  * A file name ends with `__nod<n>_shake<n>.csv`: the gestures that the person made, which the level `NORMAL` must
  * find. The name can also hold the counts of the other levels, for example
  * `shelf-3__nod1_shake0__gentle_nod1_shake0__firm_nod0_shake0.csv`. The test prints the counts of each level.
+ *
+ * `__nodmin<n>_shake<n>.csv` is for a file whose number of nods is not sure: the level must find n nods or more.
  */
 class MotionReplayTest {
-    // The axis map of ProbeDecisions. The detector uses it only for a sample with no accelerometer reading.
-    private fun config(level: Sensitivity) = HeadGestureConfig.of(level, Axis.X, 1, Axis.Y)
+    // The axis map of ProbeDecisions: these recordings gave it. The pitch axis is the axis from ear to ear.
+    private fun config(level: Sensitivity) = HeadGestureConfig.of(level, Axis.Y, 1, Axis.X)
 
     private fun replay(text: String, level: Sensitivity): List<HeadGesture> {
         val d = HeadGestureDetector(config(level))
@@ -39,19 +41,23 @@ class MotionReplayTest {
     @Test fun `each recording gives the counts in its file name`() {
         val files = File(javaClass.getResource("/motion")!!.toURI()).listFiles { f -> f.name.endsWith(".csv") }!!
         assertTrue("recordings: ${files.size}", files.size >= MIN_RECORDINGS)
-        for (f in files) {
-            val normal = requireNotNull(Regex("__nod(\\d+)_shake(\\d+)").find(f.name)) { "${f.name} has no counts in its name" }
+        // Each file replays before the test fails, so one run shows each file that has other counts than its name.
+        val wrong = ArrayList<String>()
+        for (f in files.sortedBy { it.name }) {
+            val normal = requireNotNull(Regex("__nod(min)?(\\d+)_shake(\\d+)").find(f.name)) { "${f.name} has no counts in its name" }
             val text = f.readText()
             for (level in Sensitivity.entries) {
                 val out = replay(text, level)
                 val nods = out.count { it == HeadGesture.NOD }
                 val shakes = out.count { it == HeadGesture.SHAKE }
                 println("${f.name} $level nods=$nods shakes=$shakes")
-                val expected = if (level == Sensitivity.NORMAL) normal else Regex("__${level.name.lowercase()}_nod(\\d+)_shake(\\d+)").find(f.name)
+                val expected = if (level == Sensitivity.NORMAL) normal else Regex("__${level.name.lowercase()}_nod(min)?(\\d+)_shake(\\d+)").find(f.name)
                 if (expected == null) continue
-                assertEquals("${f.name} $level nods", expected.groupValues[1].toInt(), nods)
-                assertEquals("${f.name} $level shakes", expected.groupValues[2].toInt(), shakes)
+                val (atLeast, wantedNods, wantedShakes) = expected.destructured
+                val nodsFit = if (atLeast.isEmpty()) nods == wantedNods.toInt() else nods >= wantedNods.toInt()
+                if (!nodsFit || shakes != wantedShakes.toInt()) wrong.add("${f.name} $level nods=$nods shakes=$shakes")
             }
         }
+        assertEquals(emptyList<String>(), wrong)
     }
 }

@@ -406,7 +406,7 @@ What nobody measured:
 
 The shopper answers a prompt with the head: a nod is a yes, and a shake is a no. `yesGesture` of the profile can swap the two. The app reads the gestures from the motion samples of the glasses, at 30 Hz.
 
-No recording of a real nod with these glasses exists yet. The numbers below come from head studies, from tests with synthetic samples, and from the log lines of one session with the glasses: see "The nods of the test of 2026-11-14". The next session with the glasses gives more data: see "Log lines" and "Record and replay real motion".
+The numbers below come from head studies, from tests with synthetic samples, from the log lines of one session with the glasses, and from four motion recordings of two persons: see "The nods of the test of 2026-11-14" and "The recordings of 2026-11-14". The next session with the glasses gives more data: see "Log lines" and "Record and replay real motion".
 
 ```mermaid
 flowchart TD
@@ -460,14 +460,15 @@ A head gesture counts only in the head window of a prompt. The window ends `head
 
 ### The pitch and the yaw of the head
 
-Nobody measured the axes of the gyroscope of these glasses. The Android sample of Meta has y to the sky and x from ear to ear, which agrees with `ProbeDecisions`. The iOS sample of Meta has x to the sky. With a wrong axis map a shake arrives on the pitch axis, and the app sends a yes for a no.
+The recordings of 2026-11-14 gave the axes of these glasses: x points to the ground, y is the axis from ear to ear, and z points to the front. `ProbeDecisions` has this map: the pitch axis y, the yaw axis x, and a positive pitch rate for a head that moves down. The Android sample of Meta has y to the sky and x from ear to ear, and `ProbeDecisions` had that map before. See "The recordings of 2026-11-14" for what it cost.
 
 `HeadAxes` needs no calibration:
 
 - The accelerometer reads gravity, so its slow part gives the direction to the sky. The gyroscope turns that direction at once, and the accelerometer pulls it to the measured gravity with a time constant of 1 second.
 - The yaw rate is the part of the gyroscope rate about the direction to the sky.
-- The pitch rate is the rate about the ear axis: the pitch axis of `ProbeDecisions`, laid level.
-- If that pitch axis is less than 60 degrees from the sky, the axis map is wrong, and the ear axis is not known. The pitch rate is then the rate about the level axis of the movement, which is set when a movement starts from rest. In this case a movement of the head to the shoulder also counts as a pitch.
+- The pitch rate is the rate about the ear axis: the pitch axis of `ProbeDecisions`, laid level. A nod turns the head about the ear axis, so that axis stays level when the head looks down. A nod from a head that looks 60 degrees down at a product counts as a nod from a level head.
+- The pitch axis of `ProbeDecisions` must be the axis from ear to ear. With an axis to the ground in its place, the rule fails for a head that looks 30 degrees down or more: that axis, laid level, is then the front axis, and a nod gives no pitch rate.
+- If that pitch axis is less than 30 degrees from the sky or from the ground, the axis map is wrong or the head lies on its side, and the ear axis is not known. The pitch rate is then the rate about the level axis of the movement, which is set when a movement starts from rest. In this case a movement of the head to the shoulder also counts as a pitch.
 - The sign of the pitch does not matter, because a nod can start down or up. The sign of the accelerometer does not matter also: it only turns the sign of the yaw.
 - A sample with no accelerometer reading uses the two axes of `ProbeDecisions`. Mock glasses with a motion feed of `GyroScript` send such samples.
 - The tests use synthetic samples for glasses with y to the sky and with x to the sky, for a head that looks 30 degrees down, and for a head that leans 35 degrees to the side.
@@ -542,7 +543,7 @@ The old rule took a nod only as a stroke down and an equal stroke up, closed by 
 
 ### The nods of the test of 2026-11-14
 
-One person answered three prompts with the glasses, at the level `normal`. No motion file exists, so these numbers come from the log lines of the detector.
+One person answered three prompts with the glasses, at the level `normal`. That session wrote no motion file, so these numbers come from the log lines of the detector.
 
 | Value | Measured | Limit of `normal` |
 |---|---|---|
@@ -641,6 +642,24 @@ The reasons of a rejected pair:
 
 A stroke with no opposite stroke after it gives no line. So a nod that is too small for the level shows as a head window with samples and no line of the detector.
 
+### The recordings of 2026-11-14
+
+`core/src/test/resources/motion` holds four head windows of a later session of that day, of two persons. The second person looked down at the product in the hand and then nodded, and the app lost most of these nods.
+
+| File | Person and head | Samples | Mean accelerometer reading, in m/s2 | Nods at `normal` with the map of that day | Nods at `normal` now |
+|---|---|---|---|---|---|
+| `...-p-0001__nod1_shake0.csv` | 1, level | 116 in 3.8 s | -9.13, 1.18, -3.59 | 1 | 1 |
+| `...-p-0002__nodmin0_shake0.csv` | 1, level | 25 in 0.8 s | -9.24, 0.49, -4.00 | 1 | 0 |
+| `...-p-0003__nod4_shake0.csv` | 2, looks down | 363 in 12.1 s | -8.11, -0.75, -5.36 | 0 | 4 |
+| `...-p-0004__nod4_shake0.csv` | 2, looks down | 316 in 10.5 s | -8.00, -0.77, -5.46 | 1 | 4 |
+
+- The axes: gravity reads -9.1 on x, so x points to the ground. Each nod is a turn about y: the rate about y has peaks of 2.2 to 3.2 rad/s, and the rates about x and z stay below 0.9 rad/s. A positive rate about y moves the gravity reading to -z. The head of person 2 looks further down and reads more gravity on -z, so z points to the front and a positive rate about y is a move down. The fast first stroke of each nod of both persons is positive.
+- The cause of the lost nods: the map of that day had the pitch on x. Laid level, x has the length 0.38 to 0.40 for person 1, below the limit of 0.5, so `HeadAxes` took the level axis of the movement, and the nods counted. For person 2 the length is 0.55 to 0.57, above the limit, so `HeadAxes` took x laid level as the ear axis. That axis is the front axis: it holds 11 percent of a turn about y. A nod of 0.36 rad at 2.25 rad/s was a pitch of 0.04 rad at 0.26 rad/s, below the smallest stroke of 0.10 rad. So `p-0003` gave no candidate and no log line.
+- The one nod of `p-0004` that counted on that day started with a stroke up of 0.5 rad. With the head 0.5 rad further up, x laid level is shorter than the limit.
+- The counts of `p-0003` and `p-0004` are the pairs of a stroke down and a stroke back on the y axis that pass the limits of `normal`: strokes of 0.10 rad or more, top rates of 0.8 rad/s or more, and a return to 40 percent of the largest stroke. A row of strokes with no rest between them is one nod. `p-0003` has such pairs at 4.1, 6.6, 8.4, and 10.0 seconds, and the last one goes on for 2 seconds. `p-0004` has them at 4.5, 6.7, 8.5, and 10.2 seconds.
+- `p-0002` ends at the sample at which the detector of that day reported the nod. About y, the head has made a stroke down of 0.38 rad and is 0.16 rad on its way back, which is 0.06 rad short of the return that a nod needs. The file ends about 40 ms too early for the nod, so its name asks for no nod and for no shake. A new recording has no such end: its window closes with the detector that replays it.
+- No file gives a shake at a level.
+
 ### Record and replay real motion
 
 1. Open "Glance Mock" and tap `Record motion in sessions: off`, so that it shows `on`. The app keeps the switch over a restart.
@@ -649,7 +668,7 @@ A stroke with no opposite stroke after it gives no line. So a nod that is too sm
 4. Get the files, in PowerShell: `adb -s <serial> pull /sdcard/Android/data/com.metaglance.android/files/probe/motion`.
 5. Give each file a name that ends with what the person did: `__nod<n>_shake<n>.csv`, for example `aisle-3__nod1_shake0.csv`. Put it into `core/src/test/resources/motion`.
 6. Run `./gradlew :core:test --tests "*MotionReplayTest*" -i`. The test replays each file at each level and prints `<file> <level> nods=<n> shakes=<n>`. The level `normal` must give the counts of the name.
-7. To fix the counts of another level also, add them to the name: `aisle-3__nod1_shake0__gentle_nod1_shake0__firm_nod0_shake0.csv`.
+7. To fix the counts of another level also, add them to the name: `aisle-3__nod1_shake0__gentle_nod1_shake0__firm_nod0_shake0.csv`. For a file whose number of nods is not sure, write `__nodmin<n>_shake<n>.csv`: the level must find n nods or more.
 8. Change the limits in `HeadGestureConfig` until each file passes, and raise `MIN_RECORDINGS` in `MotionReplayTest` to the number of files.
 
 - A file has the format of MockDeviceKit: 14 values for each sample, with no header row. The line `#a <ms>` before a row is the arrival time of that sample on the clock of the phone. MockDeviceKit and `MotionCsv.parse` skip each line that starts with `#`, so `Replay CSV file` of "Glance Mock" plays such a file on mock glasses.
@@ -659,8 +678,8 @@ A stroke with no opposite stroke after it gives no line. So a nod that is too sm
 
 ### What nobody measured
 
-- Each limit of the detector, with a recording. They come from head studies, from synthetic samples, and from the log lines of the nods of one person.
-- The axes of the gyroscope and of the accelerometer of these glasses, and whether each sample has an accelerometer reading.
+- A shake, a walk, and a look to a shelf, with a recording. The four recordings hold nods of two persons who sit.
+- Whether each sample of each pair of glasses has an accelerometer reading. Each sample of the four recordings has one.
 - Whether the samples of a stall always arrive late, or the glasses lose some of them. `timeGapMs` shows it.
 - How the glasses group the samples of a flow with no stall. If more than 500 ms pass between two groups, the watchdog says `STALLED` in a normal flow. `arrivalGapMs` and `burst` show it.
 - Whether a restart of Motion ends a stall.
@@ -675,7 +694,7 @@ Do them in this order. Each step needs the log of the phone: `adb logcat -s Glan
 
 1. Install the debug build. Open "Glance Mock" and set `Record motion in sessions` to `on`.
 2. Open "Glance Probe". Start a session, tap `Motion`, and keep the head at rest for 30 seconds. Read the `motion samples=` lines: `new` near 90, `arrivalGapMs` below 500, and `timeGapMs` near 33 are a good flow. Write down `burst`: it is the number of samples that the glasses send together.
-3. Tap `Axis test` and nod for 4 seconds. Then tap it again and shake the head. The strongest axis of the nod must be the pitch axis of `ProbeDecisions`, and the strongest axis of the shake its yaw axis. If not, write the measured axes into `ProbeDecisions`.
+3. Tap `Axis test` and nod for 4 seconds. Then tap it again and shake the head. The strongest axis of the nod must be the pitch axis of `ProbeDecisions` (y), and the strongest axis of the shake its yaw axis (x). If not, write the measured axes into `ProbeDecisions`.
 4. Tap `Gesture test`. Make 10 nods and 10 shakes with a rest between them. Then look to the sides, look down at a product, and walk for 2 minutes. Write down the counts and each `rejected` line of a gesture that did not count.
 5. Start a session in "Glance" against a server. Answer 5 prompts with one nod each after the line ended, and 5 with one nod at the name of the product. Each one must give the sound `added` at once and one time, `head answer yes` in the log, and the "Added" line of the server with no second sound. A nod during the line must stop the line: the log has `prompt line stopped`. Write down the two times of each `head answer` line.
 6. Answer 10 prompts with a shake. Each one must give the sound `removed` and `head answer no`.
@@ -726,7 +745,7 @@ flowchart LR
 
 `FixturesTest` reads each file of `packages/shared/fixtures` and compares it with the Kotlin types. The Gradle build gives the folder to the test as the system property `glance.fixtures`. A new message variant in `packages/shared` needs its Kotlin class, or this test fails on the fixture count.
 
-`MotionReplayTest` replays each motion recording in `core/src/test/resources/motion`. See "Record and replay real motion". The folder is empty until a session with the glasses records one.
+`MotionReplayTest` replays each motion recording in `core/src/test/resources/motion`. See "Record and replay real motion" and "The recordings of 2026-11-14".
 
 ### Test against the real server
 

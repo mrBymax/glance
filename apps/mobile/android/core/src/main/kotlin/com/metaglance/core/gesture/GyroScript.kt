@@ -62,9 +62,13 @@ class GyroScript(private val config: HeadGestureConfig) {
         sample(timeNs(i), pitch * config.pitchDownSign, yaw)
     }
 
-    /** The samples as rows of a motion file: the gyroscope values, gravity on the y axis, and no rotation. */
+    /**
+     * The samples as rows of a motion file: the gyroscope values, gravity on the yaw axis of the config, and no
+     * rotation. The yaw axis is the axis to the sky of a level head.
+     */
     fun rows(): List<MotionRow> = samples().map {
-        MotionRow(it.tNs, 0f, 9.81f, 0f, it.x, it.y, it.z, 0f, 0f, 0f, 1f, 0f, 0f, 0f)
+        fun gravity(axis: Axis) = if (axis == config.yawAxis) GRAVITY else 0f
+        MotionRow(it.tNs, gravity(Axis.X), gravity(Axis.Y), gravity(Axis.Z), it.x, it.y, it.z, 0f, 0f, 0f, 1f, 0f, 0f, 0f)
     }
 
     private fun sample(tNs: Long, pitchRate: Double, yawRate: Double): GyroSample {
@@ -82,5 +86,6 @@ class GyroScript(private val config: HeadGestureConfig) {
         const val SAMPLES_PER_SECOND = 30
         const val STEP_MS = 1000.0 / SAMPLES_PER_SECOND
         const val WALK_STEP_MS = 500.0
+        const val GRAVITY = 9.81f
     }
 }

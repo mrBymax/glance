@@ -6,7 +6,8 @@ import kotlin.math.sin
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-// The axis map of ProbeDecisions is a default that nobody measured: pitch on x, yaw on y.
+// Most tests use the map that ProbeDecisions had before the recordings of 2026-11-14: pitch on x, yaw on y.
+// The gravity projection must give the right gesture with each map, so they keep it.
 class HeadAxesTest {
     private val config = HeadGestureConfig.of(Sensitivity.NORMAL, Axis.X, 1, Axis.Y)
 
@@ -88,6 +89,47 @@ class HeadAxesTest {
         val leaned = Mount(lateral = listOf(cos(a), -sin(a), 0.0), up = listOf(sin(a), cos(a), 0.0))
         assertEquals(listOf(HeadGesture.NOD), gestures(leaned.samples(nod())))
         assertEquals(listOf(HeadGesture.SHAKE), gestures(leaned.samples(shake())))
+    }
+
+    /**
+     * The glasses of the recordings of 2026-11-14: x points to the ground, y is the axis from ear to ear, and z
+     * points to the front. A head that looks down by `tiltDegrees` reads gravity on -x and on -z.
+     */
+    private fun measured(tiltDegrees: Double): Mount {
+        val a = degrees(tiltDegrees)
+        return Mount(lateral = listOf(0.0, 1.0, 0.0), up = listOf(-cos(a), 0.0, -sin(a)))
+    }
+
+    private val measuredMap = HeadGestureConfig.of(Sensitivity.NORMAL, Axis.Y, 1, Axis.X)
+
+    private fun withMap(config: HeadGestureConfig, samples: List<HeadSample>): List<HeadGesture> {
+        val d = HeadGestureDetector(config)
+        return samples.mapNotNull { d.onSample(it) }
+    }
+
+    @Test fun `with the measured map a turn about y is the pitch, and down is positive`() {
+        // The accelerometer values of the second person of the recordings, who looked down at a product.
+        val rates = HeadAxes(measuredMap).rates(HeadSample(GyroSample(0, 0.1f, 2.25f, 0f), AccelSample(-8.11f, -0.75f, -5.36f)), 1.0 / 30)
+        assertEquals(2.25, rates.pitch, 0.03)
+        // The y axis of this head is 4 degrees from level, so a small part of the nod is a turn about gravity.
+        assertEquals(-0.26, rates.yaw, 0.03)
+    }
+
+    @Test fun `with the measured map a nod counts from a level head and from a head that looks 30 and 60 degrees down`() {
+        for (tilt in listOf(0.0, 30.0, 60.0)) {
+            assertEquals("$tilt", listOf(HeadGesture.NOD), withMap(measuredMap, measured(tilt).samples(nod())))
+            assertEquals("$tilt", listOf(HeadGesture.SHAKE), withMap(measuredMap, measured(tilt).samples(shake())))
+            // A look further down that stays there is no nod.
+            assertEquals("$tilt", emptyList<HeadGesture>(), withMap(measuredMap, measured(tilt).samples(script().rest(500).pitch(0.4, 400).rest(1500))))
+        }
+    }
+
+    // The cause of the nods that the app lost on 2026-11-14. The map had the pitch on x, which points to the ground.
+    // From a tilt of 30 degrees on, x laid level is long enough to count as the ear axis, and it is the front axis.
+    @Test fun `a map with the pitch on the ground axis loses the nod of a head that looks 35 degrees down`() {
+        val wrongMap = HeadGestureConfig.of(Sensitivity.NORMAL, Axis.X, 1, Axis.Y)
+        assertEquals(listOf(HeadGesture.NOD), withMap(wrongMap, measured(0.0).samples(nod())))
+        assertEquals(emptyList<HeadGesture>(), withMap(wrongMap, measured(35.0).samples(nod())))
     }
 
     @Test fun `a nod of four cycles is one NOD when the ear axis is not known`() {

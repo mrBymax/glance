@@ -10,9 +10,15 @@ import kotlin.math.sqrt
  * rate about that direction. The pitch rate is the rate about the ear axis: the pitch axis of the config, laid
  * level. So a wrong yaw axis in the config, or a head that leans, cannot turn a shake into a nod.
  *
- * When the pitch axis of the config points to the sky, the axis map is wrong, and the ear axis is not known.
- * The pitch rate is then the rate about the level axis of the movement itself. That axis is set when a movement
- * starts from rest, so a movement to the shoulder also counts as a pitch in this case.
+ * The pitch axis of the config must be the axis from ear to ear of the glasses. A nod turns the head about that
+ * axis, so the axis stays level when the head looks down, and a nod from a head that looks 60 degrees down counts
+ * as one from a level head. With another axis the rule fails: an axis to the ground comes 30 degrees from level
+ * when the head looks 30 degrees down, and it then counts as the ear axis while it is the front axis.
+ *
+ * When the pitch axis of the config is less than 30 degrees from the sky, the axis map is wrong or the head lies
+ * on its side, and the ear axis is not known. The pitch rate is then the rate about the level axis of the movement
+ * itself. That axis is set when a movement starts from rest, so a movement to the shoulder also counts as a pitch
+ * in this case.
  *
  * A sample with no accelerometer reading uses the two axes of the config.
  */
@@ -92,7 +98,7 @@ class HeadAxes(private val config: HeadGestureConfig) {
         const val MIN_GRAVITY = 0.5
         const val GRAVITY_S = 1.0
 
-        /** The pitch axis of the config, laid level, has at least this length when it is the ear axis: 60 degrees from the sky. */
+        /** The pitch axis of the config, laid level, has at least this length when it is the ear axis: 30 degrees from the sky or more. */
         const val MIN_EAR_AXIS = 0.5
         const val MOVE_AXIS_REST_S = 0.3
     }

@@ -12,11 +12,21 @@ object ProbeDecisions {
     const val INPUTS = true
     const val SPEECH = false
     val INPUT_SOURCES: Set<InputSource> = setOf(InputSource.CAPTOUCH)
-    val PITCH_AXIS = Axis.X
 
-    /** The sign of the pitch rate when the head starts to move down. */
+    /**
+     * The gyroscope axis from ear to ear. Four motion recordings of 2026-11-14 gave this map: the accelerometer
+     * reads gravity on -x, so x points to the ground, and each nod is a turn about y.
+     */
+    val PITCH_AXIS = Axis.Y
+
+    /**
+     * The sign of the pitch rate when the head starts to move down. A positive rate about y moves gravity to -z,
+     * the reading of a head that looks down, and the fast first stroke of each recorded nod is positive.
+     */
     const val PITCH_DOWN_SIGN = 1
-    val YAW_AXIS = Axis.Y
+
+    /** The axis to the sky of a level head. It counts only for a sample with no accelerometer reading. */
+    val YAW_AXIS = Axis.X
     const val MOTION_NEEDS_STREAM = true
 
     /** True if a line must play on the phone speaker, because a line in the glasses disturbs the stream. */
