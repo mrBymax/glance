@@ -58,16 +58,18 @@ it('R8, R9: after a no, the code gets no prompt while it stays in view and for 1
   h.advance(T.excludeAfterNoMs); h.barcode(found(NUTELLA));
   expect(h.state.prompt).toMatchObject({ productId: NUTELLA });
 });
-it('R2: a scanned product replaces the pending product, and a product in sight replaces a scanned one', () => {
+it('R2: a scanned product replaces the pending product at once, and a product in sight replaces a scanned one after 2 results in a row', () => {
   const h = scanned();
   h.see(OAT); h.barcode(found(NUTELLA));
   expect(h.events()).toEqual(['glance.cleared', 'glance.pending']);
+  h.see(RYE);
+  expect(h.state.prompt).toMatchObject({ productId: NUTELLA });
   h.see(RYE);
   expect(h.state.prompt).toMatchObject({ productId: RYE });
 });
 it('R2: a barcode brings back the product that a prompt just replaced, because a barcode is sure', () => {
   const h = scanned();
-  h.barcode(found(NUTELLA)); h.see(OAT);
+  h.barcode(found(NUTELLA)); h.see(OAT); h.see(OAT);
   expect(h.state.prompt).toMatchObject({ productId: OAT });
   h.advance(150); h.barcode(found(NUTELLA));
   expect(h.state.prompt).toMatchObject({ productId: NUTELLA });

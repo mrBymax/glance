@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { EMPTY_CART, TIMING as T } from '@glance/shared';
 import { NO_RESULT, type RecognitionResult, RecognitionResultSchema } from '../recognition/result';
-import { GO_BACK_AFTER_MS } from './glance';
+import { GO_BACK_AFTER_MS, SWITCH_WITHIN_MS } from './glance';
 import { SAME_TEXT_MS, UNSOLICITED_GAP_MS } from './guard';
 import { BARISTA, CRISPS, type Harness, KIOSK, OAT, RYE, harness } from './harness';
 import { LINE_DEFAULTS, say } from './say';
@@ -34,44 +34,110 @@ it('R1: a product that comes back after it left the view gets a new prompt', () 
   expect(h.events()).toEqual(['glance.cleared', 'glance.pending']);
   expect(h.state.prompt!.id).toBe('p-0002');
 });
-it('R2: a new product in view replaces the pending product', () => {
+it('R2: a new product in view replaces the pending product after 2 results in a row', () => {
   const h = harness();
-  h.see(OAT); h.see(RYE);
+  h.see(OAT); h.advance(150); h.see(RYE);
+  expect(h.effects).toEqual([]);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+  h.advance(150); h.see(RYE);
   expect(h.events()).toEqual(['glance.cleared', 'glance.pending']);
   expect(h.event('glance.cleared')).toEqual({ type: 'glance.cleared', promptId: 'p-0001' });
   expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: RYE });
 });
-it('R2: results that change between two products give two prompts, and do not go back and forth', () => {
+it('R2: one stray result never replaces a prompt, while its line plays and after it', () => {
+  const h = harness();
+  h.see(OAT);
+  h.advance(500); h.see(RYE);
+  h.advance(150); h.see(OAT);
+  h.done();
+  h.advance(150); h.see(RYE);
+  h.advance(150); h.result({ status: 'unsure' });
+  h.advance(150); h.see(RYE);
+  expect(h.all.filter((e) => e.type === 'speak')).toHaveLength(1);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+});
+it('R2: a result with no name, or with the name of the prompt, between two results starts the count again', () => {
+  for (const between of [{ status: 'none' }, { status: 'unsure' }, { status: 'unknown' }, { status: 'identified', productId: OAT }] as const) {
+    const h = harness();
+    h.see(OAT); h.advance(150); h.see(RYE);
+    h.advance(150); h.result(between);
+    h.advance(150); h.see(RYE);
+    expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+    h.advance(150); h.see(RYE);
+    expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: RYE });
+  }
+});
+it('R2: the 2 results must come inside 1.5 seconds', () => {
   const h = harness();
   h.see(OAT); h.advance(150); h.see(RYE);
+  h.at(150 + SWITCH_WITHIN_MS + 1); h.see(RYE);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+  h.advance(SWITCH_WITHIN_MS); h.see(RYE);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: RYE });
+});
+it('R2: 2 results in a row for 2 other products do not replace the prompt', () => {
+  const h = harness();
+  h.see(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(CRISPS);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+  h.advance(150); h.see(CRISPS);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: CRISPS });
+});
+it('R2: results that change between two products keep the first prompt', () => {
+  const h = harness();
+  h.see(OAT);
   // 9 seconds of frames, 150 ms apart.
   for (let frame = 0; frame < 30; frame += 1) {
-    h.advance(150); h.see(OAT);
-    expect(h.effects).toEqual([]);
     h.advance(150); h.see(RYE);
     expect(h.effects).toEqual([]);
+    h.advance(150); h.see(OAT);
+    expect(h.effects).toEqual([]);
+  }
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+});
+it('R2: results that change between two products in pairs give two prompts, and do not go back and forth', () => {
+  const h = harness();
+  h.see(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(RYE);
+  for (let frame = 0; frame < 15; frame += 1) {
+    for (const productId of [OAT, OAT, RYE, RYE]) {
+      h.advance(150); h.see(productId);
+      expect(h.effects).toEqual([]);
+    }
   }
   expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: RYE });
 });
 it('R2: the product that a prompt replaced gets its prompt again when sight did not name the other one for 1 second', () => {
   const h = harness();
-  h.see(OAT); h.advance(150); h.see(RYE);
-  h.advance(GO_BACK_AFTER_MS - 1); h.see(OAT);
+  h.see(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(RYE);
+  h.advance(GO_BACK_AFTER_MS - 151); h.see(OAT);
+  h.advance(150); h.see(OAT);
   expect(h.effects).toEqual([]);
   h.advance(1); h.see(OAT);
   expect(h.state.prompt).toMatchObject({ id: 'p-0003', productId: OAT });
   // The same holds the other way now.
-  h.advance(150); h.see(RYE);
+  h.advance(150); h.see(RYE); h.advance(150); h.see(RYE);
   expect(h.effects).toEqual([]);
 });
-it('R2: a third product replaces the prompt at once', () => {
+it('R2: a barcode of another product replaces the prompt at once', () => {
   const h = harness();
-  h.see(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(CRISPS);
-  expect(h.state.prompt).toMatchObject({ id: 'p-0003', productId: CRISPS });
+  h.see(OAT); h.advance(150);
+  h.barcode({ kind: 'product', productId: RYE });
+  expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: RYE });
+});
+it('R2: a prompt that a barcode or a label match opened keeps its product against one result by sight', () => {
+  const h = harness();
+  h.barcode({ kind: 'product', productId: RYE });
+  // The test of 2026-11-14: a label match named the can in the hand, and 0.5 seconds later one frame named a can on the table.
+  h.advance(500); h.see(OAT);
+  expect(h.effects).toEqual([]);
+  h.advance(150); h.result({ status: 'unsure' });
+  h.advance(150); h.see(OAT);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: RYE });
+  h.advance(150); h.see(OAT);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0002', productId: OAT });
 });
 it('R2: the product that a prompt replaced gets its prompt again at once when the shopper answered the other one', () => {
   const h = harness();
-  h.see(OAT); h.advance(150); h.see(RYE);
+  h.see(OAT); h.advance(150); h.see(RYE); h.advance(150); h.see(RYE);
   h.done(); h.no();
   h.advance(150); h.see(OAT);
   expect(h.state.prompt).toMatchObject({ productId: OAT });
@@ -121,8 +187,12 @@ it('gives an aim hint at most one time each 5 seconds', () => {
   h.advance(1); h.result({ status: 'unsure', aimHint: 'up' });
   expect(h.lines()).toEqual(['glance.partial']);
 });
-const hintsOf = (h: ReturnType<typeof harness>) =>
-  [OAT, RYE, BARISTA, CRISPS].map((id) => { h.see(id); return (h.speak()!.line as { hint: boolean }).hint; });
+// The first product gets its prompt with one result. Each other one replaces a prompt, which needs 2 results in a row.
+const hintsOf = (h: ReturnType<typeof harness>) => [OAT, RYE, BARISTA, CRISPS].map((id) => {
+  h.see(id);
+  if (h.speak() === undefined) h.see(id);
+  return (h.speak()!.line as { hint: boolean }).hint;
+});
 it('adds the yes hint to the first two glance prompts only', () => {
   expect(hintsOf(harness())).toEqual([true, true, false, false]);
 });
@@ -159,6 +229,41 @@ it('says that it cannot tell look-alike products apart, one time for each appear
   expect(h.effects).toEqual([]);
   h.advance(500); h.see(BARISTA);
   expect(h.state.prompt).toMatchObject({ productId: BARISTA });
+});
+it('keeps a prompt that a barcode or a label match opened when sight is not sure of its product', () => {
+  const h = harness();
+  h.barcode({ kind: 'product', productId: OAT });
+  h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.effects).toEqual([]);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+  h.done(); h.yes();
+  expect(h.state.cart.items.map((item) => item.productId)).toEqual([OAT]);
+});
+it('a barcode makes the prompt of sight for its product a sure prompt', () => {
+  const h = harness();
+  h.see(OAT); h.advance(150);
+  h.barcode({ kind: 'product', productId: OAT });
+  expect(h.effects).toEqual([]);
+  h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+});
+it('keeps a prompt that the still of the second look opened when a stream frame cannot tell its product apart', () => {
+  const h = harness();
+  h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  h.advance(3000);
+  h.send({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: OAT, confidence: 1 }, still: true });
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+  // The stream frame is smaller than the still, so it still cannot read the flavor.
+  h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.effects).toEqual([]);
+  expect(h.state.prompt).toMatchObject({ id: 'p-0001', productId: OAT });
+});
+it('a prompt of sight that follows a sure prompt is not sure', () => {
+  const h = harness();
+  h.barcode({ kind: 'product', productId: RYE });
+  h.advance(150); h.see(OAT); h.advance(150); h.see(OAT);
+  h.advance(150); h.result({ status: 'ambiguous', candidates: [OAT, BARISTA] });
+  expect(h.events()).toEqual(['glance.cleared', 'glance.ambiguous']);
 });
 it('ends a prompt for a product that the model is no longer sure of', () => {
   const h = harness();

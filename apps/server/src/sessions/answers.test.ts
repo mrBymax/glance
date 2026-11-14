@@ -10,7 +10,7 @@ const HEAD_BOUND_MS = T.headWindowMs + HEAD_MAX_EXTRA_MS + HEAD_LATE_MS;
 it('R3: a yes with the ID of a replaced prompt adds nothing', () => {
   const h = harness();
   h.see(OAT); h.done(); const old = h.state.prompt!.id;
-  h.see(RYE); h.done();
+  h.see(RYE); h.see(RYE); h.done();
   h.yes('voice', old);
   expect(h.state.cart).toEqual(EMPTY_CART);
   h.yes('voice');
@@ -44,7 +44,7 @@ it('R4: a late nod does not count for a prompt that was replaced', () => {
   const h = harness();
   h.see(OAT); h.done(); const old = h.state.prompt!.id;
   h.hold(OAT, T.headWindowMs);
-  h.see(RYE); h.done();
+  h.see(RYE); h.see(RYE); h.done();
   h.yes('head', old);
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
@@ -256,7 +256,7 @@ it('R12: an undo after the unit left the cart by another way removes the unit be
 it('a yes with no product prompt to answer says nothing', () => {
   const ended = harness();
   ended.see(OAT); ended.done(); const old = ended.state.prompt!.id;
-  ended.see(RYE); ended.done();
+  ended.see(RYE); ended.see(RYE); ended.done();
   ended.yes('head', old);
   expect(ended.effects).toEqual([]);
   expect(ended.verdict).toEqual({ kind: 'yes', source: 'head', promptId: old, accepted: false, reason: 'other-prompt' });

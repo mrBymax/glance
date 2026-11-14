@@ -92,7 +92,7 @@ it('a product prompt, a checkout line, and a state line play inside the gap and 
   h.see(OAT);
   expect(h.lines()).toEqual(['glance.new']);
   h.advance(100);
-  h.see(BARISTA);
+  h.see(BARISTA); h.see(BARISTA);
   expect(h.lines()).toEqual(['glance.new']);
   h.advance(100);
   h.send({ type: 'device.state', state: { ...STREAMING, battery: 15 } });

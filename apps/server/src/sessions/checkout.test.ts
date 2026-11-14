@@ -135,7 +135,7 @@ it('R17: a product held up during checkout suspends it, and the pay prompt retur
 });
 it('R17: a second product during a suspended checkout gives no second suspended event', () => {
   const h = full();
-  h.see(BARISTA); h.see(OAT);
+  h.see(BARISTA); h.see(OAT); h.see(OAT);
   expect(h.events()).toEqual(['glance.cleared', 'glance.pending']);
   expect(h.state.checkout).toMatchObject({ step: 'suspended', suspendedBy: OAT });
 });
@@ -424,7 +424,7 @@ it('the pay prompt after the spot check ends the prompt of another product', () 
   const h = spot();
   h.see(OAT);
   const promptId = h.state.prompt!.id;
-  h.advance(500); h.see(RYE);
+  h.advance(500); h.see(RYE); h.see(RYE);
   expect(h.lines()).toEqual(['spotcheck.thanks']);
   h.advance(T.viewMs); h.kiosk({ spotCheck: true });
   expect(h.events()).toEqual(['glance.cleared', 'checkout.offered']);

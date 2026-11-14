@@ -24,11 +24,14 @@ it('a gap of the view time gives a new prompt, and the old prompt ID adds nothin
   h.yes('head', first);
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
-it('a one-frame change replaces the prompt, and each yes adds only the product of its own prompt', () => {
+it('a one-frame change keeps the prompt, a change of 2 frames replaces it, and each yes adds only the product of its own prompt', () => {
   const h = harness();
   h.see(OAT); h.done(); const p1 = h.state.prompt!.id;
+  h.at(350); h.see(BARISTA);
+  expect(h.state.prompt!.id).toBe(p1);
   h.at(500); h.see(BARISTA); const p2 = h.state.prompt!.id;
   // The first product takes the prompt back when sight did not name the other one for 1 second.
+  h.at(850); h.see(OAT);
   h.at(1000); h.see(OAT);
   expect(h.state.prompt!.id).toBe(p2);
   h.at(1500); h.see(OAT); const p3 = h.state.prompt!.id;
@@ -41,6 +44,7 @@ it('a one-frame change replaces the prompt, and each yes adds only the product o
 it('a late prompt.done for a replaced prompt finishes no prompt', () => {
   const h = harness();
   h.see(OAT); const p1 = h.state.prompt!.id;
+  h.at(350); h.see(RYE);
   h.at(500); h.see(RYE);
   h.send({ type: 'prompt.done', promptId: p1 });
   expect(h.state.prompt!.doneAt).toBeNull();
