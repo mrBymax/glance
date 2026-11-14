@@ -43,8 +43,8 @@ async function openDevice() {
       });
     });
   const sendJson = (message) => socket.send(JSON.stringify(message));
-  const sendFrame = (seq) => {
-    const header = Buffer.from(JSON.stringify({ seq, ts: Date.now(), w: 432, h: 768, blurred: false }), 'utf8');
+  const sendFrame = (seq, kind) => {
+    const header = Buffer.from(JSON.stringify({ seq, ts: Date.now(), w: 432, h: 768, blurred: false, ...(kind ? { kind } : {}) }), 'utf8');
     const length = Buffer.alloc(4);
     length.writeUInt32BE(header.length, 0);
     socket.send(Buffer.concat([length, header, Buffer.from([0xff, 0xd8, 0xff, 0xd9])]));
@@ -146,6 +146,11 @@ test('skips a product, replaces a prompt that got no answer, and runs the keyboa
     assert.equal((await device.next()).t, 'biometric.request');
     server.command('rest');
     assert.equal((await device.next()).t, 'session.rest');
+    server.command('cancel');
+    assert.deepEqual((await device.next()).event, { type: 'checkout.cancelled' });
+    server.command('slow');
+    assert.deepEqual((await device.next()).event, { type: 'error', code: 'recognition.slow', message: 'Recognition is slow right now.' });
+    assert.equal((await device.next()).text, 'Recognition is slow right now.');
 
     device.sendJson({ t: 'intent', kind: 'stop', source: 'phone' });
     assert.equal((await device.next()).text, 'Camera off.');
@@ -165,4 +170,26 @@ test('drop closes the socket and refuses a new one for the drop time', async () 
   const again = await openDevice();
   assert.equal((await again.next()).t, 'snapshot');
   again.socket.terminate();
+});
+
+test('a test on the phone runs a command and reads the log through HTTP', async () => {
+  const device = await openDevice();
+  try {
+    await device.next();
+    assert.equal((await fetch(`${base}/debug/command/bio`, { method: 'POST' })).status, 204);
+    assert.equal((await device.next()).t, 'biometric.request');
+    device.sendJson({ t: 'biometric.result', ok: true });
+    device.sendFrame(1, 'still');
+    // The answer to a later message shows that the server read the two messages before it.
+    device.sendJson(deviceState('streaming'));
+    await device.next();
+
+    const lines = await (await fetch(`${base}/debug/log`)).json();
+    assert.ok(lines.includes('command bio'));
+    assert.ok(lines.includes('biometric.result ok=true'));
+    assert.ok(lines.some((line) => /^frame seq=1 .* kind=still /.test(line)));
+    assert.equal((await fetch(`${base}/debug/command/nothing`, { method: 'POST' })).status, 404);
+  } finally {
+    device.socket.terminate();
+  }
 });

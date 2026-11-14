@@ -16,6 +16,8 @@ import com.metaglance.core.gesture.GyroSample
 import com.metaglance.core.gesture.GyroScript
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.Sensitivity
+import com.metaglance.core.state.DatDon
+import com.metaglance.core.state.DatHinge
 import com.metaglance.core.state.DatLinkState
 import com.metaglance.core.state.DatRegistration
 import com.metaglance.core.state.DatSession
@@ -79,9 +81,14 @@ abstract class MockDeviceKitTestCase<T : Activity>(activityClass: Class<T>) {
     /** Pairs Ray-Ban Meta glasses that are on, open, and on the face, and waits until the app sees them. */
     protected fun pairGlasses() {
         assertTrue("The pairing failed.", onMain { glance.mockGlasses.pair() })
-        waitUntil("the app sees connected glasses", LINK_MS, { glance.datLink.snapshot.value.toString() }) {
+        // The link comes first. MockDeviceKit reports the hinge and the face in a later update of the device.
+        waitUntil("the app sees connected glasses that are open and on the face", LINK_MS, { glance.datLink.snapshot.value.toString() }) {
             val snapshot = glance.datLink.snapshot.value
-            snapshot.registration == DatRegistration.REGISTERED && snapshot.device?.link == DatLinkState.CONNECTED
+            val device = snapshot.device
+            snapshot.registration == DatRegistration.REGISTERED &&
+                device?.link == DatLinkState.CONNECTED &&
+                device.don == DatDon.DONNED &&
+                device.hinge == DatHinge.OPEN
         }
     }
 

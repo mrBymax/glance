@@ -163,8 +163,20 @@ class DatLink(
     /** Counts the calls of `initialize`. An answer to a permission check of an earlier count is out of date. */
     private var initializeCount = 0
 
+    /**
+     * Counts the answers to the requests of the app for each permission. A check of that permission that started
+     * before an answer is out of date.
+     */
+    private val requestAnswers = IntArray(Permission.entries.size)
+
     /** True after `initialize` started the SDK, or found MockDeviceKit enabled. */
     val ready: Boolean get() = initialized
+
+    /**
+     * True when a session attaches Speech. `ProbeDecisions.SPEECH` is the result of the probe on the real glasses.
+     * Mock glasses always have Speech, so that mock mode has the voice input before the probe ran.
+     */
+    val usesSpeech: Boolean get() = ProbeDecisions.SPEECH || _snapshot.value.mock
 
     /** A compatibility that `debugOverride` set in place of the value of the SDK. */
     private var compatibilityOverride: DatCompatibility? = null
@@ -238,14 +250,23 @@ class DatLink(
         if (!requireInitialized("permissions")) return
         val count = initializeCount
         for (permission in Permission.entries) {
+            val answers = requestAnswers[permission.ordinal]
             val result = Wearables.checkPermissionStatus(permission)
             // The check suspends. A change between mock glasses and the SDK in that time makes its answer wrong.
             if (count != initializeCount) return
-            onPermissionResult(permission, result)
+            // The answer to a request of the app is newer than a check that started before it.
+            if (answers != requestAnswers[permission.ordinal]) continue
+            applyPermissionResult(permission, result)
         }
     }
 
+    /** Takes the answer to a permission request of the app. */
     fun onPermissionResult(permission: Permission, result: DatResult<PermissionStatus, PermissionError>) {
+        requestAnswers[permission.ordinal] += 1
+        applyPermissionResult(permission, result)
+    }
+
+    private fun applyPermissionResult(permission: Permission, result: DatResult<PermissionStatus, PermissionError>) {
         result.fold(
             onSuccess = { status -> onPermissionResult(permission, status) },
             onFailure = { error, _ ->
@@ -271,6 +292,8 @@ class DatLink(
             }
         }
         log("$label permission $value")
+        // The shopper can allow the microphone while a session runs.
+        if (permission == Permission.MICROPHONE && value == DatPermission.GRANTED) current?.onMicrophoneGranted()
     }
 
     /**
@@ -296,6 +319,8 @@ class DatLink(
         return Wearables.createSession(SpecificDeviceSelector(id)).fold(
             onSuccess = { session ->
                 frameCount = 0
+                // The state lines can miss a state that lasts a very short time, so each new session has this line.
+                log("session created")
                 val run = SessionRun(session, withCamera, autoAttach)
                 current = run
                 run.start()
@@ -676,8 +701,13 @@ class DatLink(
                 autoAttached = true
                 if (ProbeDecisions.MOTION) attachMotion()
                 if (ProbeDecisions.INPUTS) attachInputs(ProbeDecisions.INPUT_SOURCES)
-                if (ProbeDecisions.SPEECH) attachSpeech()
+                if (usesSpeech) attachSpeech()
             }
+        }
+
+        /** Attaches Speech to a stream that started before the microphone permission was granted. */
+        fun onMicrophoneGranted() {
+            if (autoAttached && speech == null && !stopRequested && usesSpeech) attachSpeech()
         }
 
         fun attachMotion() {

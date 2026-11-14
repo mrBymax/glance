@@ -38,6 +38,10 @@ class GlanceApp : Application() {
         getSystemService(Vibrator::class.java)?.vibrate(VibrationEffect.createWaveform(timings, NO_REPEAT))
     }
 
+    /** Confirms a payment above 50 EUR. The instrumented tests replace it, because nobody can touch the test phone. */
+    @Volatile
+    var paymentPrompt: PaymentPrompt = BiometricPaymentPrompt()
+
     val datLink: DatLink by lazy { DatLink(this, scope) { datLog(it) } }
     val mockGlasses: MockGlassesController by lazy { MockGlassesController(this) }
     val profileStore: ProfileStore by lazy { ProfileStore(this) }

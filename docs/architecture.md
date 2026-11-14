@@ -230,6 +230,73 @@ sequenceDiagram
 - A `speech.final` outside the window that is no command has no effect.
 - In fake mode no call goes to Gemini, and each question gets the answer "I do not have that information."
 
+### Answers from the other inputs
+
+The head is one of four inputs of the Android app. Each other input sends its answer on the same socket.
+
+```mermaid
+sequenceDiagram
+  participant Glasses as Glasses, or mock glasses
+  participant Keys as Volume keys of the phone
+  participant App as Android app
+  participant Socket as Device socket
+  participant Runtime as SessionRuntime
+  Note over App: the prompt p-0001 is finished: prompt.done went out
+  alt touchpad
+    Glasses->>App: InputEvent.Select, a double tap
+    App->>Socket: intent yes, source touch, promptId p-0001
+    Socket->>Runtime: dispatch(intent)
+  else voice
+    Glasses->>App: final transcript "add"
+    Note over App: VoiceInput drops a result while a line plays, and for 500 ms after it
+    App->>Socket: speech.final with text, confidence, locale
+    Note over Socket: parseVoiceCommand maps the text to a command
+    Socket->>Runtime: dispatch(intent yes, source voice, ID of the last finished prompt)
+  else volume keys, with mainYes key in the profile
+    Keys->>App: volume up
+    App->>Socket: intent yes, source key, promptId p-0001
+    Socket->>Runtime: dispatch(intent)
+  end
+  Note over Runtime: step accepts the yes while the prompt is current and finished (R3, R5)
+```
+
+- A double tap carries the ID of the last finished prompt, also after that prompt ended, and the server decides if it counts. A swipe sends `intent repeat` with the source `touch`, and the server sends its last line again.
+- The app sends each final speech result as `speech.final` and maps no word to an intent. The server drops a result with a confidence below 0.5 and a text that is no command.
+- Volume up is a yes and volume down is a no, only when `mainYes` of the profile is `key` and a prompt is current. In each other case the key changes the volume of the phone.
+- Speech needs the microphone permission of the glasses. The app asks for it when the page sets `mainYes` to `voice`, and when the page sends the intent `ask`.
+
+### The fingerprint and the still photo in the Android app
+
+Two extras have their Android side: the fingerprint above 50 EUR, and the sharp second look. Each one starts with a message of the server.
+
+```mermaid
+sequenceDiagram
+  participant Glasses as Glasses, or mock glasses
+  participant Shopper
+  participant App as Android app
+  participant Socket as Device socket
+  alt fingerprint above 50 EUR
+    Socket->>App: biometric.request
+    App->>Shopper: biometric prompt of Android, "Confirm payment"
+    Shopper-->>App: fingerprint, face, or screen lock
+    App->>Socket: biometric.result with ok true
+    Note over App: a cancel and each error of the prompt send ok false
+  else sharp second look
+    Socket->>App: event glance.ambiguous
+    Note over App: StillPolicy allows one capture at a time, and one each 5 seconds
+    App->>Glasses: capturePhoto
+    Glasses-->>App: photo
+    Note over App: crop, long side 1440 at most, each face pixelated, JPEG
+    App->>Socket: frame with kind still and blurred true
+  end
+```
+
+- A phone with no screen lock and no biometric shows no prompt. The app sends `ok: false`, and the page gets the `error` event `native.biometric_unavailable`.
+- The app closes an open prompt when the checkout ends: at `checkout.cancelled` and at `session.end`.
+- The contract has no request for a still, so the event `glance.ambiguous` is the signal. If face detection fails on the phone, the still does not leave the phone.
+
+The other answers use the same messages. A no on a new product skips it, and recognition excludes it for 10 seconds. A no in the 8 seconds after an add removes that unit. The server README lists each rule from R1 to R24.
+
 ## Phases of a session
 
 `PhaseSchema` in `packages/shared/src/events.ts` names the phases. The server holds the phase in `SessionState.phase` and sends each change as the event `session.state`, with the value `cameraOn`.
@@ -313,3 +380,14 @@ stateDiagram-v2
 - No native speaker has read the Italian lines of the server. The products of `apps/server/catalog/catalog.dev.json` have no Italian texts, except the oat drink.
 - The phone UI has an Italian table, and no native speaker has read it. In Italian the page text is Italian. The words of Astryx itself and the debug panel stay English.
 - The Display HUD in `apps/display-pow` is a mockup for a browser and the Display simulator. Nobody checked it in the simulator or on glasses with a display.
+
+- No path of the server checks the token of a session or of a kiosk.
+- The server never sends the events `glance.ambiguous`, `budget.exceeded`, and `checkout.spotcheck`. It sends two `error` events: `kiosk.busy` for a kiosk that another session holds, and `recognition.slow` after 3 failed recognition calls in a row, which never comes in fake mode. Each other `error` event comes from the Android app, with a code that starts with `native.`.
+- Nobody has run the touchpad, the voice, and the volume keys with the real glasses. The app has each path, and the tests use mock glasses. With the real glasses a session attaches Speech only after the probe sets `ProbeDecisions.SPEECH` to true.
+- The intent `ask` has no effect on the server.
+- The server never sends `biometric.request`, and it drops `biometric.result`. The Android app has its side of both messages, and its tests use the fake server of the app.
+- The server does not wait for a frame with `kind: still`. The Android app sends a still after each `glance.ambiguous`, and its tests use the fake server of the app.
+- Nobody has put a finger on the payment prompt, and nobody has taken a still with the real glasses.
+- The mirror page, the landing page, and the privacy page of the website are placeholders. `apps/display-pow` is empty.
+- The phone UI has the session screen only. No screen shows the pay prompt or the receipt.
+- The server has English lines only.

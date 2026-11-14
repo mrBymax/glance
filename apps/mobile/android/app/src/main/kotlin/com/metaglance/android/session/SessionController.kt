@@ -16,6 +16,7 @@ import com.metaglance.android.dat.DatLink
 import com.metaglance.android.dat.ProbeDecisions
 import com.metaglance.android.pipeline.FaceFinder
 import com.metaglance.android.pipeline.FramePipeline
+import com.metaglance.android.pipeline.StillPhoto
 import com.metaglance.core.audio.SpeechQueue
 import com.metaglance.core.contract.Codec
 import com.metaglance.core.contract.DeviceState
@@ -29,14 +30,22 @@ import com.metaglance.core.contract.NativeToPage
 import com.metaglance.core.contract.PageToNative
 import com.metaglance.core.contract.Profile
 import com.metaglance.core.contract.Profiles
+import com.metaglance.core.contract.ServerEvent
 import com.metaglance.core.contract.ServerToDevice
 import com.metaglance.core.frame.FrameHeader
+import com.metaglance.core.frame.FrameKind
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
+import com.metaglance.core.image.StillPolicy
 import com.metaglance.core.image.UploadGate
 import com.metaglance.core.input.HeadInput
+import com.metaglance.core.input.KeyInput
 import com.metaglance.core.input.MainYesResolver
+import com.metaglance.core.input.PaymentConfirm
+import com.metaglance.core.input.PromptOutcome
 import com.metaglance.core.input.PromptTracker
+import com.metaglance.core.input.TouchInput
+import com.metaglance.core.input.VoiceInput
 import com.metaglance.core.net.DeviceSocket
 import com.metaglance.core.net.GlanceApi
 import com.metaglance.core.net.Scheduler
@@ -44,6 +53,7 @@ import com.metaglance.core.state.ConnectionAnnouncer
 import com.metaglance.core.state.DatDon
 import com.metaglance.core.state.DatFault
 import com.metaglance.core.state.DatLinkState
+import com.metaglance.core.state.DatPermission
 import com.metaglance.core.state.DatSession
 import com.metaglance.core.state.DatSnapshot
 import com.metaglance.core.state.DatStream
@@ -56,6 +66,7 @@ import com.metaglance.core.state.StopCauses
 import com.metaglance.core.state.StopFacts
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -124,6 +135,11 @@ class SessionController(
         onPromptDone = ::onPromptDone
     )
     private val announcer = ConnectionAnnouncer()
+    private val paymentConfirm = PaymentConfirm()
+    private var stillPolicy = StillPolicy()
+
+    /** The number of the last upload. The frames of the stream and the stills share it, on two threads. */
+    private val uploadSeq = AtomicInteger()
     private var headInput = newHeadInput()
 
     private var page: ((NativeToPage) -> Unit)? = null
@@ -182,6 +198,14 @@ class SessionController(
                 headInput.onSample(sample, SystemClock.elapsedRealtime(), profile)?.let { send(it) }
             }
         }
+        // The answer of the touchpad carries the last finished prompt, and the server decides if it counts.
+        scope.launch { dat.touches.collect { send(TouchInput.intentFor(it, prompts.lastFinishedPromptId())) } }
+        // The server maps the words to intents. A result while a line plays is the line itself, not the shopper.
+        scope.launch {
+            dat.transcripts.collect { transcript ->
+                VoiceInput.onTranscript(transcript, speech.isMuted(SystemClock.elapsedRealtime()))?.let { send(it) }
+            }
+        }
         scope.launch {
             while (true) {
                 delay(TICK_MS)
@@ -194,6 +218,8 @@ class SessionController(
     }
 
     fun attachPage(send: (NativeToPage) -> Unit, activity: MainActivity) {
+        // The payment prompt belongs to the old activity, and its outcome can get lost with that activity.
+        if (this.activity !== activity) abandonPaymentPrompt()
         page = send
         this.activity = activity
         // A new activity has a new page, and that page is not in pocket mode.
@@ -204,6 +230,7 @@ class SessionController(
     /** A new activity can attach before the old one is destroyed. So only the attached activity detaches. */
     fun detachPage(activity: MainActivity) {
         if (this.activity !== activity) return
+        abandonPaymentPrompt()
         page = null
         this.activity = null
     }
@@ -216,7 +243,11 @@ class SessionController(
                 send(DeviceToServer.Intent(IntentKind.STOP, IntentSource.PHONE))
                 stopDat()
             }
-            is PageToNative.Intent -> send(DeviceToServer.Intent(message.kind, IntentSource.PHONE, message.promptId))
+            is PageToNative.Intent -> {
+                // The question of the shopper comes through the microphone of the glasses.
+                if (message.kind == IntentKind.ASK) requestMicrophone()
+                send(DeviceToServer.Intent(message.kind, IntentSource.PHONE, message.promptId))
+            }
             is PageToNative.CartEdit -> send(DeviceToServer.CartEdit(message.productId, message.qty))
             is PageToNative.ProfileSet -> onProfilePatch(message.patch)
             is PageToNative.DataDelete -> deleteData()
@@ -233,9 +264,16 @@ class SessionController(
         }
     }
 
-    /** The volume keys are no input yet. */
-    @Suppress("UNUSED_PARAMETER")
-    fun onVolumeKey(up: Boolean): Boolean = false
+    /**
+     * A press of a volume key. Returns true when the key was an answer to the current prompt, so the caller must
+     * not change the volume. Up is a yes, and down is a no.
+     */
+    fun onVolumeKey(up: Boolean): Boolean {
+        val promptId = prompts.currentPromptId()
+        val kind = KeyInput.intentFor(up, profile.mainYes, promptId) ?: return false
+        send(DeviceToServer.Intent(kind, IntentSource.KEY, promptId))
+        return true
+    }
 
     /** Sends an `error` event to the page. The activity uses it for a failure that it sees itself. */
     fun reportError(error: NativeError) = sendError(error)
@@ -449,7 +487,11 @@ class SessionController(
             }
             is ServerToDevice.Event -> {
                 toPage(NativeToPage.Event(message.event))
-                Codec.decodeServerEvent(message.event)?.let(prompts::onEvent)
+                val event = Codec.decodeServerEvent(message.event)
+                event?.let(prompts::onEvent)
+                // The checkout ended on the server, for example after 30 seconds with no kiosk code in view.
+                if (event is ServerEvent.CheckoutCancelled) closePaymentPrompt()
+                if (event is ServerEvent.GlanceAmbiguous) takeStill()
             }
             is ServerToDevice.Snapshot -> {
                 toPage(NativeToPage.Snapshot(message.session))
@@ -458,11 +500,48 @@ class SessionController(
             // The cart stays on the server, and the socket stays open. The next start makes a new DAT session.
             is ServerToDevice.SessionRest -> stopDat()
             is ServerToDevice.SessionEnd -> onServerSessionEnd()
-            is ServerToDevice.BiometricRequest -> log("biometric.request has no handler yet")
+            is ServerToDevice.BiometricRequest -> onBiometricRequest()
         }
     }
 
+    /** The server asks for it before a payment above 50 EUR. Each request gets one `biometric.result`. */
+    private fun onBiometricRequest() {
+        val activity = activity
+        if (activity == null) {
+            log("biometric.request: no screen shows the prompt")
+            send(DeviceToServer.BiometricResult(false))
+            return
+        }
+        when (paymentConfirm.onRequest(activity.paymentAvailable())) {
+            PaymentConfirm.Start.SHOW -> activity.confirmPayment(::onPaymentOutcome)
+            PaymentConfirm.Start.ALREADY_OPEN -> log("biometric.request: the prompt is open")
+            PaymentConfirm.Start.UNAVAILABLE -> {
+                send(DeviceToServer.BiometricResult(false))
+                sendError(NativeErrors.BIOMETRIC_UNAVAILABLE)
+            }
+        }
+    }
+
+    private fun onPaymentOutcome(outcome: PromptOutcome) {
+        val ok = paymentConfirm.onOutcome(outcome) ?: return
+        log("payment prompt: ok=$ok")
+        send(DeviceToServer.BiometricResult(ok))
+    }
+
+    /** Closes an open payment prompt. The prompt then reports an error, and the app sends `ok: false`. */
+    private fun closePaymentPrompt() {
+        if (paymentConfirm.open) activity?.cancelPayment()
+    }
+
+    /** Answers an open payment prompt with `ok: false` now, because its activity goes away. */
+    private fun abandonPaymentPrompt() {
+        if (!paymentConfirm.open) return
+        activity?.cancelPayment()
+        onPaymentOutcome(PromptOutcome.ERROR)
+    }
+
     private fun onServerSessionEnd() {
+        closePaymentPrompt()
         stopDat()
         // The ID and the token stay for data.delete.
         serverSession?.let { saveServerSession(StoredSession(it.sessionId, it.token, it.wsUrl, live = false)) }
@@ -490,9 +569,19 @@ class SessionController(
         // The selection of the shopper changes only when the profile holds the value of the patch.
         if (patch["mainYes"] == GlanceJson.encodeToJsonElement(MainYes.serializer(), patched.mainYes)) {
             store.wantedMainYes = patched.mainYes
+            if (patched.mainYes == MainYes.VOICE) requestMicrophone()
             // The shopper can select an input that does not work on these glasses.
             if (mainYesResolved) resolveMainYes()
         }
+    }
+
+    /**
+     * Asks for the microphone permission of the glasses when a session can use Speech and the permission is
+     * missing. The bridge has no message for it, so the selection of the voice and the intent `ask` start it.
+     */
+    private fun requestMicrophone() {
+        if (!dat.ready || !dat.usesSpeech || dat.snapshot.value.microphonePermission == DatPermission.GRANTED) return
+        activity?.requestMicrophonePermission()
     }
 
     private fun setProfile(value: Profile) {
@@ -516,6 +605,7 @@ class SessionController(
     private fun deleteData() {
         stopTicket += 1
         waitingForGlasses = false
+        closePaymentPrompt()
         stopDat()
         val session = serverSession
         closeSocket()
@@ -547,6 +637,7 @@ class SessionController(
         sawStreaming = false
         mainYesResolved = false
         headInput = newHeadInput()
+        stillPolicy = StillPolicy()
         if (!dat.startSession(withCamera = true, autoAttach = true)) {
             // The SDK error of a failed start arrives through dat.faults, after this call returns.
             scope.launch { sendError(if (INSUFFICIENT_SDK in sessionErrors) NativeErrors.SDK_TOO_OLD else NativeErrors.SESSION_FAILED) }
@@ -589,6 +680,7 @@ class SessionController(
                 // Each upload is the center of the frame, with each face pixelated.
                 findFaces = { faces.find(it) },
                 crop = true,
+                nextSeq = uploadSeq::incrementAndGet,
                 log = ::log
             )
             try {
@@ -596,6 +688,43 @@ class SessionController(
             } finally {
                 pipeline.close()
                 faces.close()
+            }
+        }
+    }
+
+    /**
+     * The sharp second look: the server cannot tell look-alike products apart in a frame of the stream, so the
+     * app sends one still photo, which has more pixels. The contract has no request for it, and the event
+     * `glance.ambiguous` is the signal. A still does not pass the upload gate, but it needs an open socket.
+     */
+    private fun takeStill() {
+        val eventMs = SystemClock.elapsedRealtime()
+        // Each DAT session has a policy of its own, and a capture ends the policy that started it.
+        val policy = stillPolicy
+        if (!datRunning || !policy.tryStart(eventMs)) return
+        scope.launch {
+            try {
+                val photo = dat.captureStill() ?: return@launch
+                val capturedAt = System.currentTimeMillis()
+                val still = withContext(Dispatchers.Default) {
+                    val faces = FaceFinder()
+                    try {
+                        StillPhoto.prepare(photo) { faces.find(it) }
+                    } finally {
+                        faces.close()
+                    }
+                }
+                if (still == null) {
+                    log("still dropped: face detection failed")
+                    return@launch
+                }
+                val header = FrameHeader(uploadSeq.incrementAndGet(), capturedAt, still.width, still.height, blurred = true, kind = FrameKind.STILL)
+                val sent = socket?.sendFrame(header, still.jpeg) == true
+                tap?.onFrame(header, still.jpeg.size, sent)
+                val result = if (sent) "sent" else "not sent, the socket is down"
+                log("still seq=${header.seq} ${still.width}x${still.height} ${still.jpeg.size} bytes $result, ${SystemClock.elapsedRealtime() - eventMs} ms after the event")
+            } finally {
+                policy.onEnd()
             }
         }
     }
@@ -611,6 +740,9 @@ class SessionController(
         }
         if (datRunning) {
             if (snapshot.stream == DatStream.STREAMING && !sawStreaming) onFirstStreaming()
+            // A capability can start late: Speech starts when the shopper allows the microphone during a session.
+            // Then the input that the shopper selected can work now.
+            if (mainYesResolved && snapshot.stream == DatStream.STREAMING && profile.mainYes != store.wantedMainYes) resolveMainYes()
             // A stream that ended by itself cannot start again, and its DAT session has no other use.
             val streamEnded = snapshot.stream == DatStream.STOPPED || snapshot.stream == DatStream.CLOSED
             if (sawStreaming && streamEnded && !stopCalled) {
@@ -639,7 +771,8 @@ class SessionController(
         val snapshot = dat.snapshot.value
         val works = MainYesResolver.resolve(store.wantedMainYes, snapshot.motionStarted, snapshot.inputsActive, snapshot.speechStarted)
         if (works == profile.mainYes) return
-        log("main yes: ${store.wantedMainYes} does not work on these glasses, so it is $works")
+        val wanted = store.wantedMainYes
+        log(if (works == wanted) "main yes: $wanted works now" else "main yes: $wanted does not work on these glasses, so it is $works")
         val patch = buildJsonObject { put("mainYes", GlanceJson.encodeToJsonElement(MainYes.serializer(), works)) }
         setProfile(Profiles.applyPatch(profile, patch))
         send(DeviceToServer.ProfileSet(patch))

@@ -65,6 +65,12 @@ class MockGlassesController(context: Context) {
         kit.permissions.setRequestResult(Permission.CAMERA, if (granted) PermissionStatus.Granted else PermissionStatus.Denied)
     }
 
+    /** Sets the microphone permission of the SDK, and the answer to the next request for it. Speech needs it. */
+    fun setMicrophonePermission(granted: Boolean, nextRequestGranted: Boolean = granted) {
+        kit.permissions.set(Permission.MICROPHONE, if (granted) PermissionStatus.Granted else PermissionStatus.Denied)
+        kit.permissions.setRequestResult(Permission.MICROPHONE, if (nextRequestGranted) PermissionStatus.Granted else PermissionStatus.Denied)
+    }
+
     fun setNextRegistration(works: Boolean) = kit.simulateRegistrationOutcome(works)
 
     /** Plays head movements one time. Returns false with no mock glasses. */
@@ -81,10 +87,10 @@ class MockGlassesController(context: Context) {
         return true
     }
 
-    /** Sends a final transcript, as if the shopper said `text`. */
-    fun say(text: String): Boolean {
+    /** Sends a transcript, as if the shopper said `text`. A result that is not final is a part of a sentence. */
+    fun say(text: String, isFinal: Boolean = true): Boolean {
         val speech = glasses?.services?.speech ?: return false
-        speech.simulateTranscription(text, true, SPOKEN_CONFIDENCE)
+        speech.simulateTranscription(text, isFinal, SPOKEN_CONFIDENCE)
         return true
     }
 

@@ -3,7 +3,11 @@
 //
 //   node server.mjs        port 8080, or PORT. HOST selects the address, default 0.0.0.0.
 //   SAVE_FRAMES=1          writes the newest frame to <temp folder>/glance-last.jpg
-//   keyboard               rest, bio, amb, badclip, drop
+//   FIRST_PROMPT_MS=3000   the time from the first frame to the first product prompt
+//   keyboard               rest, bio, cancel, amb, slow, badclip, drop
+//
+// A test on a phone has no keyboard. It runs a command with POST /debug/command/<name>,
+// and it reads the newest log lines with GET /debug/log.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -22,10 +26,16 @@ const AMBIGUOUS = fixture('events/glance.ambiguous.json');
 const CART_UPDATED = fixture('events/cart.updated.json');
 const CHECKOUT_OFFERED = fixture('events/checkout.offered.json');
 const CHECKOUT_PAID = fixture('events/checkout.paid.json');
+const CHECKOUT_CANCELLED = fixture('events/checkout.cancelled.json');
 
 const SESSION_ID = 's-1';
 const TOKEN = 't-1';
 const SESSION_PATH = `/api/sessions/${SESSION_ID}`;
+const COMMAND_PATH = '/debug/command/';
+const COMMANDS = ['rest', 'bio', 'cancel', 'amb', 'slow', 'badclip', 'drop'];
+const MAX_KEPT_LOG_LINES = 500;
+// The event and the line of the server of Plan 1 after 3 failed recognition calls in a row.
+const SLOW = { type: 'error', code: 'recognition.slow', message: 'Recognition is slow right now.' };
 
 const LINES = {
   cameraOn: 'Camera on. Hold a product up to hear its price.',
@@ -74,12 +84,13 @@ function readFrame(message) {
 
 /**
  * Starts the fake server. The returned promise gives `{ port, command, close }`.
- * `command(name)` runs one keyboard command. The three delays are options so that a test does not wait.
+ * `command(name)` runs one keyboard command, and returns false for a name that is no command.
+ * The three delays are options so that a test does not wait.
  */
 export function startFakeServer({
   port = 8080,
   host = '0.0.0.0',
-  log = console.log,
+  log: print = console.log,
   saveFrames = false,
   firstPromptMs = 3000,
   promptGapMs = 15000,
@@ -96,6 +107,13 @@ export function startFakeServer({
   let firstFrameAt = null;
   let lastPromptAt = null;
   let stream = 'stopped';
+
+  const logLines = [];
+  const log = (line) => {
+    logLines.push(line);
+    if (logLines.length > MAX_KEPT_LOG_LINES) logLines.shift();
+    print(line);
+  };
 
   const resetSession = () => {
     prompt = null;
@@ -213,6 +231,9 @@ export function startFakeServer({
       case 'prompt.done':
         log(`prompt.done ${message.promptId}`);
         break;
+      case 'biometric.result':
+        log(`biometric.result ok=${message.ok}`);
+        break;
       default:
         log(text);
     }
@@ -234,6 +255,10 @@ export function startFakeServer({
     } else if (request.method === 'DELETE' && path === SESSION_PATH) {
       resetSession();
       response.writeHead(204).end();
+    } else if (request.method === 'POST' && path.startsWith(COMMAND_PATH)) {
+      response.writeHead(command(path.slice(COMMAND_PATH.length)) ? 204 : 404).end();
+    } else if (request.method === 'GET' && path === '/debug/log') {
+      json(logLines);
     } else if (request.method === 'GET' && path === '/clip.wav') {
       response.writeHead(200, { 'content-type': 'audio/wav', 'content-length': clip.length });
       response.end(clip);
@@ -270,8 +295,16 @@ export function startFakeServer({
       case 'bio':
         send({ t: 'biometric.request' });
         break;
+      case 'cancel':
+        if (prompt?.kind === 'pay') prompt = null;
+        event(CHECKOUT_CANCELLED);
+        break;
       case 'amb':
         event(AMBIGUOUS);
+        break;
+      case 'slow':
+        event(SLOW);
+        speak(SLOW.message);
         break;
       case 'badclip':
         productPrompt('/missing.mp3');
@@ -281,10 +314,11 @@ export function startFakeServer({
         for (const socket of sockets) socket.terminate();
         break;
       default:
-        log(`commands: rest, bio, amb, badclip, drop. Not a command: ${name}`);
-        return;
+        log(`commands: ${COMMANDS.join(', ')}. Not a command: ${name}`);
+        return false;
     }
     log(`command ${name}`);
+    return true;
   };
 
   const close = () =>
@@ -310,6 +344,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     port: Number(process.env.PORT ?? 8080),
     host: process.env.HOST ?? '0.0.0.0',
     saveFrames: process.env.SAVE_FRAMES === '1',
+    ...(process.env.FIRST_PROMPT_MS ? { firstPromptMs: Number(process.env.FIRST_PROMPT_MS) } : {}),
   });
   createInterface({ input: process.stdin }).on('line', (line) => {
     if (line.trim() !== '') server.command(line.trim());

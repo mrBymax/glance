@@ -29,6 +29,8 @@ class FramePipeline(
     private val onUpload: (FrameHeader, ByteArray) -> Unit,
     private val findFaces: ((RawFrame) -> FaceResult)? = null,
     private val crop: Boolean = false,
+    /** Gives the number of the next upload. Without it, this pipeline counts its uploads from 1. */
+    private val nextSeq: (() -> Int)? = null,
     private val log: (String) -> Unit
 ) {
     private val scanner = QrScanner()
@@ -62,7 +64,7 @@ class FramePipeline(
         val jpeg = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }.toByteArray()
         bitmap.recycle()
 
-        seq += 1
+        seq = nextSeq?.invoke() ?: (seq + 1)
         onUpload(FrameHeader(seq, System.currentTimeMillis(), prepared.width, prepared.height, prepared.blurred), jpeg)
     }
 
