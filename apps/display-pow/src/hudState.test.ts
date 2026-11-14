@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ServerEvent, SessionSnapshot } from '@glance/shared';
-import { DEFAULT_PROFILE } from '@glance/shared';
+import { DEFAULT_PROFILE, parseServerEvent } from '@glance/shared';
 import { INITIAL_HUD_STATE, hudFromSnapshot, hudView, mockAnswer, reduceHud } from './hudState';
 
 const oat = { id: 'oat-drink-1l', name: 'Oat drink', packSize: '1 L', priceCents: 189 };
@@ -86,5 +86,74 @@ describe('mockAnswer', () => {
   });
   it('returns nothing when no product is pending', () => {
     expect(mockAnswer(run(cameraOn), 'yes')).toEqual([]);
+  });
+});
+
+describe('rules of the plan text with no plan test', () => {
+  const kiosk = { id: 'kiosk-1', name: 'Checkout 3', store: 'Demo Market' };
+  const twoRye = { items: [{ ...ryeCart.items[0]!, qty: 2 }], totalCents: 520 };
+  const withCart = (cart: typeof ryeCart, ...events: ServerEvent[]) => run(cameraOn, { type: 'cart.updated', cart, change: null }, ...events);
+  const ryeInCart = (qty: number) => pending('p-3', rye, { kind: 'inCart', qtyInCart: qty });
+
+  it('clears the product on an ambiguous product and on a paid checkout', () => {
+    const base = run(cameraOn, pending('p-1'));
+    const paid: ServerEvent = { type: 'checkout.paid', orderId: 'o-1', totalCents: 260, paidAt: '2026-11-14T10:00:00Z', items: ryeCart.items, kiosk };
+    expect(reduceHud(base, { type: 'glance.ambiguous', candidates: [oat, rye] }).pending).toBeNull();
+    expect(reduceHud(base, paid).pending).toBeNull();
+  });
+  it('shows the message of an error as the caption', () => {
+    expect(run(cameraOn, { type: 'error', code: 'glasses.disconnected', message: 'The glasses are not connected.' }).caption)
+      .toBe('The glasses are not connected.');
+  });
+  it('keeps its state for an event that changes no part of the HUD', () => {
+    const base = run(cameraOn, pending('p-1'));
+    for (const event of [{ type: 'glance.hint', aimHint: 'left' }, { type: 'budget.exceeded', budgetCents: 100, totalCents: 260 },
+      { type: 'checkout.suspended' }, { type: 'checkout.cancelled' }, { type: 'checkout.failed', reason: 'declined' }] as ServerEvent[]) {
+      expect(reduceHud(base, event)).toBe(base);
+    }
+  });
+  it('keeps the product of a snapshot when a clear for an older prompt arrives after it', () => {
+    const snapshot: SessionSnapshot = { sessionId: 's-1', phase: 'shopping', cameraOn: true,
+      prompt: { promptId: 'p-2', kind: 'product', mode: 'new', product: rye, warnings: [], qtyInCart: 0 },
+      cart: ryeCart, profile: DEFAULT_PROFILE, kiosk: null, lastReceipt: null, captions: [] };
+    const state = hudFromSnapshot(snapshot);
+    expect(state.caption).toBeNull();
+    expect(reduceHud(state, { type: 'glance.cleared', promptId: 'p-1' }).pending?.promptId).toBe('p-2');
+  });
+  it('has no pending product for a pay prompt, and takes the last caption of a snapshot', () => {
+    const caption = (id: string, text: string) => ({ id, text, lang: 'en' as const, priority: 'normal' as const, url: null });
+    const snapshot: SessionSnapshot = { sessionId: 's-1', phase: 'checkout', cameraOn: true,
+      prompt: { promptId: 'p-9', kind: 'pay', kiosk, totalCents: 260, itemCount: 1, needsBiometric: false },
+      cart: ryeCart, profile: DEFAULT_PROFILE, kiosk, lastReceipt: null,
+      captions: [caption('c-1', 'Camera on.'), caption('c-2', 'Checkout 3. Nod to pay.')] };
+    expect(hudFromSnapshot(snapshot)).toMatchObject({ pending: null, caption: 'Checkout 3. Nod to pay.' });
+    expect(hudView(hudFromSnapshot(snapshot)).canAnswer).toBe(false);
+  });
+  it('counts each unit of a line in the item count', () => {
+    expect(hudView(withCart(twoRye)).total).toBe('5.20 EUR, 2 items');
+  });
+  it('adds a unit to the line of a product that is in the cart, and names the change', () => {
+    const events = mockAnswer(withCart(ryeCart, ryeInCart(1)), 'yes');
+    expect(events).toEqual([
+      { type: 'glance.cleared', promptId: 'p-3' },
+      { type: 'cart.updated', cart: twoRye, change: { kind: 'add', productId: 'rye-bread', name: 'Rye bread' } },
+      { type: 'caption', id: 'mock-p-3-yes', text: 'Added: Rye bread. Total 5.20 EUR.', lang: 'en', priority: 'normal', url: null },
+    ]);
+  });
+  it('removes one unit of two, and removes the line at 0', () => {
+    expect(mockAnswer(withCart(twoRye, ryeInCart(2)), 'no')[1]).toEqual(
+      { type: 'cart.updated', cart: ryeCart, change: { kind: 'remove', productId: 'rye-bread', name: 'Rye bread' } });
+    expect(mockAnswer(withCart(ryeCart, ryeInCart(1)), 'no')[1]).toMatchObject({ cart: { items: [], totalCents: 0 } });
+  });
+  it('changes no cart for a no on a new product, and for a no on a product with no line in the cart', () => {
+    const skipped = [{ type: 'glance.cleared', promptId: 'p-3' },
+      { type: 'caption', id: 'mock-p-3-no', text: 'Skipped.', lang: 'en', priority: 'normal', url: null }];
+    expect(mockAnswer(withCart(ryeCart, pending('p-3', rye)), 'no')).toEqual(skipped);
+    expect(mockAnswer(run(cameraOn, ryeInCart(1)), 'no')).toEqual(skipped);
+  });
+  it('gives only events that the shared schema accepts', () => {
+    for (const event of [...mockAnswer(withCart(ryeCart, ryeInCart(1)), 'yes'), ...mockAnswer(withCart(ryeCart, ryeInCart(1)), 'no')]) {
+      expect(parseServerEvent(event)).toEqual(event);
+    }
   });
 });

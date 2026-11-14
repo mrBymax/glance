@@ -150,6 +150,47 @@ describe('live session', () => {
     expect(onSnapshot).not.toHaveBeenCalled();
     expect(onEvent).not.toHaveBeenCalled();
   });
+  it('keeps its state for a refused snapshot request and for a failed one, and gets the snapshot on the next open', async () => {
+    const answers: (() => Promise<unknown>)[] = [
+      async () => ({ ok: false, json: async () => snapshot('refused') }),
+      async () => { throw new TypeError('no network'); },
+      async () => ({ ok: true, json: async () => snapshot('third') }),
+    ];
+    vi.stubGlobal('fetch', vi.fn(() => answers.shift()?.()));
+    const calls: string[] = [];
+    openLive(urls, { onSnapshot: (s) => calls.push(s.sessionId), onEvent: (e) => calls.push(e.type) });
+    const source = FakeEventSource.last;
+    source.emit('open');
+    await flush();
+    source.emit('open');
+    await flush();
+    source.emit('message', JSON.stringify(unknown));
+    expect(calls).toEqual(['glance.unknown']);
+    source.emit('open');
+    await flush();
+    expect(calls).toEqual(['glance.unknown', 'third']);
+  });
+});
+
+describe('rules of the plan text with no plan test', () => {
+  it('encodes the session ID, and puts the origin of the server before each path', () => {
+    expect(liveUrls('http://127.0.0.1:8080', 'a/b', 't')).toEqual({
+      snapshot: 'http://127.0.0.1:8080/api/sessions/a%2Fb?token=t',
+      events: 'http://127.0.0.1:8080/api/sessions/a%2Fb/events?token=t',
+      intents: 'http://127.0.0.1:8080/api/sessions/a%2Fb/intents?token=t' });
+  });
+  it('rejects a recording that is not a list, and a step with no time', () => {
+    expect(() => parseRecording({ afterMs: 0, event: cameraOn })).toThrow();
+    expect(() => parseRecording(null)).toThrow();
+    expect(() => parseRecording([{ afterMs: 0, event: cameraOn }, { event: cameraOn }])).toThrow(/step 1/);
+    expect(() => parseRecording([{ afterMs: '100', event: cameraOn }])).toThrow(/step 0/);
+    expect(() => parseRecording([null])).toThrow(/step 0/);
+  });
+  it('keeps the time and the event of each step of the committed recording', () => {
+    const steps = parseRecording(mainTake);
+    expect(steps).toEqual(mainTake);
+    expect(steps.at(-1)).toMatchObject({ afterMs: 31200, event: { type: 'caption', text: 'Camera off.' } });
+  });
 });
 
 describe('postIntent', () => {
