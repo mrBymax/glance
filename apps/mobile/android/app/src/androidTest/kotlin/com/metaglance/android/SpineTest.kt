@@ -2,7 +2,9 @@ package com.metaglance.android
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.metaglance.android.support.MockDeviceKitTestCase
+import com.metaglance.android.support.TestClips
 import com.metaglance.android.support.TrafficRecorder
+import com.metaglance.android.support.requireFakeServer
 import com.metaglance.android.support.waitFor
 import com.metaglance.android.support.waitUntil
 import com.metaglance.core.contract.DeviceToServer
@@ -19,11 +21,7 @@ import com.metaglance.core.contract.StreamStatus
 import com.metaglance.core.net.GlanceApi
 import com.metaglance.core.state.DatSession
 import com.metaglance.core.state.NativeErrors
-import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -47,7 +45,7 @@ class SpineTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) 
     @Before
     override fun setUp() {
         super.setUp()
-        requireFakeServer()
+        requireFakeServer(BuildConfig.SERVER_URL)
         onMain {
             glance.session.onPageMessage(PageToNative.DataDelete)
             glance.profileStore.serverUrl = BuildConfig.SERVER_URL
@@ -68,7 +66,7 @@ class SpineTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) 
     @Test
     fun aNodAddsTheProductAndANodAtTheKioskCodePays() {
         pairGlasses()
-        setCameraFeed("scene.mp4")
+        setCameraFeed(TestClips.SCENE)
         onMain { glance.session.onPageMessage(PageToNative.SessionStart) }
 
         waitUntil("the stream reaches streaming", START_MS, ::state) {
@@ -100,7 +98,7 @@ class SpineTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) 
         assertEquals(1, shopping.cart.items.single().qty)
 
         showKioskCode()
-        waitUntil("kiosk.seen goes out with the code text", KIOSK_MS, ::state) { traffic.sent<DeviceToServer.KioskSeen> { it.text == KIOSK_TEXT } != null }
+        waitUntil("kiosk.seen goes out with the code text", KIOSK_MS, ::state) { traffic.sent<DeviceToServer.KioskSeen> { it.text == TestClips.KIOSK_TEXT } != null }
         val offered = waitFor("the pay prompt arrives", STEP_MS, ::state) { traffic.event<ServerEvent.CheckoutOffered>() }
         assertEquals(1, offered.itemCount)
         assertEquals(shopping.cart.totalCents, offered.totalCents)
@@ -123,6 +121,17 @@ class SpineTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) 
         assertEquals(2, traffic.toServer.filterIsInstance<DeviceToServer.Intent>().size)
         assertTrue("Messages that the socket dropped: ${traffic.notSent}", traffic.notSent.isEmpty())
         assertEquals(listOf(NativeErrors.HINGE_CLOSED.code), traffic.nativeErrors.toList())
+
+        // A start after the payment is a new shop: the app asks the server for a new session.
+        val paidSessionId = end.sessionId
+        onMain { glance.session.onPageMessage(PageToNative.SessionStart) }
+        waitUntil("the app holds a new server session", START_MS, ::state) {
+            glance.profileStore.serverSession.let { it != null && it.live && it.sessionId != paidSessionId }
+        }
+        waitUntil("the stream of the new session reaches streaming", START_MS, ::state) {
+            glance.session.nativeState.value.stream == StreamStatus.STREAMING
+        }
+        assertEquals(Phase.SHOPPING, serverSnapshot().phase)
     }
 
     /**
@@ -131,7 +140,7 @@ class SpineTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) 
      */
     private fun showKioskCode() {
         val sessionId = glance.profileStore.serverSession?.sessionId
-        setCameraFeed("kiosk.mp4")
+        setCameraFeed(TestClips.KIOSK)
         val framesBefore = traffic.frames.size
         onMain { glasses.fold() }
         waitUntil("the app reports the closed hinge", STEP_MS, ::state) { NativeErrors.HINGE_CLOSED.code in traffic.nativeErrors }
@@ -160,21 +169,10 @@ class SpineTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) 
         return GlanceJson.decodeFromJsonElement(SessionSnapshot.serializer(), json)
     }
 
-    /** A server with real recognition or real speech costs money for each frame and each line. */
-    private fun requireFakeServer() {
-        val health = http.newCall(Request.Builder().url("${BuildConfig.SERVER_URL}/healthz").build()).execute().use { response ->
-            assertTrue("GET /healthz gave the status ${response.code}.", response.isSuccessful)
-            GlanceJson.parseToJsonElement(response.body?.string().orEmpty()).jsonObject
-        }
-        assertTrue("The server does not run with fake recognition.", health["fakeRecognition"]?.jsonPrimitive?.boolean == true)
-        assertTrue("The server does not run with fake speech.", health["fakeSpeech"]?.jsonPrimitive?.boolean == true)
-    }
-
     private fun state(): String = "native=${glance.session.nativeState.value} ${traffic.summary()} dat=${datLog.takeLast(LOG_TAIL)}"
 
     private companion object {
         const val PRODUCT_ID = "oat-drink-1l"
-        const val KIOSK_TEXT = "GL1 K3X7"
         const val MAX_LONG_SIDE = 768
         const val START_MS = 15_000L
         const val STEP_MS = 10_000L

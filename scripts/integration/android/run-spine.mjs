@@ -152,7 +152,10 @@ function build() {
   const args = [':app:assembleDebug', ':app:assembleDebugAndroidTest', `-Pglance.serverUrl=${SERVER_URL}`, '--console=plain', '-q'];
   // With more than one phone attached, Gradle uses each phone unless this variable names one.
   const env = { ...process.env, ANDROID_SERIAL: SERIAL };
-  const run = spawnSync(gradlew, args, { cwd: androidDir, env, stdio: 'inherit', shell: process.platform === 'win32', timeout: BUILD_TIMEOUT_MS });
+  // A .bat file needs the shell on Windows. The command is one text, and each part of it is a constant of this file.
+  const run = process.platform === 'win32'
+    ? spawnSync([gradlew, ...args].join(' '), { cwd: androidDir, env, stdio: 'inherit', shell: true, timeout: BUILD_TIMEOUT_MS })
+    : spawnSync(gradlew, args, { cwd: androidDir, env, stdio: 'inherit', timeout: BUILD_TIMEOUT_MS });
   if (run.error) throw new Error(`Gradle did not run: ${run.error.message}`);
   if (run.status !== 0) throw new Error(`The Gradle build failed with status ${run.status}.`);
 }

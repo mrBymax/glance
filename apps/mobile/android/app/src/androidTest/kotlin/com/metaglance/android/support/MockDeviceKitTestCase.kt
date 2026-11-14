@@ -2,8 +2,6 @@ package com.metaglance.android.support
 
 import android.app.Activity
 import android.content.Context
-import android.media.AudioManager
-import android.net.Uri
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.meta.wearable.dat.mockdevice.MockDeviceKit
@@ -21,11 +19,8 @@ import com.metaglance.core.gesture.Sensitivity
 import com.metaglance.core.state.DatLinkState
 import com.metaglance.core.state.DatRegistration
 import com.metaglance.core.state.DatSession
-import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.After
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -56,9 +51,7 @@ abstract class MockDeviceKitTestCase<T : Activity>(activityClass: Class<T>) {
     open fun setUp() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         targetContext = instrumentation.targetContext
-        // The phone voice speaks each line that has no clip. A test must never make a sound.
-        val audio = targetContext.getSystemService(AudioManager::class.java)
-        assertEquals("Set the media volume of the phone to 0 before the tests.", 0, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
+        requireSilentPhone(targetContext)
 
         mockDeviceKit = MockDeviceKit.getInstance(targetContext)
         onMain {
@@ -91,15 +84,6 @@ abstract class MockDeviceKitTestCase<T : Activity>(activityClass: Class<T>) {
         }
     }
 
-    /** Copies an asset of the test APK to the cache of the app, because the mock camera takes a file address. */
-    protected fun assetUri(assetName: String): Uri {
-        val outFile = File(targetContext.cacheDir, assetName)
-        InstrumentationRegistry.getInstrumentation().context.assets.open(assetName).use { input ->
-            FileOutputStream(outFile).use { output -> input.copyTo(output) }
-        }
-        return Uri.fromFile(outFile)
-    }
-
     protected fun setCameraFeed(assetName: String) {
         val uri = assetUri(assetName)
         onMain { glasses.services.camera.setCameraFeed(uri) }
@@ -118,11 +102,7 @@ abstract class MockDeviceKitTestCase<T : Activity>(activityClass: Class<T>) {
 
     protected fun headConfig(): HeadGestureConfig = HeadGestureConfig.of(Sensitivity.NORMAL, ProbeDecisions.PITCH_AXIS, ProbeDecisions.PITCH_DOWN_SIGN, ProbeDecisions.YAW_AXIS)
 
-    protected fun <R> onMain(block: () -> R): R {
-        var result: Result<R>? = null
-        InstrumentationRegistry.getInstrumentation().runOnMainSync { result = runCatching(block) }
-        return checkNotNull(result).getOrThrow()
-    }
+    protected fun <R> onMain(block: () -> R): R = onMainSync(block)
 
     protected companion object {
         const val LINK_MS = 10_000L

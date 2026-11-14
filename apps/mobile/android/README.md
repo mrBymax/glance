@@ -5,6 +5,7 @@ The Android app of Meta Glance. This folder holds a Gradle project with two modu
 - `core` is pure Kotlin on the JVM. It holds each rule that a unit test can check.
 - `app` is the Android application `com.metaglance.android`. Its debug build also holds the probe screen "Glance Probe".
 - `tools` holds a fake server and the script that makes the sounds. Both need Node 22 or later.
+- `app/src/androidTest` holds the tests that run on a phone with mock glasses. See "Instrumented tests".
 
 The app has two screens.
 
@@ -42,7 +43,8 @@ flowchart LR
 - A frame is a `RawFrame` in I420 layout. `frames` holds the newest frame only. A frame with an odd width or height, or with fewer bytes than its size needs, is dropped with one log line.
 - While a session runs, the device of the snapshot comes from the session. After the session, it comes from the device list of the SDK again.
 - `attachMotion`, `attachInputs`, and `attachSpeech` add a capability to a started session. `gyro`, `motionRows`, `touches`, and `transcripts` give their data.
-- A capability that stops with no request from the app starts again, at most 3 times in a row. `Revival` in `core` holds this rule.
+- A capability that stops with no request from the app starts again 750 ms later, at most 3 times in a row, and only if the session still runs then. `Revival` in `core` holds the count.
+- A stop waits until the stream is 1 second old. A stop at the start of a stream ended the app process in the video decoder of the SDK (DAT 1.0.1).
 - `captureStill` takes a photo while the stream runs.
 - `PhoneVoice` speaks a line with the speech engine of the phone, as media sound.
 - `ProbeDecisions` holds the values that the probe run on the glasses decides: the capabilities that start, the input sources, and the gyroscope axes. Its values are defaults until that run.
@@ -55,7 +57,7 @@ flowchart LR
 - The page loads from `https://appassets.androidplatform.net/index.html`. `UiAssetsHandler` serves it from the APK assets: from the folder `ui` when the APK holds `ui/index.html`, else from the folder `placeholder`. A debug build adds `?debug=1`.
 - The Gradle task `syncUi` copies `apps/mobile/ui/dist` into the APK as the folder `ui`. It does not run npm. Build the phone UI first: `npm run build --workspace @glance/phone-ui` at the repository root.
 - A debug build with `glance.uiDevUrl` loads that address in place of the assets.
-- The page sends a message with `window.GlanceNative.postMessage(json)`. The app sends one with `window.__glanceReceive(json)`. `WebBridge` sends nothing before the `ui.ready` of a page.
+- The page sends a message with `window.GlanceNative.postMessage(json)`. The app sends one with `window.__glanceReceive(json)`. `WebBridge` sends nothing before the first `ui.ready`. A page that loads again gets no message until its own `ui.ready`, and the answer to that brings the state, the profile, and the snapshot again.
 - A link to another site opens outside the app.
 - The text of the page follows the font size of the phone.
 - `ProfileStore` keeps the profile, the yes input that the shopper selected, the server session, the server address, the gesture sensitivity, and the placeholder switch in the preferences file `glance`.
@@ -106,7 +108,7 @@ Rules of `SessionController`:
 - `session.rest` of the server stops the DAT session. The socket and the server session stay.
 - `session.end` of the server stops the DAT session and marks the server session as not live. The socket closes 5 seconds later, so the last lines still arrive. If the server closes the socket first, the app does not connect again, and it does not say the "Connection lost" line.
 - `profile.set` of the page changes the profile only when the result is inside the limits of `packages/shared`: a speech rate from 0.8 to 2, a head window of 8000, 15000, or null, and a budget above 0 or null. The page gets a `profile` message after each `profile.set`, also when nothing changed.
-- When a DAT session stops with no request from the app, `StopCauses.classify` names the cause, and the page gets its `error` event.
+- When a DAT session stops with no request from the app, `StopCauses.classify` names the cause, and the page gets its `error` event. The app reads the cause 500 ms after the stop, because the glasses can report a closed hinge after the stop.
 - After a lost link or a closed hinge, a new DAT session starts by itself when the glasses are connected, open, and not off the face. The app waits 2 seconds first, and it stops after 5 such starts in a row with no stream.
 - A stream that ends by itself after it ran also ends its DAT session.
 - The screen stays on while a DAT session runs.
@@ -217,6 +219,58 @@ What it does:
 
 A phone on USB reaches the server with `adb -s <serial> reverse tcp:8080 tcp:8080` and `glance.serverUrl=http://127.0.0.1:8080`.
 
+## Instrumented tests
+
+`app/src/androidTest` holds tests that run on a phone with mock glasses of MockDeviceKit. They follow the DAT guide "Android testing with Mock Device Kit" (https://wearables.developer.meta.com/docs/develop/dat/testing-mdk-android). No test needs the glasses, the Meta AI app, or a vendor.
+
+```mermaid
+flowchart LR
+    Runner[run-spine.mjs on the laptop] -->|starts with fake recognition and fake speech| Server[apps/server on port 8080]
+    Runner -->|adb reverse, install, am instrument| Tests[Tests in the app process]
+    Tests --> App[SessionController, DatLink, the pages]
+    Tests --> Kit[MockDeviceKit: glasses, video file, motion samples]
+    Kit --> App
+    App <-->|127.0.0.1:8080 through USB| Server
+```
+
+| Class | What it checks |
+|---|---|
+| `SpineTest` | One shop: the stream starts, frames go out, the product prompt arrives, `prompt.done` goes out, a mock nod adds the product, and the server snapshot holds one item. Then the mock glasses fold and open, the app starts a new DAT session by itself, the kiosk code gives `kiosk.seen`, a mock nod pays, the phase is `paid`, and the DAT session stops. A start after the payment gets a new server session. |
+| `ProbeLinkTest` | `DatLink` with mock glasses: the paired device, the stream, the colors of a frame, the kiosk code in a frame, a stop and a new start, and six stops at the start of a stream. |
+| `ProbeScreenTest` | The probe screen: each test taps the buttons and reads the log, for the stream, the saved frame, `QR log`, `Pipeline test`, Motion, Inputs, Speech, `Speak line`, `Still`, `Record motion`, and `Play bad clip`. |
+| `PlaceholderPageTest` | The placeholder page in the WebView: state and profile, a stored profile patch, a page that loads again, and `Add` and `Skip` on a product prompt. |
+
+`SpineTest` and the prompt tests of `PlaceholderPageTest` need the server of `apps/server` with both fake switches at `BuildConfig.SERVER_URL`. They read `GET /healthz` first, and they fail if recognition or speech is real.
+
+Run them with the script, in `scripts/integration`. It needs `adb`, FFmpeg, and the JDK on `PATH`.
+
+| Command | Result |
+|---|---|
+| `npm install` | Installs `qrcode`, one time |
+| `node android/run-spine.mjs` | Starts the fake server, sets `adb reverse`, builds and installs both APK files, and runs `SpineTest`. Then it removes the reverse and stops the server. |
+| `node android/run-spine.mjs --runs 3` | Runs it three times, each with a new server |
+| `node android/run-spine.mjs --all` | Runs each test class |
+| `node android/run-spine.mjs --class com.metaglance.android.ProbeScreenTest` | Runs one class. `Class#method` runs one test. |
+| `node android/run-spine.mjs --no-build` | Uses the APK files of the last build |
+| `node android/make-clips.mjs --force` | Makes the camera feeds again: `scene.mp4`, `kiosk.mp4`, and `scene.png` in `app/src/androidTest/assets`. The files are in git. |
+
+Rules of the script and of the tests:
+
+- The script uses the phone with the serial `P11262000912` only, and each `adb` call names it. Change `SERIAL` in `run-spine.mjs` for another phone.
+- The script ends with status 2 when the phone is locked or not attached. It does not unlock the phone.
+- The script reads the media volume. If it is not 0, it prints the old value and sets 0. Each test class fails at its start when the volume is not 0, because the phone voice speaks each line that has no clip.
+- The server gets no vendor key, and it plays `scripts/integration/android/spine-script.json`: the product `oat-drink-1l` from second 8 to second 10 after the socket of a session opens.
+- The script installs with no `-g`, and no test grants `BLUETOOTH_CONNECT`. Without that permission the app never starts the real SDK, and mock glasses need no Bluetooth. A feed from a video file needs no camera permission.
+- The log of each server is in `<temp folder>/glance-integration`.
+
+Facts about MockDeviceKit that the tests found (DAT 1.0.1, Nothing Phone (1), Android 15):
+
+- `setCameraFeed(fileUri)` takes effect at the next stream start. A running stream keeps its feed, and it plays the file again from its start when the file ends.
+- A feed from a video file gives 30 frames each second, also for a file with 15 and a stream configuration with 7.
+- `fold()` reports `DOFFED`, then the session error `SESSION_ENDED_BY_DEVICE` and `STOPPED`, and the closed hinge after them.
+- `setMotionFeed(samples, loop = false)` on a running Motion capability plays the samples one time from their start.
+- With no network on the phone, the page shows `network: offline` also when the socket through `adb reverse` is open, because the phone reports no active network.
+
 ## The sounds
 
 `node tools/make-sounds.mjs` writes `found.wav`, `added.wav`, `removed.wav`, `warning.wav`, and `paid.wav` to `app/src/main/res/raw`. The files are in git. Run the script only to change a sound.
@@ -241,12 +295,14 @@ Run each command in `apps/mobile/android`. PowerShell uses `.\gradlew.bat` in pl
 | `./gradlew test` | Runs each unit test task. `app` has no unit test. |
 | `./gradlew :app:assembleDebug` | Builds `app/build/outputs/apk/debug/app-debug.apk` |
 | `./gradlew :app:installDebug` | Installs the debug build on each attached phone |
+| `./gradlew :app:assembleDebugAndroidTest` | Builds the test APK `app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk` |
+| `./gradlew :app:assembleDebug -Pglance.serverUrl=http://127.0.0.1:8080` | Builds with another server address. A Gradle property wins over `local.properties`. |
 
 Run `ktlintFormat` and `ktlintCheck` as two commands. In one command, the check can read a file before the format task writes it.
 
 ## Keys of `local.properties`
 
-Git ignores `local.properties`. Each key is optional.
+Git ignores `local.properties`. Each key is optional, and each one is also a Gradle property: `-P<key>=<value>`.
 
 | Key | Default | Use |
 |---|---|---|

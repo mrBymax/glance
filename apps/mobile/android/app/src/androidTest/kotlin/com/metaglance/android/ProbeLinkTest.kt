@@ -3,6 +3,7 @@ package com.metaglance.android
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.metaglance.android.pipeline.QrScanner
 import com.metaglance.android.support.MockDeviceKitTestCase
+import com.metaglance.android.support.TestClips
 import com.metaglance.android.support.waitFor
 import com.metaglance.android.support.waitUntil
 import com.metaglance.core.image.I420
@@ -39,18 +40,18 @@ class ProbeLinkTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
     @Test
     fun aSessionStreamsFramesOfTheFeed() {
         pairGlasses()
-        setCameraFeed("scene.mp4")
+        setCameraFeed(TestClips.SCENE)
         startSession()
         waitUntil("the log has a frame line", STREAM_MS, { datLog.toString() }) { datLog.any { FRAME_LINE.matches(it) } }
         assertTrue("log: $datLog", datLog.contains("session STARTED"))
         assertTrue("log: $datLog", datLog.contains("stream STREAMING"))
-        assertEquals("720x1280", glance.datLink.frameSize)
+        assertEquals(TestClips.FRAME_SIZE, glance.datLink.frameSize)
     }
 
     @Test
     fun aFrameHasTheColorsOfTheScene() {
         pairGlasses()
-        setCameraFeed("scene.mp4")
+        setCameraFeed(TestClips.SCENE)
         val collector = collectFrames()
         startSession()
         val frame = waitFor("a frame arrives", STREAM_MS) { newest.get() }
@@ -68,7 +69,7 @@ class ProbeLinkTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
     @Test
     fun theScannerReadsTheKioskCode() {
         pairGlasses()
-        setCameraFeed("kiosk.mp4")
+        setCameraFeed(TestClips.KIOSK)
         val collector = collectFrames()
         startSession()
         val scanner = QrScanner()
@@ -76,7 +77,7 @@ class ProbeLinkTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
             val hit = waitFor("the scanner reads a code", STREAM_MS) {
                 newest.getAndSet(null)?.let { frame -> scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height).firstOrNull() }
             }
-            assertEquals("GL1 K3X7", hit.text)
+            assertEquals(TestClips.KIOSK_TEXT, hit.text)
             assertTrue("area ${hit.areaPx}", hit.areaPx > 0)
         } finally {
             scanner.close()
@@ -88,11 +89,11 @@ class ProbeLinkTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
     @Test
     fun aNewFeedShowsInTheNextStream() {
         pairGlasses()
-        setCameraFeed("scene.mp4")
+        setCameraFeed(TestClips.SCENE)
         val collector = collectFrames()
         startSession()
         waitFor("a frame arrives", STREAM_MS) { newest.get() }
-        setCameraFeed("kiosk.mp4")
+        setCameraFeed(TestClips.KIOSK)
         onMain { glance.datLink.stopSession() }
         waitUntil("the session stops", STREAM_MS, { datLog.toString() }) { glance.datLink.snapshot.value.session == DatSession.STOPPED }
         newest.set(null)
@@ -102,7 +103,7 @@ class ProbeLinkTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
             val hit = waitFor("the scanner reads the code of the new feed", STREAM_MS) {
                 newest.getAndSet(null)?.let { frame -> scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height).firstOrNull() }
             }
-            assertEquals("GL1 K3X7", hit.text)
+            assertEquals(TestClips.KIOSK_TEXT, hit.text)
         } finally {
             scanner.close()
             collector.cancel()
@@ -112,7 +113,7 @@ class ProbeLinkTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
     @Test
     fun aStoppedSessionGivesWayToANewOne() {
         pairGlasses()
-        setCameraFeed("scene.mp4")
+        setCameraFeed(TestClips.SCENE)
         startSession()
         onMain { glance.datLink.stopSession() }
         waitUntil("the log has session STOPPED", STREAM_MS, { datLog.toString() }) { datLog.contains("session STOPPED") }
@@ -121,6 +122,18 @@ class ProbeLinkTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
         datLog.clear()
         startSession()
         assertTrue("log: $datLog", datLog.contains("stream STREAMING"))
+    }
+
+    // Without the wait in DatLink, the video decoder of the SDK ends the app process in one of a few rounds.
+    @Test
+    fun aStopAtTheStartOfTheStreamDoesNotEndTheApp() {
+        pairGlasses()
+        setCameraFeed(TestClips.SCENE)
+        repeat(STOP_ROUNDS) {
+            startSession()
+            onMain { glance.datLink.stopSession() }
+            waitUntil("the session stops", STREAM_MS, { datLog.takeLast(LOG_TAIL).toString() }) { glance.datLink.snapshot.value.session == DatSession.STOPPED }
+        }
     }
 
     private fun startSession() {
@@ -154,6 +167,8 @@ class ProbeLinkTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.ja
 
     private companion object {
         const val STREAM_MS = 15_000L
+        const val STOP_ROUNDS = 6
+        const val LOG_TAIL = 8
         val FRAME_LINE = Regex("""frame 720x1280 #\d+ fps=\d+\.\d""")
     }
 }
