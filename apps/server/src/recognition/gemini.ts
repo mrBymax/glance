@@ -51,6 +51,8 @@ export function createGeminiRecognizer(deps: {
     ...deps.catalog.products, ...deps.storeEntries.map((entry) => scannedProduct(entry.item, entry.details)),
   ]);
   const responseSchema = recognitionResponseSchema(known.products.map((product) => product.id));
+  // The ID of a store item is `gtin-<13 digits>`, so the instruction shows the model the code of each one.
+  const shownCodes = new Set(deps.storeEntries.map((entry) => entry.item.gtin));
 
   return {
     async recognize(jpeg, opts) {
@@ -79,7 +81,7 @@ export function createGeminiRecognizer(deps: {
       } catch {
         return NO_RESULT;
       }
-      return normalizeResult(raw, { catalog: known, exclude: opts.exclude, minConfidence: deps.minConfidence });
+      return normalizeResult(raw, { catalog: known, exclude: opts.exclude, minConfidence: deps.minConfidence, shownCodes });
     },
   };
 }

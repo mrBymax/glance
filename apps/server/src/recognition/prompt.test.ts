@@ -66,7 +66,9 @@ it('rejects a template with no placeholder', () => {
 });
 it('limits the answer to the catalog IDs', () => {
   const schema = recognitionResponseSchema(['a', 'b']) as Schema;
-  expect(schema.required).toEqual(['status', 'productId', 'candidates', 'confidence', 'aimHint', 'gesture', 'code']);
+  // `held` is first: the model says where the product is before it names it.
+  expect(schema.required).toEqual(['held', 'status', 'productId', 'candidates', 'confidence', 'aimHint', 'gesture', 'code']);
+  expect(schema.properties.held).toEqual({ type: 'boolean' });
   expect(schema.properties.status!.enum).toEqual(['identified', 'ambiguous', 'unsure', 'unknown', 'none']);
   expect(schema.properties.productId!.anyOf).toEqual([{ type: 'string', enum: ['a', 'b'] }, { type: 'null' }]);
   expect(schema.properties.candidates!.items!.enum).toEqual(['a', 'b']);
@@ -100,7 +102,7 @@ it('the instruction file says that the package of a store item can be in another
 it('the instruction file names each status, each aim hint, and each gesture of the answer', () => {
   const text = readFileSync('../../agents/recognition.md', 'utf8');
   const words = ['identified', 'ambiguous', 'unsure', 'unknown', 'none', 'left', 'right', 'up', 'down', 'closer', 'farther', 'turn',
-    'thumbs_up', 'thumbs_down', 'candidates', 'aimHint', 'confidence', 'productId', 'Exclude', 'code', 'visible', 'digits'];
+    'thumbs_up', 'thumbs_down', 'candidates', 'aimHint', 'confidence', 'productId', 'Exclude', 'code', 'visible', 'digits', 'held'];
   for (const word of words) expect(text).toContain(word);
 });
 it('the instruction file tells the model not to guess a digit, and to answer none for the barcode side', () => {
@@ -117,15 +119,26 @@ it('adds the rules for reference pictures only for a call that holds some', () =
   expect(text).toMatch(/The last image is the frame/);
   expect(text).toMatch(/background means nothing/);
   expect(text).toMatch(/Never answer about a product that only a reference picture shows/);
-  // Two store items of one design: the part that differs must be in the frame.
-  expect(text).toMatch(/look alike[^.]*\./);
-  expect(text).toMatch(/If the frame does not show that part clearly, use `unsure`/);
+  // Two store items of one design: the flavor text names the item, and a color alone does not.
+  expect(text).toMatch(/look alike, the flavor text tells them apart/);
+  expect(text).toMatch(/If you cannot, use `ambiguous` with these products/);
+  expect(text).toMatch(/Their colors alone are not enough/);
 });
-it('the instruction file keeps a store item of a row of look-alike items to a frame that shows the part that differs', () => {
+it('the instruction file names a store item of a row of look-alike items only by its flavor text, and asks for the candidates in each other case', () => {
   const text = readFileSync('../../agents/recognition.md', 'utf8');
-  expect(text).toMatch(/differ only in a flavor word or in the color/);
-  expect(text).toMatch(/only when the frame shows the part that tells it apart/);
-  expect(text).toMatch(/The light of the room can change a color/);
+  expect(text).toMatch(/only when you can read its flavor text on the product in the hand/);
+  expect(text).toMatch(/a color alone never gives `identified`/);
+  expect(text).toMatch(/use `ambiguous` with the IDs of the items that it can be/);
+});
+it('the instruction file keeps each answer to the product in the hand, and asks where the product is', () => {
+  const text = readFileSync('../../agents/recognition.md', 'utf8');
+  expect(text).toMatch(/`held`: true when a hand holds a product and presents it to the camera/);
+  expect(text).toMatch(/stands on a table[^.]*does not count/);
+  expect(text).toMatch(/hand of another person does not count/);
+  expect(text).toMatch(/Never give the name of a product that stands behind or beside the product in the hand/);
+  expect(text).toMatch(/With `held` false, the status is `none`/);
+  expect(text).toMatch(/larger and nearer/);
+  expect(text).toMatch(/never from an ID of the catalog or of the store items/);
 });
 it('the instruction file keeps the code to a product that a hand holds, so a shelf label asks for no still', () => {
   const text = readFileSync('../../agents/recognition.md', 'utf8');

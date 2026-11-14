@@ -19,7 +19,7 @@ The request starts with reference pictures: photos of the real package of some p
 - A reference picture can show the package from another side, at another size, or in other light. Its background means nothing.
 - If a hand in the frame holds a product, and the shape, the colors, and the print of its package match the reference pictures of one product, use \`identified\` with that ID. This holds also when the text in the frame is too small to read.
 - A package that is only similar to a reference picture gives \`unsure\`, or \`unknown\` when you can see that it is another product.
-- When the reference pictures of two products look alike, find the part that differs: the flavor text, or the color. If the frame does not show that part clearly, use \`unsure\`.
+- When the reference pictures of two products look alike, the flavor text tells them apart. If you can read it on the product in the hand, use \`identified\`, also when the product is tilted or partly behind the fingers. If you cannot, use \`ambiguous\` with these products. Their colors alone are not enough: the light of the frame can differ from the light of the pictures.
 - Never answer about a product that only a reference picture shows. The status, the aim hint, and the code are about the frame alone.`;
 
 /**
@@ -59,6 +59,7 @@ export function buildSystemInstruction(
 export function recognitionResponseSchema(productIds: readonly string[]): unknown {
   const id = productIds.length > 0 ? z.enum(productIds as [string, ...string[]]) : null;
   return z.toJSONSchema(z.object({
+    held: z.boolean(),
     status: z.enum(['identified', 'ambiguous', 'unsure', 'unknown', 'none']),
     productId: id === null ? z.null() : id.nullable(),
     candidates: id === null ? z.array(z.string()).max(0) : z.array(id),

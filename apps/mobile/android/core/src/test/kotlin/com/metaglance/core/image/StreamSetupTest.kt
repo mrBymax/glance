@@ -55,8 +55,8 @@ class StreamSetupTest {
         assertEquals(1500, StreamSetup(StreamQuality.MEDIUM, 2).gapMs(1500))
     }
 
-    @Test fun `the upload has a center crop with even sides at each quality`() {
-        val sizes = StreamQuality.entries.map { FrameGeometry.outputSize(FrameGeometry.centerCrop(it.width, it.height)) }
-        assertEquals(listOf(494 to 768, 402 to 626, 288 to 448), sizes)
+    @Test fun `the upload is the full frame with even sides at each quality`() {
+        val sizes = StreamQuality.entries.map { FrameGeometry.outputSize(FrameGeometry.full(it.width, it.height)) }
+        assertEquals(listOf(432 to 768, 432 to 768, 360 to 640), sizes)
     }
 }

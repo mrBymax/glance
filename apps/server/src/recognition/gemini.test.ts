@@ -12,10 +12,12 @@ import { NO_RESULT } from './result';
 const catalog = indexCatalog(readCatalogFile(fileURLToPath(new URL('../../catalog/catalog.dev.json', import.meta.url))));
 const template = readFileSync(RECOGNITION_TEMPLATE_PATH, 'utf8');
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
-const answer = {
+const result = {
   status: 'identified', productId: 'oat-drink-1l', candidates: [], confidence: 0.9, aimHint: 'none', gesture: 'none',
   code: { visible: false, digits: null },
 };
+/** What the model writes: the result, and where the product is. */
+const answer = { held: true, ...result };
 
 type Call = { url: string; headers: Headers; body: Record<string, unknown> };
 let calls: Call[];
@@ -50,7 +52,7 @@ beforeEach(() => {
 });
 
 it('sends one frame, the exclude list, the catalog, and the answer schema', async () => {
-  expect(await recognizer().recognize(JPEG, opts({ exclude: ['rye-bread'] }))).toEqual(answer);
+  expect(await recognizer().recognize(JPEG, opts({ exclude: ['rye-bread'] }))).toEqual(result);
   expect(calls).toHaveLength(1);
   const { url, headers, body } = calls[0]!;
   expect(url).toContain('/models/gemini-3.5-flash-lite:generateContent');
@@ -83,7 +85,7 @@ it('knows the store items: the instruction lists them, the schema takes their ID
   const storeAnswer = { ...answer, productId: 'gtin-6438574558384' };
   reply = modelSays(JSON.stringify(storeAnswer));
   expect(await recognizer().recognize(JPEG, opts())).toMatchObject({ status: 'unknown', productId: null });
-  expect(await recognizer({ storeEntries: [cups] }).recognize(JPEG, opts())).toEqual(storeAnswer);
+  expect(await recognizer({ storeEntries: [cups] }).recognize(JPEG, opts())).toEqual({ ...result, productId: 'gtin-6438574558384' });
 
   const { body } = calls[1]!;
   expect(JSON.stringify(body.systemInstruction)).toContain('- id: gtin-6438574558384 | name: Paper cups');
@@ -116,6 +118,16 @@ it('checks the answer of the model', async () => {
   expect(await recognizer().recognize(JPEG, opts())).toMatchObject({ status: 'unsure', productId: null, aimHint: 'closer' });
   reply = modelSays(JSON.stringify(answer));
   expect((await recognizer().recognize(JPEG, opts({ exclude: ['oat-drink-1l'] }))).status).toBe('none');
+});
+it('drops digits of the model that are the code of a store item of the instruction', async () => {
+  reply = modelSays(JSON.stringify({ ...answer, status: 'unsure', productId: null, code: { visible: true, digits: '6438574558384' } }));
+  expect((await recognizer({ storeEntries: [cups] }).recognize(JPEG, opts())).code).toEqual({ visible: true, digits: null });
+  // With no such item in the instruction, the model cannot copy the digits, and the lookup decides.
+  expect((await recognizer().recognize(JPEG, opts())).code).toEqual({ visible: true, digits: '6438574558384' });
+});
+it('names no product for an answer about a product that no hand holds', async () => {
+  reply = modelSays(JSON.stringify({ ...answer, held: false }));
+  expect(await recognizer().recognize(JPEG, opts())).toEqual(NO_RESULT);
 });
 it('gives no result for an answer that is empty or no JSON', async () => {
   reply = modelSays('');

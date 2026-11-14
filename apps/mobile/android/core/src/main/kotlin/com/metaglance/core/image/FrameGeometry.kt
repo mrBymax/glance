@@ -9,8 +9,8 @@ object FrameGeometry {
     fun full(width: Int, height: Int) = RectPx(0, 0, width, height)
 
     /**
-     * The center 80 percent of the width and 70 percent of the height.
-     * Each of the four values is even, so the crop starts on a chroma sample of an I420 frame.
+     * The center 80 percent of the width and 70 percent of the height, for the still of the second look.
+     * A stream frame goes out with no crop. Each of the four values is even, so the crop starts on a chroma sample of an I420 frame.
      */
     fun centerCrop(width: Int, height: Int): RectPx {
         val cropWidth = even(width * 8 / 10)

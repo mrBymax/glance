@@ -1,6 +1,5 @@
 package com.metaglance.core.image
 
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -60,24 +59,36 @@ class FramePrepTest {
     }
 
     @Test fun `drops a frame when face detection failed`() {
-        assertNull(FramePrep.prepare(frame(720, 1280, 128), FaceResult.Failed, crop = false))
+        assertNull(FramePrep.prepare(frame(720, 1280, 128), FaceResult.Failed))
     }
 
-    @Test fun `follows the size of each frame`() {
-        fun size(w: Int, h: Int, crop: Boolean): Pair<Int, Int> {
-            val prepared = FramePrep.prepare(frame(w, h, 128), FaceResult.NotRun, crop)!!
+    @Test fun `keeps the full frame, with a long side of 768 pixels at most`() {
+        fun size(w: Int, h: Int): Pair<Int, Int> {
+            val prepared = FramePrep.prepare(frame(w, h, 128), FaceResult.NotRun)!!
             assertEquals(prepared.width * prepared.height, prepared.argb.size)
             return prepared.width to prepared.height
         }
-        assertEquals(432 to 768, size(720, 1280, false))
-        assertEquals(432 to 768, size(504, 896, false))
-        assertEquals(360 to 640, size(360, 640, false))
-        assertEquals(494 to 768, size(720, 1280, true))
+        assertEquals(432 to 768, size(720, 1280))
+        assertEquals(432 to 768, size(504, 896))
+        assertEquals(360 to 640, size(360, 640))
+    }
+
+    @Test fun `keeps a product at the lower edge and at a side of the frame`() {
+        // White rows at the lower edge, and white columns at the right side. The center crop of before cut both off.
+        val f = frame(360, 640, 16).also {
+            for (row in 600 until 640) for (col in 0 until 360) it.i420[row * 360 + col] = 235.toByte()
+            for (row in 0 until 640) for (col in 340 until 360) it.i420[row * 360 + col] = 235.toByte()
+        }
+        val out = FramePrep.prepare(f, FaceResult.NotRun)!!
+        assertEquals(360 to 640, out.width to out.height)
+        assertTrue(out.argb[620 * 360 + 100] and 0xFF >= 254)
+        assertTrue(out.argb[100 * 360 + 350] and 0xFF >= 254)
+        assertEquals(0xFF000000.toInt(), out.argb[100 * 360 + 100])
     }
 
     @Test fun `marks a frame as blurred only when face detection ran`() {
-        assertFalse(FramePrep.prepare(frame(360, 640, 128), FaceResult.NotRun, false)!!.blurred)
-        assertTrue(FramePrep.prepare(frame(360, 640, 128), FaceResult.Found(emptyList()), false)!!.blurred)
+        assertFalse(FramePrep.prepare(frame(360, 640, 128), FaceResult.NotRun)!!.blurred)
+        assertTrue(FramePrep.prepare(frame(360, 640, 128), FaceResult.Found(emptyList()))!!.blurred)
     }
 
     /** A frame with no color, in which each luma byte differs from its neighbors. */
@@ -85,21 +96,23 @@ class FramePrepTest {
 
     @Test fun `pixelates a found face in the output`() {
         val f = noiseFrame(720, 1280)
-        val out = FramePrep.prepare(f, FaceResult.Found(listOf(RectPx(300, 600, 120, 120))), crop = true)!!
-        val x = ((300 - 72) * 494 / 576) + 20
-        val y = ((600 - 192) * 768 / 896) + 20
+        val out = FramePrep.prepare(f, FaceResult.Found(listOf(RectPx(300, 600, 120, 120))))!!
+        val x = (300 * 432 / 720) + 20
+        val y = (600 * 768 / 1280) + 20
         assertEquals(out.argb[y * out.width + x], out.argb[y * out.width + x + 1])
         assertTrue(out.blurred)
-        assertEquals(494 to 768, out.width to out.height)
+        assertEquals(432 to 768, out.width to out.height)
         // The same two pixels differ with no face, so the test frame is noise at that place.
-        val plain = FramePrep.prepare(f, FaceResult.Found(emptyList()), crop = true)!!
+        val plain = FramePrep.prepare(f, FaceResult.Found(emptyList()))!!
         assertNotEquals(plain.argb[y * plain.width + x], plain.argb[y * plain.width + x + 1])
     }
 
-    @Test fun `leaves the output as it is for a face outside the crop`() {
+    @Test fun `pixelates a face in the corner of the frame`() {
+        // The center crop of before left this face out. The full frame shows it, so it must be pixelated.
         val f = noiseFrame(720, 1280)
-        val out = FramePrep.prepare(f, FaceResult.Found(listOf(RectPx(0, 0, 50, 50))), crop = true)!!
-        val plain = FramePrep.prepare(f, FaceResult.NotRun, crop = true)!!
-        assertArrayEquals(plain.argb, out.argb)
+        val out = FramePrep.prepare(f, FaceResult.Found(listOf(RectPx(0, 0, 100, 100))))!!
+        assertEquals(out.argb[10 * out.width + 10], out.argb[10 * out.width + 11])
+        val plain = FramePrep.prepare(f, FaceResult.NotRun)!!
+        assertNotEquals(plain.argb[10 * plain.width + 10], plain.argb[10 * plain.width + 11])
     }
 }

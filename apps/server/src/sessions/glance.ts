@@ -3,7 +3,7 @@ import { isConfirmed, passSpotCheck, suspendCheckoutFor } from './checkout';
 import { codeOf, codeQuiet, endStillWait, holdUnknownLine, onFrameCode, onUnnamedProduct, speakUnknown } from './code';
 import { say } from './say';
 import { type Turn, emit, nextPromptId, promptProductInView, qtyInCart, speak } from './turn';
-import type { RuleInput } from './types';
+import type { RuleInput, SessionState } from './types';
 import { inView } from './view';
 import { warningsFor } from './warnings';
 
@@ -19,6 +19,34 @@ const YES_HINT_GLANCES = 2;
  */
 export const GO_BACK_AFTER_MS = 1000;
 
+/**
+ * A result by sight replaces the prompt of another product only when the result before it named the same product,
+ * at most this time earlier. One frame can name a product that stands behind the product in the hand.
+ */
+export const SWITCH_WITHIN_MS = 1500;
+
+/** What the rules of this file know about the source of a product prompt. */
+export type SightState = {
+  /**
+   * The ID of the product prompt that a sure source opened or confirmed, else null. The sure sources are a barcode,
+   * a label match, digits of the model, and a still, which has the pixels for the flavor text of a package.
+   * An `ambiguous` result of a stream frame does not end such a prompt.
+   */
+  surePromptId: string | null;
+  /** The last result by sight that named another product than the product of the prompt, when no other result followed it. */
+  run: { productId: string; at: number } | null;
+};
+
+/**
+ * The sight state of a session. It lives in the session state as the field `sight`, which only this file reads.
+ * A new session, and a session that an older server stored, have none, so this fills it.
+ */
+export function sightOf(s: SessionState): SightState {
+  const state = s as SessionState & { sight?: SightState };
+  state.sight ??= { surePromptId: null, run: null };
+  return state.sight;
+}
+
 type RecognitionInput = Extract<RuleInput, { type: 'recognition' }>;
 
 export function onRecognition(turn: Turn, input: RecognitionInput): void {
@@ -26,6 +54,8 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
   if (s.phase !== 'shopping' && s.phase !== 'checkout') return;
   const { result } = input;
   if (result.status !== 'none') s.lastTargetAt = now;
+  // "In a row": each result that names no product ends the run of `agreesBySight`.
+  if (result.status !== 'identified') sightOf(s).run = null;
   onFrameCode(turn, result.code);
 
   // The sharp second look. The phone took this still because of a glance.ambiguous event.
@@ -44,7 +74,9 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
 
   switch (result.status) {
     case 'identified':
-      if (result.productId !== null && !goesBack(turn, result.productId)) onIdentified(turn, result.productId);
+      if (result.productId !== null && agreesBySight(turn, result.productId) && !goesBack(turn, result.productId)) {
+        onIdentified(turn, result.productId, input.still);
+      }
       return;
     case 'ambiguous':
       onAmbiguous(turn, result.candidates);
@@ -61,6 +93,25 @@ export function onRecognition(turn: Turn, input: RecognitionInput): void {
 }
 
 /**
+ * False for the first result by sight that names another product than the product of the current prompt.
+ * The prompt changes with the second such result in a row for one product, inside SWITCH_WITHIN_MS.
+ * In the test of 2026-11-14 a label match named the can in the hand, and 0.5 seconds later one frame named a can
+ * on the table behind it. A barcode and a label match are sure, so they do not go through this test.
+ */
+function agreesBySight(turn: Turn, productId: string): boolean {
+  const { s, now } = turn;
+  const sight = sightOf(s);
+  if (s.prompt?.kind !== 'product' || s.prompt.productId === productId) {
+    sight.run = null;
+    return true;
+  }
+  const agrees = sight.run !== null && sight.run.productId === productId && now - sight.run.at <= SWITCH_WITHIN_MS;
+  // The run stays after it agrees: `goesBack` can still hold the product back, and the next result then counts.
+  sight.run = { productId, at: now };
+  return agrees;
+}
+
+/**
  * True for a result of sight that would give the prompt back to the product that the current prompt replaced, while
  * sight still names the product of the current prompt. A barcode is sure, so it does not go through this test.
  */
@@ -71,11 +122,16 @@ function goesBack(turn: Turn, productId: string): boolean {
   return lastSeen !== undefined && now - lastSeen < GO_BACK_AFTER_MS;
 }
 
-/** For a product that recognition named, and for the product of a barcode. */
-export function onIdentified(turn: Turn, productId: string): void {
+/**
+ * For a product that recognition named, and for the product of a barcode or a label match.
+ * `sure` is false for the result of a stream frame. Each other source is sure of its product.
+ */
+export function onIdentified(turn: Turn, productId: string, sure = true): void {
   const { s, now, ctx } = turn;
   const product = ctx.catalog.get(productId);
   if (!product) return;
+  // A sure source names the product of the prompt that sight opened: the prompt is sure from now on.
+  if (sure && s.prompt?.kind === 'product' && s.prompt.productId === productId) sightOf(s).surePromptId = s.prompt.id;
   // The model named one product, in a still or in a stream frame, so the look-alike line is out of date.
   s.heldAmbiguous = null;
   // The same for the unknown line that waits for a still.
@@ -88,10 +144,10 @@ export function onIdentified(turn: Turn, productId: string): void {
   if (s.muted.includes(productId)) return;
   // R1: results inside the view time belong to one appearance, and one appearance gets one prompt.
   if (s.prompt?.kind === 'product' && s.prompt.productId === productId && wasInView) return;
-  openProductPrompt(turn, product);
+  openProductPrompt(turn, product, sure);
 }
 
-function openProductPrompt(turn: Turn, product: Product): void {
+function openProductPrompt(turn: Turn, product: Product, sure: boolean): void {
   const { s } = turn;
   if (s.prompt?.kind === 'product') {
     emit(turn, { type: 'glance.cleared', promptId: s.prompt.id });
@@ -111,6 +167,7 @@ function openProductPrompt(turn: Turn, product: Product): void {
   // A sound never carries information alone: the line names each warning.
   const over = { promptId: id, ...(warnings.length > 0 ? { sound: 'warning' as const } : {}) };
   s.prompt = { id, kind: 'product', mode, productId: product.id, startedAt: turn.now, doneAt: null };
+  sightOf(s).surePromptId = sure ? id : null;
   emit(turn, {
     type: 'glance.pending', promptId: id, kind: mode, product: toProductRef(product, s.profile.lang), warnings, qtyInCart: qty,
   });
@@ -148,6 +205,8 @@ function onAmbiguous(turn: Turn, candidates: readonly string[]): void {
 
   if (s.prompt?.kind === 'product') {
     if (candidates.includes(s.prompt.productId)) {
+      // A sure source read the product. A small frame that cannot tell it from its look-alikes says nothing new.
+      if (sightOf(s).surePromptId === s.prompt.id) return;
       // The shopper cannot add a product that the model is no longer sure of.
       emit(turn, { type: 'glance.cleared', promptId: s.prompt.id });
       s.prompt = null;

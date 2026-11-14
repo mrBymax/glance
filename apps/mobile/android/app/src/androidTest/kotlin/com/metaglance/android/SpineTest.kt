@@ -78,7 +78,7 @@ class SpineTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) 
         }
         waitUntil("frames go out", STEP_MS, ::state) { traffic.frames.size >= 2 }
         val frame = traffic.frames.first()
-        // Each upload is the center crop of the 720 x 1280 stream, and face detection ran on it.
+        // Each upload is the full frame of the 720 x 1280 stream with a long side of 768 pixels, and face detection ran on it.
         assertEquals(UPLOAD_SIZE, frame.header.w to frame.header.h)
         assertTrue("An upload went out with no face detection.", traffic.frames.all { it.header.blurred })
 
@@ -175,7 +175,7 @@ class SpineTest : MockDeviceKitTestCase<MainActivity>(MainActivity::class.java) 
 
     private companion object {
         const val PRODUCT_ID = "oat-drink-1l"
-        val UPLOAD_SIZE = 494 to 768
+        val UPLOAD_SIZE = 432 to 768
         const val START_MS = 15_000L
         const val STEP_MS = 10_000L
 
