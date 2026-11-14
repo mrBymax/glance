@@ -6,6 +6,8 @@ import type { Config } from './config';
 import type { Store } from './db/store';
 import { registerSessionRoutes } from './http/sessions';
 import { ScriptPlayer, readFakeScript } from './recognition/fake';
+import type { Recognizer } from './recognition/gemini';
+import { createFrameHandler } from './recognition/intake';
 import { SessionRegistry } from './sessions/registry';
 import { type FrameHandler, registerDeviceSocket } from './ws/device';
 
@@ -13,7 +15,9 @@ export type AppDeps = {
   config: Config; clock: Clock; store: Store; catalog: CatalogIndex;
   /** false gives no log. An object sends each log line to its stream. */
   log?: boolean | { level: string; stream: { write(line: string): void } };
-  /** Gets each frame of each phone. Without it the server drops the frames. Fake recognition does not use it. */
+  /** Names the product of each frame. Fake recognition does not use it. */
+  recognizer?: Recognizer;
+  /** Gets each frame of each phone, in place of the recognizer. With neither, the server drops the frames. */
   onFrame?: FrameHandler;
 };
 
@@ -114,6 +118,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     );
   };
 
+  const recognize = player || deps.onFrame || !deps.recognizer ? null : createFrameHandler({
+    recognizer: deps.recognizer,
+    clock: deps.clock,
+    log: app.log,
+    onSlow: (session) => app.log.warn(`recognition is slow for the session ${session.id}: 3 calls failed in a row`),
+    requireBlur: config.requireBlur,
+  });
+  if (recognize) app.closers.add(() => recognize.stopAll());
+
   registerSessionRoutes(app, {
     // The test helper sets the address after the server has its port, so the route reads it for each call.
     publicBaseUrl: () => config.publicBaseUrl,
@@ -121,7 +134,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     onEventsOpen: (session) => player?.start(session, { fakeDevice: !session.connected }),
   });
   registerDeviceSocket(app, {
-    onFrame: player ? logFrame : deps.onFrame ?? (() => undefined),
+    onFrame: player ? logFrame : deps.onFrame ?? recognize ?? (() => undefined),
     onOpen: (session) => player?.start(session, { fakeDevice: false }),
   });
 

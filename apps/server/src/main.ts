@@ -1,11 +1,13 @@
+import { readFileSync } from 'node:fs';
 import { buildApp } from './app';
-import { indexCatalog, readCatalogFile } from './catalog/catalog';
+import { type CatalogIndex, indexCatalog, readCatalogFile } from './catalog/catalog';
 import { systemClock } from './clock';
 import { type Config, ConfigError, loadConfig } from './config';
 import { MemoryStore } from './db/memory';
 import { MongoStore } from './db/mongo';
 import type { Store } from './db/store';
 import { FakeScriptError } from './recognition/fake';
+import { RECOGNITION_TEMPLATE_PATH, type Recognizer, createGeminiRecognizer } from './recognition/gemini';
 
 class StartError extends Error {}
 
@@ -20,14 +22,31 @@ async function openStore(config: Config): Promise<Store> {
   return store;
 }
 
+/** The real recognizer, or undefined with fake recognition. loadConfig has checked that the key exists. */
+function openRecognizer(config: Config, catalog: CatalogIndex): Recognizer | undefined {
+  if (config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
+  return createGeminiRecognizer({
+    apiKey: config.geminiApiKey,
+    model: config.geminiModel,
+    mediaResolution: config.geminiMediaResolution,
+    minConfidence: config.minConfidence,
+    catalog,
+    template: readFileSync(RECOGNITION_TEMPLATE_PATH, 'utf8'),
+  });
+}
+
 async function main(): Promise<void> {
   const config = loadConfig(process.env, process.argv.slice(2));
   const store = await openStore(config);
   const catalog = indexCatalog(await store.listProducts());
-  const app = await buildApp({ config, clock: systemClock, store, catalog });
+  const recognizer = openRecognizer(config, catalog);
+  const app = await buildApp({ config, clock: systemClock, store, catalog, ...(recognizer ? { recognizer } : {}) });
   app.addHook('onClose', () => store.close());
   app.log.info(`store: ${config.mongodbUri === null ? 'memory' : 'mongo'}`);
   app.log.info(`catalog: ${catalog.products.length} products`);
+  app.log.info(config.fakeRecognition === null
+    ? `recognition: ${config.geminiModel}, blur ${config.requireBlur ? 'required' : 'not required'}`
+    : `recognition: fake, script ${config.fakeRecognition}`);
 
   let closing = false;
   const close = (signal: string): void => {

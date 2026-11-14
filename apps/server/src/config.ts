@@ -9,6 +9,8 @@ export type Config = {
   geminiModel: string;
   geminiMediaResolution: 'default' | 'low';
   minConfidence: number;
+  /** Drop each frame that the phone sent with blurred: false. */
+  requireBlur: boolean;
   /** The path of the script file, or null when recognition is real. */
   fakeRecognition: string | null;
   fakeSpeech: boolean;
@@ -69,6 +71,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     geminiModel: read('GEMINI_MODEL') ?? 'gemini-3.5-flash-lite',
     geminiMediaResolution: mediaResolution,
     minConfidence: readNumber('RECOGNITION_MIN_CONFIDENCE', 0.6, 0, 1, false),
+    requireBlur: read('REQUIRE_BLUR') === '1',
     fakeRecognition,
     fakeSpeech,
     elevenlabsApiKey: read('ELEVENLABS_API_KEY'),

@@ -7,7 +7,7 @@ it('uses the defaults', () => {
   expect(loadConfig(KEYS, [])).toMatchObject({
     port: 8080, publicBaseUrl: 'http://localhost:8080', mongodbUri: null, mongodbDb: 'glance',
     catalogPath: 'catalog/catalog.dev.json', geminiModel: 'gemini-3.5-flash-lite',
-    geminiMediaResolution: 'default', minConfidence: 0.6, fakeRecognition: null, fakeSpeech: false,
+    geminiMediaResolution: 'default', minConfidence: 0.6, requireBlur: false, fakeRecognition: null, fakeSpeech: false,
     speechCacheDir: '.cache/speech', saveFramesDir: null, paymentDelayMs: 1500,
   });
 });
@@ -21,6 +21,11 @@ it('names the missing variable', () => {
   expect(() => loadConfig({ FAKE_SPEECH: '1' }, [])).toThrow(/GEMINI_API_KEY/);
   expect(() => loadConfig({ FAKE_RECOGNITION: '1' }, [])).toThrow(/ELEVENLABS_API_KEY/);
   expect(() => loadConfig({ FAKE_RECOGNITION: '1', ELEVENLABS_API_KEY: 'e' }, [])).toThrow(/ELEVENLABS_VOICE_EN/);
+});
+it('turns the blur check on with REQUIRE_BLUR=1 alone', () => {
+  expect(loadConfig({ REQUIRE_BLUR: '1' }, ['--fake']).requireBlur).toBe(true);
+  expect(loadConfig({ REQUIRE_BLUR: 'true' }, ['--fake']).requireBlur).toBe(false);
+  expect(loadConfig({ REQUIRE_BLUR: '' }, ['--fake']).requireBlur).toBe(false);
 });
 it('rejects a value that is not a number', () => {
   expect(() => loadConfig({ PORT: 'abc' }, ['--fake'])).toThrow(ConfigError);
