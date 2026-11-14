@@ -2,17 +2,34 @@
 
 ## Summary
 
-Phases A and B are done and merged (2026-11-14, about 06:15). On the merged tree: shared 44 tests, server 329 tests (7 MongoDB tests skipped, no database), website 47, phone UI 71, `npm run lint` clean, and in `apps/mobile/android` `./gradlew ktlintCheck test :app:assembleDebug` passes and gives `app-debug.apk`. Lane worktrees: `C:\Users\marco\Desktop\glance-wt\<lane>` on `overnight/server`, `overnight/android`, `overnight/web`.
+State on 2026-11-14 at about 08:30: phases A, B, C, and D are done and merged in `feat/overnight-build` (8c5bba6). Phase E (other inputs and the extras) is next.
 
-Open from phase B, for phase C: the device checks of Plan 2 (Tasks 1, 2, 3, 13, 14, 15) run as integration test 3. Vendor checks not yet made: Plan 1 Task 13 Step 5 (1 Gemini call) and Task 15 Step 5 (1 ElevenLabs call, 10 characters). The commands are in `MORNING.md` section 8.
+What works, checked on the merged tree:
 
-Tools: load with `source "$USERPROFILE/.glance-tools/env.sh"` (Git Bash) or `. "$env:USERPROFILE\.glance-tools\env.ps1"`. JDK 17.0.21, Gradle 8.14.1, Android SDK (platform 36, build-tools 35.0.0 and 36.0.0, emulator, WHPX usable), FFmpeg 9.0.2 with libx265. Docker Desktop runs (started with `docker desktop start`, no dialog).
+- `npm test --workspaces --if-present`: shared 44, server 402 (7 MongoDB tests skipped, no database), website 119, phone UI 169. `npm run lint` is clean.
+- `apps/mobile/android`: `./gradlew ktlintCheck test :app:assembleDebug` passes (151 unit tests).
+- Integration test 1: `node scripts/integration/server-kotlin.mjs` passes.
+- Integration test 2: `node scripts/integration/server-web.mjs` passes (phone UI, kiosk page, mirror page) with one known defect line. `--strict` fails on it.
+- Integration test 3: `node scripts/integration/android/run-spine.mjs --integration` passes 3 of 3 on the phone P11262000912 (spine, 18 state tests, 2 page tests). `--all` runs each instrumented test.
+- One real Gemini call works (1349 ms) after the fix f26b800. Ledger: 2 of 20 Gemini calls, 0 of 5 ElevenLabs calls.
 
-Phone P11262000912: attached, unlocked, media volume already 0, no `com.metaglance` package (read at about 04:10).
+Before each command: `source "$USERPROFILE/.glance-tools/env.sh"` (Git Bash).
+
+Open defects and limits:
+
+- The phone UI with `?api=` (BrowserBridge) does not show the caption "Paid. ...", because the bridge closes the event stream at the phase `paid` and the server sends the caption later. The Android path is not affected. A fix is planned in phase E.
+- No instrumented test covers the state "Recognition slow". The server rule now exists (Plan 1 Task 18). Planned in phase E.
+- The Vite dev proxy loses calls on this machine (Node 26, Windows). The test harness adds an HTTP agent. The app configs are unchanged: see `MORNING.md`.
+- Not done, needs a person: the Lighthouse audit of Plan 3 Task 15, a camera read of the kiosk QR code, the real catalog (Plan 4 Task 1), the Vultr instance (Plan 1 Task 22), the final signed APK (Plan 2 Task 20), the probe on the glasses (Plan 2 Task 4).
+
+Lane worktrees: `C:UsersmarcoDesktopglance-wt<lane>` with the branches `overnight/server`, `overnight/android`, `overnight/web`, `overnight/integ`, `overnight/hud`.
 
 ## Log of attempts
 
-None yet.
+- Integration test 3, spine: a running mock stream keeps its camera feed, so the test folds and unfolds the glasses for the QR clip. Fixes on the way: a 500 ms settle time in SessionController, a delayed Inputs revival, and a 1 s wait in DatLink.stop against a native abort in the video decoder of mwdat-camera 1.0.1.
+- Integration test 2 failed after the merge of phases C and D, because the phone UI now starts on the setup screen. The test was stale and now clicks through the screens.
+- Gemini check: the first call got status 400 for a 4 s server deadline. Fixed in f26b800.
+- Details of each lane: `QUESTIONS.md` and `MORNING.md` section 8.
 
 ## Tasks
 
@@ -41,12 +58,12 @@ Status values: `todo`, `done`, `blocked`, `morning`.
 | 1 | 14 | Recognition worker (C2) | B | server | done | merge 444f77d |
 | 1 | 15 | Speech clips (C2) | B | server | done | merge 444f77d |
 | 1 | 16 | Kiosk, mock payment, receipt (C2) | B | server | done | merge 444f77d |
-| 1 | 17 | Token checks (C3) | D | server | todo | |
-| 1 | 18 | States that the server reports (C3) | D | server | todo | |
-| 1 | 19 | No stored frame (C3) | D | server | todo | |
-| 1 | 20 | Catalog check and seed (C3) | D | server | todo | |
-| 1 | 21 | Replay tool (C3) | D | server | todo | |
-| 1 | 22 | Deployment on Vultr with HTTPS (C3) | D | server | todo | |
+| 1 | 17 | Token checks (C3) | D | server | done | merged in 8c5bba6 |
+| 1 | 18 | States that the server reports (C3) | D | server | done | merged in 8c5bba6 |
+| 1 | 19 | No stored frame (C3) | D | server | done | merged in 8c5bba6 |
+| 1 | 20 | Catalog check and seed (C3) | D | server | done | merged in 8c5bba6 |
+| 1 | 21 | Replay tool (C3) | D | server | done | merged in 8c5bba6 |
+| 1 | 22 | Deployment on Vultr with HTTPS (C3) | D | server | done | merged in 8c5bba6 |
 | 1 | 23 | Allergen guard (Extra 1) | E | server | todo | |
 | 1 | 24 | Budget guard (Extra 2) | E | server | todo | |
 | 1 | 25 | Answer for look-alike products (Extra 3) | E | server | todo | |
@@ -70,11 +87,11 @@ Status values: `todo`, `done`, `blocked`, `morning`.
 | 2 | 13 | Bridge, WebView host, placeholder page (C2) | B | android | done | merge 396d89e |
 | 2 | 14 | Pipeline and audio adapters (C2) | B | android | done | merge 396d89e |
 | 2 | 15 | Session controller and the spine check (C2) | B | android | done | merge 396d89e |
-| 2 | 16 | Setup flow (C3) | D | android | todo | |
-| 2 | 17 | Mock menu, device and error states (C3) | D | android | todo | |
-| 2 | 18 | Face blur and crop (C3) | D | android | todo | |
-| 2 | 19 | Haptics and pocket mode (C3) | D | android | todo | |
-| 2 | 20 | Signed demo APK (C3) | D | android | todo | |
+| 2 | 16 | Setup flow (C3) | D | android | done | merged in 8c5bba6 |
+| 2 | 17 | Mock menu, device and error states (C3) | D | android | done | merged in 8c5bba6 |
+| 2 | 18 | Face blur and crop (C3) | D | android | done | merged in 8c5bba6 |
+| 2 | 19 | Haptics and pocket mode (C3) | D | android | done | merged in 8c5bba6 |
+| 2 | 20 | Signed demo APK (C3) | D | android | done | merged in 8c5bba6 |
 | 2 | 21 | Volume keys as yes and no (Extra, core if the probe selects it) | E | android | todo | |
 | 2 | 22 | Double tap and swipe (Extra) | E | android | todo | |
 | 2 | 23 | Voice commands (Extra) | E | android | todo | |
@@ -86,15 +103,15 @@ Status values: `todo`, `done`, `blocked`, `morning`.
 | 3 | 4 | UI state and reducer (C2) | B | web | done | merge fcc07c1 |
 | 3 | 5 | Session screen (C2) | B | web | done | merge fcc07c1 |
 | 3 | 6 | Kiosk page (C2) | B | web | done | merge fcc07c1 |
-| 3 | 7 | Setup screen (C3) | D | web | todo | |
-| 3 | 8 | Checkout sheet and receipt (C3) | D | web | todo | |
-| 3 | 9 | Settings sheet (C3) | D | web | todo | |
-| 3 | 10 | State banner and status row (C3) | D | web | todo | |
-| 3 | 11 | A phone button for each action, and haptics (C3) | D | web | todo | |
-| 3 | 12 | Pocket mode (C3) | D | web | todo | |
-| 3 | 13 | Mirror page (C3) | D | web | todo | |
-| 3 | 14 | Debug panel (C3) | D | web | todo | |
-| 3 | 15 | Accessibility checks of spec section 10 (C3) | D | web | todo | |
+| 3 | 7 | Setup screen (C3) | D | web | done | merged in 8c5bba6 |
+| 3 | 8 | Checkout sheet and receipt (C3) | D | web | done | merged in 8c5bba6 |
+| 3 | 9 | Settings sheet (C3) | D | web | done | merged in 8c5bba6 |
+| 3 | 10 | State banner and status row (C3) | D | web | done | merged in 8c5bba6 |
+| 3 | 11 | A phone button for each action, and haptics (C3) | D | web | done | merged in 8c5bba6 |
+| 3 | 12 | Pocket mode (C3) | D | web | done | merged in 8c5bba6 |
+| 3 | 13 | Mirror page (C3) | D | web | done | merged in 8c5bba6 |
+| 3 | 14 | Debug panel (C3) | D | web | done | merged in 8c5bba6 |
+| 3 | 15 | Accessibility checks of spec section 10 (C3) | D | web | done | merged in 8c5bba6 |
 | 3 | 16 | Allergen and diet settings, and the warning on the card (Extra 1) | E | web | todo | |
 | 3 | 17 | Budget setting and the warning (Extra 2) | E | web | todo | |
 | 3 | 18 | Look-alike message (Extra 3) | E | web | todo | |
@@ -102,15 +119,15 @@ Status values: `todo`, `done`, `blocked`, `morning`.
 | 3 | 20 | Fingerprint state at checkout (Extra 6) | E | web | todo | |
 | 3 | 21 | Language switch (Extra 7) | E | web | todo | |
 | 3 | 22 | Spot check on the kiosk and on the phone (Extra 8) | E | web | todo | |
-| 4 | 1 | Catalog content (C3) | D | web | todo | |
-| 4 | 2 | Landing content and the copy guard (C3) | D | web | todo | |
-| 4 | 3 | Landing page (C3) | D | web | todo | |
-| 4 | 4 | Privacy page (C3) | D | web | todo | |
-| 4 | 5 | Run sheet for the demo and the shoot (C3) | D | web | todo | |
+| 4 | 1 | Catalog content (C3) | D | web | done | merged in 8c5bba6 |
+| 4 | 2 | Landing content and the copy guard (C3) | D | web | done | merged in 8c5bba6 |
+| 4 | 3 | Landing page (C3) | D | web | done | merged in 8c5bba6 |
+| 4 | 4 | Privacy page (C3) | D | web | done | merged in 8c5bba6 |
+| 4 | 5 | Run sheet for the demo and the shoot (C3) | D | web | done | merged in 8c5bba6 |
 | 4 | 6 | HUD project, state, and feeds (Extra 4) | E | hud | todo | |
 | 4 | 7 | HUD screen, verification, and the simulator clip (Extra 4) | E | hud | todo | |
 | 4 | 8 | Late content and the publish check (C3) | - | main | morning | |
-| I | 1 | Integration: server and Kotlin client | C | main | todo | |
-| I | 2 | Integration: server and web pages | C | main | todo | |
-| I | 3 | Integration: app with mock glasses on the phone | C | main | todo | |
+| I | 1 | Integration: server and Kotlin client | C | main | done | merged in 8c5bba6 |
+| I | 2 | Integration: server and web pages | C | main | done | merged in 8c5bba6 |
+| I | 3 | Integration: app with mock glasses on the phone | C | main | done | merged in 8c5bba6 |
 | F | 1 | Draft pull request into main with the status table | end | main | todo | |
