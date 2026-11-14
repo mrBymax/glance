@@ -1,0 +1,20 @@
+{
+  "name": "glance",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*", "apps/mobile/*"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "prepare": "node scripts/hooks/install.mjs",
+    "lint": "eslint .",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2"
+  }
+}
