@@ -9,7 +9,7 @@ data class CodeRead(val code: String, val source: BarcodeSource)
  * Decides when the phone reports a product code. One frame can give a wrong code, so a code counts only when
  * frames agree: `barcodeReads` equal reads of the decoder inside `barcodeWindowMs`, or `ocrReads` equal reads
  * inside `ocrWindowMs`. OCR has no checksum of its own, so it needs more reads. A read of the decoder also counts
- * as an OCR read. A different code starts the count again.
+ * as an OCR read. A different code starts the count again. Two reads are equal when their 13-digit forms are equal.
  *
  * After the first report, the code is reported one time each `repeatMs` while it stays in view, as a kiosk code.
  * The appearance lasts over a gap of `gapMs` with no read, because a scan can miss a frame.
@@ -37,9 +37,11 @@ class BarcodeVote(
     fun onFrame(nowMs: Long, read: CodeRead?): CodeRead? {
         if (accepted && nowMs - lastReadMs > gapMs) reset()
         if (read == null) return null
-        if (read.code != candidate) {
+        // A decoder can give a UPC-A code with 12 digits, and OCR the same code with 13.
+        val gtin = Gtin.normalize(read.code) ?: read.code
+        if (gtin != candidate) {
             reset()
-            candidate = read.code
+            candidate = gtin
         }
         lastReadMs = nowMs
         val source = acceptedSource ?: count(nowMs, read.source) ?: return null

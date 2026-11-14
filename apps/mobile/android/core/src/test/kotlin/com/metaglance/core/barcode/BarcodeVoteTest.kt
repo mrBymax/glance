@@ -107,4 +107,12 @@ class BarcodeVoteTest {
         vote.onFrame(800, digits)
         assertEquals(digits, vote.onFrame(1800, decoded))
     }
+
+    @Test fun `a UPC-A code and its 13-digit form are equal reads`() {
+        val vote = BarcodeVote()
+        assertNull(vote.onFrame(0, CodeRead("036000291452", BarcodeSource.BARCODE)))
+        assertEquals(CodeRead("0036000291452", BarcodeSource.BARCODE), vote.onFrame(140, CodeRead("0036000291452", BarcodeSource.BARCODE)))
+        assertNull(vote.onFrame(280, CodeRead("036000291452", BarcodeSource.OCR)))
+        assertTrue(vote.accepted)
+    }
 }
