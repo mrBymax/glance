@@ -107,6 +107,55 @@ class FramePrepTest {
         assertNotEquals(plain.argb[y * plain.width + x], plain.argb[y * plain.width + x + 1])
     }
 
+    @Test fun `a crop keeps the pixels of the frame, with no scale`() {
+        val f = noiseFrame(720, 1280)
+        val crop = RectPx(304, 366, 358, 716)
+        val out = FramePrep.prepare(f, FaceResult.Found(emptyList()), crop)!!
+        assertEquals(358 to 716, out.width to out.height)
+        assertEquals(358 * 716, out.argb.size)
+        assertTrue(out.blurred)
+        // Each output pixel is the frame pixel at the same place of the crop.
+        val whole = I420.cropScaleToArgb(f.i420, 720, 1280, FrameGeometry.full(720, 1280), 720, 1280)
+        for ((x, y) in listOf(0 to 0, 357 to 0, 0 to 715, 357 to 715, 100 to 333)) {
+            assertEquals("$x,$y", whole[(366 + y) * 720 + 304 + x], out.argb[y * 358 + x])
+        }
+    }
+
+    @Test fun `a crop of a still that is larger than 1600 pixels is scaled to that`() {
+        val out = FramePrep.prepare(frame(1200, 2000, 128), FaceResult.NotRun, RectPx(0, 0, 1000, 2000))!!
+        assertEquals(800 to 1600, out.width to out.height)
+    }
+
+    @Test fun `pixelates the part of a face that is inside the crop`() {
+        val f = noiseFrame(720, 1280)
+        val crop = RectPx(304, 366, 358, 716)
+        // The face starts left of the crop and ends inside it.
+        val out = FramePrep.prepare(f, FaceResult.Found(listOf(RectPx(250, 400, 120, 120))), crop)!!
+        assertEquals(out.argb[60 * 358 + 12], out.argb[60 * 358 + 13])
+        val plain = FramePrep.prepare(f, FaceResult.Found(emptyList()), crop)!!
+        assertNotEquals(plain.argb[60 * 358 + 12], plain.argb[60 * 358 + 13])
+        // A place of the crop far from the face keeps its pixels.
+        assertEquals(plain.argb[600 * 358 + 300], out.argb[600 * 358 + 300])
+    }
+
+    @Test fun `pixelates the edge of a crop beside a face, as the full frame does`() {
+        val f = noiseFrame(720, 1280)
+        val crop = RectPx(304, 366, 358, 716)
+        // The face ends 4 pixels left of the crop. With its margin of 20 percent it reaches 20 pixels into the crop.
+        val out = FramePrep.prepare(f, FaceResult.Found(listOf(RectPx(180, 400, 120, 120))), crop)!!
+        assertEquals(out.argb[60 * 358 + 2], out.argb[60 * 358 + 3])
+        val plain = FramePrep.prepare(f, FaceResult.Found(emptyList()), crop)!!
+        assertNotEquals(plain.argb[60 * 358 + 2], plain.argb[60 * 358 + 3])
+    }
+
+    @Test fun `a face outside the crop changes nothing, and a failed face detection drops the crop`() {
+        val f = noiseFrame(720, 1280)
+        val crop = RectPx(304, 366, 358, 716)
+        val out = FramePrep.prepare(f, FaceResult.Found(listOf(RectPx(0, 0, 100, 100))), crop)!!
+        assertTrue(out.argb.contentEquals(FramePrep.prepare(f, FaceResult.Found(emptyList()), crop)!!.argb))
+        assertNull(FramePrep.prepare(f, FaceResult.Failed, crop))
+    }
+
     @Test fun `pixelates a face in the corner of the frame`() {
         // The center crop of before left this face out. The full frame shows it, so it must be pixelated.
         val f = noiseFrame(720, 1280)

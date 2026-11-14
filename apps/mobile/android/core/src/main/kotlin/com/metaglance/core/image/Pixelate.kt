@@ -6,6 +6,13 @@ object Pixelate {
     private const val BLOCKS_PER_BOX = 6
     private const val GROW_PERCENT = 20
 
+    /** The box with the margin of [apply]: 20 percent of its size more on each side. The values can be outside the image. */
+    fun grown(box: RectPx): RectPx {
+        val growX = box.width * GROW_PERCENT / 100
+        val growY = box.height * GROW_PERCENT / 100
+        return RectPx(box.left - growX, box.top - growY, box.width + 2 * growX, box.height + 2 * growY)
+    }
+
     /**
      * Pixelates each box of `argb` in place. `argb` has `width * height` pixels in rows.
      *

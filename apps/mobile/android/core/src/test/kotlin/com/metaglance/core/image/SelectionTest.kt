@@ -3,6 +3,7 @@ package com.metaglance.core.image
 import com.metaglance.core.contract.Timing
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -82,6 +83,47 @@ class SelectionTest {
         assertEquals("f", p.offer(900, "g", 2.0))
         assertNull(p.offer(1043, "h", 1.0))
         assertEquals("g", p.offer(1200, "i", 1.0))
+    }
+
+    @Test fun `a frame with a region wins over a sharper frame with none`() {
+        val p = SharpestFramePicker<String>(everyMs = 300)
+        assertNull(p.offer(0, "a", 90.0))
+        assertNull(p.offer(100, "b", 3.0, preferred = true))
+        assertNull(p.offer(200, "c", 50.0))
+        assertEquals("b", p.offer(300, "d", 1.0))
+    }
+
+    @Test fun `picks the sharpest of the frames with a region`() {
+        val p = SharpestFramePicker<String>(everyMs = 300)
+        assertNull(p.offer(0, "a", 3.0, preferred = true))
+        assertNull(p.offer(100, "b", 9.0, preferred = true))
+        assertNull(p.offer(200, "c", 5.0, preferred = true))
+        // The frame with a region that ends the window starts the next one.
+        assertEquals("b", p.offer(300, "d", 1.0, preferred = true))
+        assertNull(p.offer(450, "e", 99.0))
+        assertEquals("d", p.offer(600, "f", 1.0))
+    }
+
+    @Test fun `a damaged frame with a region is never picked`() {
+        val p = SharpestFramePicker<String>(everyMs = 300)
+        assertNull(p.offer(0, "a", 3.0))
+        assertNull(p.offer(100, "b", 9.0, damaged = true, preferred = true))
+        assertEquals("a", p.offer(300, "c", 1.0))
+    }
+
+    @Test fun `measures the sharpness inside a region`() {
+        // The left half is flat, and the right half has a pattern.
+        val luma = ByteArray(64 * 64) { i ->
+            when {
+                i % 64 < 32 -> 128
+                ((i % 64) / 4 + (i / 64) / 4) % 2 == 0 -> 16
+                else -> 235
+            }.toByte()
+        }
+        assertEquals(0.0, Sharpness.of(luma, 64, 64, RectPx(0, 0, 28, 64)), 0.0)
+        assertTrue(Sharpness.of(luma, 64, 64, RectPx(32, 0, 32, 64)) > Sharpness.of(luma, 64, 64))
+        assertEquals(Sharpness.of(luma, 64, 64), Sharpness.of(luma, 64, 64, RectPx(0, 0, 64, 64)), 0.0)
+        assertThrows(IllegalArgumentException::class.java) { Sharpness.of(luma, 64, 64, RectPx(40, 0, 32, 64)) }
     }
 
     @Test fun `gives one line for each 3 seconds with a damaged frame`() {
