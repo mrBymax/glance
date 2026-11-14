@@ -51,9 +51,10 @@ Copy `dist/` to any static host: GitHub Pages, Netlify, Vercel, an S3 bucket, or
 | All text of the page, section by section | `src/content/site.ts` |
 | Names and titles of the team | `src/content/team.ts` (one line for each person, in the order of the page; an empty title shows nothing) |
 | Text and layout of the diagram of the parts | `DIAGRAM` in `src/content/site.ts`, and `src/sections/PartsDiagram.tsx` for the coordinates |
+| The display mock | `DISPLAY` in `src/content/site.ts`, `src/sections/Display.tsx`, and `hud/` with its README for the build in `public/hud` |
 | Order of the sections and the links of the sticky bar | `SECTIONS` in `src/content/site.ts`, and `src/App.tsx` |
 | Colors, type sizes, spacing | `src/styles/site.css` (Astryx tokens only) |
-| The animation of the hero | `src/hero/` (camera distance, lights, and speed at the top of `animation.ts`) |
+| The animation of the hero | `src/hero/` (field of view, framing, lights, and speed at the top of `animation.ts`) |
 | Motion of the page | `src/motion/Reveal.tsx` (the reveal on scroll) |
 
 Meta Glance is a protocol: a place shows a Glance code, the glasses read it, and a nod confirms. The copy presents it so: the loop, the use cases, the store demo, how to build on it. Each mechanic in the copy comes from `docs/architecture.md` and `apps/website/README.md` of the app branch. Use cases other than the checkout are what the protocol enables. The page states no test log, no availability, no price, no partner, and no certification.
@@ -81,6 +82,8 @@ flowchart LR
 - The hero imports `assets/animation/metaGlancePlayer.js` and `meta-glances-placeholder.glb` from the repository root, unchanged. `vite.config.ts` allows that folder and dedupes `three`, so the player and the site share one copy of Three.js.
 - `scripts/capture-poster.mjs` needs `npm run dev` and Chrome. It opens `/?poster`, where the hero shows the last frame of the clip on a clear background, and writes `media/hero-poster.png` and the poster images. Run it after a change of the GLB, of the QR text, or of the camera distance in `src/hero/animation.ts`.
 - The font is Optimistic VF, in `public/fonts/OptimisticVF.woff2`, unchanged. The owner supplied the file, and its licence must be confirmed before the site is published: Optimistic is a typeface of Meta, and its name table forbids changes to the file. `src/styles/fonts.css` declares it (weights 300 to 800, `font-display: swap`) with a fallback of Arial with metric overrides, so the swap moves no line. `index.html` preloads it. On dark grounds the page sets the `DRKM` axis of the font to 1. The page makes no request to another host.
+- The hero renders the mark with no tone mapping and no environment map, so its blue is the blue of the vertex colors of the GLB (#3BA8F0 to #4BBDFD). The camera has a field of view of 18 degrees, so the two loops stay even.
+- `public/hud` is the build of the Display HUD of the app, with its own toolkit. `hud/README.md` says where each file comes from and how to build it again. `scripts/capture-hud-still.mjs` writes its still, with the dev server running.
 - The QR code of the hero and of the kiosk holds `GL1 K3X7`, the code of the demo kiosk `Checkout 3`. Both the PNG and the rendered last frame of the animation decode to that text.
 
 ## Size of the build
@@ -100,6 +103,8 @@ Measured on 2026-11-14 at 1440 x 900 on a local server, with a cold cache:
 | `dist/` on disk | 14 MB, of which 11 MB are the four GLB files |
 
 LCP was 448 to 508 ms over two runs (the poster of the hero) and CLS was 0. These are local numbers with no network throttling.
+
+The display mock adds no byte to the first load. When its section nears the view, the page loads `public/hud`: 606 KB of script (196 KB compressed), 98 KB of CSS (18 KB compressed), and three Noto Sans files of 13 KB. Its still is 18 to 40 KB.
 
 ## Gotchas
 
