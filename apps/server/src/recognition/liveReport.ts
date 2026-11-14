@@ -64,12 +64,14 @@ export function reportViewDeclaration(productIds: readonly string[]): FunctionDe
  * The arguments of a report_view call in the shape of the per-frame answer, for normalizeResult.
  * It checks nothing: normalizeResult does, and it gives "no product" for arguments that are no report.
  * The report has no gesture, and a call with no code fields has no code.
+ * The report has no `held` field: the instruction of the session asks only about a product in a hand.
  */
 export function resultFromReport(args: unknown): unknown {
   if (typeof args !== 'object' || args === null) return args;
   const { codeVisible, codeDigits, candidates, ...fields } = args as Record<string, unknown>;
   return {
     ...fields,
+    held: true,
     candidates: candidates ?? [],
     gesture: 'none',
     code: { visible: codeVisible ?? false, digits: codeDigits ?? null },
