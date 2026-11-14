@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /** Formats an amount in cents as euros with two decimals, for example 189 as "1.89". */
 export function formatEur(cents: number): string {
   if (!Number.isInteger(cents) || cents < 0) {
@@ -11,3 +13,6 @@ export function formatEur(cents: number): string {
 export function cartTotalCents(items: readonly { unitPriceCents: number; qty: number }[]): number {
   return items.reduce((total, item) => total + item.unitPriceCents * item.qty, 0);
 }
+
+/** An amount of money: an integer number of cents in EUR, 0 or more. */
+export const CentsSchema = z.number().int().min(0);

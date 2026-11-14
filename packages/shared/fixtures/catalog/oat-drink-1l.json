@@ -1,0 +1,15 @@
+{
+  "id": "oat-drink-1l",
+  "name": { "en": "Oat drink", "it": "Bevanda di avena" },
+  "spokenName": { "en": "Oat drink", "it": "Bevanda di avena" },
+  "brand": "Oatly",
+  "packSize": "1 L",
+  "spokenPack": { "en": "one litre", "it": "un litro" },
+  "spokenPackDetailed": { "en": "one litre carton", "it": "cartone da un litro" },
+  "priceCents": 189,
+  "allergens": ["gluten"],
+  "vegan": true,
+  "vegetarian": true,
+  "visual": "Tall carton, light blue and white, the word OATLY in large black letters.",
+  "lookAlikes": ["oat-drink-barista-1l"]
+}
