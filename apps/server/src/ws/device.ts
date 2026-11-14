@@ -16,6 +16,8 @@ const PING_EVERY_MS = 20_000;
 /** The phone sends 0.5 when the glasses give no value, so 0.5 must pass. */
 const MIN_SPEECH_CONFIDENCE = 0.5;
 const CLOSE_NORMAL = 1000;
+/** How long a refused socket waits for its client to close. */
+const REFUSED_CLOSE_MS = 5000;
 
 /**
  * The socket of spec section 8.2, one for each session, at /ws/device?session=<id>&token=<token>.
@@ -32,6 +34,25 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
   /** Each open socket, with false when it sent no pong since the last ping. */
   const alive = new Map<WebSocket, boolean>();
+  /** The sockets that got a refusal and that their client has not closed yet. */
+  const refused = new Set<Duplex>();
+
+  /**
+   * Answers an upgrade with an HTTP status and lets the client close the connection.
+   * If the server closes first, the client can lose the answer: with Node 26 on Windows, a client under load
+   * got a connection reset in place of the status for about 15 of 100 refusals.
+   */
+  const refuse = (socket: Duplex, status: string): void => {
+    refused.add(socket);
+    const timer = setTimeout(() => socket.destroy(), REFUSED_CLOSE_MS);
+    socket.once('close', () => {
+      clearTimeout(timer);
+      refused.delete(socket);
+    });
+    socket.once('end', () => socket.destroy());
+    socket.resume();
+    socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+  };
 
   const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer): void => {
     // Without a listener, an error of the raw socket before the handshake stops the process.
@@ -42,7 +63,7 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
     const open = async (): Promise<void> => {
       const session = sessionId === null ? null : await app.sessions.get(sessionId);
       if (!session) {
-        socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+        refuse(socket, '404 Not Found');
         return;
       }
       wss.handleUpgrade(request, socket, head, (ws) => connect(ws, session));
@@ -188,6 +209,7 @@ export function registerDeviceSocket(app: FastifyInstance, deps: {
     clearInterval(pingTimer);
     app.server.off('upgrade', onUpgrade);
     for (const ws of alive.keys()) ws.terminate();
+    for (const socket of refused) socket.destroy();
     wss.close();
   });
 }

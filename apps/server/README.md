@@ -438,7 +438,7 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 
 The phone opens `/ws/device?session=<id>&token=<token>`, as in spec section 8.2. The messages are `DeviceToServer` and `ServerToDevice` of `@glance/shared`.
 
-- An upgrade for another path or for an unknown session gets `404 Not Found`.
+- An upgrade for another path or for an unknown session gets `404 Not Found`. The server writes the answer and lets the client close the connection, with a limit of 5 seconds. If the server closes first, a client under load can get a connection reset in place of the status.
 - On open, the server sends a `snapshot`. Then it sends each event of the session as `event`, and each line as `speak`.
 - One phone holds a session. A second socket for the same session takes over, and the server closes the older one. No message goes to both.
 - `intent`, `prompt.done`, `device.state`, `cart.edit`, and `profile.set` go to the rules. After `profile.set` the phone gets a new `snapshot`.

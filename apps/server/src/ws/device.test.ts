@@ -182,3 +182,20 @@ it('a second socket for the session takes over, and no message goes out two time
   expect(session.connected).toBe(true);
   second.close();
 });
+it('answers each of many refused upgrades at the same time with the status', async () => {
+  // A server that closes a refused socket first can lose the answer: the client then gets a connection reset.
+  const statuses = await Promise.all(Array.from({ length: 60 }, () => upgradeStatus(`${t.wsBase}/ws/device?session=nope&token=x`)));
+  expect(statuses).toEqual(Array.from({ length: 60 }, () => 404));
+});
+it('closes while a client holds a refused upgrade open', async () => {
+  const { connect } = await import('node:net');
+  const client = connect({ port: Number(new URL(t.base).port), host: '127.0.0.1', allowHalfOpen: true });
+  let answer = '';
+  client.on('data', (chunk) => { answer += chunk.toString(); });
+  client.on('error', () => undefined);
+  client.write('GET /ws/other HTTP/1.1\r\nHost: test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n');
+  await vi.waitFor(() => expect(answer).toContain('404 Not Found'));
+  phone.close();
+  await expect(Promise.race([t.close(), new Promise((_, no) => setTimeout(no, 2000))])).resolves.toBeUndefined();
+  client.destroy();
+});
