@@ -875,7 +875,7 @@ The rules that exist:
 - Each line goes through the guard for the voice. It drops a line that the shopper did not ask for when the line repeats a text, follows another line too closely, or names a failed read a second time. See "A guard for the voice".
 - An `ambiguous` result gets the look-alike answer, and never a prompt. See "Look-alike products".
 - A yes or a no counts only with the ID of the current prompt (R3). From voice, touchpad, key, or camera it also needs a finished prompt (R5). From the phone or the HUD it needs the ID alone (R6).
-- A yes or a no from the head (R4) needs the ID of the current prompt, a finished prompt, and the target in view. The phone is the judge of the head window: it reads the window in the time of the motion samples of the glasses, and after a stall of the link it sends the answer seconds late. So the server has no head window of its own. It keeps one last time: the answer must arrive less than the head window of the profile plus 21 seconds after `prompt.done`. The 21 seconds are `HEAD_MAX_EXTRA_MS` (15 s, the longest time that a stall or a still adds to a window) plus `HEAD_LATE_MS` (6 s, the longest wait for a late sample) in `answers.ts`. They repeat `MAX_EXTRA_MS` and `LATE_MS` of `HeadInput` in the Android app. A profile with no head window has no last time.
+- A yes or a no from the head (R4) needs the ID of the current prompt, a finished prompt, and the target in view. The phone is the judge of the head window. It reads the window in the time of the motion samples of the glasses. After a stall of the link it sends the answer seconds late. So the server has no head window of its own. It keeps one last time: the answer must arrive less than the head window of the profile plus 21 seconds after `prompt.done`. `answers.ts` has the 21 seconds as two values. `HEAD_MAX_EXTRA_MS` is 15 seconds: the longest time that a stall or a still adds to a window. `HEAD_LATE_MS` is 6 seconds: the longest wait for a late sample. They repeat `MAX_EXTRA_MS` and `LATE_MS` of `HeadInput` in the Android app. A profile with no head window has no last time.
 - "In view" for a head answer to a product prompt: the frames showed no product for less than 3 seconds. A time of more than 1.5 seconds with no recognition result is a stall (`FRAME_STALL_MS` in `view.ts`): the frames and the motion samples stop together, so the view is unknown, and that time does not count. The rule counts the stall that runs and the last stall that ended. An older stall counts as time out of view.
 - A head answer to the pay prompt gets the longer time and no more: the kiosk code must have a report in the last 3 seconds, stall or not. Each other rule of the checkout stays (R16 to R19, the spot check, the fingerprint).
 - An accepted yes adds one unit (R7). An accepted no skips the product, and recognition excludes it for 10 seconds (R8, R9).
@@ -994,6 +994,7 @@ What the phone plays by itself. The Android app and the phone UI were read for t
 | Sound or vibration | Trigger | Limit |
 |---|---|---|
 | The sound and the clip of a line (`SpeechQueue`, `ExoLinePlayer`) | A `speak` message of the server | One for each message. The app plays no line again by itself |
+| The answer sound: `added` for a yes, `removed` for a no (`AnswerSound`) | The app sends a head answer. The sound does not wait for the server | One for each answer. The next line of the server then plays with no sound, when it has the same sound and arrives less than 3 seconds later (`AnswerSoundOnce`) |
 | The phone voice in place of a clip (`PhoneVoice`) | A line with no clip, or a clip that does not load in 3 seconds | One for each line |
 | "Connection lost. Your cart is safe. Glances are paused." (`ConnectionAnnouncer`) | The socket was down for 3 seconds | One for each drop |
 | The pattern `prompt` or `warning` | The event `glance.pending` or `checkout.offered` | One for each prompt. A repeated barcode report gives no new event |
@@ -1004,6 +1005,7 @@ What the phone plays by itself. The Android app and the phone UI were read for t
 
 - The Android app vibrates only for a `haptic` message of the page, and the page sends one only for the rows above.
 - A still, a label upload, a reference picture, and a barcode report play no sound and give no vibration on the phone.
+- The answer sound came with the rework of the head gestures, after the audit. The line "Added" or "Removed" that answers the nod keeps its sound field in the `speak` message. The app plays the clip alone, so the shopper hears one sound for one answer. An answer that the rules reject has its answer sound, and no "Added" line follows.
 - One fault was found and fixed: the add that crosses the budget gave two patterns, `added` and then `warning`. It gives one now.
 - With TalkBack on, the phone UI also writes each caption into a live region, so TalkBack can read a line that the voice speaks. This audit did not change that.
 

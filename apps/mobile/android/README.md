@@ -351,7 +351,7 @@ A head gesture counts only in the head window of a prompt. The window starts whe
 - So a prompt whose line ends during a still gets its full head window after the still.
 - A new window starts the detector from rest. A movement that started in the window of another prompt is no answer.
 - The window stays open after an answer, until the server ends the prompt or a new prompt replaces it. The server decides if an answer counts.
-- The server has a head window of its own, on its own clock (rule R4 in `apps/server`). It does not know about a stall or a late sample, so it can reject an answer that the phone sent late.
+- The server has no head window of its own (rule R4 in `apps/server`). It takes a head answer while the prompt is current, up to the head window plus `MAX_EXTRA_MS` plus `LATE_MS` after `prompt.done` on its clock: the last time at which this class can send the answer. `HEAD_MAX_EXTRA_MS` and `HEAD_LATE_MS` in `apps/server/src/sessions/answers.ts` repeat the two values, so change them together.
 
 ### The pitch and the yaw of the head
 
@@ -475,7 +475,7 @@ In that time no still starts:
 Before this change, nothing told the shopper that a nod counted until the line of the server arrived. Now the app plays one sound at the moment it sends a head answer: `added` for a yes, and `removed` for a no. Both are sounds of the app that the lines of the server also use: the line "Added" has the sound `added`, and the line "Removed" has the sound `removed`.
 
 - One answer gives one sound. A rejected stroke pair gives none.
-- The line that answers the gesture plays its clip with no sound. `AnswerSoundOnce` in `core` holds the rule: the next line of the server after an answer sound loses its sound when the sound is the same and the line arrives less than 3 seconds later. Another sound stays, for example `warning` for the add that crosses the budget. A line after that one keeps its sound.
+- The line that answers the gesture plays its clip with no sound. `AnswerSoundOnce` in `core` holds the rule for the next line of the server after an answer sound. That line loses its sound when the sound is the same and the line arrives less than 3 seconds later. Another sound stays, for example `warning` for the add that crosses the budget. A line after that one keeps its sound.
 - An answer that the server rejects still gave its answer sound. The shopper then hears the sound and no "Added" line.
 - The sound plays only when the socket took the answer.
 - `AnswerSound` plays it with a `SoundPool` as media. It goes to the glasses when they are the media output, it is silent with a media volume of 0, and it does not stop a line that plays.
@@ -536,7 +536,7 @@ A stroke with no opposite stroke after it gives no line. So a nod that is too sm
 - How the glasses group the samples of a flow with no stall. If more than 500 ms pass between two groups, the watchdog says `STALLED` in a normal flow. `arrivalGapMs` and `burst` show it.
 - Whether a restart of Motion ends a stall.
 - The delay of the answer sound on the glasses.
-- The server takes a head answer only inside its own head window, on its own clock, and with the product in view. So it can reject a late answer that the phone accepted. That rule is in `apps/server`.
+- The server takes a late head answer now (rule R4 in `apps/server/README.md`). Only tests of the rules cover that. Three cases still reject an answer that the phone accepted: the product prompt ended on the server, 18 seconds after the last result with its product. The frames showed no product for 3 seconds. A nod on the pay prompt came with no report of the kiosk code in the last 3 seconds.
 - The instrumented tests did not run after these changes: they need the test phone.
 
 ### Checks of the head gestures with the glasses
@@ -547,12 +547,12 @@ Do them in this order. Each step needs the log of the phone: `adb logcat -s Glan
 2. Open "Glance Probe". Start a session, tap `Motion`, and keep the head at rest for 30 seconds. Read the `motion samples=` lines: `new` near 90, `arrivalGapMs` below 500, and `timeGapMs` near 33 are a good flow. Write down `burst`: it is the number of samples that the glasses send together.
 3. Tap `Axis test` and nod for 4 seconds. Then tap it again and shake the head. The strongest axis of the nod must be the pitch axis of `ProbeDecisions`, and the strongest axis of the shake its yaw axis. If not, write the measured axes into `ProbeDecisions`.
 4. Tap `Gesture test`. Make 10 nods and 10 shakes with a rest between them. Then look to the sides, look down at a product, and walk for 2 minutes. Write down the counts and each `rejected` line of a gesture that did not count.
-5. Start a session in "Glance" against a server. Answer 10 prompts with one nod each, after the line ended. Each one must give the sound `added` at once, `head answer yes` in the log, and the answer of the server.
+5. Start a session in "Glance" against a server. Answer 10 prompts with one nod each, after the line ended. Each one must give the sound `added` at once and one time, `head answer yes` in the log, and the "Added" line of the server with no second sound.
 6. Answer 10 prompts with a shake. Each one must give the sound `removed` and `head answer no`.
 7. Let 5 prompts pass with no answer while the head looks around and at the product. The log must have no `head answer` line.
 8. Hold a barcode in view while a prompt waits. The log must have `label still waits`, and no `still` line between `head window open` and the answer.
 9. Read the `motion stall` lines of the session. For a nod with no effect, read the lines of its head window: no line of the detector means a movement below the level, and a `rejected` line names the rule.
-10. Read the log of the server for a head answer that it rejected. If the phone sent the answer late, the head window of the server is the cause.
+10. Read the log of the server for a head answer that it rejected. The list above has the three causes for a late answer.
 11. Pull the recordings and replay them. See "Record and replay real motion".
 
 ## The core module
