@@ -168,11 +168,11 @@ sequenceDiagram
   Server-->>Place: kiosk.state connected
   Phone->>Glasses: the line with the place and the amount
   Note over Glasses: store demo: "Checkout 3 at Demo Market. Three items, six euros thirty-nine. Nod to pay."
-  Phone->>Server: prompt.done
   Phone->>Server: kiosk.seen, one time each second
-  Glasses->>Phone: motion samples with a nod
+  Glasses->>Phone: motion samples with a nod, during the line or after it
+  Note over Phone: a nod during the line stops the line, and no prompt.done goes out
   Phone->>Server: intent yes, source head, promptId
-  Note over Server: checks the prompt ID, the end of the line, and the code in view
+  Note over Server: checks the prompt ID, the code in view, and the last time
   Note over Server: store demo: a mock payment, 1500 ms
   Server-->>Phone: checkout.paid, and speak "Paid. ..."
   Server-->>Place: kiosk.state paid, with the receipt
@@ -186,16 +186,18 @@ The server writes the line and sends it to the phone as `speak` with a `promptId
 
 The line names the place, the amount, and the input that confirms. The line of the store demo is "Checkout 3 at Demo Market. Three items, six euros thirty-nine. Nod to pay." The server computes the amount. The lines exist in English and Italian.
 
-When the line ended, the phone sends `prompt.done` with the `promptId`.
+When the line ended, the phone sends `prompt.done` with the `promptId`. A line that a head answer stopped gets no `prompt.done`.
 
 ### The head window
 
 The phone reads a nod and a shake from the motion samples of the glasses. A head gesture counts only in the head window of the prompt.
 
-- The head window of this prompt opens when its line ended. A movement during the line never confirms.
+- The head window of this prompt opens 300 ms after its line arrived on the phone, while the line plays. The wearer never waits for the end of the line to nod or to shake.
+- A gesture counts only when its movement started in the head window. So the turn of the head to the code is no answer.
+- A head answer during the line stops the line at once. The server then reads the answer as the end of the line.
 - The head window lasts 8 seconds by default. The profile of the wearer can set 15 seconds, or no limit (`headWindowMs`).
 - The phone is the judge of the head window, in the time of the motion samples. After a stall of the link, its answer can arrive late.
-- So the server keeps one last time: the head window plus 21 seconds after `prompt.done` (`HEAD_MAX_EXTRA_MS` plus `HEAD_LATE_MS`).
+- So the server keeps one last time: the head window plus 21 seconds after `prompt.done` (`HEAD_MAX_EXTRA_MS` plus `HEAD_LATE_MS`). With no `prompt.done`, the time counts from the start of the prompt.
 
 ### A nod and a shake
 
@@ -208,13 +210,12 @@ The phone sends the answer as an intent with the ID of the prompt:
 A head answer to this prompt counts only when each of these conditions holds:
 
 - The `promptId` is the ID of the current prompt. Each new prompt has a new ID, so an answer to an older prompt cannot confirm.
-- The line of the prompt ended (`prompt.done`).
 - The phone reported the code of the place in the last 3 seconds. An answer with the code out of view has no effect.
 - The answer arrived before the last time.
 
-A nod confirms. In the store demo the mock payment then starts, and a second nod while it runs has no effect. A shake cancels: the voice says "Checkout cancelled. Your cart is safe." After a shake, and after a failed payment, the place stays quiet for this wearer until its code has left the view.
+A nod confirms. In the store demo the mock payment then starts, and a second nod while it runs has no effect. With a fingerprint limit on the server, a total above it first needs the fingerprint check of the phone. A shake cancels, during the line as after it: the voice says "Checkout cancelled. Your cart is safe." After a shake, and after a failed payment, the place stays quiet for this wearer until its code has left the view.
 
-A nod is the yes by default. The profile can swap the nod and the shake, or turn the head gestures off. Each answer also has a button in the phone app, and a button answer needs the prompt ID alone.
+A nod is the yes by default. The profile can swap the nod and the shake, or turn the head gestures off. Each answer also has a button in the phone app, and a button answer needs the prompt ID alone. An answer by voice, touchpad, or key needs the end of the line (`prompt.done`).
 
 ### Time limits
 
@@ -226,7 +227,7 @@ A nod is the yes by default. The profile can swap the nod and the shake, or turn
 | Head window | 8000 ms, 15000 ms, or no limit | `headWindowMs` of the profile |
 | Last time for a late head answer | head window plus 21 seconds | `HEAD_MAX_EXTRA_MS`, `HEAD_LATE_MS` |
 | A confirmation ends with its code out of view | 30000 ms | `TIMING.kioskIdleMs` |
-| One hint after an answer with the code out of view | in the 15000 ms after the line ended | `TIMING.hintAfterPromptMs` |
+| One hint after an answer with the code out of view | in the 15000 ms after the line ended, or after a head answer stopped it | `TIMING.hintAfterPromptMs` |
 | The place shows the result | 10000 ms | `KIOSK_RESULT_MS` |
 | Mock payment | 1500 ms by default | `PAYMENT_DELAY_MS` |
 
