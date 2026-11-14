@@ -13,6 +13,8 @@ This file describes only the parts that exist. The plan is `docs/superpowers/pla
 | `src/bus.ts` | `EventBus` delivers messages inside the process, by topic. |
 | `src/clock.ts` | The time source of the runtime. |
 | `src/main.ts` | Starts the server and closes it on `SIGTERM` and `SIGINT`. |
+| `src/catalog/catalog.ts` | `readCatalogFile` reads a catalog file, and `indexCatalog` finds a product by its ID. |
+| `catalog/catalog.dev.json` | The dev catalog with four products. The tests use its IDs and prices. |
 
 The server has no session path and no device socket yet.
 
@@ -61,6 +63,14 @@ curl http://localhost:8080/healthz
 - The flag `--fake` turns both fake switches on. A variable that is set wins over the flag.
 - Each path is relative to the working directory, which is `apps/server`.
 - With a missing key the server prints `config: <message>` and exits with code 1. The message names the variable and the switch that removes the need.
+
+## Catalog
+
+A catalog file is a JSON array. Each entry is a `Product` of `@glance/shared`. Prices are integers in cents.
+
+- `readCatalogFile` stops at the first entry that fails the schema. Its message names the file, the index of the entry, and the ID.
+- `indexCatalog` rejects a catalog that holds one ID two times.
+- In `allergens`, `null` means "no data", and an empty list means "no allergen". The potato crisps of the dev catalog have no data.
 
 ## Checks
 
