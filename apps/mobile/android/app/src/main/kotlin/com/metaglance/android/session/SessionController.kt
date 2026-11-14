@@ -52,6 +52,7 @@ import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.gesture.HeadSample
 import com.metaglance.core.image.StillPolicy
+import com.metaglance.core.image.SecondLook
 import com.metaglance.core.image.StreamSetup
 import com.metaglance.core.image.UploadGate
 import com.metaglance.core.image.WaitingStill
@@ -182,6 +183,9 @@ class SessionController(
     private var stillPolicy = StillPolicy()
     private var waitingStills = WaitingStills()
     private val answerSound = AnswerSound(app)
+
+    /** True when this camera start takes a still for each `glance.ambiguous` event. */
+    private var secondLook = false
     private val answerSoundOnce = AnswerSoundOnce()
     private val motionRecorder = MotionRecorder(File(app.getExternalFilesDir("probe") ?: File(app.filesDir, "probe"), "motion"), scope, ::log)
     private val headTrace = HeadTrace()
@@ -614,7 +618,7 @@ class SessionController(
                 if (event is ServerEvent.CartUpdated) cart = event.cart
                 // The checkout ended on the server, for example after 30 seconds with no kiosk code in view.
                 if (event is ServerEvent.CheckoutCancelled) closePaymentPrompt()
-                if (event is ServerEvent.GlanceAmbiguous) wantStill(WaitingStill.SECOND_LOOK)
+                if (event is ServerEvent.GlanceAmbiguous && secondLook) wantStill(WaitingStill.SECOND_LOOK)
             }
             is ServerToDevice.Snapshot -> {
                 toPage(NativeToPage.Snapshot(message.session))
@@ -791,6 +795,8 @@ class SessionController(
         stillPolicy = StillPolicy(labelTiming.stillEveryMs)
         log("label still: wait ${labelTiming.waitMs} ms, gap ${labelTiming.gapMs} ms")
         // The same holds for the stream settings. DatLink reads them in the call below.
+        secondLook = store.takesSecondLook
+        log(SecondLook.logLine(secondLook))
         val stream = store.streamSetup
         if (!dat.startSession(withCamera = true, autoAttach = true)) {
             // The SDK error of a failed start arrives through dat.faults, after this call returns.
@@ -922,6 +928,7 @@ class SessionController(
      */
     private fun takeStill() {
         val eventMs = SystemClock.elapsedRealtime()
+     * It runs only with the setting `glance.secondLookStill`, which is off by default.
         // Each DAT session has a policy of its own, and a capture ends the policy that started it.
         val policy = stillPolicy
         if (!datRunning || !policy.tryStart(eventMs)) return

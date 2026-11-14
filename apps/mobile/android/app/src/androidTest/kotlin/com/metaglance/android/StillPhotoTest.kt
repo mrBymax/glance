@@ -2,6 +2,7 @@ package com.metaglance.android
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.metaglance.android.support.FakeServerTestCase
+import com.metaglance.android.support.SecondLookRule
 import com.metaglance.android.support.TestClips
 import com.metaglance.android.support.TrafficRecorder
 import com.metaglance.android.support.assetUri
@@ -15,6 +16,7 @@ import com.metaglance.core.contract.StreamStatus
 import com.metaglance.core.frame.FrameKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -22,9 +24,23 @@ import org.junit.runner.RunWith
  * The sharp second look: rows 1 and 2 of the table of Plan 2 Task 25 Step 4, and row 4 with a mock nod.
  * The command `amb` of the fake server sends `glance.ambiguous`, and the mock glasses give the image of the
  * plain scene as the still photo. That image has 720 x 1280 pixels, so the upload is its center crop with no scale.
+ * The app takes this still only with the setting `glance.secondLookStill`, so the rule sets it to on.
  */
 @RunWith(AndroidJUnit4::class)
 class StillPhotoTest : FakeServerTestCase() {
+    @get:Rule
+    val secondLook = SecondLookRule()
+
+    @Test
+    fun withTheSettingOffAnAmbiguousGlanceSendsNoStill() {
+        onMain { glance.profileStore.secondLookStill = false }
+        startSessionWithStillImage()
+        command("amb")
+        waitUntil("the event arrives", STEP_MS, ::state) { traffic.events().any { it is ServerEvent.GlanceAmbiguous } }
+        Thread.sleep(QUIET_MS)
+        assertEquals(emptyList<TrafficRecorder.Frame>(), stills())
+    }
+
     @Test
     fun anAmbiguousGlanceSendsOneStillWithItsFacesHidden() {
         startSessionWithStillImage()

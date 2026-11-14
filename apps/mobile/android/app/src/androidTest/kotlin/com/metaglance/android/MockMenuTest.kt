@@ -43,6 +43,7 @@ class MockMenuTest {
     private var labelGapBefore: Long? = null
     private var streamQualityBefore: StreamQuality? = null
     private var streamFpsBefore: Int? = null
+    private var secondLookBefore: Boolean? = null
 
     private val glance: GlanceApp get() = targetContext.applicationContext as GlanceApp
 
@@ -57,6 +58,7 @@ class MockMenuTest {
         labelGapBefore = glance.profileStore.labelGapMs
         streamQualityBefore = glance.profileStore.streamQuality
         streamFpsBefore = glance.profileStore.streamFps
+        secondLookBefore = glance.profileStore.secondLookStill
     }
 
     @After
@@ -71,6 +73,7 @@ class MockMenuTest {
             glance.profileStore.labelGapMs = labelGapBefore
             glance.profileStore.streamQuality = streamQualityBefore
             glance.profileStore.streamFps = streamFpsBefore
+            glance.profileStore.secondLookStill = secondLookBefore
             glance.session.applySensitivity()
         }
     }
@@ -220,6 +223,23 @@ class MockMenuTest {
         assertEquals(StreamSetup.within(BuildConfig.STREAM_QUALITY, BuildConfig.STREAM_FPS), glance.profileStore.streamSetup)
     }
 
+    @Test
+    fun theSecondLookItemSwitchesTheStillAndStoresIt() {
+        onMainSync { glance.profileStore.secondLookStill = false }
+        scenarioRule.scenario.recreate()
+
+        tap("Second look still: off")
+        awaitStatus("Second look still: on. The next camera start uses it.")
+        assertEquals(true, glance.profileStore.secondLookStill)
+        tap("Second look still: on")
+        awaitStatus("Second look still: off. The next camera start uses it.")
+        assertEquals(false, glance.profileStore.secondLookStill)
+
+        // With no stored value, the value of the build counts.
+        onMainSync { glance.profileStore.secondLookStill = null }
+        assertEquals(BuildConfig.SECOND_LOOK_STILL, glance.profileStore.takesSecondLook)
+    }
+
     private fun type(hint: String, text: String) {
         scenarioRule.scenario.onActivity { activity ->
             val field = views<EditText>(activity).firstOrNull { it.hint?.toString() == hint }
@@ -278,7 +298,7 @@ class MockMenuTest {
             "Say add", "Say skip",
             "Meta AI missing", "Update required", "Stream error BATTERY_LOW", "Stream error THERMAL_HOT",
             "Save server URL", "Drop server link 10 s", "Sensitivity: gentle", "Sensitivity: normal", "Sensitivity: firm",
-            "Use placeholder page", "Save barcode waits", "Stream quality", "Stream frame rate"
+            "Use placeholder page", "Save barcode waits", "Stream quality", "Stream frame rate", "Second look still"
         )
     }
 }

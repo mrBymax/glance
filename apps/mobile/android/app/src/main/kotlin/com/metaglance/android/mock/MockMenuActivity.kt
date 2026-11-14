@@ -33,6 +33,7 @@ import com.metaglance.core.contract.NativeState
 import com.metaglance.core.gesture.GyroScript
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.Sensitivity
+import com.metaglance.core.image.SecondLook
 import com.metaglance.core.state.DatCompatibility
 import com.metaglance.core.state.DatFault
 import com.metaglance.core.state.DatSession
@@ -331,8 +332,9 @@ class MockMenuActivity : AppCompatActivity() {
     }
 
     /**
-     * The frame size and the frame rate that the app asks of the glasses, from the next camera start. Each tap
-     * goes to the next value. The value of the menu wins over the value of the build from the first tap.
+     * The frame size and the frame rate that the app asks of the glasses, and the switch of the second look still,
+     * from the next camera start. Each tap goes to the next value. The value of the menu wins over the value of
+     * the build from the first tap.
      */
     private fun addStreamItems() {
         val store = glance.profileStore
@@ -349,6 +351,13 @@ class MockMenuActivity : AppCompatActivity() {
             store.streamFps = store.streamSetup.nextFps().fps
             fps.text = fpsLabel()
             status("${fpsLabel()}. The next camera start uses it.")
+        }
+        // Set it to on only for a server with SECOND_LOOK_WAIT_MS: each still stalls the motion samples for seconds.
+        lateinit var secondLook: Button
+        secondLook = item(SecondLook.menuLabel(store.takesSecondLook)) {
+            store.secondLookStill = !store.takesSecondLook
+            secondLook.text = SecondLook.menuLabel(store.takesSecondLook)
+            status("${SecondLook.menuLabel(store.takesSecondLook)}. The next camera start uses it.")
         }
     }
 

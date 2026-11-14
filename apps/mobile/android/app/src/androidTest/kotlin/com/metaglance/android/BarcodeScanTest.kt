@@ -2,6 +2,7 @@ package com.metaglance.android
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.metaglance.android.support.FakeServerTestCase
+import com.metaglance.android.support.SecondLookRule
 import com.metaglance.android.support.TestClips
 import com.metaglance.android.support.TrafficRecorder
 import com.metaglance.android.support.assetUri
@@ -16,6 +17,7 @@ import com.metaglance.core.frame.FrameKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -27,6 +29,10 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class BarcodeScanTest : FakeServerTestCase() {
+    /** For the test with the command `amb`. No other test of this class gets a `glance.ambiguous` event. */
+    @get:Rule
+    val secondLook = SecondLookRule()
+
     @Test
     fun aBarcodeInViewGivesBarcodeSeenOneTimeEachSecond() {
         startSession(TestClips.BARCODE)

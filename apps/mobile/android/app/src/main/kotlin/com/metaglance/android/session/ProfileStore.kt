@@ -96,6 +96,15 @@ class ProfileStore(context: Context) {
     val streamSetup: StreamSetup
         get() = StreamSetup.within(streamQuality?.name ?: BuildConfig.STREAM_QUALITY, streamFps ?: BuildConfig.STREAM_FPS)
 
+    /** The switch of the second look still that the mock menu set, or null for the value of the build. */
+    var secondLookStill: Boolean?
+        get() = if (prefs.contains(KEY_SECOND_LOOK_STILL)) prefs.getBoolean(KEY_SECOND_LOOK_STILL, false) else null
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SECOND_LOOK_STILL) else putBoolean(KEY_SECOND_LOOK_STILL, value) }.apply()
+
+    /** True when the next camera start takes a still for each `glance.ambiguous` event. */
+    val takesSecondLook: Boolean
+        get() = secondLookStill ?: BuildConfig.SECOND_LOOK_STILL
+
     /** True makes the app show its placeholder page in place of the phone UI. */
     var usePlaceholder: Boolean
         get() = prefs.getBoolean(KEY_USE_PLACEHOLDER, false)
@@ -146,6 +155,7 @@ class ProfileStore(context: Context) {
         const val KEY_RECORD_MOTION = "recordMotion"
         const val KEY_STREAM_QUALITY = "streamQuality"
         const val KEY_STREAM_FPS = "streamFps"
+        const val KEY_SECOND_LOOK_STILL = "secondLookStill"
         const val KEY_NOTIFICATIONS_ASKED = "notificationsAsked"
         val SESSION_KEYS = listOf(KEY_SESSION_ID, KEY_SESSION_TOKEN, KEY_SESSION_WS_URL, KEY_SESSION_LIVE)
     }

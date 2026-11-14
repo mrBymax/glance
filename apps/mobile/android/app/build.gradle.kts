@@ -32,6 +32,13 @@ fun localInt(key: String, default: Int): String {
     return (text.toIntOrNull() ?: error("$key must be a whole number. Got \"$text\".")).toString()
 }
 
+// A switch, as a boolean of BuildConfig.
+fun localBool(key: String, default: Boolean): String {
+    val text = local(key, default.toString()).trim().lowercase()
+    if (text != "true" && text != "false") error("$key must be true or false. Got \"$text\".")
+    return text
+}
+
 android {
     namespace = "com.metaglance.android"
     compileSdk = 36
@@ -50,6 +57,7 @@ android {
         buildConfigField("long", "LABEL_GAP_MS", localMs("glance.labelGapMs", 6000))
         buildConfigField("String", "STREAM_QUALITY", localQuality("glance.streamQuality", "HIGH"))
         buildConfigField("int", "STREAM_FPS", localInt("glance.streamFps", 7))
+        buildConfigField("boolean", "SECOND_LOOK_STILL", localBool("glance.secondLookStill", false))
         testInstrumentationRunner = "com.metaglance.android.support.GlanceTestRunner"
     }
     // The demo build is the APK for the testers: not debuggable, with no probe screen and no cleartext traffic,
