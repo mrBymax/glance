@@ -167,6 +167,17 @@ class ProbeActivity : AppCompatActivity() {
             datLink.initialize(bluetoothGranted())
             log.line(if (mock.pair()) "mock glasses paired" else "mock pairing failed")
         }
+        addButton("Mock: enable, not registered") {
+            datLink.stopSession()
+            mock.enable(registered = false)
+            datLink.initialize(bluetoothGranted())
+            log.line(if (mock.pair()) "mock glasses paired, not registered" else "mock pairing failed")
+        }
+        addButton("Mock: deny camera") {
+            mock.setCameraPermission(granted = false)
+            log.line("mock camera permission: denied, and the next request gives denied")
+            lifecycleScope.launch { datLink.refreshPermissions() }
+        }
         addButton("Mock: phone camera") {
             withPhoneCamera {
                 mock.usePhoneCamera()

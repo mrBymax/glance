@@ -34,5 +34,16 @@
                 <data android:scheme="glance" />
             </intent-filter>
         </activity>
+
+        <!-- The mock menu is a second launcher icon in each build type: mock mode is the fallback of the live demo.
+             It has a task of its own, so a change from the menu to "Glance" and back keeps both screens. -->
+        <activity android:name=".mock.MockMenuActivity" android:exported="true" android:label="Glance Mock"
+            android:screenOrientation="portrait" android:launchMode="singleTask"
+            android:taskAffinity="com.metaglance.android.mock">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

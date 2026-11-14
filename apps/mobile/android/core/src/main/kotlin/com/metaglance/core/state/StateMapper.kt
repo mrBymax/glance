@@ -16,10 +16,11 @@ object StateMapper {
     /**
      * `socketExpected` is true while a server session exists. Without one, a closed socket is not "offline".
      * A denied Bluetooth permission gives the registration `UNAVAILABLE`, because the SDK does not run without it.
+     * Mock glasses use no Bluetooth, so they keep their registration.
      */
     fun nativeState(dat: DatSnapshot, phoneOnline: Boolean, socketExpected: Boolean, socketOpen: Boolean): NativeState = NativeState(
         metaAiInstalled = dat.metaAiInstalled,
-        registration = if (dat.bluetoothGranted) registration(dat.registration) else Registration.UNAVAILABLE,
+        registration = if (dat.bluetoothGranted || dat.mock) registration(dat.registration) else Registration.UNAVAILABLE,
         cameraPermission = when (dat.cameraPermission) {
             DatPermission.UNKNOWN -> CameraPermission.UNKNOWN
             DatPermission.GRANTED -> CameraPermission.GRANTED

@@ -56,6 +56,7 @@ import com.metaglance.core.image.I420
 import com.metaglance.core.image.RawFrame
 import com.metaglance.core.input.TouchEvent
 import com.metaglance.core.input.Transcript
+import com.metaglance.core.state.DatCompatibility
 import com.metaglance.core.state.DatDevice
 import com.metaglance.core.state.DatFault
 import com.metaglance.core.state.DatLinkState
@@ -158,6 +159,12 @@ class DatLink(
         private set
 
     private var initialized = false
+
+    /** True after `initialize` started the SDK, or found MockDeviceKit enabled. */
+    val ready: Boolean get() = initialized
+
+    /** A compatibility that `debugOverride` set in place of the value of the SDK. */
+    private var compatibilityOverride: DatCompatibility? = null
     private var appFlows: Job? = null
     private var deviceId: DeviceIdentifier? = null
     private var current: SessionRun? = null
@@ -173,7 +180,22 @@ class DatLink(
         val mock = MockDeviceKit.getInstance(app).isEnabled
         _snapshot.update { it.copy(bluetoothGranted = bluetoothGranted, mock = mock) }
         if (!mock) {
-            if (!bluetoothGranted) return
+            if (!bluetoothGranted) {
+                // The SDK does not run. MockDeviceKit can have run before, and its state must not stay.
+                initialized = false
+                appFlows?.cancel()
+                selectDevice = {}
+                deviceId = null
+                _snapshot.update {
+                    it.copy(
+                        registration = DatRegistration.UNAVAILABLE,
+                        cameraPermission = DatPermission.UNKNOWN,
+                        microphonePermission = DatPermission.UNKNOWN,
+                        device = if (current == null) null else it.device
+                    )
+                }
+                return
+            }
             var failure: WearablesError? = null
             Wearables.initialize(app).onFailure { error, _ ->
                 if (error != WearablesError.ALREADY_INITIALIZED) failure = error
@@ -343,6 +365,35 @@ class DatLink(
     }
 
     /**
+     * Reports a fault as if the SDK reported it, for the mock menu and the tests. MockDeviceKit has no call for a
+     * stream error. A `STREAM` fault also stops the session, as the glasses do after such an error.
+     */
+    fun debugFault(fault: DatFault) {
+        log("debug fault ${fault.area.name.lowercase(Locale.US)} ${fault.name}")
+        _faults.tryEmit(fault)
+        if (fault.area == DatFault.Area.STREAM) current?.stop()
+    }
+
+    /**
+     * Sets a value that MockDeviceKit cannot set: a missing Meta AI app, or the compatibility of the device.
+     * A null argument changes nothing. `debugClearOverrides` removes the compatibility again.
+     */
+    fun debugOverride(metaAiInstalled: Boolean? = null, compatibility: DatCompatibility? = null) {
+        metaAiInstalled?.let(::setMetaAiInstalled)
+        if (compatibility != null) {
+            compatibilityOverride = compatibility
+            _snapshot.update { it.copy(device = it.device?.copy(compatibility = compatibility)) }
+        }
+        log("debug override metaAiInstalled=$metaAiInstalled compatibility=$compatibility")
+    }
+
+    fun debugClearOverrides() {
+        compatibilityOverride = null
+        setMetaAiInstalled(true)
+        selectDevice()
+    }
+
+    /**
      * Runs a call that adds a capability to a session. The SDK returns its errors as a `DatResult`, but with
      * DAT 1.0.1 `addInputs` threw an IllegalStateException ("Could not get shared DWA channel") for a session that
      * mock glasses had just ended with a fold. The app must not stop for that. Returns null after such a failure.
@@ -407,7 +458,8 @@ class DatLink(
     }
 
     private fun setDevice(device: Device?) {
-        val value = device?.toCore()
+        val override = compatibilityOverride
+        val value = device?.toCore()?.let { if (override == null) it else it.copy(compatibility = override) }
         val before = _snapshot.value.device
         if (value == before) return
         _snapshot.update { it.copy(device = value) }
