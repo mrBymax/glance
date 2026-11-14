@@ -62,7 +62,7 @@ curl -X POST http://localhost:8080/api/sessions
 
 At the start the server logs `store: memory` or `store: mongo`, the number of products, `store list: <path>, <n> items`, `product info: fake` or the address of Open Food Facts, `recognition: fake` or the model, and `speech: fake` or the speech model.
 
-With real recognition and real speech (`npm run dev` with both keys in `.env` and both fake switches empty), each frame is one paid Gemini call, and each new line is one paid ElevenLabs call. A phone sends 2 frames each second, and at most one label still each 6 seconds.
+With real recognition and real speech (`npm run dev` with both keys in `.env` and both fake switches empty), each frame is one paid Gemini call, and each new line is one paid ElevenLabs call. A phone sends 2 frames each second, and at most one label still each 6 seconds with the default still gap of the app.
 
 ## Settings
 
@@ -456,7 +456,7 @@ A frame with the kind `label` is the still of a barcode that the phone could not
 - A label frame of a session that rests, is paid, or ended is dropped with no call.
 - With `REQUIRE_BLUR=1` the server drops a label frame with `blurred: false`. With `SAVE_FRAMES` it saves each label frame that it accepts.
 - Each label frame gets the frame log line at `info` level, and each call gets `label session=<id> seq=<n> match=<13 digits|none> ms=<n>`.
-- With real recognition, each label call is one paid Gemini call. The phone sends at most one still each 6 seconds, and the limit of 5 seconds on the server holds for a phone that sends more.
+- With real recognition, each label call is one paid Gemini call. The phone sends at most one still each 6 seconds by default. A person can set that gap on the phone, down to 2 seconds, and the limit of 5 seconds on the server holds for a phone that sends more.
 
 ### Try it in fake mode
 

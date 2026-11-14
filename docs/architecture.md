@@ -83,7 +83,7 @@ flowchart LR
 | Part | Folder | Task |
 |---|---|---|
 | Contract | `packages/shared` | Each message type as a zod schema, one JSON fixture for each message variant, `TIMING`, the frame codec, the kiosk code helpers, and the GTIN helpers. |
-| Android app | `apps/mobile/android` | Connects to the glasses through the DAT SDK, sends frames and answers to the server, plays the lines, and hosts the phone UI. |
+| Android app | `apps/mobile/android` | Connects to the glasses through the DAT SDK, sends frames and answers to the server, reads the barcode of a product, plays the lines, and hosts the phone UI. |
 | Phone UI | `apps/mobile/ui` | The setup screen links the glasses. The session screen shows the current prompt, the last lines as text, the cart, the pay prompt, the receipt, and the settings. It has no network code: each message goes through a `GlanceBridge`. |
 | Server | `apps/server` | Recognizes the product in a frame, finds the product of a barcode, runs the cart rules, writes the spoken lines, answers a question about a product, and runs the checkout with a mock payment. |
 | Website | `apps/website` | The kiosk page shows the code that starts a checkout, and then the cart and the result. The mirror page shows the spoken lines and the cart of one session, and plays the speech clips. The landing page and the privacy page show fixed text and make no call to the server. |
@@ -222,9 +222,27 @@ The other answers use the same messages. A no on a new product skips it, and rec
 
 ## A barcode scan and a label frame
 
-The shopper can show the barcode of a product in place of its front. Three readers can find the code: the barcode scanner of the phone, the text reader of the phone, and the model on the server. This section describes the contract and the server. The steps of the phone in the diagrams are those of the design, and `apps/mobile/android/README.md` says which of them exist.
+The shopper can show the barcode of a product in place of its front. Three readers can find the code: the barcode scanner of the phone, the text reader of the phone, and the model on the server.
 
-The diagram shows a code that the phone read.
+The first diagram shows the readers of the phone. `FramePipeline` of the Android app runs them on each frame of the stream.
+
+```mermaid
+flowchart TD
+  frame["Frame of the stream"] --> scan["CodeScanner: EAN-13, EAN-8, UPC-A, UPC-E"]
+  scan -- "code with a right check digit" --> vote["BarcodeVote: 2 equal reads, or 3 with OCR"]
+  scan -- "region of a barcode, no code" --> again["Scan of the larger crop, then DigitReader: OCR of the digits"]
+  again -- "code with a right check digit" --> vote
+  vote --> seen["barcode.seen, then one time each second"]
+  again -- "no code for the barcode wait, 2500 ms" --> policy["LabelPolicy: one still each still gap, 6000 ms"]
+  request["still.request of the server"] --> policy
+  policy --> still["One still photo. LabelStill reads it on the phone"]
+  still -- "code" --> seen
+  still -- "no code" --> label["Frame with the kind label, each face pixelated"]
+```
+
+The barcode wait and the still gap are settings of the Android app. A person changes them in the group `Barcode` of the screen "Glance Mock", with no new build. `apps/mobile/android/README.md` has the limits and the rules of each reader.
+
+The second diagram shows a code that the phone read.
 
 ```mermaid
 sequenceDiagram
@@ -244,8 +262,8 @@ sequenceDiagram
     Resolver->>List: byGtin(gtin)
     List-->>Resolver: the item with its price, or nothing
     Resolver->>Off: GET /api/v2/product/<code>, unless the cache has the answer
-    Off-->>Resolver: names, allergens, diets
-    Note over Resolver: the lookup has 2500 ms. Late or failed details give the name of the store and no allergen data
+    Off-->>Resolver: brand, pack size, allergens, diets
+    Note over Resolver: the lookup has 2500 ms. Late or failed details give a product with no allergen data
     Resolver-->>Socket: the product gtin-<13 digits>, or null
   end
   alt a product
@@ -260,7 +278,7 @@ sequenceDiagram
   end
 ```
 
-The second diagram shows a code that only the model sees. The recognition call of each stream frame also answers `code`, with `visible` and `digits`.
+The third diagram shows a code that only the model sees. The recognition call of each stream frame also answers `code`, with `visible` and `digits`.
 
 ```mermaid
 sequenceDiagram
@@ -303,12 +321,13 @@ Rules of this path:
 
 - The store list decides what the store sells and at which price. It is the file of `STORE_LIST_PATH`, behind the interface `StoreList`, so an ERP client can take its place.
 - A catalog product with the `gtin` of the code wins over the store list. It keeps the price and the spoken texts of the catalog.
-- Each other product is built from the store item and the details of Open Food Facts. Its ID is `gtin-<13 digits>`, and `ScannedProducts` keeps it for the process. The rules find it by that ID as they find a catalog product: the cart, the warnings, the snapshot, a question, and the spot check need no change. No client sees a new type.
+- Each other product is built from the store item and the details of Open Food Facts. The store list gives the name and the price. Open Food Facts gives the allergens and the diets, and the brand and the pack size when the store list has none. The server does not read the name of Open Food Facts, which is often in another language or only a part of the name. The ID of the product is `gtin-<13 digits>`, and `ScannedProducts` keeps it for the process. The rules find it by that ID as they find a catalog product: the cart, the warnings, the snapshot, a question, and the spot check need no change. No client sees a new type.
 - Open Food Facts answers are kept for 30 days, and "not found" for 1 day, in memory and in files. After a failed read the next request for that code waits 30 seconds, and after the status 429 each code waits 60 seconds. The server never asks for a code that starts with `2`, `02`, or `04`: only one store knows such a code.
 - An empty allergen list of Open Food Facts counts as no data. The shopper then hears "Allergen data is missing for this product." when the profile lists an allergen or a diet.
 - Digits that the model read count only with a right check digit and a product of the catalog or the store list. Then one frame is enough. The model never causes the line "This product is not in this store."
 - A label gives a product only when its answer selects exactly one item of the store list: by digits with a right check digit, or by each word of the brand and each word and number of the name. Free text of the model never becomes a product.
 - One voice: while barcode reports or label frames arrive, or the model sees a code, and for 3 seconds after, recognition by sight speaks no unknown line and no aim hint. The recognition instruction also gives the status `none` to a package shown with its barcode side.
+- The phone takes a label still by itself when a barcode region was in view for the barcode wait with no accepted code, and after each `still.request`. It takes at most one each still gap.
 - A label call is one more Gemini call. The server asks for a still at most one time each 6 seconds for a session, and each 30 seconds after 2 requests with no code read. It starts at most one label call each 5 seconds for a session, and none for a session that does not shop.
 - A lookup result that arrives after the result of a later report of another code is dropped.
 - In fake mode a script step `barcode` reports a code as the phone does, a `result` step can set `code`, and the field `label` of the script is the answer of the label reader. With `FAKE_PRODUCT_INFO` the details come from fixture files, and no call goes to Open Food Facts.
@@ -378,7 +397,7 @@ sequenceDiagram
 
 ## The fingerprint and the still photo in the Android app
 
-Two extras have their Android side: the fingerprint above 50 EUR, and the sharp second look. Each one starts with a message of the server.
+Two extras have their Android side: the fingerprint above 50 EUR, and the sharp second look. Each one starts with a message of the server. The still of a barcode is in "A barcode scan and a label frame".
 
 ```mermaid
 sequenceDiagram
@@ -394,7 +413,7 @@ sequenceDiagram
     Note over App: a cancel and each error of the prompt send ok false
   else sharp second look
     Socket->>App: event glance.ambiguous
-    Note over App: StillPolicy allows one capture at a time, and one each 5 seconds
+    Note over App: StillPolicy allows one capture at a time, and one each 5 seconds. The label still shares it
     App->>Glasses: capturePhoto
     Glasses-->>App: photo
     Note over App: crop, long side 1440 at most, each face pixelated, JPEG
@@ -504,5 +523,6 @@ Checks that nobody did:
 - No native speaker has read the Italian lines of the server or the Italian table of the phone UI.
 - Nobody has checked the Display HUD in the Display simulator or on glasses with a display. The checks ran in a browser.
 - No replay of a frame set has run with the real recognition service, and no test has run the store tests against a MongoDB server.
-- Nobody has read a barcode with the real glasses, so the distance at which the phone or the model reads a code is not known.
+- Nobody has read a barcode with the real glasses, so the distance at which the phone or the model reads a code is not known. Nobody knows if the barcode wait of 2500 ms feels long, which is why it is a setting.
+- The instrumented tests of the Android app did not run after the group `Barcode` came to "Glance Mock". They need the test phone.
 - The label call and the `code` field of the recognition call have not run with the real model. The server code has made no call to Open Food Facts: the tests use a fetch function of their own and fixture files.
