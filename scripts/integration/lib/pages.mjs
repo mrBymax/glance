@@ -1,4 +1,5 @@
 // Serves the web apps with their Vite dev servers and opens them in the installed Chrome, for the integration tests.
+import { Agent } from 'node:http';
 import { resolve } from 'node:path';
 import puppeteer from 'puppeteer-core';
 import { createServer } from 'vite';
@@ -6,25 +7,37 @@ import { freePort, repoRoot } from './server.mjs';
 
 const HOST = '127.0.0.1';
 const WAIT_MS = 30_000;
+/**
+ * The wait of a test checks the page at this interval. The default of Puppeteer checks at each animation frame,
+ * and Chrome gives no animation frame to a page that is not the front page of the browser.
+ */
+export const POLL_MS = 100;
 
 /**
  * Starts the Vite dev server of one app on a free port of 127.0.0.1, with the config file of the app.
  * `apiOrigin` is the target of its /api proxy. Returns the address and `stop`.
+ * The proxy rule of the config file gets an agent here. With no agent, the proxy of Vite 8.3.8 on Node 26.12.1 and Windows
+ * lost about one call in four with ECONNRESET, also with a plain Node server as its target. With an agent it lost none.
  */
 export async function startDevServer(appDir, apiOrigin) {
   const root = resolve(repoRoot, appDir);
   const port = await freePort();
   // The config file of each app reads this variable for its proxy when the server starts.
   process.env.GLANCE_SERVER_ORIGIN = apiOrigin;
+  const agent = new Agent();
   const server = await createServer({
     root,
     configFile: resolve(root, 'vite.config.ts'),
     logLevel: 'error',
     clearScreen: false,
-    server: { host: HOST, port, strictPort: true },
+    server: { host: HOST, port, strictPort: true, proxy: { '/api': { agent } } },
   });
   await server.listen();
-  return { url: `http://${HOST}:${port}`, stop: () => server.close() };
+  const stop = async () => {
+    await server.close();
+    agent.destroy();
+  };
+  return { url: `http://${HOST}:${port}`, stop };
 }
 
 /**
@@ -60,7 +73,7 @@ export async function waitForText(page, name, selector, text) {
   try {
     await page.waitForFunction(
       (css, wanted) => [...document.querySelectorAll(css)].some((element) => element.textContent.includes(wanted)),
-      {},
+      { polling: POLL_MS },
       selector,
       text,
     );

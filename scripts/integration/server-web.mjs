@@ -1,10 +1,11 @@
-// Integration test 2: the Glance server, the phone UI with BrowserBridge, and the kiosk page.
+// Integration test 2: the Glance server, the phone UI with BrowserBridge, the kiosk page, and the mirror page.
 // Starts the server in fake mode and the two Vite dev servers, plays one shop in the installed Chrome, and stops all of it.
 // Use: node scripts/integration/server-web.mjs [--strict]
 // With --strict, a known defect of a page also fails the run.
+import { randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openPage, startBrowser, startDevServer, waitForText } from './lib/pages.mjs';
+import { openPage, POLL_MS, startBrowser, startDevServer, waitForText } from './lib/pages.mjs';
 import { startFakeServer } from './lib/server.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -16,18 +17,26 @@ const SERVER_KIOSK_CODE = 'K3X7';
 const PRODUCT = { name: 'Oat drink', pack: '1 L', priceCents: 189, price: '1.89 EUR' };
 const LOG_TAIL_LINES = 40;
 const PAID_LINE = 'Paid.';
+const DEMO_PAYMENT_LINE = 'Demo payment. No money moved.';
 const CAPTION_WAIT_MS = 3000;
+// The checkout sheet of the phone UI, for the pay prompt and for the receipt. The Astryx BottomSheet is a dialog element.
+const SHEET = 'dialog[open]';
+// The two columns of the mirror page: the spoken lines and the cart.
+const MIRROR_VOICE = '.mirror-voice';
+const MIRROR_CART = '.mirror-cart';
 
 function check(condition, message) {
   if (!condition) throw new Error(message);
 }
+
+const button = (name) => `::-p-aria([name="${name}"][role="button"])`;
 
 /** Waits until the bridge of the phone UI delivered a server event of this type, and returns the event. */
 async function waitForEvent(phone, type) {
   try {
     const found = await phone.waitForFunction(
       (wanted) => window.glanceMessages.find((message) => message.t === 'event' && message.event.type === wanted)?.event,
-      {},
+      { polling: POLL_MS },
       type,
     );
     return await found.jsonValue();
@@ -42,7 +51,7 @@ async function showsPaidLine(phone) {
   try {
     await phone.waitForFunction(
       (wanted) => [...document.querySelectorAll('li')].some((element) => element.textContent.includes(wanted)),
-      { timeout: CAPTION_WAIT_MS },
+      { polling: POLL_MS, timeout: CAPTION_WAIT_MS },
       PAID_LINE,
     );
     return true;
@@ -51,9 +60,9 @@ async function showsPaidLine(phone) {
   }
 }
 
-async function playShop(server, phoneUrl, kioskUrl, browser, problems, knownDefects) {
+async function playShop(server, phoneUrl, websiteUrl, browser, problems, knownDefects) {
   const kiosk = await openPage(
-    browser, 'kiosk', `${kioskUrl}/kiosk?name=${encodeURIComponent(KIOSK_NAME)}`, { width: 1920, height: 1080 }, problems,
+    browser, 'kiosk', `${websiteUrl}/kiosk?name=${encodeURIComponent(KIOSK_NAME)}`, { width: 1920, height: 1080 }, problems,
   );
   await waitForText(kiosk, 'kiosk', 'h1', 'Look at this code to pay');
   await waitForText(kiosk, 'kiosk', '.kiosk-row', `${KIOSK_NAME}, ${STORE}`);
@@ -63,54 +72,82 @@ async function playShop(server, phoneUrl, kioskUrl, browser, problems, knownDefe
   check(code !== SERVER_KIOSK_CODE, 'kiosk: the page shows the code of the kiosk that the server made at its start.');
   console.log(`kiosk: registered, code ${code}`);
 
+  // The mirror follows the newest live session, as it does in the demo. It starts before the phone has a session.
+  const mirror = await openPage(
+    browser, 'mirror', `${websiteUrl}/mirror?latest=${encodeURIComponent(server.demoKey)}`, { width: 1920, height: 1080 }, problems,
+  );
+  await mirror.locator(button('Start mirror')).click();
+  await waitForText(mirror, 'mirror', MIRROR_VOICE, 'Waiting for a session on the phone.');
+  console.log('mirror: started, waits for a session');
+
   const phone = await openPage(
     browser, 'phone UI', `${phoneUrl}/?ready=1&api=${encodeURIComponent(server.url)}`, { width: 412, height: 915 }, problems,
   );
-  await waitForText(phone, 'phone UI', 'main', 'Your cart is empty.');
-  // No screen of the page starts a session yet, so the test sends the message of the start button.
-  // The dev build keeps the bridge of the page in window.glanceBridge.
+  await waitForText(phone, 'phone UI', 'h1', 'Set up Glance');
+  // The dev build keeps the bridge of the page in window.glanceBridge. The test reads the events that the bridge delivers.
   await phone.evaluate(() => {
     window.glanceMessages = [];
     window.glanceBridge.subscribe((message) => window.glanceMessages.push(message));
-    window.glanceBridge.send({ t: 'session.start' });
   });
-  const sessionQuery = await (await phone.waitForFunction(() => window.glanceBridge.sessionQuery())).jsonValue();
+  await phone.locator(button('Start shopping')).click();
+  const sessionQuery = await (await phone.waitForFunction(() => window.glanceBridge.sessionQuery(), { polling: POLL_MS })).jsonValue();
   const session = new URLSearchParams(sessionQuery);
-  console.log('phone UI: session started');
+  await waitForText(phone, 'phone UI', 'main', 'Your cart is empty.');
+  console.log('phone UI: setup screen answered with Start shopping, the session started');
 
   await waitForText(phone, 'phone UI', 'h2', PRODUCT.name);
   await waitForText(phone, 'phone UI', 'main', PRODUCT.price);
   await waitForText(phone, 'phone UI', 'li', 'Camera on.');
-  await phone.locator('::-p-aria([name="Add"][role="button"])').click();
+  await waitForText(mirror, 'mirror', `${MIRROR_VOICE} li`, 'Camera on.');
+  await waitForText(mirror, 'mirror', MIRROR_CART, 'The cart is empty.');
+  console.log('mirror: follows the session of the phone');
+
+  await phone.locator(button('Add')).click();
   await waitForText(phone, 'phone UI', 'section', `${PRODUCT.pack}, 1 x ${PRODUCT.price}`);
   await waitForText(phone, 'phone UI', 'li', 'Added');
   const cartEvent = await waitForEvent(phone, 'cart.updated');
   check(cartEvent.cart.totalCents === PRODUCT.priceCents, `phone UI: the cart total is ${cartEvent.cart.totalCents} cents.`);
   console.log('phone UI: product card answered with Add, the cart shows the product');
+  await waitForText(mirror, 'mirror', `${MIRROR_VOICE} li`, 'Added');
+  await waitForText(mirror, 'mirror', `${MIRROR_CART} li`, PRODUCT.name);
+  await waitForText(mirror, 'mirror', `${MIRROR_CART} li`, `${PRODUCT.pack}, 1 x ${PRODUCT.price}`);
+  await waitForText(mirror, 'mirror', MIRROR_CART, PRODUCT.price);
+  console.log('mirror: shows the line of the add and the cart');
 
   // The script of the server shows the session the newest kiosk, which is the kiosk of the page.
   const offered = await waitForEvent(phone, 'checkout.offered');
   check(offered.kiosk.name === KIOSK_NAME, `phone UI: the checkout is at "${offered.kiosk.name}", not at "${KIOSK_NAME}".`);
   check(offered.totalCents === PRODUCT.priceCents, `phone UI: the pay prompt has the total ${offered.totalCents} cents.`);
   await waitForText(phone, 'phone UI', 'li', `${KIOSK_NAME} at ${STORE}.`);
+  await waitForText(phone, 'phone UI', `${SHEET} h2`, `${KIOSK_NAME} at ${STORE}`);
+  await waitForText(phone, 'phone UI', SHEET, '1 item');
+  await waitForText(phone, 'phone UI', SHEET, PRODUCT.price);
+  await waitForText(mirror, 'mirror', `${MIRROR_VOICE} li`, `${KIOSK_NAME} at ${STORE}.`);
   await waitForText(kiosk, 'kiosk', 'h1', 'Waiting for your nod');
   await waitForText(kiosk, 'kiosk', '.kiosk-total', PRODUCT.price);
   await waitForText(kiosk, 'kiosk', 'li', PRODUCT.name);
   await waitForText(kiosk, 'kiosk', 'li', `1 x ${PRODUCT.price}`);
   console.log('kiosk: connected, shows the cart and the total');
 
-  // No screen of the page shows the pay prompt yet, so the test sends the answer of its pay button through the bridge.
-  await phone.evaluate((promptId) => window.glanceBridge.send({ t: 'intent', kind: 'yes', promptId }), offered.promptId);
+  await phone.locator(button('Pay')).click();
   const paid = await waitForEvent(phone, 'checkout.paid');
   check(paid.totalCents === PRODUCT.priceCents, `phone UI: the receipt has the total ${paid.totalCents} cents.`);
   check(paid.kiosk.name === KIOSK_NAME, `phone UI: the receipt names the kiosk "${paid.kiosk.name}".`);
   check(paid.items.length === 1 && paid.items[0].name === PRODUCT.name, 'phone UI: the receipt does not hold the one product.');
+  await waitForText(phone, 'phone UI', `${SHEET} h2`, 'Paid');
+  await waitForText(phone, 'phone UI', SHEET, `Order ${paid.orderId}`);
+  await waitForText(phone, 'phone UI', `${SHEET} li`, PRODUCT.name);
+  await waitForText(phone, 'phone UI', SHEET, DEMO_PAYMENT_LINE);
   await waitForText(phone, 'phone UI', 'section', 'Your cart is empty.');
+  console.log('phone UI: checkout sheet answered with Pay, the receipt shows the order');
   await waitForText(kiosk, 'kiosk', 'h1', 'Paid');
   await waitForText(kiosk, 'kiosk', '.kiosk-total', PRODUCT.price);
   await waitForText(kiosk, 'kiosk', 'li', PRODUCT.name);
-  await waitForText(kiosk, 'kiosk', '.kiosk-row', 'Demo payment. No money moved.');
+  await waitForText(kiosk, 'kiosk', '.kiosk-row', DEMO_PAYMENT_LINE);
   console.log(`kiosk: paid, order ${paid.orderId}`);
+  await waitForText(mirror, 'mirror', `${MIRROR_VOICE} li`, PAID_LINE);
+  await waitForText(mirror, 'mirror', MIRROR_CART, 'The cart is empty.');
+  console.log('mirror: shows the line of the payment and an empty cart');
 
   const answer = await fetch(`${server.url}/api/sessions/${session.get('s')}?token=${session.get('t')}`);
   check(answer.ok, `server: the snapshot call gave the status ${answer.status}.`);
@@ -129,6 +166,10 @@ async function playShop(server, phoneUrl, kioskUrl, browser, problems, knownDefe
   if (!(await showsPaidLine(phone))) {
     knownDefects.push(`phone UI: the captions do not show the line "${PAID_LINE} ..." that the server spoke after the payment.`);
   }
+
+  await phone.locator(button('Done')).click();
+  await waitForText(phone, 'phone UI', 'h1', 'Set up Glance');
+  console.log('phone UI: receipt answered with Done, the setup screen shows again');
 }
 
 async function main() {
@@ -138,7 +179,8 @@ async function main() {
   const stops = [];
   let server = null;
   try {
-    server = await startFakeServer({ fakeScript: resolve(here, 'server-web.fake-script.json') });
+    // The key of GET /api/demo/latest, which the mirror page sends. A new one for each run, and it opens no other server.
+    server = await startFakeServer({ fakeScript: resolve(here, 'server-web.fake-script.json'), demoKey: randomUUID() });
     stops.push(() => server.stop());
     console.log(`server: fake mode on ${server.url}`);
     const phoneUi = await startDevServer('apps/mobile/ui', server.url);
@@ -166,8 +208,8 @@ async function main() {
   for (const problem of problems) console.error(problem);
   if (server) {
     console.error(`The last ${LOG_TAIL_LINES} log lines of the server:`);
-    // The address of a call holds the token of its session or kiosk.
-    console.error(server.log.slice(-LOG_TAIL_LINES).join('\n').replace(/token=[^"&\s]+/g, 'token=<token>'));
+    // The server logs the path of a call with no query. This line also covers a log line that holds a token or the demo key.
+    console.error(server.log.slice(-LOG_TAIL_LINES).join('\n').replace(/(token|key)=[^"&\s]+/g, '$1=<hidden>'));
   }
   console.error('result: fail');
   return 1;
@@ -175,5 +217,6 @@ async function main() {
 
 main().then((code) => process.exit(code), (error) => {
   console.error(error);
+  console.error('result: fail');
   process.exit(1);
 });
