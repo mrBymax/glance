@@ -54,6 +54,20 @@ glance/
    - Create feature branches off `main` (e.g. `feature/<name>` or `fix/<name>`).
    - Keep empty target folders tracked with `.gitkeep` until initial project code is generated.
 
+## Hooks
+
+The repository has two hooks.
+
+**Pre-commit hook.** `.githooks/pre-commit` runs `scripts/hooks/pre-commit.mjs` on the staged files. It stops a commit that holds one of these:
+
+- a secret, or a file that can hold one (`.env`, `local.properties`, a keystore)
+- an ESLint error in a staged JavaScript or TypeScript file (rules: `eslint.config.mjs`)
+- a ktlint error in `apps/mobile/android`, when a Kotlin file is staged
+
+`npm install` at the repository root turns the hook on. Without npm, run `git config core.hooksPath .githooks` one time. Do not commit with `--no-verify`. Fix the finding.
+
+**Stop hook of Claude Code.** `.claude/settings.json` runs `.claude/hooks/stop-docs.cjs` each time Claude Code wants to stop. If code changed and no documentation changed with it, the hook asks Claude one time to update the documentation: this file, the `README.md` of each changed app or package, and `docs/architecture.md`. Each diagram in the documentation is a Mermaid code block.
+
 ## Agent Skills
 
 `skills/` is the only copy of the project skills. `.claude/skills` (Claude Code) and `.agents/skills` (Codex, Cursor, Gemini CLI, and other agents that read `.agents/`) are symlinks to it.

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"require((process.env.CLAUDE_PROJECT_DIR || process.cwd()) + '/.claude/hooks/stop-docs.cjs')\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
