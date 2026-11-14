@@ -7,3 +7,7 @@
 .astryx-button {
   min-inline-size: 48px;
 }
+/* The clear button of an input is 20 px high, and Astryx grows its hit area to 44 px at most. */
+.astryx-input-clear-button {
+  block-size: 48px;
+}

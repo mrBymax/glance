@@ -360,6 +360,7 @@ jsdom has no layout and no colors. Measure these three in a browser, at 360 x 80
 The design requires touch targets of 48 px or more. Astryx controls are 28, 32, and 36 px high.
 
 - `src/styles/touch.css` raises the three Astryx height tokens to 48, 48, and 56 px, and gives each `Button` a minimum width of 48 px.
+- `src/styles/touch.css` also sets the clear button of an input to a height of 48 px. Its stock height is 20 px, and Astryx grows its hit area to 44 px at most. In Chrome at 360 px the button "Clear Budget" then measured 48 x 48 px.
 - `SegmentedControl` needs `size="lg"`. `CheckboxList` needs `density="spacious"`. A smaller variant is below 48 px.
 - Do not use `Switch`, `Slider`, or a raw `button`. No rule covers them.
 - jsdom has no layout, so a test cannot measure a control. `uncoveredTouchTargets(root)` in `src/test/touchTargets.ts` lists each control that none of these rules covers. A screen test expects an empty list.
