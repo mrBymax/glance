@@ -254,8 +254,9 @@ A store item has no description of its package, and a stream frame is small. Wit
 - The pictures are those of `REFERENCE_DIR`. See "Reference pictures" for how to take them.
 - Each picture is one image part at the media resolution `MEDIA_RESOLUTION_LOW` (280 tokens), after the text part `Reference picture of <product ID>: <name>`. Then come the text `The frame`, the frame, and the exclude line. A store item that the catalog holds has the ID and the name of its catalog product.
 - A call with pictures gets the section "Reference pictures" at the end of its instruction. The text is `REFERENCE_RULES` in `src/recognition/prompt.ts`. It says: the last image is the frame, a picture can show another side or other light, a match of shape, colors, and print gives `identified` also when the text is too small to read, a package that is only similar gives `unsure`, and no answer is about a picture alone.
+- For store items that look alike, `agents/recognition.md` and `REFERENCE_RULES` say: name such an item only when the frame shows the part that tells it apart, prefer the flavor text because the light of the room can change a color, and answer `unsure` in each other case.
 - With no picture, the request and the instruction are those of a server with no reference picture.
-- A frame call gets at most 12 pictures and at most 2 MB of JPEG bytes (`MAX_FRAME_REFERENCES`, `MAX_FRAME_REFERENCE_BYTES`). An item gets each of its pictures or none. With more items, only the first items of the store list get pictures: 4 items with 3 pictures for each item, and 12 items with 1 picture. The log line of the pictures then ends with `<n> items with pictures get none in a frame call`.
+- A frame call gets at most 12 pictures and at most 2 MB of JPEG bytes (`MAX_FRAME_REFERENCES`, `MAX_FRAME_REFERENCE_BYTES`). Each item gets its newest picture before an item gets a second one, in the order of the store list. So 4 items get 3 pictures each, 6 items get 2 each, and 12 items get 1 each. With more than 12 items, only the first 12 items of the store list get a picture, and the log line of the pictures ends with `<n> items with pictures get none in a frame call`.
 - The server sends each picture to the Files API of Gemini one time (`createPictureUploader`), and a frame call holds the address of the file. So a frame call uploads no picture. 3 pictures of 130 kB in each of 7 calls a second would be 27 Mbit/s.
 - The API deletes a file after 48 hours. The server sends the pictures again after 24 hours.
 - `createFrameReferences` holds the parts in memory. No frame call reads the folder or a file. A frame call checks the state of the folder when the last check is 10 seconds old, and that call still gets the older parts. The server reads a file and uploads it only when a selected picture changed. A picture that the server saves or removes through `/api/demo/reference` counts at once.
@@ -263,7 +264,7 @@ A store item has no description of its package, and a stream frame is small. Wit
 - A read or an upload that fails gets the line `reference pictures not read. <message>`. The frame calls keep the parts that they had, and the next check tries again.
 - With `FAKE_RECOGNITION` the server uploads no picture, and `<k>` is 0.
 
-Measured on 2026-11-14 with `npm run reference:probe`: 48 stream frames of two tests of that day, one call at a time, with the demo catalog, a store list of one item (a white and red energy drink can), and its 3 reference pictures. The room had purple light. A person labeled each frame by eye: 7 show the front of the can in a hand, 25 show the can in a hand from the back or cut off, 11 show no product in a hand (in 2 of them the can stands on the table), and 5 show a pack of paper cups in a hand.
+Measured on 2026-11-14 with `npm run reference:probe`: 48 stream frames of two tests of that day, one call at a time, with the demo catalog and a store list of one item (a white and red energy drink can). The item had 4 reference pictures, and a call got the newest 1 or 3: the top of the can in a hand, then its front, then its back. The room had purple light. A person labeled each frame by eye: 7 show the front of the can in a hand, 25 show the can in a hand from the back or cut off, 11 show no product in a hand (in 2 of them the can stands on the table), and 5 show a pack of paper cups in a hand.
 
 | Pictures for the item | 32 frames with the can: `identified`, `unsure`, `none` | Wrong names in the 16 other frames | Median | 90th percentile | Prompt tokens |
 |---|---|---|---|---|---|
@@ -271,12 +272,14 @@ Measured on 2026-11-14 with `npm run reference:probe`: 48 stream frames of two t
 | 1, the bytes in the request | 11, 5, 16 | 0 | 1056 ms | 1294 ms | 2698 |
 | 3, the bytes in the request | 13, 13, 6 | 0 | 1253 ms | 1560 ms | 3276 |
 | 3, as files of the Files API | 13, 12, 7 | 0 | 1125 ms | 1456 ms | 3276 |
+| 3 for each of 4 items, as files, with the rule for items that look alike | 4, 19, 8 and 1 `ambiguous` | 0 | 1267 ms | 1521 ms | 6150 |
 
-- The first three rows come from one run: each frame got its three calls one after the other. The last row is a second run of 48 calls, some minutes later.
-- With 3 pictures the model named the can in 13 of 32 frames, and without pictures in 3. No call named a product in a frame with no can in a hand.
-- 3 pictures as files cost about 170 ms more than no picture at the median, and 1051 prompt tokens.
-- An `unsure` answer never held a product: each `unsure` answer of the 192 calls had `productId: null`, with a confidence of 0.3 to 0.8. So no rule can count two `unsure` answers as one `identified`, and the server has none.
-- Not measured: a similar product in a hand, for example another white can. The store list of the test had one item. A wrong name is worse than no name, so test a look-alike pair before a demo with more items, and set `RECOGNITION_REFERENCES=0` if the model names the wrong one.
+- The first three rows come from one run: each frame got its three calls one after the other. The fourth row is a second run of 48 calls, some minutes later. The last row is a third run, after the store list got three cans of one design (12 pictures in a call) and the instruction got the rule for items that look alike.
+- With one item and 3 pictures the model named the can in 13 of 32 frames, and without pictures in 3. No call named a product in a frame with no can in a hand.
+- 3 pictures as files cost about 170 ms more than no picture at the median, and 1051 prompt tokens. 12 pictures cost about 310 ms and 3925 tokens.
+- With four items and the rule for items that look alike, the model named the can only in 4 of the 7 frames that show its front, and in no frame that shows its back. It answered `unsure` for 19 frames, and `none` for 8 in place of 18 without pictures. An `unsure` answer asks the phone for a still, and the label call names the product. The run does not tell the effect of the rule from the effect of the three more items.
+- An `unsure` answer never held a product: each `unsure` answer of the 240 calls had `productId: null`, with a confidence of 0.3 to 0.8. So no rule can count two `unsure` answers as one `identified`, and the server has none.
+- Not measured: a choice between store items that look alike. No frame of the three cans of one design exists, so no call had one of them in a hand. A wrong name is worse than no name. Record frames of each can, label them, and run the probe before a demo with them. Set `RECOGNITION_REFERENCES=0` if the model names the wrong one. See the rule R2 in "Rules" for results that change between two products.
 
 ```bash
 CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.json npm run reference:probe --workspace @glance/server -- --labels <labels.json> --pictures 0,3 --upload

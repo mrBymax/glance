@@ -64,16 +64,34 @@ it('gives no part with 0 pictures for each item, with no picture, and for a code
   await add(NUTELLA, 2);
   expect(await loadFrameReferences(store, entries, dev, 0)).toMatchObject({ parts: [], items: 0, pictures: 0, leftOut: 0, storedPictures: 2 });
 });
-it('stops at the picture limit: the first items of the store list get their pictures, and the others get none', async () => {
-  const many = numbered(MAX_FRAME_REFERENCES);
+it('at the picture limit each item gets its newest picture before an item gets a second one', async () => {
+  const many = numbered(MAX_FRAME_REFERENCES - 2);
   for (const { item } of many) {
     await add(item.gtin, 1);
     await add(item.gtin, 2);
   }
-  const half = MAX_FRAME_REFERENCES / 2;
   const loaded = await loadFrameReferences(store, many, dev, 2);
-  expect(loaded).toMatchObject({ items: half, pictures: MAX_FRAME_REFERENCES, leftOut: half });
-  expect(loaded.parts[loaded.parts.length - 2]).toEqual({ text: `Reference picture of gtin-${many[half - 1]!.item.gtin}: Item ${half - 1}` });
+  expect(loaded).toMatchObject({ items: MAX_FRAME_REFERENCES - 2, pictures: MAX_FRAME_REFERENCES, leftOut: 0 });
+  // The first two items of the store list have two pictures, and the pictures of one item stay together.
+  expect(loaded.parts.slice(0, 6)).toEqual([
+    { text: 'Reference picture of gtin-4000000000000: Item 0' }, picture(jpeg(2)),
+    { text: 'Reference picture of gtin-4000000000000: Item 0' }, picture(jpeg(1)),
+    { text: 'Reference picture of gtin-4000000000001: Item 1' }, picture(jpeg(2)),
+  ]);
+  expect(loaded.parts.slice(-2)).toEqual([{ text: `Reference picture of gtin-${many.at(-1)!.item.gtin}: Item ${many.length - 1}` }, picture(jpeg(2))]);
+});
+it('with more items than the picture limit, the first items of the store list get one picture, and the others get none', async () => {
+  const many = numbered(MAX_FRAME_REFERENCES + 3);
+  for (const { item } of many) await add(item.gtin, 1);
+  const loaded = await loadFrameReferences(store, many, dev, 3);
+  expect(loaded).toMatchObject({ items: MAX_FRAME_REFERENCES, pictures: MAX_FRAME_REFERENCES, leftOut: 3 });
+  expect(loaded.parts.at(-2)).toEqual({ text: `Reference picture of gtin-${many[MAX_FRAME_REFERENCES - 1]!.item.gtin}: Item ${MAX_FRAME_REFERENCES - 1}` });
+});
+it('the four items of a demo with 13 pictures get three pictures each', async () => {
+  const four = numbered(4);
+  for (let fill = 1; fill <= 4; fill += 1) await add(four[0]!.item.gtin, fill);
+  for (const { item } of four.slice(1)) for (let fill = 1; fill <= 3; fill += 1) await add(item.gtin, fill);
+  expect(await loadFrameReferences(store, four, dev, 3)).toMatchObject({ items: 4, pictures: 12, leftOut: 0, storedPictures: 13 });
 });
 it('stops at the byte limit', async () => {
   await add(NUTELLA, 1, MAX_FRAME_REFERENCE_BYTES - 10);

@@ -44,6 +44,7 @@ The store also sells the items below. Each line is one item: its ID, its name, a
 - Use `identified` with the ID of a store item only when you can read the package in the frame, and its text or its picture says that it is that product.
 - The package text can be in another language than the name of the item. For example, a package that says "Kartonkipikari / Pappersmugg" is "Paper cups".
 - A similar product is not the item. A product of another brand, another type, another flavor, or another pack size gives `unknown`.
+- Some items differ only in a flavor word or in the color of the package. Use `identified` for such an item only when the frame shows the part that tells it apart. Prefer the flavor text. The light of the room can change a color. If you cannot tell which of these items it is, use `unsure`.
 - If the frame is too small or too blurred to read the package, use `unsure`. The phone then takes a photo, and a second reader checks the package.
 
 {{storeItems}}

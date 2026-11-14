@@ -19,6 +19,7 @@ The request starts with reference pictures: photos of the real package of some p
 - A reference picture can show the package from another side, at another size, or in other light. Its background means nothing.
 - If a hand in the frame holds a product, and the shape, the colors, and the print of its package match the reference pictures of one product, use \`identified\` with that ID. This holds also when the text in the frame is too small to read.
 - A package that is only similar to a reference picture gives \`unsure\`, or \`unknown\` when you can see that it is another product.
+- When the reference pictures of two products look alike, find the part that differs: the flavor text, or the color. If the frame does not show that part clearly, use \`unsure\`.
 - Never answer about a product that only a reference picture shows. The status, the aim hint, and the code are about the frame alone.`;
 
 /**

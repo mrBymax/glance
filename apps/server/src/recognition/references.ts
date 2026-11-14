@@ -38,9 +38,11 @@ export type FrameReferences = {
 type Selected = { id: string; name: string; pictures: ReferenceImage[] };
 
 /**
- * Selects the pictures of a frame call: the `perItem` newest pictures of each store item, in the order of the store list.
- * An item gets each of its pictures or none. The first item that does not fit in the limits ends the list, so the
- * items with pictures are always the first ones of the store list.
+ * Selects the pictures of a frame call: up to `perItem` of the newest pictures of each store item.
+ * Each item gets its newest picture before an item gets a second one, in the order of the store list, so the
+ * limits leave no item out while another item has two. With more items than the picture limit, only the first
+ * items of the store list get a picture. A picture that does not fit in the byte limit is left out.
+ * Returns the pictures of each item together, newest first, in the order of the store list.
  * A store item that the catalog holds has the ID and the name of its catalog product, as in the instruction.
  */
 function selectFrameReferences(
@@ -50,24 +52,24 @@ function selectFrameReferences(
     const gtin = product.gtin === undefined ? null : normalizeGtin(product.gtin);
     return gtin === null ? [] : [[gtin, product] as const];
   }));
-  const selected: Selected[] = [];
+  const withPictures = perItem === 0 ? [] : entries.filter(({ item }) => (all.get(item.gtin)?.length ?? 0) > 0);
+  const selected = withPictures.map(({ item }): Selected => {
+    const product = inCatalog.get(item.gtin);
+    return { id: product?.id ?? scannedProductId(item.gtin), name: product?.name.en ?? item.name, pictures: [] };
+  });
   let count = 0;
   let bytes = 0;
-  let leftOut = 0;
-  for (const { item } of entries) {
-    const pictures = (all.get(item.gtin) ?? []).slice(0, perItem);
-    if (pictures.length === 0) continue;
-    const size = pictures.reduce((sum, picture) => sum + picture.bytes, 0);
-    if (leftOut > 0 || count + pictures.length > MAX_FRAME_REFERENCES || bytes + size > MAX_FRAME_REFERENCE_BYTES) {
-      leftOut += 1;
-      continue;
-    }
-    const product = inCatalog.get(item.gtin);
-    selected.push({ id: product?.id ?? scannedProductId(item.gtin), name: product?.name.en ?? item.name, pictures: [...pictures] });
-    count += pictures.length;
-    bytes += size;
+  for (let rank = 0; rank < perItem; rank += 1) {
+    withPictures.forEach(({ item }, index) => {
+      const picture = all.get(item.gtin)![rank];
+      if (!picture || count >= MAX_FRAME_REFERENCES || bytes + picture.bytes > MAX_FRAME_REFERENCE_BYTES) return;
+      selected[index]!.pictures.push(picture);
+      count += 1;
+      bytes += picture.bytes;
+    });
   }
-  return { selected, leftOut };
+  const used = selected.filter((item) => item.pictures.length > 0);
+  return { selected: used, leftOut: selected.length - used.length };
 }
 
 /** Makes the image part of one picture. */

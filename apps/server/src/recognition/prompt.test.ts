@@ -117,6 +117,15 @@ it('adds the rules for reference pictures only for a call that holds some', () =
   expect(text).toMatch(/The last image is the frame/);
   expect(text).toMatch(/background means nothing/);
   expect(text).toMatch(/Never answer about a product that only a reference picture shows/);
+  // Two store items of one design: the part that differs must be in the frame.
+  expect(text).toMatch(/look alike[^.]*\./);
+  expect(text).toMatch(/If the frame does not show that part clearly, use `unsure`/);
+});
+it('the instruction file keeps a store item of a row of look-alike items to a frame that shows the part that differs', () => {
+  const text = readFileSync('../../agents/recognition.md', 'utf8');
+  expect(text).toMatch(/differ only in a flavor word or in the color/);
+  expect(text).toMatch(/only when the frame shows the part that tells it apart/);
+  expect(text).toMatch(/The light of the room can change a color/);
 });
 it('the instruction file keeps the code to a product that a hand holds, so a shelf label asks for no still', () => {
   const text = readFileSync('../../agents/recognition.md', 'utf8');
