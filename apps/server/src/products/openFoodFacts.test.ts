@@ -5,7 +5,7 @@ import { afterAll, beforeEach, expect, it, vi } from 'vitest';
 import type { FetchFn } from '../speech/elevenlabs';
 import { FAKE_PRODUCT_INFO_DIR } from './fakeProductInfo';
 import {
-  DEFAULT_OFF_BASE_URL, DEFAULT_PRODUCT_INFO_USER_AGENT, OFF_HIT_TTL_MS, OFF_MISS_TTL_MS,
+  DEFAULT_OFF_BASE_URL, DEFAULT_PRODUCT_INFO_USER_AGENT, OFF_CACHE_VERSION, OFF_HIT_TTL_MS, OFF_MISS_TTL_MS,
   OFF_PAUSE_AFTER_429_MS, OFF_RETRY_AFTER_MS, OFF_TIMEOUT_MS, createOpenFoodFactsInfo,
 } from './openFoodFacts';
 
@@ -44,7 +44,10 @@ it('asks for one product with the fields that it reads, and names the app', asyn
   const [url, init] = fetchStub.mock.calls[0]!;
   expect(url).toBe(
     'https://world.openfoodfacts.org/api/v2/product/8076800195057'
-    + '?fields=code,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags',
+    + '?fields=code,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags,product_name,generic_name,_keywords,categories_tags'
+    + ',product_name_en,generic_name_en,product_name_fi,generic_name_fi,product_name_sv,generic_name_sv,product_name_it,generic_name_it'
+    + ',product_name_de,generic_name_de,product_name_fr,generic_name_fr,product_name_es,generic_name_es,product_name_da,generic_name_da'
+    + ',product_name_nb,generic_name_nb,product_name_et,generic_name_et,product_name_nl,generic_name_nl,product_name_pl,generic_name_pl',
   );
   expect(new Headers(init.headers).get('user-agent')).toBe('MetaGlance/0.1 (https://github.com/mrBymax/glance)');
   expect(init.signal).toBeInstanceOf(AbortSignal);
@@ -163,6 +166,43 @@ it('tells if it holds an answer for a code, a hit or a miss, with no request', a
   now += OFF_HIT_TTL_MS;
   expect(await reader().holds(SPAGHETTI)).toBe(false);
   expect(fetchStub).not.toHaveBeenCalled();
+});
+it('writes the version of the cache format into each file, with the texts for the search', async () => {
+  await reader().byGtin(SPAGHETTI);
+  const file = JSON.parse(readFileSync(join(cacheDir, `${SPAGHETTI}.json`), 'utf8')) as { version: number; details: { texts: { names: string[] } } };
+  expect(file.version).toBe(OFF_CACHE_VERSION);
+  expect(file.details.texts.names).toEqual(['Spaghetti Nº5', 'Spaghetti n.5']);
+});
+// A file of the format before the texts: no version, and details with no texts.
+const oldFile = (): void => writeFileSync(join(cacheDir, `${SPAGHETTI}.json`), JSON.stringify({
+  gtin: SPAGHETTI, fetchedAt: now, details: { brand: 'Barilla', quantity: '500 g', allergens: ['gluten'], vegan: null, vegetarian: true },
+}));
+it('gives the details of a cache file of an older format with no request, and does not hold the code', async () => {
+  oldFile();
+  const info = reader();
+  expect(await info.cached(SPAGHETTI)).toMatchObject({ brand: 'Barilla', allergens: ['gluten'] });
+  expect(await info.holds(SPAGHETTI)).toBe(false);
+  expect(fetchStub).not.toHaveBeenCalled();
+});
+it('reads a code with a cache file of an older format again, and then holds it', async () => {
+  oldFile();
+  const info = reader();
+  expect((await info.byGtin(SPAGHETTI))?.texts?.names).toEqual(['Spaghetti Nº5', 'Spaghetti n.5']);
+  expect(fetchStub).toHaveBeenCalledTimes(1);
+  expect(await info.holds(SPAGHETTI)).toBe(true);
+  expect(await reader().holds(SPAGHETTI)).toBe(true);
+  await info.byGtin(SPAGHETTI);
+  expect(fetchStub).toHaveBeenCalledTimes(1);
+});
+it('answers with the details of the older file when the new read fails', async () => {
+  oldFile();
+  fetchStub.mockImplementation(async () => new Response('busy', { status: 503 }));
+  const info = reader();
+  expect(await info.byGtin(SPAGHETTI)).toMatchObject({ brand: 'Barilla', allergens: ['gluten'] });
+  // Inside the 30 seconds after the failed read: the same answer, and no second request.
+  expect(await info.byGtin(SPAGHETTI)).toMatchObject({ brand: 'Barilla' });
+  expect(fetchStub).toHaveBeenCalledTimes(1);
+  expect(await info.holds(SPAGHETTI)).toBe(false);
 });
 it('reads again when a cache file is broken', async () => {
   writeFileSync(join(cacheDir, `${SPAGHETTI}.json`), '{"fetchedAt":');

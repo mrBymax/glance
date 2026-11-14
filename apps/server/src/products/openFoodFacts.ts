@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { AllergenSchema, isStoreInternalGtin } from '@glance/shared';
 import { type Clock, systemClock } from '../clock';
 import type { FetchFn } from '../speech/elevenlabs';
-import { type ProductDetails, type ProductInfo, parseOffAnswer } from './productInfo';
+import { OFF_NAME_LANGS, type ProductDetails, type ProductInfo, parseOffAnswer } from './productInfo';
 
 export const DEFAULT_OFF_BASE_URL = 'https://world.openfoodfacts.org';
 /** Open Food Facts asks each app for a User-Agent with its name, its version, and a contact. */
@@ -22,12 +22,22 @@ export const OFF_RETRY_AFTER_MS = 30_000;
 /** The status 429 says that the address read too much. The database can block an address that goes on, so each code waits. */
 export const OFF_PAUSE_AFTER_429_MS = 60_000;
 
-const FIELDS = 'code,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags';
+/**
+ * The version of the cache files. Version 2 added the texts for the search by package text. A file of an older
+ * version still gives its details, and the warm-up of the start reads its product again.
+ */
+export const OFF_CACHE_VERSION = 2;
+
+const FIELDS = [
+  'code,brands,quantity,allergens_tags,traces_tags,ingredients_analysis_tags,product_name,generic_name,_keywords,categories_tags',
+  ...OFF_NAME_LANGS.map((lang) => `product_name_${lang},generic_name_${lang}`),
+].join(',');
 const LOGGED_BODY_CHARS = 200;
 
-type Cached = { fetchedAt: number; details: ProductDetails | null };
+type Cached = { version?: number; fetchedAt: number; details: ProductDetails | null };
 
 const CachedSchema: z.ZodType<Cached> = z.object({
+  version: z.number().optional(),
   fetchedAt: z.number(),
   details: z.object({
     brand: z.string().nullable(),
@@ -35,6 +45,7 @@ const CachedSchema: z.ZodType<Cached> = z.object({
     allergens: z.array(AllergenSchema).nullable(),
     vegan: z.boolean().nullable(),
     vegetarian: z.boolean().nullable(),
+    texts: z.object({ names: z.array(z.string()), brands: z.array(z.string()), keywords: z.array(z.string()) }).optional(),
   }).nullable(),
 });
 
@@ -72,6 +83,8 @@ export function createOpenFoodFactsInfo(deps: {
   let pausedUntil = 0;
 
   const fresh = (entry: Cached): boolean => clock.now() - entry.fetchedAt < (entry.details === null ? OFF_MISS_TTL_MS : OFF_HIT_TTL_MS);
+  /** False for a hit of a file of an older version: it has no texts for the search, so the product needs a new read. */
+  const complete = (entry: Cached): boolean => entry.details === null || entry.version === OFF_CACHE_VERSION;
   const filePath = (gtin13: string): string => join(deps.cacheDir, `${gtin13}.json`);
 
   const readFileEntry = async (gtin13: string): Promise<Cached | null> => {
@@ -94,7 +107,7 @@ export function createOpenFoodFactsInfo(deps: {
     const temp = join(deps.cacheDir, `${gtin13}.${randomUUID()}.tmp`);
     try {
       await mkdir(deps.cacheDir, { recursive: true });
-      await writeFile(temp, JSON.stringify({ gtin: gtin13, ...entry }));
+      await writeFile(temp, JSON.stringify({ version: OFF_CACHE_VERSION, gtin: gtin13, fetchedAt: entry.fetchedAt, details: entry.details }));
       await rename(temp, filePath(gtin13));
     } catch (error) {
       await rm(temp, { force: true }).catch(() => undefined);
@@ -133,28 +146,35 @@ export function createOpenFoodFactsInfo(deps: {
   };
 
   const load = async (gtin13: string): Promise<ProductDetails | null> => {
-    const stored = await readFileEntry(gtin13);
-    if (stored && fresh(stored)) {
-      memory.set(gtin13, stored);
-      return stored.details;
-    }
-    const now = clock.now();
-    if (now < pausedUntil) {
-      throw new Error(`Open Food Facts answered 429. It allows no call for ${Math.ceil((pausedUntil - now) / 1000)} s.`);
-    }
-    const failed = failedAt.get(gtin13);
-    if (failed !== undefined && now - failed < OFF_RETRY_AFTER_MS) {
-      throw new Error(`The call to Open Food Facts failed ${Math.round((now - failed) / 1000)} s ago. The next call for this code waits.`);
+    const stored = memory.get(gtin13) ?? await readFileEntry(gtin13);
+    const kept = stored && fresh(stored) ? stored : null;
+    if (kept) {
+      memory.set(gtin13, kept);
+      if (complete(kept)) return kept.details;
     }
     let details: ProductDetails | null;
     try {
-      details = await request(gtin13);
+      const now = clock.now();
+      if (now < pausedUntil) {
+        throw new Error(`Open Food Facts answered 429. It allows no call for ${Math.ceil((pausedUntil - now) / 1000)} s.`);
+      }
+      const failed = failedAt.get(gtin13);
+      if (failed !== undefined && now - failed < OFF_RETRY_AFTER_MS) {
+        throw new Error(`The call to Open Food Facts failed ${Math.round((now - failed) / 1000)} s ago. The next call for this code waits.`);
+      }
+      try {
+        details = await request(gtin13);
+      } catch (error) {
+        failedAt.set(gtin13, clock.now());
+        throw error;
+      }
     } catch (error) {
-      failedAt.set(gtin13, clock.now());
+      // The file of an older version still has the allergens. The texts for the search wait for the next read.
+      if (kept) return kept.details;
       throw error;
     }
     failedAt.delete(gtin13);
-    const entry: Cached = { fetchedAt: clock.now(), details };
+    const entry: Cached = { version: OFF_CACHE_VERSION, fetchedAt: clock.now(), details };
     memory.set(gtin13, entry);
     await writeFileEntry(gtin13, entry);
     return entry.details;
@@ -175,12 +195,14 @@ export function createOpenFoodFactsInfo(deps: {
       return known(gtin13) ? (await keptEntry(gtin13))?.details ?? null : null;
     },
     async holds(gtin13) {
-      return !known(gtin13) || await keptEntry(gtin13) !== null;
+      if (!known(gtin13)) return true;
+      const kept = await keptEntry(gtin13);
+      return kept !== null && complete(kept);
     },
     async byGtin(gtin13) {
       if (!known(gtin13)) return null;
       const kept = memory.get(gtin13);
-      if (kept && fresh(kept)) return kept.details;
+      if (kept && fresh(kept) && complete(kept)) return kept.details;
 
       let call = running.get(gtin13);
       if (!call) {

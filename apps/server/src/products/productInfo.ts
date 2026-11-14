@@ -11,6 +11,21 @@ export type ProductDetails = {
   allergens: Allergen[] | null;
   vegan: boolean | null;
   vegetarian: boolean | null;
+  /** The texts for the search by package text. Details that an older cache file holds have none. */
+  texts?: ProductTexts;
+};
+
+/**
+ * The words that a package can show, as the product database has them. The search of search/productSearch.ts
+ * compares them with what a model read. No spoken line uses them: the store list names each product.
+ */
+export type ProductTexts = {
+  /** The product name and the generic name, in each language that the database has. */
+  names: string[];
+  /** Each brand of the product. */
+  brands: string[];
+  /** The keywords of the database, and the words of its categories. */
+  keywords: string[];
 };
 
 /** The details of a product by its code. The store list holds the price, so this reader gives none. */
@@ -81,6 +96,37 @@ function diet(analysis: readonly string[], name: 'vegan' | 'vegetarian'): boolea
   return yes;
 }
 
+/**
+ * The languages whose product name and generic name the reader asks for. The database gives a name of a language
+ * only when the request names its field. The list holds the languages of the demo and of the nearest markets.
+ */
+export const OFF_NAME_LANGS = ['en', 'fi', 'sv', 'it', 'de', 'fr', 'es', 'da', 'nb', 'et', 'nl', 'pl'] as const;
+
+const NAME_FIELD = /^(product_name|generic_name)(_[a-z]{2})?$/;
+
+/** Each text one time, in the order of the first one. The compare has no regard to case. */
+function unique(list: readonly (string | null)[]): string[] {
+  const seen = new Set<string>();
+  return list.flatMap((value) => {
+    if (value === null || seen.has(value.toLowerCase())) return [];
+    seen.add(value.toLowerCase());
+    return [value];
+  });
+}
+
+/** "en:energy-drinks" becomes "energy drinks". */
+function tagWords(tag: string): string | null {
+  return text(tag.replace(/^[a-z]{2}:/, '').replace(/-/g, ' '));
+}
+
+function texts(fields: Record<string, unknown>): ProductTexts {
+  return {
+    names: unique(Object.keys(fields).filter((key) => NAME_FIELD.test(key)).map((key) => text(fields[key]))),
+    brands: unique(typeof fields.brands === 'string' ? fields.brands.split(',').map(text) : []),
+    keywords: unique([...tags(fields._keywords).map(text), ...tags(fields.categories_tags).map(tagWords)]),
+  };
+}
+
 /** "400.0 g" and "500g" become "400 g" and "500 g". Each other text stays as it is. */
 function quantity(value: unknown): string | null {
   const clean = text(value);
@@ -105,5 +151,6 @@ export function parseOffAnswer(body: unknown): ProductDetails | null {
     allergens: allergens(fields),
     vegan: diet(analysis, 'vegan'),
     vegetarian: diet(analysis, 'vegetarian'),
+    texts: texts(fields),
   };
 }

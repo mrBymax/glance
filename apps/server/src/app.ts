@@ -17,7 +17,7 @@ import { type LabelReader, NO_LABEL } from './label/reader';
 import { createBarcodeReports } from './products/barcodes';
 import type { ProductInfo } from './products/productInfo';
 import { ProductResolver } from './products/resolver';
-import { ScannedProducts, gtinOfScannedId, scannedProduct, withScanned } from './products/scanned';
+import { ScannedProducts, gtinOfScannedId, scannedProduct, scannedProductId, withScanned } from './products/scanned';
 import { type StoreEntry, notInCatalog, readStoreEntries } from './products/storeEntries';
 import type { StoreList } from './products/storeList';
 import { startWarmUp } from './products/warmup';
@@ -31,6 +31,7 @@ import { SessionRegistry } from './sessions/registry';
 import type { RuntimeDeps } from './sessions/runtime';
 import { ClipCache } from './speech/clips';
 import type { Synthesize } from './speech/elevenlabs';
+import { createClipWarmUp } from './speech/prewarm';
 import { createClipUrl } from './speech/service';
 import { type FrameHandler, frameLogLine, registerDeviceSocket } from './ws/device';
 
@@ -46,6 +47,10 @@ export type AppDeps = {
   log?: boolean | { level: string; stream: { write(line: string): void } };
   /** Names the product of each frame. Fake recognition does not use it. */
   recognizer?: Recognizer;
+  /** Runs after each read of the warm-up, with the code of the store item. The search index of main.ts takes the new details. */
+  onProductRead?: (gtin13: string) => void | Promise<void>;
+  /** Gives each session a recognizer of its own, in place of `recognizer`. The observe pipeline needs it. */
+  recognizerFor?: (sessionId: string) => Recognizer;
   /** Makes the speech clips. Without it, and with FAKE_SPEECH, each line goes out with no clip. */
   synthesize?: Synthesize;
   /** Reads the still of a label. Fake recognition has a reader of its own. With neither, the server drops each label frame. */
@@ -166,10 +171,36 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     catalog: deps.catalog, storeList: deps.storeList, info: deps.productInfo, scanned, log: (line) => app.log.warn(line),
   });
   const reportBarcode = createBarcodeReports({ resolver, log: app.log });
+  const clipUrl = createClipUrl({
+    fake: config.fakeSpeech,
+    cache: clips,
+    synthesize: deps.synthesize ?? null,
+    voiceId: config.voiceId,
+    // The test helper sets the address after the server has its port, so each call reads it.
+    publicBaseUrl: () => config.publicBaseUrl,
+    log: (line) => app.log.warn(line),
+  });
+  // The prompt of a store item must not wait for its clip. Each clip that the cache does not hold is one paid call,
+  // so fake speech and SPEECH_WARM_UP=0 make none.
+  const clipWarmUp = config.fakeSpeech || !config.speechWarmUp || !deps.synthesize ? null
+    : createClipWarmUp({ clipUrl, hasClip: clipUrl.has, log: (line) => app.log.info(line) });
+  if (clipWarmUp) {
+    app.closers.add(() => clipWarmUp.stop());
+    clipWarmUp.add(notInCatalog(storeEntries, deps.catalog.products).flatMap((entry) => scanned.get(scannedProductId(entry.item.gtin)) ?? []));
+  }
   // Not awaited: the start of the server does not wait for Open Food Facts. The fixtures of FAKE_PRODUCT_INFO need no read.
   if (!config.fakeProductInfo) {
     const warmUp = startWarmUp({
-      entries: notInCatalog(storeEntries, deps.catalog.products), info: deps.productInfo, resolver, log: (line) => app.log.info(line),
+      entries: notInCatalog(storeEntries, deps.catalog.products), info: deps.productInfo, log: (line) => app.log.info(line),
+      resolver: {
+        resolve: async (gtin) => {
+          const product = await resolver.resolve(gtin);
+          // The product database can give the pack size, which is a part of a prompt line.
+          if (product) clipWarmUp?.add([product]);
+          await deps.onProductRead?.(gtin);
+          return product;
+        },
+      },
     });
     app.closers.add(() => warmUp.stop());
   }
@@ -183,15 +214,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     biometricAboveCents: config.biometricAboveCents,
     store: deps.store,
     bus,
-    clipUrl: createClipUrl({
-      fake: config.fakeSpeech,
-      cache: clips,
-      synthesize: deps.synthesize ?? null,
-      voiceId: config.voiceId,
-      // The test helper sets the address after the server has its port, so each call reads it.
-      publicBaseUrl: () => config.publicBaseUrl,
-      log: (line) => app.log.warn(line),
-    }),
+    clipUrl,
     startPayment: payments,
     ask,
     restoreProducts: async (productIds) => {
@@ -225,6 +248,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     store: config.mongodbUri === null ? 'memory' : 'mongo',
     // The team checks this before the demo: the server must store no frame then.
     saveFrames: saveFrame !== null,
+    recognitionPipeline: config.recognitionPipeline,
   }));
 
   // With fake recognition, one script player stands for the frames and the recognition calls of each session.
@@ -249,8 +273,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (saveFrame) saveFrameWith(saveFrame, app.log, session.id, { header, jpeg: new Uint8Array(jpeg) });
   };
 
-  const recognize = player || deps.onFrame || !deps.recognizer ? null : createFrameHandler({
-    recognizer: deps.recognizer,
+  const { recognizer, recognizerFor } = deps;
+  const recognize = player || deps.onFrame || (!recognizer && !recognizerFor) ? null : createFrameHandler({
+    recognizerFor: (session) => recognizerFor?.(session.id) ?? recognizer!,
     concurrency: config.recognitionConcurrency,
     clock: deps.clock,
     log: app.log,

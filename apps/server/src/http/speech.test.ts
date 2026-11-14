@@ -109,3 +109,29 @@ it('with ElevenLabs down, the line goes out with no clip, and the prompt still t
   expect(session.state.cart.totalCents).toBe(189);
   phone.close();
 });
+it('makes the clips of the prompts of each store item at the start, so the first prompt waits for no call', async () => {
+  const item = { gtin: '6430062761795', priceCents: 249, name: 'Kili Cascara Yuzu + Sitruuna', brand: 'Kili', packSize: '330 ml' };
+  const warm = await testApp({ ...REAL_SPEECH, SPEECH_WARM_UP: '1' }, {
+    synthesize, storeList: { byGtin: async (gtin) => (gtin === item.gtin ? item : undefined), all: async () => [item] },
+  });
+  apps.push(warm);
+  await vi.waitFor(() => expect(synthesize).toHaveBeenCalledTimes(3), { timeout: 3000 });
+  const made = synthesize.mock.calls.map(([text]) => text);
+  expect(made).toEqual([
+    'Kili Cascara Yuzu plus Sitruuna, two forty-nine. Nod to add.',
+    'Kili Cascara Yuzu plus Sitruuna, two forty-nine.',
+    'Kili Cascara Yuzu plus Sitruuna. One is in your cart. Nod to add another. Shake to remove.',
+  ]);
+
+  // The first prompt of a session has the yes phrase, and its text is the text of a clip that exists.
+  const { session, phone } = await shopper(warm);
+  session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: `gtin-${item.gtin}` }, still: false });
+  const speak = await phone.next((m) => m.t === 'speak') as { text: string; url: string };
+  expect(speak.text).toBe(made[0]);
+  expect(speak.url).toBe(`${warm.base}/api/speech/${clipKey(made[0]!, 'en', 'voice-en', ELEVENLABS_MODEL)}.mp3`);
+  expect(synthesize.mock.calls.filter(([text]) => text === made[0])).toHaveLength(1);
+});
+it('makes no clip at the start with SPEECH_WARM_UP=0', async () => {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(synthesize).not.toHaveBeenCalled();
+});

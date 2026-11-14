@@ -12,6 +12,13 @@ export type Config = {
   geminiApiKey: string | null;
   geminiModel: string;
   geminiMediaResolution: 'default' | 'low';
+  /**
+   * How a stream frame gets its result. `frame`: one call with the store list and the reference pictures.
+   * `observe`: one call that describes the held product, then the search of the store list, then a verify call.
+   */
+  recognitionPipeline: 'frame' | 'observe';
+  /** The confidence that the verify call of the observe pipeline needs to name an item. */
+  verifyMinConfidence: number;
   /** The number of recognition calls that one session runs at the same time. */
   recognitionConcurrency: number;
   /** The number of reference pictures of one store item in a frame call. 0: a frame call gets no picture. */
@@ -27,6 +34,8 @@ export type Config = {
   elevenlabsApiKey: string | null;
   voiceId: { en: string | null; it: string | null };
   speechCacheDir: string;
+  /** Make the clips of the product prompts of each store item at the start. It has no effect with fake speech. */
+  speechWarmUp: boolean;
   /** A directory for frames, or null. The server stores no frame without it. */
   saveFramesDir: string | null;
   paymentDelayMs: number;
@@ -99,6 +108,11 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     throw new ConfigError(`GEMINI_MEDIA_RESOLUTION must be "default" or "low". Got "${mediaResolution}".`);
   }
 
+  const recognitionPipeline = read('RECOGNITION_PIPELINE') ?? 'frame';
+  if (recognitionPipeline !== 'frame' && recognitionPipeline !== 'observe') {
+    throw new ConfigError(`RECOGNITION_PIPELINE must be "frame" or "observe". Got "${recognitionPipeline}".`);
+  }
+
   const port = readNumber('PORT', 8080, 0, 65535, true);
   const config: Config = {
     port,
@@ -109,6 +123,8 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     geminiApiKey: read('GEMINI_API_KEY'),
     geminiModel: read('GEMINI_MODEL') ?? 'gemini-3.5-flash-lite',
     geminiMediaResolution: mediaResolution,
+    recognitionPipeline,
+    verifyMinConfidence: readNumber('VERIFY_MIN_CONFIDENCE', 0.9, 0, 1, false),
     recognitionConcurrency: readNumber('RECOGNITION_CONCURRENCY', 8, 1, 12, true),
     recognitionReferences: readNumber('RECOGNITION_REFERENCES', 3, 0, REFERENCES_FOR_ITEM, true),
     minConfidence: readNumber('RECOGNITION_MIN_CONFIDENCE', 0.6, 0, 1, false),
@@ -119,6 +135,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     elevenlabsApiKey: read('ELEVENLABS_API_KEY'),
     voiceId: { en: read('ELEVENLABS_VOICE_EN'), it: read('ELEVENLABS_VOICE_IT') },
     speechCacheDir: read('SPEECH_CACHE_DIR') ?? '.cache/speech',
+    speechWarmUp: read('SPEECH_WARM_UP') !== '0',
     saveFramesDir: read('SAVE_FRAMES'),
     paymentDelayMs: readNumber('PAYMENT_DELAY_MS', 1500, 0, 600_000, true),
     secondLookWaitMs: readNumber('SECOND_LOOK_WAIT_MS', 0, 0, 10_000, true),

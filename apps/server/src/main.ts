@@ -3,6 +3,7 @@ import type { Part } from '@google/genai';
 import { ANSWERS_TEMPLATE_PATH, answerQuestion } from './ask/ask';
 import { createGeminiGenerate } from './ask/gemini';
 import { type AppDeps, buildApp } from './app';
+import { normalizeGtin } from '@glance/shared';
 import { type CatalogIndex, indexCatalog, readCatalogFile } from './catalog/catalog';
 import { systemClock } from './clock';
 import { type Config, ConfigError, loadConfig } from './config';
@@ -11,10 +12,14 @@ import { MongoStore } from './db/mongo';
 import type { Store } from './db/store';
 import { LABEL_TEMPLATE_PATH, createGeminiLabelReader } from './label/gemini';
 import type { LabelReader } from './label/reader';
+import { OBSERVE_TEMPLATE_PATH, createGeminiObserver } from './observe/gemini';
+import { createObservePipeline } from './observe/pipeline';
+import { VERIFY_TEMPLATE_PATH, createGeminiVerifier } from './observe/verify';
 import { createFakeProductInfo } from './products/fakeProductInfo';
 import { createOpenFoodFactsInfo } from './products/openFoodFacts';
 import type { ProductInfo } from './products/productInfo';
 import { priceConflicts } from './products/resolver';
+import { scannedProductId } from './products/scanned';
 import { type StoreEntry, notInCatalog, readStoreEntries } from './products/storeEntries';
 import { type StoreList, readStoreListFile } from './products/storeList';
 import { ELEVENLABS_MODEL, createSynthesize } from './speech/elevenlabs';
@@ -22,7 +27,8 @@ import { FakeScriptError } from './recognition/fake';
 import { RECOGNITION_TEMPLATE_PATH, type Recognizer, createGeminiRecognizer } from './recognition/gemini';
 import { createFrameReferences, createPictureUploader, refreshOnChange, sharePictureParts } from './recognition/references';
 import { createFrameSaver } from './recognition/save';
-import { createFolderReferences } from './reference/images';
+import { type ReferenceImages, createFolderReferences } from './reference/images';
+import { type ProductSearch, createProductSearch } from './search/productSearch';
 
 class StartError extends Error {}
 
@@ -52,6 +58,33 @@ function openRecognizer(
     template: readFileSync(RECOGNITION_TEMPLATE_PATH, 'utf8'),
     references,
   });
+}
+
+/**
+ * The recognizer of each session for RECOGNITION_PIPELINE=observe, or undefined for the frame pipeline and with fake
+ * recognition. The observe call and the verify call use the key and the model of recognition.
+ * A catalog product with a code of the store list keeps its catalog ID, as a barcode gives it.
+ */
+function openObservePipeline(
+  config: Config, catalog: CatalogIndex, entries: readonly StoreEntry[], search: ProductSearch, references: ReferenceImages,
+  log: (line: string) => void,
+): AppDeps['recognizerFor'] {
+  if (config.recognitionPipeline !== 'observe' || config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
+  const catalogIds = new Map(catalog.products.flatMap((product) => {
+    const gtin = product.gtin === undefined ? null : normalizeGtin(product.gtin);
+    return gtin === null ? [] : [[gtin, product.id] as const];
+  }));
+  const pipeline = createObservePipeline({
+    observer: createGeminiObserver({
+      apiKey: config.geminiApiKey, model: config.geminiModel, mediaResolution: config.geminiMediaResolution,
+      template: readFileSync(OBSERVE_TEMPLATE_PATH, 'utf8'), withBox: true,
+    }),
+    verifier: createGeminiVerifier({ apiKey: config.geminiApiKey, model: config.geminiModel, template: readFileSync(VERIFY_TEMPLATE_PATH, 'utf8'), search }),
+    search, entries, references,
+    productIdOf: (gtin) => catalogIds.get(gtin) ?? scannedProductId(gtin),
+    clock: systemClock, minVerifyConfidence: config.verifyMinConfidence, log,
+  });
+  return (sessionId) => pipeline.forSession(sessionId);
 }
 
 /** The reader of label stills, or undefined with fake recognition. It uses the key and the model of recognition. */
@@ -93,8 +126,10 @@ async function main(): Promise<void> {
   // One read of the store list for the whole run: recognition and the label reader build their instructions from it.
   const storeEntries = await readStoreEntries(storeList, productInfo, (line) => console.error(line));
   const storeItems = storeEntries.map((entry) => entry.item);
-  // Fake recognition makes no frame call, so it gets no part and no upload.
-  const frameCallKey = config.fakeRecognition === null ? config.geminiApiKey : null;
+  const search = createProductSearch(storeEntries);
+  // Fake recognition makes no frame call, so it gets no part and no upload. The observe pipeline sends no picture
+  // with a frame: its verify call reads the pictures of its candidates from the folder.
+  const frameCallKey = config.fakeRecognition === null && config.recognitionPipeline === 'frame' ? config.geminiApiKey : null;
   const folder = createFolderReferences(config.referenceDir, systemClock);
   // The app does not exist yet, and a line of the first read must go to its log.
   let logReferences: (line: string) => void = (line) => console.error(line);
@@ -106,7 +141,10 @@ async function main(): Promise<void> {
     ...(picturePart === null ? {} : { picturePart }),
     log: (line) => logReferences(line),
   });
-  const recognizer = openRecognizer(config, catalog, storeEntries, frameReferences.current);
+  // The app does not exist yet, as for the reference pictures.
+  let logPipeline: (line: string) => void = (line) => console.error(line);
+  const recognizerFor = openObservePipeline(config, catalog, storeEntries, search, folder, (line) => logPipeline(line));
+  const recognizer = recognizerFor ? undefined : openRecognizer(config, catalog, storeEntries, frameReferences.current);
   const labelReader = openLabelReader(config, storeEntries);
   // loadConfig has checked that the key exists when FAKE_SPEECH is off.
   const synthesize = config.fakeSpeech || config.elevenlabsApiKey === null ? undefined : createSynthesize(config.elevenlabsApiKey);
@@ -114,9 +152,15 @@ async function main(): Promise<void> {
     config, clock: systemClock, store, catalog, storeList, productInfo, storeEntries,
     references: refreshOnChange(folder, frameReferences),
     ...(picturePart === null ? {} : { picturePart }),
-    ...(recognizer ? { recognizer } : {}), ...(labelReader ? { labelReader } : {}), ...(ask ? { ask } : {}), ...(synthesize ? { synthesize } : {}),
+    ...(recognizer ? { recognizer } : {}), ...(recognizerFor ? { recognizerFor } : {}), ...(labelReader ? { labelReader } : {}), ...(ask ? { ask } : {}), ...(synthesize ? { synthesize } : {}),
     ...(config.saveFramesDir === null ? {} : { saveFrame: createFrameSaver(config.saveFramesDir) }),
+    // The warm-up read the product again: the search index takes its names of each language.
+    onProductRead: async (gtin) => {
+      const item = await storeList.byGtin(gtin);
+      if (item) search.put({ item, details: await productInfo.cached(gtin) });
+    },
   });
+  logPipeline = (line) => app.log.info(line);
   app.addHook('onClose', () => store.close());
   app.log.info(`store: ${config.mongodbUri === null ? 'memory' : 'mongo'}`);
   app.log.info(`catalog: ${catalog.products.length} products`);
@@ -127,7 +171,7 @@ async function main(): Promise<void> {
   app.log.info(config.fakeProductInfo ? 'product info: fake' : `product info: ${config.offBaseUrl}, cache in ${config.productCacheDir}`);
   for (const line of priceConflicts(catalog.products, storeItems)) app.log.warn(line);
   app.log.info(config.fakeRecognition === null
-    ? `recognition: ${config.geminiModel}, blur ${config.requireBlur ? 'required' : 'not required'}`
+    ? `recognition: ${config.geminiModel}, pipeline ${config.recognitionPipeline}, blur ${config.requireBlur ? 'required' : 'not required'}`
     : `recognition: fake, script ${config.fakeRecognition}`);
 
   if (config.saveFramesDir !== null) app.log.warn(`SAVE_FRAMES is on. The server writes each frame to ${config.saveFramesDir}.`);

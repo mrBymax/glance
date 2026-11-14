@@ -19,6 +19,23 @@ const FIXED_KEYS: readonly FixedKey[] = [
 
 const AIM_HINTS = ['left', 'right', 'up', 'down', 'closer', 'farther', 'turn'] as const;
 
+/** The forms of a product prompt for a shopper with no warning: with and with no yes phrase, and for one unit in the cart. */
+const promptForms = (product: Product): Line[] => [
+  { key: 'glance.new', product, hint: true, warnings: [] },
+  { key: 'glance.new', product, hint: false, warnings: [] },
+  { key: 'glance.inCart', product, qty: 1, warnings: [] },
+];
+
+/**
+ * The texts of the product prompts of each product, for the default profile in the language `lang`.
+ * The rules speak the form with the yes phrase in the first 2 prompts of a session, and the form with none after them.
+ * The price is a part of each text, so a new price gives a new text and a new clip.
+ */
+export function promptLines(products: readonly Product[], lang: Lang = DEFAULT_PROFILE.lang): string[] {
+  const profile = { ...DEFAULT_PROFILE, lang };
+  return [...new Set(products.flatMap(promptForms).map((line) => renderLine(line, profile)))];
+}
+
 /**
  * The texts that the seed makes clips for: the lines that a shop with the default profile is sure to need.
  * A line with a total or an item count is not in the list, because its text depends on the cart.
@@ -27,11 +44,7 @@ const AIM_HINTS = ['left', 'right', 'up', 'down', 'closer', 'farther', 'turn'] a
 export function seedLines(products: readonly Product[], lang: Lang = DEFAULT_PROFILE.lang): string[] {
   const profile = { ...DEFAULT_PROFILE, lang };
   const lines: Line[] = [
-    ...products.flatMap((product): Line[] => [
-      { key: 'glance.new', product, hint: true, warnings: [] },
-      { key: 'glance.new', product, hint: false, warnings: [] },
-      { key: 'glance.inCart', product, qty: 1, warnings: [] },
-    ]),
+    ...products.flatMap(promptForms),
     ...FIXED_KEYS.map((key): Line => ({ key })),
     { key: 'device.battery', percent: 20 },
     { key: 'device.battery', percent: 10 },
