@@ -37,8 +37,9 @@ describe('device messages', () => {
     expect(parseDeviceToServer({ t: 'barcode.seen', code: '8076809513753', source: 'label' })).toBeNull();
     expect(parseDeviceToServer({ t: 'barcode.seen', code: '8076809513753' })).toBeNull();
   });
-  it('accepts a request for a still of a label, and rejects another purpose', () => {
+  it('accepts a request for a still of a label or of a reference picture, and rejects another purpose', () => {
     expect(parseServerToDevice({ t: 'still.request', purpose: 'label' })).toEqual({ t: 'still.request', purpose: 'label' });
+    expect(parseServerToDevice({ t: 'still.request', purpose: 'reference' })).toEqual({ t: 'still.request', purpose: 'reference' });
     expect(parseServerToDevice({ t: 'still.request', purpose: 'face' })).toBeNull();
     expect(parseServerToDevice({ t: 'still.request' })).toBeNull();
   });

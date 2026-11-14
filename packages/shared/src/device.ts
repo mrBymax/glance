@@ -71,9 +71,11 @@ export const ServerToDeviceSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('session.rest') }),
   z.object({ t: z.literal('session.end') }),
   z.object({ t: z.literal('biometric.request') }),
-  // The server asks for one still when it sees a barcode that it cannot read. The phone answers with barcode.seen
+  // 'label': the server asks for one still when it sees a barcode that it cannot read. The phone answers with barcode.seen
   // or with a frame of the kind 'label', and its limit for stills can drop the request.
-  z.object({ t: z.literal('still.request'), purpose: z.literal('label') }),
+  // 'reference': a person asked for a reference picture of a store item. The phone takes the still outside that limit,
+  // reads no code in it, and always answers with a frame of the kind 'label'.
+  z.object({ t: z.literal('still.request'), purpose: z.enum(['label', 'reference']) }),
 ]);
 export type ServerToDevice = z.infer<typeof ServerToDeviceSchema>;
 
