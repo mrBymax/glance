@@ -193,3 +193,29 @@ test('a test on the phone runs a command and reads the log through HTTP', async 
     device.socket.terminate();
   }
 });
+
+test('logs barcode.seen and the kind of a label frame, and the command label asks for a still', async () => {
+  const device = await openDevice();
+  try {
+    await device.next();
+    assert.equal(server.command('label'), true);
+    assert.deepEqual(await device.next(), { t: 'still.request', purpose: 'label' });
+
+    device.sendJson({ t: 'barcode.seen', code: '4006381333931', source: 'barcode' });
+    device.sendJson({ t: 'barcode.seen', code: '8076809513753', source: 'ocr' });
+    device.sendFrame(7, 'label');
+    device.sendFrame(8);
+    // The answer to a later message shows that the server read the messages before it.
+    device.sendJson(deviceState('streaming'));
+    await device.next();
+
+    const lines = await (await fetch(`${base}/debug/log`)).json();
+    assert.ok(lines.includes('command label'));
+    assert.ok(lines.includes('barcode.seen 4006381333931 source=barcode'));
+    assert.ok(lines.includes('barcode.seen 8076809513753 source=ocr'));
+    assert.ok(lines.some((line) => /^frame seq=7 .* kind=label /.test(line)));
+    assert.ok(lines.some((line) => /^frame seq=8 .* kind=frame /.test(line)));
+  } finally {
+    device.socket.terminate();
+  }
+});
