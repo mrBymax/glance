@@ -101,6 +101,13 @@ it('shows scanned products with names of 80 characters and accents, in the cart 
   for (const item of SCANNED_ITEMS) expect(screen.getByText(item.name)).toHaveClass('kiosk-name');
   expect(screen.getByText('28.27 EUR')).toHaveClass('kiosk-total');
 });
+it('keeps the quantity and the price of a line whole, next to a name that is cut', () => {
+  renderWithTheme(<KioskView event={at('connected', { cart: { items: SCANNED_ITEMS, totalCents: SCANNED_TOTAL_CENTS }, totalCents: SCANNED_TOTAL_CENTS })} link="open" />);
+  const name = screen.getByText(SCANNED_ITEMS[1]!.name);
+  // jsdom reads no StyleX rule. The textWrap prop of the price gives it one class that the name does not have.
+  const own = [...screen.getByText('2 x 12.49 EUR').classList].filter((key) => !name.classList.contains(key));
+  expect(own).toHaveLength(1);
+});
 it('says how to try again after a failed payment', () => {
   renderWithTheme(<KioskView event={at('failed')} link="open" />);
   expect(screen.getByText('Look at the code to try again.')).toBeInTheDocument();

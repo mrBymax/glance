@@ -17,3 +17,7 @@ it('keeps each product name on one line, so that the cart lines fit and the code
   expect(rule).toMatch(/overflow:\s*hidden/);
   expect(rule).toMatch(/text-overflow:\s*ellipsis/);
 });
+it('lets the panel go below the width of its longest word, so that a long name does not push the code', () => {
+  const rule = /\.kiosk-panel\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  expect(rule).toMatch(/min-inline-size:\s*0/);
+});
