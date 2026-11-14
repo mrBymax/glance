@@ -16,4 +16,7 @@ export const CartSchema = z.object({
 });
 export type Cart = z.infer<typeof CartSchema>;
 
+/** A cart edit sets the quantity of one line. The quantity 0 removes the line. */
+export const CartEditSchema = z.object({ productId: z.string().min(1), qty: z.number().int().min(0) });
+
 export const EMPTY_CART: Cart = { items: [], totalCents: 0 };

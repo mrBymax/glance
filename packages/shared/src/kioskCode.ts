@@ -1,6 +1,9 @@
+import { z } from 'zod';
+
 export const KIOSK_CODE_PREFIX = 'GL1';
 
 const CODE = /^[A-Z0-9]{4,8}$/;
+export const KioskCodeSchema = z.string().regex(CODE);
 
 /** Returns the QR text of a kiosk code, for example "GL1 K3X7". */
 export function formatKioskCode(code: string): string {

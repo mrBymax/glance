@@ -1,4 +1,5 @@
 export * from './allergens';
+export * from './bridge';
 export * from './cart';
 export * from './catalog';
 export * from './device';
@@ -8,5 +9,6 @@ export * from './kioskCode';
 export * from './languages';
 export * from './money';
 export * from './profile';
+export * from './rest';
 export * from './snapshot';
 export * from './timing';

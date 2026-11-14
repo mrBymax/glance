@@ -1,0 +1,7 @@
+{
+  "t": "profile.set",
+  "patch": {
+    "detail": "brief",
+    "haptics": false
+  }
+}

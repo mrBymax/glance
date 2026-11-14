@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CartEditSchema } from './cart';
 import { PrioritySchema, ServerEventSchema, SoundNameSchema } from './events';
 import { LangSchema } from './languages';
 import { ProfilePatchSchema } from './profile';
@@ -27,9 +28,6 @@ export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
 const promptId = z.string().min(1);
 
-// A cart edit sets the quantity of one line. The quantity 0 removes the line.
-const cartEdit = { productId: z.string().min(1), qty: z.number().int().min(0) };
-
 export const DeviceToServerSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('intent'), kind: IntentKindSchema, source: IntentSourceSchema, promptId: promptId.optional() }),
   z.object({ t: z.literal('prompt.done'), promptId }),
@@ -42,7 +40,7 @@ export const DeviceToServerSchema = z.discriminatedUnion('t', [
     locale: z.string(),
   }),
   z.object({ t: z.literal('device.state'), state: DeviceStateSchema }),
-  z.object({ t: z.literal('cart.edit'), ...cartEdit }),
+  CartEditSchema.extend({ t: z.literal('cart.edit') }),
   z.object({ t: z.literal('profile.set'), patch: ProfilePatchSchema }),
   z.object({ t: z.literal('biometric.result'), ok: z.boolean() }),
 ]);

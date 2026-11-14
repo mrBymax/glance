@@ -1,0 +1,6 @@
+{
+  "name": "Checkout 3",
+  "store": "Demo Market",
+  "spotCheck": false,
+  "failPayment": false
+}
