@@ -53,7 +53,7 @@ The app compiles the source of this package. Its bundler or its runner must read
 
 ## Kotlin uses the same names
 
-The Android app has its own classes for these messages. Each class uses the field names and the wire values of this package, for example `promptId`, `t`, and `glance.pending`. The Kotlin tests decode each file in `fixtures/`, so a name that differs fails a test.
+The Android app has its own classes for these messages. Each class uses the field names and the wire values of this package, for example `promptId`, `t`, and `glance.pending`. Plan 2 adds Kotlin tests that decode each file in `fixtures/`, so that a name that differs fails a test.
 
 ## Each new message variant gets a fixture
 
@@ -69,7 +69,7 @@ When you add a variant to a union, add one valid example to the folder of that u
 | `bridge-native-to-page` | `NativeToPageSchema` | 4 |
 | `rest` | the schema with the name of the file | 8 |
 
-`src/fixtures.test.ts` validates each file. The tests of the other apps count the files, so update the counts when you add one.
+`src/fixtures.test.ts` validates each file. The tests of this package count the files, and the Kotlin tests of Plan 2 will count them too. Update each count when you add a file.
 
 ## Checks
 
@@ -85,4 +85,5 @@ npm run lint
 
 - A schema drops each key that it does not know. A parsed message can have fewer keys than its input.
 - `ProfileSchema` fills each default. `ProfilePatchSchema` fills none, so a patch holds only the keys that the sender set.
+- `EMPTY_CART` and `DEFAULT_PROFILE` are frozen, because each app shares the one object. A write to one of them throws `TypeError`. Make a new object: `{ ...cart, items: [...cart.items, item] }`.
 - TypeScript 6 loads no `@types` package by default. `tsconfig.json` names `node` in `types`, because the tests read the fixture folders.

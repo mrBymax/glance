@@ -41,4 +41,7 @@ export type Profile = z.infer<typeof ProfileSchema>;
 export const ProfilePatchSchema = z.object(fields).partial();
 export type ProfilePatch = z.infer<typeof ProfilePatchSchema>;
 
+/** Each app shares this one object, so it is frozen. To change a profile, make a new one. */
 export const DEFAULT_PROFILE: Profile = ProfileSchema.parse({});
+Object.freeze(DEFAULT_PROFILE.allergens);
+Object.freeze(DEFAULT_PROFILE);
