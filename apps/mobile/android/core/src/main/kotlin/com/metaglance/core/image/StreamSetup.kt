@@ -33,9 +33,10 @@ data class StreamSetup(val quality: StreamQuality, val fps: Int) {
 
         /**
          * The defaults of `glance.streamQuality` and `glance.streamFps` in the build of the app. The glasses
-         * lowered a stream of 720 x 1280 to 504 x 896 in each session of 2026-11-14.
+         * lower a stream by one step when the link is weak: on 2026-11-14 a request of 720 x 1280 fell to 504 x 896 and
+         * no further, and a request of 504 x 896 fell to 360 x 640 in each session. So the app asks for the top size.
          */
-        val DEFAULT = StreamSetup(StreamQuality.MEDIUM, 7)
+        val DEFAULT = StreamSetup(StreamQuality.HIGH, 7)
 
         fun quality(name: String): StreamQuality? = StreamQuality.entries.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }
 

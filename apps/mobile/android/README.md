@@ -372,7 +372,7 @@ The app asks the glasses for a frame size and a frame rate. A person can change 
 
 | Setting | Item of "Glance Mock" | Key of `local.properties` | Default | Values |
 |---|---|---|---|---|
-| The frame size | `Stream quality: <name> <width> x <height>` | `glance.streamQuality` | `MEDIUM` | `HIGH` 720 x 1280, `MEDIUM` 504 x 896, `LOW` 360 x 640 |
+| The frame size | `Stream quality: <name> <width> x <height>` | `glance.streamQuality` | `HIGH` | `HIGH` 720 x 1280, `MEDIUM` 504 x 896, `LOW` 360 x 640 |
 | The frames each second | `Stream frame rate: <n>` | `glance.streamFps` | `7` | 2, 7, 15, 24, 30 |
 
 1. Open "Glance Mock" and go to the group `Stream`, at the end of the list.
@@ -403,6 +403,7 @@ What follows the settings:
 What nobody measured:
 
 - Each setting other than 720 x 1280 at 7 frames each second with the real glasses: the frame size and the frame rate that arrive, and the damage lines.
+- The default is `HIGH`. Measured on 2026-11-14: the glasses lower a stream by one step when the link is weak. With a request of `HIGH` the stream fell to 504 x 896 and stayed there. With a request of `MEDIUM` it fell to 360 x 640 in each of 6 sessions, and frames of that size are too small to read a label.
 - The frame size of the mock glasses for `MEDIUM` and `LOW`. The mock stream had 720 x 1280 and 30 frames each second for a request of `HIGH` at 7.
 - The distance at which a barcode decodes at 504 x 896 and at 360 x 640.
 - Whether ML Kit finds each face in a frame of 360 x 640. A face that it does not find is not pixelated.
@@ -1137,7 +1138,7 @@ Git ignores `local.properties`. Each key is optional, and each one is also a Gra
 | `glance.uiDevUrl` | empty | Address of the dev server of the phone UI, as `BuildConfig.UI_DEV_URL` |
 | `glance.labelWaitMs` | `1000` | The time in milliseconds that a barcode region is in view before the label still, as `BuildConfig.LABEL_WAIT_MS`. The app keeps it from 300 to 10000. A value that is no whole number stops the build. |
 | `glance.labelGapMs` | `6000` | The shortest time in milliseconds between two label stills, as `BuildConfig.LABEL_GAP_MS`. The app keeps it from 2000 to 60000. |
-| `glance.streamQuality` | `MEDIUM` | The frame size that the app asks of the glasses, as `BuildConfig.STREAM_QUALITY`: `HIGH` (720 x 1280), `MEDIUM` (504 x 896), or `LOW` (360 x 640). Another value stops the build. See "The stream settings". |
+| `glance.streamQuality` | `HIGH` | The frame size that the app asks of the glasses, as `BuildConfig.STREAM_QUALITY`: `HIGH` (720 x 1280), `MEDIUM` (504 x 896), or `LOW` (360 x 640). Another value stops the build. See "The stream settings". |
 | `glance.streamFps` | `7` | The frames each second that the app asks for, as `BuildConfig.STREAM_FPS`: 2, 7, 15, 24, or 30. The app takes the nearest of these for another number. A value that is no whole number stops the build. |
 | `glance.demoStoreFile` | `glance-demo.jks` | The keystore of the demo build, as a path from the folder `app` |
 | `glance.demoStorePassword` | empty | The password of the keystore |

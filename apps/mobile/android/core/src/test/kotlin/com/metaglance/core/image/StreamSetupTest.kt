@@ -7,8 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StreamSetupTest {
-    @Test fun `the default is MEDIUM at 7 frames each second`() {
-        assertEquals(StreamSetup(StreamQuality.MEDIUM, 7), StreamSetup.DEFAULT)
+    @Test fun `the default is HIGH at 7 frames each second`() {
+        assertEquals(StreamSetup(StreamQuality.HIGH, 7), StreamSetup.DEFAULT)
     }
 
     @Test fun `the build of the app has the defaults of the stream`() {
@@ -30,7 +30,7 @@ class StreamSetupTest {
 
     @Test fun `brings the values of the build and of the store to values that the SDK accepts`() {
         assertEquals(StreamSetup(StreamQuality.HIGH, 30), StreamSetup.within("high", 30))
-        assertEquals(StreamSetup(StreamQuality.MEDIUM, 7), StreamSetup.within("4K", 7))
+        assertEquals(StreamSetup(StreamQuality.HIGH, 7), StreamSetup.within("4K", 7))
         assertEquals(listOf(2, 2, 2, 2, 7, 7, 7, 15, 15, 24, 24, 30, 30), listOf(-1, 0, 2, 4, 5, 7, 11, 12, 19, 20, 27, 28, 1000).map { StreamSetup.within("LOW", it).fps })
     }
 
@@ -40,7 +40,7 @@ class StreamSetupTest {
     }
 
     @Test fun `the log line names the quality and the frame rate`() {
-        assertEquals("stream config: quality=MEDIUM fps=7", StreamSetup.DEFAULT.logLine)
+        assertEquals("stream config: quality=HIGH fps=7", StreamSetup.DEFAULT.logLine)
         assertEquals("stream config: quality=HIGH fps=30", StreamSetup(StreamQuality.HIGH, 30).logLine)
     }
 

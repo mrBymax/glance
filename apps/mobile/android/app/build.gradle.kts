@@ -48,7 +48,7 @@ android {
         buildConfigField("String", "UI_DEV_URL", "\"${local("glance.uiDevUrl", "")}\"")
         buildConfigField("long", "LABEL_WAIT_MS", localMs("glance.labelWaitMs", 1000))
         buildConfigField("long", "LABEL_GAP_MS", localMs("glance.labelGapMs", 6000))
-        buildConfigField("String", "STREAM_QUALITY", localQuality("glance.streamQuality", "MEDIUM"))
+        buildConfigField("String", "STREAM_QUALITY", localQuality("glance.streamQuality", "HIGH"))
         buildConfigField("int", "STREAM_FPS", localInt("glance.streamFps", 7))
         testInstrumentationRunner = "com.metaglance.android.support.GlanceTestRunner"
     }
