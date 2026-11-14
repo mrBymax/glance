@@ -1,6 +1,6 @@
 # Product site
 
-`@glance/site` is the one-page website that presents Meta Glance. It is a static site: React, TypeScript, and Vite, with the Astryx Neutral theme of the phone app. The build is a folder that any static host serves.
+`@glance/site` is the one-page website that presents Meta Glance. It is a static site: React, TypeScript, and Vite, with the Astryx Neutral theme of the phone app, the Optimistic font, and Motion for the animations. The build is a folder that any static host serves.
 
 `docs/design.md` holds the design: the references, the reference lock, the decision ledger, the tokens, and the standards with their measurements.
 
@@ -40,6 +40,7 @@ Copy `dist/` to any static host: GitHub Pages, Netlify, Vercel, an S3 bucket, or
 
 - The asset paths are relative (`./assets/...`), so the folder works at any path, also at `https://host/some/folder/`.
 - A host that needs an absolute base gets it from `SITE_BASE`: `SITE_BASE=/glance/ npm run build`.
+- A social preview needs the absolute address of the image. Set `SITE_URL` to the address of the site, with a trailing slash: `SITE_URL=https://example.org/glance/ npm run build`. Without it, `og:image` is the relative path `./og-image.png`, which some services do not read.
 - Serve `.glb` as `model/gltf-binary` and `.avif` as `image/avif`. Most hosts do it by default.
 - Let the host cache `assets/` for a long time: each file name holds a hash of its content.
 
@@ -48,10 +49,12 @@ Copy `dist/` to any static host: GitHub Pages, Netlify, Vercel, an S3 bucket, or
 | What | File |
 |---|---|
 | All text of the page, section by section | `src/content/site.ts` |
-| Names and roles of the team | `src/content/team.ts` (one line for each person; an empty role shows nothing) |
+| Names and titles of the team | `src/content/team.ts` (one line for each person, in the order of the page; an empty title shows nothing) |
+| Text and layout of the diagram of the parts | `DIAGRAM` in `src/content/site.ts`, and `src/sections/PartsDiagram.tsx` for the coordinates |
 | Order of the sections and the links of the sticky bar | `SECTIONS` in `src/content/site.ts`, and `src/App.tsx` |
 | Colors, type sizes, spacing | `src/styles/site.css` (Astryx tokens only) |
-| The animation of the hero | `src/hero/` |
+| The animation of the hero | `src/hero/` (camera distance, lights, sway, and tilt at the top of `animation.ts`) |
+| Motion of the page | `src/motion/` (the reveal on scroll and the hover of actions and cards) |
 
 Each claim of the copy comes from `README.md`, `docs/architecture.md`, and the design spec of the repository. Keep it true to the build. The section "A prototype, said plainly" lists what is a demo, and it must change when the build changes.
 
@@ -60,20 +63,25 @@ Each claim of the copy comes from `README.md`, `docs/architecture.md`, and the d
 ```mermaid
 flowchart LR
   photos["assets/team_pics/*.jpeg"] --> build["scripts/build-assets.mjs (sharp)"]
-  captures["media/*.png: app and kiosk screens"] --> build
+  captures["media/*.png: phone app screens"] --> build
+  logos["assets/Glance.svg, Glance Dark.svg"] --> build
   qr["text GL1 K3X7"] --> build
-  build --> generated["src/assets/generated: AVIF and WebP at 2 to 3 widths, kiosk-code.png"]
+  build --> generated["src/assets/generated: AVIF and WebP at 2 to 3 widths, kiosk-code.png, logo files"]
+  build --> icons["public: favicons, og-image.png"]
   glb["assets/animation/*.glb and metaGlancePlayer.js"] --> hero["src/hero/animation.ts (Three.js, loaded on demand)"]
   generated --> hero
   hero --> poster["scripts/capture-poster.mjs (Chrome)"]
   poster --> generated
 ```
 
-- `npm run assets` runs `scripts/build-assets.mjs`. It writes each team photo as a 4:5 portrait at 320, 480, and 640 px, each screen capture at two widths, the pixelated photo of the privacy chapter, and the QR card of the hero. The output is committed, so a build needs neither sharp nor Chrome.
-- `media/` holds the source captures of the phone app and the kiosk page. They come from the builds of the app branch in replay mode (`apps/mobile/ui` with `?replay=1&ready=1` at 390 x 844, light and dark; `apps/website` at `/kiosk?replay=1` at 1280 x 800), at a device pixel ratio of 2. Take new ones after a change of the app UI, with the same names.
+- `npm run assets` runs `scripts/build-assets.mjs`. It writes each team photo as a 4:5 portrait at 320, 480, and 640 px, each screen capture at two widths, the pixelated photo of the privacy chapter, the QR card of the hero, the logo files, the favicons, and the social preview image. The output is committed, so a build needs neither sharp nor Chrome.
+- The logo comes from `assets/Glance.svg` (dark word mark, for the light scheme) and `assets/Glance Dark.svg` (white word mark, for the dark scheme). Each source file holds a 3157 x 2105 PNG as the fill of the symbol and weighs 357 KB. The script keeps each path and color, stores that fill as an 800 px WebP, and crops the view box to the drawing: 24 KB for each file. The favicon is the symbol of the same file. `public/og-image.png` is the light logo on the canvas color, 1200 x 630.
+- `media/` holds the source captures of the phone app. They come from the build of the app branch in replay mode (`apps/mobile/ui` with `?replay=1&ready=1` at 390 x 844, light and dark), at a device pixel ratio of 2. Take new ones after a change of the app UI, with the same names.
+- The kiosk in the feature chapters is not a picture: `src/components/KioskScreen.tsx` draws the "waiting for your nod" state of the kiosk page of the demo run with the tokens of the page, so it follows the color scheme. Its QR code stays black on a white card with a quiet zone of four modules, also in the dark scheme.
 - The hero imports `assets/animation/metaGlancePlayer.js` and `meta-glances-placeholder.glb` from the repository root, unchanged. `vite.config.ts` allows that folder and dedupes `three`, so the player and the site share one copy of Three.js.
 - `scripts/capture-poster.mjs` needs `npm run dev` and Chrome. It opens `/?poster`, where the hero shows the last frame of the clip on a clear background, and writes `media/hero-poster.png` and the poster images. Run it after a change of the GLB, of the QR text, or of the camera distance in `src/hero/animation.ts`.
-- Figtree comes from `@fontsource-variable/figtree` (SIL Open Font License 1.1) through `src/styles/fonts.css`, as in the phone app. The page makes no request to another host.
+- The font is Optimistic VF, in `public/fonts/OptimisticVF.woff2`, unchanged. The owner supplied the file, and its licence must be confirmed before the site is published: Optimistic is a typeface of Meta, and its name table forbids changes to the file. `src/styles/fonts.css` declares it (weights 300 to 800, `font-display: swap`) with a fallback of Arial with metric overrides, so the swap moves no line. `index.html` preloads it. On dark grounds the page sets the `DRKM` axis of the font to 1. The page makes no request to another host.
+- The QR code of the hero and of the kiosk holds `GL1 K3X7`, the code of the demo kiosk `Checkout 3`. Both the PNG and the rendered last frame of the animation decode to that text.
 
 ## Size of the build
 
@@ -81,20 +89,26 @@ Measured on 2026-11-14 at 1440 x 900 on a local server, with a cold cache:
 
 | Part | Size |
 |---|---|
-| Until the load event: HTML, CSS, JS, font, poster | 4 requests, 253 KB transferred |
-| Main script | 578 KB, 178 KB transferred |
-| Stylesheet | 332 KB, 53 KB transferred (the full Astryx stylesheet) |
-| Animation chunk (Three.js), after the load event | 633 KB, 154 KB transferred |
+| Until the load event: HTML, CSS, JS, font, poster | 5 to 6 requests, 303 to 482 KB transferred (the font arrives before or after the load event) |
+| Main script, with React, Astryx, and Motion | 667 KB, 210 KB transferred |
+| Motion (`domAnimation` through `LazyMotion`, `m`, the hooks) | about 33 KB of the transferred main script |
+| Font, preloaded | 179 KB (`OptimisticVF.woff2`, the file as supplied) |
+| Stylesheet | 334 KB, 53 KB transferred (the full Astryx stylesheet) |
+| Animation chunk (Three.js), after the load event | 638 KB, 156 KB transferred |
 | GLB of the hero, after the load event | 2.7 MB |
 | Largest image | 45 KB (`team-fb-640.webp`) |
 | `dist/` on disk | 14 MB, of which 11 MB are the four GLB files |
 
-LCP was 432 ms (the poster of the hero) and CLS was 0.0002. These are local numbers with no network throttling.
+LCP was 448 to 508 ms over two runs (the poster of the hero) and CLS was 0. These are local numbers with no network throttling.
 
 ## Gotchas
 
 - `dist/` holds all four GLB files, but the page fetches one. `metaGlancePlayer.js` names each variant with `new URL(..., import.meta.url)`, so Vite copies each of them.
-- The animation and `assets/Glance.svg` hold the mark of Meta: the clip starts from the Meta logo. The page chrome uses the glasses glyph of the app as its mark instead. Ask the Meta mentors before the page goes public, as `apps/website/README.md` on the app branch also says.
+- The animation, the logo files, and the font are Meta assets or hold the mark of Meta: the clip starts from the Meta logo, `assets/Glance.svg` holds the same symbol, and Optimistic is a typeface of Meta. The owner asked for all three. Ask the Meta mentors before the page goes public, as `apps/website/README.md` on the app branch also says.
+- The hero fills the first viewport with the header. Its height is `100dvh` (with `100vh` before it) less `--site-header-measured`, which `SiteHeader` measures, and less its top margin, between 34 rem and 68 rem. The CSS default of that variable is the header height at the default font size, so the first paint does not move.
+- After the clip, the card of the hero sways slowly and tilts toward a fine pointer. With reduced motion it stands still. The canvas draws no frame while the hero is out of view.
+- Each reveal starts from the server HTML, so the text is visible before the script runs. An element below the viewport hides after hydration and appears when it scrolls in. The reader never sees it hide.
+- The diagram of the parts has two drawings: a wide one for a figure of 70 rem or more, and a tall one below. The text of each is 18.5 units, and each drawing shows only where that is 14 px or more.
 - Headless Chrome needs `--enable-unsafe-swiftshader --use-angle=swiftshader` for WebGL. Those flags slow the first paint by seconds, so `scripts/check-page.mjs` measures the load in a Chrome with its default flags.
 - SwiftShader caps a texture at 8192 px. A full-page screenshot of a taller page repeats its top, so capture the page one viewport at a time.
 - The hero and the status band nest a `Theme` of Astryx with `mode="dark"`. In the dark scheme, where the canvas is dark as well, `site.css` paints them with `--color-background-surface`.
