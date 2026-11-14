@@ -35,6 +35,7 @@ import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.image.UploadGate
 import com.metaglance.core.input.HeadInput
+import com.metaglance.core.input.KeyInput
 import com.metaglance.core.input.MainYesResolver
 import com.metaglance.core.input.PromptTracker
 import com.metaglance.core.net.DeviceSocket
@@ -233,9 +234,16 @@ class SessionController(
         }
     }
 
-    /** The volume keys are no input yet. */
-    @Suppress("UNUSED_PARAMETER")
-    fun onVolumeKey(up: Boolean): Boolean = false
+    /**
+     * A press of a volume key. Returns true when the key was an answer to the current prompt, so the caller must
+     * not change the volume. Up is a yes, and down is a no.
+     */
+    fun onVolumeKey(up: Boolean): Boolean {
+        val promptId = prompts.currentPromptId()
+        val kind = KeyInput.intentFor(up, profile.mainYes, promptId) ?: return false
+        send(DeviceToServer.Intent(kind, IntentSource.KEY, promptId))
+        return true
+    }
 
     /** Sends an `error` event to the page. The activity uses it for a failure that it sees itself. */
     fun reportError(error: NativeError) = sendError(error)

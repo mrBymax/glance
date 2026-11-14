@@ -46,6 +46,9 @@ class MainActivity : AppCompatActivity() {
 
     private val glance: GlanceApp get() = application as GlanceApp
 
+    /** The volume keys whose key down was an answer to a prompt. Android does not get their repeat events and their key up. */
+    private val answerKeys = HashSet<Int>()
+
     private var afterBluetooth: (Boolean) -> Unit = {}
     private val bluetoothRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         onBluetoothAnswer(granted)
@@ -143,13 +146,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        val handled = when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_UP -> glance.session.onVolumeKey(up = true)
-            KeyEvent.KEYCODE_VOLUME_DOWN -> glance.session.onVolumeKey(up = false)
-            else -> false
+        if (keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) return super.onKeyDown(keyCode, event)
+        // A key that stays down sends repeat events. They are part of the first press, so they send no new answer.
+        if (event.repeatCount > 0) return keyCode in answerKeys || super.onKeyDown(keyCode, event)
+        if (glance.session.onVolumeKey(up = keyCode == KeyEvent.KEYCODE_VOLUME_UP)) {
+            answerKeys.add(keyCode)
+            return true
         }
-        return handled || super.onKeyDown(keyCode, event)
+        answerKeys.remove(keyCode)
+        return super.onKeyDown(keyCode, event)
     }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = answerKeys.remove(keyCode) || super.onKeyUp(keyCode, event)
 
     // The page needs JavaScript. It comes from the APK, or from the dev server of a debug build.
     @SuppressLint("SetJavaScriptEnabled")

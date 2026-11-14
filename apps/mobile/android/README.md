@@ -160,6 +160,7 @@ Rules of `SessionController`:
 - `haptic` of the page plays the pattern of `HapticPatterns`, if `haptics` of the profile is true. The app never vibrates by itself.
 - `pocket.set` on dims the screen to 1 percent and hides the system bars. A swipe from the edge shows them for a short time. `pocket.set` off gives the brightness of the phone again. The page draws the black screen and blocks the touches. A new activity starts with pocket mode off.
 - Five seconds after the first `STREAMING`, `MainYesResolver` selects the yes input that works. A change goes to the page and to the server as a profile patch.
+- The volume keys of the phone answer a prompt when `mainYes` of the profile is `key`: up sends `intent yes`, and down sends `intent no`, each with the source `key` and the ID of the current prompt. A prompt is current from the end of its line until the server ends it or a new prompt replaces it. `MainActivity` then takes the key down, its repeat events, and its key up, so the volume does not change, and a key that stays down sends one answer. In each other case the key changes the volume as usual. `KeyInput` in `core` holds the rule.
 - With the socket down for 3 seconds, the phone voice says "Connection lost. Your cart is safe. Glances are paused."
 - With the media volume at 0, no line plays, and each prompt is reported at once.
 - `FramePipeline` scans each frame for a kiosk code, and selects the sharpest frame of each 500 ms. `FaceFinder` looks for faces in that frame with ML Kit, on the phone. The upload is the center of the frame (80 percent of the width, 70 percent of the height) with each face pixelated, as a JPEG of quality 80 with a long side of 768 pixels at most: 494 x 768 for the stream of 720 x 1280. Its header has `blurred: true`. If face detection fails, the frame is dropped. The app writes no frame to storage.
@@ -341,10 +342,11 @@ flowchart LR
 | `DeviceStatesTest` | The states of the table in "Mock mode for seats without glasses": `NativeState`, the `error` events, and the `device.state` messages for each one. One test pays at a kiosk that declines each payment: `checkout.failed` and its line arrive, the cart stays, and the camera stays on. |
 | `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items change the stored settings. |
 | `HapticsPocketTest` | The 8 haptic buttons of the placeholder page give the 8 patterns, `haptics: false` gives none, and pocket mode dims the screen, hides the bars, and keeps the screen on. |
+| `VolumeKeysTest` | The volume keys with `mainYes: key`: volume up on a product prompt sends `intent yes` with the source `key` and adds the product, volume down sends `intent no`, and the media volume stays at 0. A key that stays down in pocket mode sends one yes. Before the first prompt, after the prompt ended, and with the head as the main yes, the app does not take the key. |
 | `FaceFinderTest` | ML Kit face detection runs on the phone, and an image with no face gives an empty list. |
 | `PhoneUiPageTest` | The phone UI in the WebView. The setup test clicks through the three steps: link the glasses, a denied and then an allowed camera, and the start, which opens the session screen. The card test reads the product card of a prompt and the cart after `Add`. Both are skipped for an APK with no build of the phone UI. The setup test is skipped for a phone UI with no setup screen. |
 
-`SpineTest`, `DeviceStatesTest`, `PhoneUiPageTest`, and the prompt tests of `PlaceholderPageTest` need the server of `apps/server` with both fake switches at `BuildConfig.SERVER_URL`. They read `GET /healthz` first, and they fail if recognition or speech is real.
+`SpineTest`, `DeviceStatesTest`, `VolumeKeysTest`, `PhoneUiPageTest`, and the prompt tests of `PlaceholderPageTest` need the server of `apps/server` with both fake switches at `BuildConfig.SERVER_URL`. They read `GET /healthz` first, and they fail if recognition or speech is real.
 
 Run them with the script, in `scripts/integration`. It needs `adb`, FFmpeg, and the JDK on `PATH`.
 
@@ -372,6 +374,7 @@ Rules of the script and of the tests:
 - The script installs with no `-g`, and no test grants `BLUETOOTH_CONNECT`. Without that permission the app never starts the real SDK, and mock glasses need no Bluetooth. A feed from a video file needs no camera permission.
 - The log of each server is in `<temp folder>/glance-integration`.
 - The tests run with `GlanceTestRunner`. It stops the Bluetooth prompt at the start of "Glance", and it takes each vibration in place of the phone. So the phone stays quiet, and no prompt waits for a tap. `BluetoothPromptTest` turns the prompt on for itself and taps its deny button.
+- `VolumeKeysTest` sends a volume key through the input system of Android only when the app must take it. For a key that Android must get, the test calls `MainActivity.onKeyDown` and reads the result, because the real key changes the media volume of the phone. If the volume is not 0 at the end of a test, the test sets it to 0 again.
 - No test sends `setup.openUpdate`, because the SDK opens the Meta AI app for it.
 - No test image holds a face. Check the pixelated face by hand: start the fake server with `SAVE_FRAMES=1`, point the mock camera at a photo of a face, and open `glance-last.jpg` in the temp folder.
 - On a phone with no network of its own, `network` stays `offline`. `DeviceStatesTest` then checks the dropped server link in the frames, the line, and the messages only.
