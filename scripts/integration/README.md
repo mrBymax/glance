@@ -1,6 +1,6 @@
 # Integration tests
 
-Each script here starts the Glance server of `apps/server` in fake mode on `127.0.0.1` and a free port, runs one test against it, and stops it. No test calls Gemini or ElevenLabs.
+Each script here starts the Glance server of `apps/server` in fake mode on `127.0.0.1` and a free port, runs one test against it, and stops it. No test calls Gemini, ElevenLabs, or Open Food Facts.
 
 `package.json` of this folder holds the tools of these scripts, so that no app gets a new dependency. The folder is not a workspace of the repository, so it needs its own install:
 
@@ -17,7 +17,7 @@ npm install --prefix scripts/integration  # puppeteer-core, for the test of the 
 
 The exit code of each script is 0 for a pass and 1 for a fail, and the last line is `result: pass` or `result: fail`.
 
-The Android runner differs. It also starts the fake server of the app, `apps/mobile/android/tools/fake-server`, on a free port of `127.0.0.1`, for the messages that the server in fake mode cannot send on request. It uses port 8080 (or the port of `GLANCE_TEST_PORT`) and `adb reverse`, it needs the phone, `adb`, FFmpeg, and the JDK, and its last line starts with `PASS` or `FAIL`. The phone is the one of `ANDROID_SERIAL`, or the one attached phone. Its packages `qrcode` and `bwip-js` draw the codes of the camera feeds, and they are in the same `package.json`. It also sets `FAKE_PRODUCT_INFO=1`, so its server never calls Open Food Facts, and it stops when `GET /healthz` reports `fakeProductInfo: false`. `npm test` in this folder checks how the runner reads the serial, the port, and the fake switches, with no phone. See "Instrumented tests" in `apps/mobile/android/README.md`.
+The Android runner differs. It also starts the fake server of the app, `apps/mobile/android/tools/fake-server`, on a free port of `127.0.0.1`, for the messages that the server in fake mode cannot send on request. It uses port 8080 (or the port of `GLANCE_TEST_PORT`) and `adb reverse`, it needs the phone, `adb`, FFmpeg, and the JDK, and its last line starts with `PASS` or `FAIL`. The phone is the one of `ANDROID_SERIAL`, or the one attached phone. Its packages `qrcode` and `bwip-js` draw the codes of the camera feeds, and they are in the same `package.json`. It also sets `FAKE_PRODUCT_INFO=1`, so its server never calls Open Food Facts, and it stops when `GET /healthz` reports `fakeProductInfo: false`. `npm test` in this folder checks how the runner reads the serial, the port, and the fake switches, with no phone. It also checks the environment that `lib/server.mjs` gives the server. See "Instrumented tests" in `apps/mobile/android/README.md`.
 
 ## The server and the Kotlin client
 
@@ -83,6 +83,14 @@ sequenceDiagram
     Server-->>Phone: cart.updated
     Note over Phone: cart line and total
     Note over Mirror: "Added ...", cart line and total
+    Note over Server: the script reports the barcode 8076800195057
+    Server-->>Phone: glance.pending for the spaghetti of the store list
+    Note over Phone: product card with the price of the store list
+    Test->>Phone: click Add
+    Phone->>Server: POST .../intents yes
+    Server-->>Phone: cart.updated
+    Note over Phone: two cart lines and the total
+    Note over Mirror: two cart lines and the total
     Note over Server: the script shows the session the newest kiosk
     Server-->>Phone: checkout.offered
     Server-->>Kiosk: kiosk.state connected
@@ -101,9 +109,10 @@ sequenceDiagram
     Note over Phone: setup screen
 ```
 
-- The server plays `server-web.fake-script.json`: the oat drink is in view from 1.5 to 5.5 seconds after the event stream of the session opens, and the newest kiosk is in view from second 12. The kiosk page registers the newest kiosk.
+- The server plays `server-web.fake-script.json`: the oat drink is in view from 1.5 to 5.5 seconds after the event stream of the session opens, the barcode of the Barilla spaghetti from second 7 to second 10, and the newest kiosk from second 12. The kiosk page registers the newest kiosk.
+- The spaghetti is an item of `apps/server/catalog/store-list.dev.json`, and the catalog does not hold it. So the test fails when the lookup of a barcode, the store list, or the fixtures of `FAKE_PRODUCT_INFO` fail.
 - The test reads the text that each page shows. For the events it reads the messages that `BrowserBridge` delivers to the page, through `window.glanceBridge`, which only the dev build has.
-- Each answer of the shopper is a click on a button of the phone UI: Start shopping, Add, Pay, and Done.
+- Each answer of the shopper is a click on a button of the phone UI: Start shopping, Add for each of the two products, Pay, and Done.
 - The mirror page follows the phone with the flag `latest`. The script gives the server a new `DEMO_KEY` for each run. In fake mode a caption has no clip, so the mirror plays no sound.
 - The last server check reads the snapshot: the phase `paid`, an empty cart, the receipt with the order ID of the page, and the caption "Paid. ...".
 - An error that a page throws fails the run.
@@ -115,6 +124,6 @@ sequenceDiagram
 
 ## Shared code
 
-`lib/server.mjs` exports `startFakeServer`. It removes each server variable of the shell from the environment of the server, sets `FAKE_RECOGNITION` and `FAKE_SPEECH`, and waits for `GET /healthz`. It throws when the answer does not show both fake switches. A script can give it the path of a `FAKE_RECOGNITION` script file and a `DEMO_KEY`.
+`lib/server.mjs` exports `startFakeServer`. It removes each server variable of the shell from the environment of the server, sets `FAKE_RECOGNITION`, `FAKE_SPEECH`, and `FAKE_PRODUCT_INFO`, and waits for `GET /healthz`. It throws when the answer does not show each of the three fake switches. So the server reads the dev catalog and the dev store list, also when the shell sets `STORE_LIST_PATH`. A script can give it the path of a `FAKE_RECOGNITION` script file and a `DEMO_KEY`.
 
 `lib/pages.mjs` exports `startDevServer`, `startBrowser`, `openPage`, and `waitForText` for a test with web pages.

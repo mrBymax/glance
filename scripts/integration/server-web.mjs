@@ -14,6 +14,9 @@ const STORE = 'Demo Market';
 const SERVER_KIOSK_CODE = 'K3X7';
 // The oat drink of apps/server/catalog/catalog.dev.json.
 const PRODUCT = { name: 'Oat drink', pack: '1 L', priceCents: 189, price: '1.89 EUR' };
+// The Barilla spaghetti of apps/server/catalog/store-list.dev.json. The catalog does not hold it, so only its barcode finds it.
+const SCANNED = { id: 'gtin-8076800195057', name: 'Spaghetti n.5', pack: '500 g', priceCents: 109, price: '1.09 EUR' };
+const TOTAL = { cents: PRODUCT.priceCents + SCANNED.priceCents, text: '2.98 EUR' };
 const LOG_TAIL_LINES = 40;
 const PAID_LINE = 'Paid.';
 const DEMO_PAYMENT_LINE = 'Demo payment. No money moved.';
@@ -29,18 +32,22 @@ function check(condition, message) {
 
 const button = (name) => `::-p-aria([name="${name}"][role="button"])`;
 
-/** Waits until the bridge of the phone UI delivered a server event of this type, and returns the event. */
-async function waitForEvent(phone, type) {
+/**
+ * Waits until the bridge of the phone UI delivered a server event of this type, and returns the event.
+ * `count` selects the event: 1 is the first one of the type, 2 is the second one.
+ */
+async function waitForEvent(phone, type, count = 1) {
   try {
     const found = await phone.waitForFunction(
-      (wanted) => window.glanceMessages.find((message) => message.t === 'event' && message.event.type === wanted)?.event,
+      (wanted, index) => window.glanceMessages.filter((message) => message.t === 'event' && message.event.type === wanted)[index]?.event,
       { polling: POLL_MS },
       type,
+      count - 1,
     );
     return await found.jsonValue();
   } catch (error) {
     const seen = await phone.evaluate(() => window.glanceMessages.map((message) => (message.t === 'event' ? message.event.type : message.t)));
-    throw new Error(`phone UI: the bridge delivered no "${type}" event. It delivered: ${seen.join(', ')}`, { cause: error });
+    throw new Error(`phone UI: the bridge delivered ${count - 1} "${type}" events, not ${count}. It delivered: ${seen.join(', ')}`, { cause: error });
   }
 }
 
@@ -98,34 +105,53 @@ async function playShop(server, phoneUrl, websiteUrl, browser, problems) {
   await waitForText(mirror, 'mirror', MIRROR_CART, PRODUCT.price);
   console.log('mirror: shows the line of the add and the cart');
 
+  // The script of the server reports the barcode of the spaghetti. The store list has the price, and a fixture has the details.
+  const scanned = await waitForEvent(phone, 'glance.pending', 2);
+  check(scanned.product.id === SCANNED.id, `phone UI: the barcode gave the product "${scanned.product.id}".`);
+  check(scanned.product.priceCents === SCANNED.priceCents, `phone UI: the scanned product costs ${scanned.product.priceCents} cents.`);
+  await waitForText(phone, 'phone UI', 'h2', SCANNED.name);
+  await waitForText(phone, 'phone UI', 'main', SCANNED.price);
+  await phone.locator(button('Add')).click();
+  await waitForText(phone, 'phone UI', 'section', `${SCANNED.pack}, 1 x ${SCANNED.price}`);
+  const secondCart = await waitForEvent(phone, 'cart.updated', 2);
+  check(secondCart.cart.totalCents === TOTAL.cents, `phone UI: the cart total with the scanned product is ${secondCart.cart.totalCents} cents.`);
+  await waitForText(mirror, 'mirror', `${MIRROR_CART} li`, SCANNED.name);
+  await waitForText(mirror, 'mirror', MIRROR_CART, TOTAL.text);
+  console.log('phone UI: the barcode of the script gave a product of the store list, and Add put it in the cart');
+
   // The script of the server shows the session the newest kiosk, which is the kiosk of the page.
   const offered = await waitForEvent(phone, 'checkout.offered');
   check(offered.kiosk.name === KIOSK_NAME, `phone UI: the checkout is at "${offered.kiosk.name}", not at "${KIOSK_NAME}".`);
-  check(offered.totalCents === PRODUCT.priceCents, `phone UI: the pay prompt has the total ${offered.totalCents} cents.`);
+  check(offered.totalCents === TOTAL.cents, `phone UI: the pay prompt has the total ${offered.totalCents} cents.`);
   await waitForText(phone, 'phone UI', 'li', `${KIOSK_NAME} at ${STORE}.`);
   await waitForText(phone, 'phone UI', `${SHEET} h2`, `${KIOSK_NAME} at ${STORE}`);
-  await waitForText(phone, 'phone UI', SHEET, '1 item');
-  await waitForText(phone, 'phone UI', SHEET, PRODUCT.price);
+  await waitForText(phone, 'phone UI', SHEET, '2 items');
+  await waitForText(phone, 'phone UI', SHEET, TOTAL.text);
   await waitForText(mirror, 'mirror', `${MIRROR_VOICE} li`, `${KIOSK_NAME} at ${STORE}.`);
   await waitForText(kiosk, 'kiosk', 'h1', 'Waiting for your nod');
-  await waitForText(kiosk, 'kiosk', '.kiosk-total', PRODUCT.price);
+  await waitForText(kiosk, 'kiosk', '.kiosk-total', TOTAL.text);
   await waitForText(kiosk, 'kiosk', 'li', PRODUCT.name);
   await waitForText(kiosk, 'kiosk', 'li', `1 x ${PRODUCT.price}`);
+  await waitForText(kiosk, 'kiosk', 'li', SCANNED.name);
   console.log('kiosk: connected, shows the cart and the total');
 
   await phone.locator(button('Pay')).click();
   const paid = await waitForEvent(phone, 'checkout.paid');
-  check(paid.totalCents === PRODUCT.priceCents, `phone UI: the receipt has the total ${paid.totalCents} cents.`);
+  check(paid.totalCents === TOTAL.cents, `phone UI: the receipt has the total ${paid.totalCents} cents.`);
   check(paid.kiosk.name === KIOSK_NAME, `phone UI: the receipt names the kiosk "${paid.kiosk.name}".`);
-  check(paid.items.length === 1 && paid.items[0].name === PRODUCT.name, 'phone UI: the receipt does not hold the one product.');
+  check(
+    paid.items.length === 2 && paid.items.some((item) => item.name === PRODUCT.name) && paid.items.some((item) => item.name === SCANNED.name),
+    'phone UI: the receipt does not hold the two products.',
+  );
   await waitForText(phone, 'phone UI', `${SHEET} h2`, 'Paid');
   await waitForText(phone, 'phone UI', SHEET, `Order ${paid.orderId}`);
   await waitForText(phone, 'phone UI', `${SHEET} li`, PRODUCT.name);
+  await waitForText(phone, 'phone UI', `${SHEET} li`, SCANNED.name);
   await waitForText(phone, 'phone UI', SHEET, DEMO_PAYMENT_LINE);
   await waitForText(phone, 'phone UI', 'section', 'Your cart is empty.');
   console.log('phone UI: checkout sheet answered with Pay, the receipt shows the order');
   await waitForText(kiosk, 'kiosk', 'h1', 'Paid');
-  await waitForText(kiosk, 'kiosk', '.kiosk-total', PRODUCT.price);
+  await waitForText(kiosk, 'kiosk', '.kiosk-total', TOTAL.text);
   await waitForText(kiosk, 'kiosk', 'li', PRODUCT.name);
   await waitForText(kiosk, 'kiosk', '.kiosk-row', DEMO_PAYMENT_LINE);
   console.log(`kiosk: paid, order ${paid.orderId}`);
