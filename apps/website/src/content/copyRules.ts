@@ -1,6 +1,7 @@
 // The rules that each text of the website must pass before a publish.
 // The character ranges and the word list follow skills/anti-slop/SKILL.md.
-const BANNED_CHARACTERS = /[‐-―‘-‟…←-⇿−×•■-◿☀-➿\u{1F000}-\u{1FAFF};!]/u;
+// Escapes, so that this file holds none of the characters that it bans.
+const BANNED_CHARACTERS = /[\u2010-\u2015\u2018-\u201F\u2026\u2190-\u21FF\u2212\u00D7\u2022\u25A0-\u25FF\u2600-\u27BF\u{1F000}-\u{1FAFF};!]/u;
 const FORBIDDEN_CLAIMS: { rule: string; pattern: RegExp }[] = [
   { rule: 'claims that the store installs nothing', pattern: /install(s|ed)? nothing|nothing to install|no installation/i },
   { rule: 'claims that the store lends glasses', pattern: /\blend(s|ing)?\b|\blent\b|\bborrow/i },
