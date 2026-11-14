@@ -297,6 +297,7 @@ The still photo:
 - A still with a code gives `barcode.seen`, and the still stays on the phone.
 - A still with no code goes to the server as a frame with `kind: label` and `blurred: true`: the full photo with no crop, each face pixelated, a long side of 1600 pixels at most, and JPEG quality 85. If face detection fails, the still is dropped.
 - Each 10 seconds the frame path logs `frame path: scan <n>x mean <ms> max <ms> ms, product ..., faces ..., pixelate ..., jpeg ...`: the time of the code scan and the product read of each frame, and of the face detection, the crop with pixelation, and the JPEG of each upload.
+- A capture that gives no photo (`capture error CaptureFailed`, after about 10 seconds) stops frames and motion samples for that time. After one, the app takes no still by itself for 45 seconds and logs `still failed: no new still for 45 s`. A reference picture that a person asks for does not wait. Measured on 2026-11-14 with the stream at 360 x 640: three failed captures in 40 seconds, each with a motion stall of 11 to 14 seconds.
 - The log line `label still asked: region <box> in <w>x<h>` or `label still asked: server request` says why the phone takes a still.
 
 The still of a reference picture:

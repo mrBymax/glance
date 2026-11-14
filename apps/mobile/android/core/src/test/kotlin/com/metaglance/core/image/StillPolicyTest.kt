@@ -38,4 +38,23 @@ class StillPolicyTest {
         assertFalse(p.tryStart(6599))
         assertTrue(p.tryStart(6600))
     }
+
+    @Test fun `a capture that failed keeps the app from a new still for 45 seconds`() {
+        val p = StillPolicy()
+        assertTrue(p.tryStart(1000))
+        p.onFailed(11000)
+        p.onEnd()
+        // A failed capture took the link for 10 seconds, so the next one waits.
+        assertFalse(p.tryStart(20000))
+        assertFalse(p.tryStart(55999))
+        assertTrue(p.tryStart(56000))
+    }
+
+    @Test fun `a still that a person asked for does not wait after a failed capture`() {
+        val p = StillPolicy()
+        assertTrue(p.tryStart(1000))
+        p.onFailed(11000)
+        p.onEnd()
+        assertTrue(p.tryStartNow(12000))
+    }
 }

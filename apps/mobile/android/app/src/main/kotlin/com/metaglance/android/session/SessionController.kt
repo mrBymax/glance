@@ -927,7 +927,11 @@ class SessionController(
         if (!datRunning || !policy.tryStart(eventMs)) return
         scope.launch {
             try {
-                val photo = dat.captureStill() ?: return@launch
+                val photo = dat.captureStill() ?: run {
+                    policy.onFailed(SystemClock.elapsedRealtime())
+                    log("still failed: no new still for ${StillPolicy.AFTER_FAILURE_MS / 1000} s")
+                    return@launch
+                }
                 val capturedAt = System.currentTimeMillis()
                 val still = withContext(Dispatchers.Default) {
                     val faces = FaceFinder()
@@ -973,7 +977,11 @@ class SessionController(
         }
         scope.launch {
             try {
-                val photo = dat.captureStill() ?: return@launch
+                val photo = dat.captureStill() ?: run {
+                    policy.onFailed(SystemClock.elapsedRealtime())
+                    log("still failed: no new still for ${StillPolicy.AFTER_FAILURE_MS / 1000} s")
+                    return@launch
+                }
                 val capturedAt = System.currentTimeMillis()
                 val size = "${photo.width}x${photo.height}"
                 val outcome = withContext(Dispatchers.Default) { readLabelStill(photo) }
@@ -1014,7 +1022,11 @@ class SessionController(
         }
         scope.launch {
             try {
-                val photo = dat.captureStill() ?: return@launch
+                val photo = dat.captureStill() ?: run {
+                    policy.onFailed(SystemClock.elapsedRealtime())
+                    log("still failed: no new still for ${StillPolicy.AFTER_FAILURE_MS / 1000} s")
+                    return@launch
+                }
                 val capturedAt = System.currentTimeMillis()
                 val still = withContext(Dispatchers.Default) {
                     val faces = FaceFinder()
