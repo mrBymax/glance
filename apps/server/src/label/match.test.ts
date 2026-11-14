@@ -85,3 +85,11 @@ it('reads the answer of the model, and an answer that is no label as an empty on
   expect(parseLabelAnswer({ digits: '8076800195057' })).toEqual(NO_LABEL);
   expect(parseLabelAnswer(undefined)).toEqual(NO_LABEL);
 });
+it('the pack size never selects an item that has no pack size', () => {
+  const two: StoreItem[] = [
+    { gtin: '3017624010701', priceCents: 399, name: 'Nutella', brand: 'Ferrero', packSize: '400 g' },
+    { gtin: '0000080177173', priceCents: 45, name: 'Nutella', brand: 'Ferrero' },
+  ];
+  expect(matchLabel(read({ brand: 'Ferrero', name: 'Nutella', packSize: '15 g' }), two, 0.6)).toBeNull();
+  expect(matchLabel(read({ brand: 'Ferrero', name: 'Nutella', packSize: '400 g' }), two, 0.6)).toBe('3017624010701');
+});

@@ -204,6 +204,35 @@ it('a stored session with a scanned product in its cart works after a restart of
   expect(await phone.next((m) => isSpeak(m) && m.sound === 'removed')).toMatchObject({ text: 'Removed Nutella. Total zero euros.' });
 });
 
+it('a stored session with a prompt for a scanned product keeps the prompt after a restart of the server', async () => {
+  const first = await shop();
+  first.phone.send({ t: 'barcode.seen', code: SPAGHETTI, source: 'barcode' });
+  await first.phone.next(isEvent('glance.pending'));
+  await (await first.t.app.sessions.get(first.id))!.settled();
+  first.phone.close();
+
+  const second = await testApp({}, { store: first.t.store });
+  apps.push(second);
+  const phone = await connectPhone(second, first.id, first.token);
+  phones.push(phone);
+  const snapshot = await phone.next((m) => m.t === 'snapshot') as Extract<ServerToDevice, { t: 'snapshot' }>;
+  expect(snapshot.session.prompt).toMatchObject({ kind: 'product', product: { id: 'gtin-8076800195057', priceCents: 109 } });
+});
+it('a stored session loads after a restart when the store list fails, and keeps its cart', async () => {
+  const first = await shop();
+  await scanAndAdd(first.phone, NUTELLA);
+  await (await first.t.app.sessions.get(first.id))!.settled();
+  first.phone.close();
+
+  const down = { byGtin: async () => { throw new Error('The ERP is down.'); }, all: async () => [] };
+  const second = await testApp({}, { store: first.t.store, storeList: down });
+  apps.push(second);
+  const phone = await connectPhone(second, first.id, first.token);
+  phones.push(phone);
+  const snapshot = await phone.next((m) => m.t === 'snapshot') as Extract<ServerToDevice, { t: 'snapshot' }>;
+  expect(snapshot.session.cart).toMatchObject({ items: [{ productId: 'gtin-3017624010701', qty: 1 }], totalCents: 399 });
+});
+
 /** A recognizer that answers each frame with the next result of the list, and then with the last one. */
 function recognizerOf(results: Partial<RecognitionResult>[]): Recognizer {
   let index = 0;

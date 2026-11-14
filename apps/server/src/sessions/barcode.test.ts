@@ -234,3 +234,28 @@ it('keeps the kiosk rules: a pay prompt does not open while a scanned product ha
   h.send({ type: 'kiosk.seen', kiosk: KIOSK, busy: false, spotCheck: false });
   expect(h.state.checkout).toBeNull();
 });
+
+it('R9: after a no, a code that left the view and comes back inside 10 seconds gets no prompt', () => {
+  const h = scanned();
+  h.barcode(found(NUTELLA)); h.done(); h.no();
+  h.advance(T.viewMs + 1000); h.barcode(found(NUTELLA));
+  expect(h.state.prompt).toBeNull();
+  expect(h.effects).toEqual([]);
+});
+it('a session that rests takes no barcode and no label frame', () => {
+  const h = scanned();
+  h.state = { ...h.state, phase: 'resting' };
+  h.barcode(found(NUTELLA)); expect(h.effects).toEqual([]);
+  h.barcode(missing()); expect(h.effects).toEqual([]);
+  h.label('failed'); expect(h.effects).toEqual([]);
+  expect(h.state.phase).toBe('resting');
+});
+it('a label frame that gave no product gets no line while the payment runs', () => {
+  const h = harness({ cart: [OAT] });
+  h.kiosk(); h.done(); h.yes();
+  h.label('started'); h.label('failed');
+  expect(h.effects).toEqual([]);
+});
+it('the times of the design', () => {
+  expect([CODE_QUIET_MS, CODE_FRAMES_WITHIN_MS, STILL_REQUEST_EVERY_MS, UNREADABLE_EVERY_MS]).toEqual([3000, 2000, 6000, 10000]);
+});

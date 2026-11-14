@@ -65,6 +65,7 @@ it('reads a field of the wrong type as no data and keeps the other fields', () =
 it('reads an answer with the status 0, or with no product, as not found', () => {
   expect(parseOffAnswer({ code: '2999999999990', status: 0, status_verbose: 'product not found' })).toBeNull();
   expect(parseOffAnswer({ status: 1 })).toBeNull();
+  expect(parseOffAnswer({ status: 0, product: { product_name: 'Left over' } })).toBeNull();
   expect(parseOffAnswer('not found')).toBeNull();
   expect(parseOffAnswer(null)).toBeNull();
 });
