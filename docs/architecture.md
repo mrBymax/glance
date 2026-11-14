@@ -236,5 +236,6 @@ stateDiagram-v2
 - The Android app sends a yes or a no only from the head and from the page. The touchpad, the voice of the glasses, and the volume keys are no input yet, so the app sends no `speech.final`.
 - `biometric.request` and `biometric.result` have no effect.
 - `apps/display-pow` is empty.
-- The phone UI has no microphone button, no fingerprint state, no Italian text, and no spot check view.
+- The server does nothing for an intent with the kind `ask`, never sets `needsBiometric`, and never sends the kiosk state `spotcheck`. So the microphone button, the fingerprint state, and the spot check views of the phone UI and of the kiosk page show only with injected events, and in the replay of the kiosk page.
+- The phone UI has an Italian table, and no native speaker has read it. In Italian the page text is Italian, and each caption stays English. The words of Astryx itself and the debug panel also stay English.
 - The server has English lines only.

@@ -238,7 +238,7 @@ Each action that the shopper can do with the head or the voice also has a button
 
 End asks first, because the server takes no input for a session that ended.
 
-"Ask a question" needs no prompt ID. The Android app relays the intent, and the server then opens its question window. `BrowserBridge` posts it as each other intent. A browser session has no microphone, so that window closes with no question.
+"Ask a question" needs no prompt ID. The Android app relays the intent, and `BrowserBridge` posts it as each other intent. The server takes the intent and does nothing with it yet: it has no question window.
 
 `hapticFor(before, action, after)` in `src/state/haptics.ts` returns the pattern for one message, or `null`. `BridgeProvider` calls it for each message of the bridge and sends `{ t: 'haptic', pattern }` for a result. The Android app vibrates only for these messages.
 
