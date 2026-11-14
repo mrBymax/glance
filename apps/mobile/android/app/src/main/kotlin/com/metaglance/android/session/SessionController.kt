@@ -29,6 +29,7 @@ import com.metaglance.core.contract.PageToNative
 import com.metaglance.core.contract.Profile
 import com.metaglance.core.contract.Profiles
 import com.metaglance.core.contract.ServerToDevice
+import com.metaglance.core.frame.FrameHeader
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.image.UploadGate
@@ -135,7 +136,29 @@ class SessionController(
     private var waitingForGlasses = false
     private var restartsInARow = 0
     private var restartNotBeforeMs = 0L
+
+    /** Counts the starts and the stops that the app asked for. A stop that waits for its cause reads it. */
+    private var stopTicket = 0
     private var lastDeviceState: DeviceState? = null
+
+    /**
+     * Sees each message between the app and the server. The instrumented tests read the traffic through it.
+     * The controller calls it on the main thread and on the frame thread, and it changes nothing.
+     */
+    interface Tap {
+        /** `sent` is false when the socket was down, so the message went nowhere. */
+        fun onToServer(message: DeviceToServer, sent: Boolean)
+
+        fun onFrame(header: FrameHeader, jpegBytes: Int, sent: Boolean)
+
+        fun onFromServer(message: ServerToDevice)
+
+        /** An error event of the app itself, which goes to the page and not to the server. */
+        fun onNativeError(error: NativeError)
+    }
+
+    @Volatile
+    var tap: Tap? = null
 
     private val _nativeState = MutableStateFlow(mapNativeState(dat.snapshot.value))
     val nativeState: StateFlow<NativeState> = _nativeState.asStateFlow()
@@ -336,6 +359,7 @@ class SessionController(
     }
 
     private fun onServerMessage(message: ServerToDevice) {
+        tap?.onFromServer(message)
         when (message) {
             is ServerToDevice.Speak -> {
                 message.promptId?.let(prompts::onPromptSpoken)
@@ -408,6 +432,7 @@ class SessionController(
     }
 
     private fun deleteData() {
+        stopTicket += 1
         waitingForGlasses = false
         stopDat()
         val session = serverSession
@@ -432,6 +457,7 @@ class SessionController(
 
     private fun startDat() {
         if (datRunning) return
+        stopTicket += 1
         sessionErrors.clear()
         streamErrors.clear()
         stopByApp = false
@@ -451,6 +477,7 @@ class SessionController(
 
     /** Stops the DAT session because the app, the page, or the server asked for it. No error event follows. */
     private fun stopDat() {
+        stopTicket += 1
         waitingForGlasses = false
         if (!datRunning) return
         stopByApp = true
@@ -467,8 +494,15 @@ class SessionController(
                     val link = socket
                     UploadGate.check(link?.isOpen == true, link?.queuedBytes() ?: 0, worn(dat.snapshot.value))
                 },
-                onKioskText = { text -> socket?.send(DeviceToServer.KioskSeen(text)) },
-                onUpload = { header, jpeg -> socket?.sendFrame(header, jpeg) },
+                onKioskText = { text ->
+                    val message = DeviceToServer.KioskSeen(text)
+                    val sent = socket?.send(message) == true
+                    tap?.onToServer(message, sent)
+                },
+                onUpload = { header, jpeg ->
+                    val sent = socket?.sendFrame(header, jpeg) == true
+                    tap?.onFrame(header, jpeg.size, sent)
+                },
                 log = ::log
             )
             try {
@@ -539,7 +573,23 @@ class SessionController(
         pipelineJob = null
         mainYesJob?.cancel()
         mainYesJob = null
-        val facts = StopFacts(stopByApp, sessionErrors.toSet(), streamErrors.toSet(), snapshot.device?.link, snapshot.device?.hinge)
+        if (stopByApp) {
+            onStopCause(StopFacts(true, sessionErrors.toSet(), streamErrors.toSet(), snapshot.device?.link, snapshot.device?.hinge))
+            return
+        }
+        // The session can stop before the device reports why. Mock glasses that fold report SESSION_ENDED_BY_DEVICE
+        // and STOPPED first, and the closed hinge after them. So the cause is read a short time after the stop.
+        val ticket = stopTicket
+        scope.launch {
+            delay(STOP_SETTLE_MS)
+            // A new start, or a stop that the app asked for, came first. The old stop has no use then.
+            if (ticket != stopTicket || datRunning) return@launch
+            val device = dat.snapshot.value.device
+            onStopCause(StopFacts(false, sessionErrors.toSet(), streamErrors.toSet(), device?.link, device?.hinge))
+        }
+    }
+
+    private fun onStopCause(facts: StopFacts) {
         val cause = StopCauses.classify(facts)
         log("dat session stopped: $cause session=$sessionErrors stream=$streamErrors")
         val error = if (cause == StopCause.OTHER && INSUFFICIENT_SDK in sessionErrors) NativeErrors.SDK_TOO_OLD else NativeErrors.forStop(cause)
@@ -569,11 +619,14 @@ class SessionController(
     }
 
     private fun send(message: DeviceToServer) {
-        if (socket?.send(message) != true) log("not sent, the socket is down: ${Codec.encode(message).take(MAX_LOGGED_CHARS)}")
+        val sent = socket?.send(message) == true
+        tap?.onToServer(message, sent)
+        if (!sent) log("not sent, the socket is down: ${Codec.encode(message).take(MAX_LOGGED_CHARS)}")
     }
 
     private fun sendError(error: NativeError) {
         log("error ${error.code}")
+        tap?.onNativeError(error)
         toPage(NativeToPage.Event(NativeErrors.toEvent(error)))
     }
 
@@ -637,6 +690,7 @@ class SessionController(
         const val CLOSE_AFTER_END_MS = 5000L
         const val MAIN_YES_DELAY_MS = 5000L
         const val RESTART_DELAY_MS = 2000L
+        const val STOP_SETTLE_MS = 500L
         const val MAX_RESTARTS_IN_A_ROW = 5
         const val MAX_LOGGED_CHARS = 120
         const val INSUFFICIENT_SDK = "INSUFFICIENT_SDK_VERSION"

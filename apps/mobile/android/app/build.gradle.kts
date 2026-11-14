@@ -9,7 +9,9 @@ plugins {
 val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
-fun local(key: String, default: String): String = localProps.getProperty(key, default)
+
+// A Gradle property wins over local.properties: ./gradlew :app:assembleDebug -Pglance.serverUrl=http://127.0.0.1:8080
+fun local(key: String, default: String): String = providers.gradleProperty(key).orNull ?: localProps.getProperty(key, default)
 
 android {
     namespace = "com.metaglance.android"
@@ -25,6 +27,7 @@ android {
         manifestPlaceholders["mwdat_client_token"] = local("mwdat_client_token", "0")
         buildConfigField("String", "SERVER_URL", "\"${local("glance.serverUrl", "http://10.0.2.2:8080")}\"")
         buildConfigField("String", "UI_DEV_URL", "\"${local("glance.uiDevUrl", "")}\"")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -61,4 +64,10 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.biometric)
+
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }

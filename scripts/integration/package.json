@@ -1,0 +1,14 @@
+{
+  "name": "glance-integration",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tools of the integration tests. No app depends on them.",
+  "scripts": {
+    "android:clips": "node android/make-clips.mjs",
+    "android:spine": "node android/run-spine.mjs"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
+}
