@@ -1,10 +1,23 @@
 package com.metaglance.core.barcode
 
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LabelTimingTest {
     private fun LabelPolicy.stills(range: IntProgression): List<Int> = range.filter { onFrame(it.toLong(), regionInView = true, codeAccepted = false) }
+
+    @Test fun `the default wait is 1000 ms, and the default gap is 6000 ms`() {
+        assertEquals(1000L, LabelTiming.DEFAULT_WAIT_MS)
+        assertEquals(6000L, LabelTiming.DEFAULT_GAP_MS)
+    }
+
+    @Test fun `the build of the app has the defaults of the label timing`() {
+        val build = File("../app/build.gradle.kts").readText()
+        assertTrue(build.contains("localMs(\"glance.labelWaitMs\", ${LabelTiming.DEFAULT_WAIT_MS})"))
+        assertTrue(build.contains("localMs(\"glance.labelGapMs\", ${LabelTiming.DEFAULT_GAP_MS})"))
+    }
 
     @Test fun `an empty field gives the default again`() {
         assertEquals(MsField.Empty, LabelTiming.readField("", LabelTiming.WAIT_LIMITS_MS))

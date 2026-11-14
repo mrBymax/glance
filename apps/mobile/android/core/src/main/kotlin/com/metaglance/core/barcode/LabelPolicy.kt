@@ -15,8 +15,8 @@ package com.metaglance.core.barcode
  * no barcode is, and such a region must not stop Motion and cost a model call each `everyMs` for a full shop.
  */
 class LabelPolicy(
-    private val dwellMs: Long = 2500,
-    private val everyMs: Long = 6000,
+    private val dwellMs: Long = LabelTiming.DEFAULT_WAIT_MS,
+    private val everyMs: Long = LabelTiming.DEFAULT_GAP_MS,
     private val gapMs: Long = 600,
     private val maxRegionStills: Int = 3
 ) {

@@ -175,7 +175,7 @@ class BarcodeScanTest : FakeServerTestCase() {
         const val CODE_MS = 10_000L
         const val REPEAT_WINDOW_MS = 3_300L
 
-        /** A region asks for a still after 2.5 seconds. The capture and the read on the phone come after that. */
+        /** A region asks for a still after the barcode wait, 1 second in the build. The capture and the read on the phone come after that. */
         const val LABEL_MS = 15_000L
         const val WATCH_MS = 6_000L
         const val QUIET_MS = 4_000L

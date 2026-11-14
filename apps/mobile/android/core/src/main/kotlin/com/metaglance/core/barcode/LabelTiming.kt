@@ -20,6 +20,9 @@ sealed interface MsField {
  *
  * A short wait takes a still before the scanner had its chance, and each still can stop Motion for a moment.
  * A long wait makes the shopper hold the product. So both values have limits.
+ *
+ * The default wait is short: with the glasses, a still took 2.3 to 2.9 seconds and its label call 1.5 to 2.3
+ * seconds (measured on 2026-11-14), so the shopper already waits about 5 seconds after the wait.
  */
 data class LabelTiming(val waitMs: Long, val gapMs: Long) {
     /**
@@ -31,6 +34,9 @@ data class LabelTiming(val waitMs: Long, val gapMs: Long) {
     fun labelPolicy(): LabelPolicy = LabelPolicy(dwellMs = waitMs, everyMs = gapMs)
 
     companion object {
+        /** The defaults of `glance.labelWaitMs` and `glance.labelGapMs` in the build of the app. */
+        const val DEFAULT_WAIT_MS = 1000L
+        const val DEFAULT_GAP_MS = 6000L
         val WAIT_LIMITS_MS = 300L..10_000L
         val GAP_LIMITS_MS = 2000L..60_000L
         private val WHOLE_NUMBER = Regex("[+-]?[0-9]+")

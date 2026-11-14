@@ -233,7 +233,7 @@ flowchart TD
   scan -- "region of a barcode, no code" --> again["Scan of the larger crop, then DigitReader: OCR of the digits"]
   again -- "code with a right check digit" --> vote
   vote --> seen["barcode.seen, then one time each second"]
-  again -- "no code for the barcode wait, 2500 ms" --> policy["LabelPolicy: one still each still gap, 6000 ms"]
+  again -- "no code for the barcode wait, 1000 ms" --> policy["LabelPolicy: one still each still gap, 6000 ms"]
   request["still.request of the server"] --> policy
   policy --> still["One still photo. LabelStill reads it on the phone"]
   still -- "code" --> seen

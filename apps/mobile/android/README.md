@@ -195,7 +195,7 @@ flowchart TD
     U -- not decoded --> O[DigitReader: OCR of the region and the digits under it, 3 times each second at most]
     O -- exactly one code with a right check digit --> V
     V -- 2 equal reads of the decoder, or 3 equal reads --> M[barcode.seen, then one time each second]
-    R -- in view for the barcode wait, 2.5 s, with no accepted code --> L[LabelPolicy]
+    R -- in view for the barcode wait, 1 s, with no accepted code --> L[LabelPolicy]
     SR[still.request of the server] --> L
     L -- one each still gap, 6 s --> SP[StillPolicy, then one still photo]
     SP --> P[LabelStill: scanner and OCR on the full still, on the phone]
@@ -219,7 +219,7 @@ Rules that keep a wrong product out:
 
 The still photo:
 
-- `LabelPolicy` asks for a still when a region was in view for the barcode wait (2500 ms) with no accepted code, and when the server sends `still.request`. Both share one limit, the still gap: one still each 6 seconds. A request inside that time is dropped.
+- `LabelPolicy` asks for a still when a region was in view for the barcode wait (1000 ms) with no accepted code, and when the server sends `still.request`. Both share one limit, the still gap: one still each 6 seconds. A request inside that time is dropped.
 - A person can change both times on the phone with no new build. See "The two times of the label still".
 - A region that stays in view asks for 3 stills at most. The scanner can report a region where no barcode is, and each still can stop Motion and can cost one model call of the server. The region asks again after it left the view for more than 600 ms. A `still.request` does not count for this limit.
 - After a still gave a code, its region asks for no other still while it stays in view: the frames cannot read that code, so each still would give the same report again.
@@ -233,11 +233,11 @@ The still photo:
 
 ### The two times of the label still
 
-Nobody knows yet if 2.5 seconds feel long with a product in the hand. So the two times are settings of the app, for mock glasses and for real glasses.
+With the glasses, a still took 2.3 to 2.9 seconds and its label call 1.5 to 2.3 seconds (measured on 2026-11-14). The shopper waits about 5 seconds after the barcode wait, so the default barcode wait is short: 1 second. Nobody knows yet which value is best with a product in the hand. So the two times are settings of the app, for mock glasses and for real glasses.
 
 | Time | Field of "Glance Mock" | Key of `local.properties` | Default | Limits |
 |---|---|---|---|---|
-| Barcode wait: a barcode region is in view with no accepted code for this time, then the phone takes the still | `Barcode wait (ms)` | `glance.labelWaitMs` | 2500 | 300 to 10000 |
+| Barcode wait: a barcode region is in view with no accepted code for this time, then the phone takes the still | `Barcode wait (ms)` | `glance.labelWaitMs` | 1000 | 300 to 10000 |
 | Still gap: the shortest time between two label stills | `Still gap (ms)` | `glance.labelGapMs` | 6000 | 2000 to 60000 |
 
 1. Open "Glance Mock" and go to the group `Barcode`, at the end of the list.
@@ -249,10 +249,10 @@ Nobody knows yet if 2.5 seconds feel long with a product in the hand. So the two
 - The app keeps the values over a restart. An empty field gives the value of the build again.
 - A number outside the limits becomes the nearest limit. A text that is no whole number changes nothing.
 - The keys of `local.properties` set the values of the build. A value of the menu wins over them until a person empties the field.
-- A short barcode wait takes the still before the scanner and OCR had their time. Each still can stop Motion for a moment, so a nod can fail after it.
+- A short barcode wait takes the still before the scanner and OCR had their time: OCR needs 3 equal reads, which take up to 1 second. Each still can stop Motion for a moment, so a nod can fail after it.
 - The server starts at most one label call each 5 seconds for a session. With a still gap below 5000 ms it drops some label frames, and the phone still reads each still for a code.
 - With real recognition, each label frame that the server accepts is one paid model call. A shorter still gap can cost more calls.
-- `LabelTiming` in `core` holds the limits and reads a field. The probe screen always uses 2500 ms and 6000 ms.
+- `LabelTiming` in `core` holds the limits and reads a field. The probe screen always uses the defaults, 1000 ms and 6000 ms.
 
 Measured on the test phone on 2026-11-14, with images of an EAN-13 code with 5 pixels for each narrow bar and a Gaussian blur:
 
@@ -628,7 +628,7 @@ Git ignores `local.properties`. Each key is optional, and each one is also a Gra
 | `mwdat_client_token` | `0` | DAT client token. `0` is Developer Mode. |
 | `glance.serverUrl` | `http://10.0.2.2:8080` | Address of the Glance server, as `BuildConfig.SERVER_URL` |
 | `glance.uiDevUrl` | empty | Address of the dev server of the phone UI, as `BuildConfig.UI_DEV_URL` |
-| `glance.labelWaitMs` | `2500` | The time in milliseconds that a barcode region is in view before the label still, as `BuildConfig.LABEL_WAIT_MS`. The app keeps it from 300 to 10000. A value that is no whole number stops the build. |
+| `glance.labelWaitMs` | `1000` | The time in milliseconds that a barcode region is in view before the label still, as `BuildConfig.LABEL_WAIT_MS`. The app keeps it from 300 to 10000. A value that is no whole number stops the build. |
 | `glance.labelGapMs` | `6000` | The shortest time in milliseconds between two label stills, as `BuildConfig.LABEL_GAP_MS`. The app keeps it from 2000 to 60000. |
 | `glance.demoStoreFile` | `glance-demo.jks` | The keystore of the demo build, as a path from the folder `app` |
 | `glance.demoStorePassword` | empty | The password of the keystore |

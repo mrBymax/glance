@@ -33,7 +33,7 @@ android {
         manifestPlaceholders["mwdat_client_token"] = local("mwdat_client_token", "0")
         buildConfigField("String", "SERVER_URL", "\"${local("glance.serverUrl", "http://10.0.2.2:8080")}\"")
         buildConfigField("String", "UI_DEV_URL", "\"${local("glance.uiDevUrl", "")}\"")
-        buildConfigField("long", "LABEL_WAIT_MS", localMs("glance.labelWaitMs", 2500))
+        buildConfigField("long", "LABEL_WAIT_MS", localMs("glance.labelWaitMs", 1000))
         buildConfigField("long", "LABEL_GAP_MS", localMs("glance.labelGapMs", 6000))
         testInstrumentationRunner = "com.metaglance.android.support.GlanceTestRunner"
     }
