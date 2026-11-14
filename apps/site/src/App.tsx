@@ -3,6 +3,7 @@ import { SiteHeader } from './components/SiteHeader';
 import { Closing, SiteFooter } from './sections/Closing';
 import { Builders } from './sections/Builders';
 import { Demo } from './sections/Demo';
+import { Display } from './sections/Display';
 import { Faq } from './sections/Faq';
 import { Hero } from './sections/Hero';
 import { HowItWorks } from './sections/HowItWorks';
@@ -26,6 +27,7 @@ export function App() {
             <HowItWorks />
             <UseCases />
             <Demo />
+            <Display />
             <Builders />
             <Why />
             <Team />

@@ -168,6 +168,25 @@ export const KIOSK_SCREEN = {
   ],
 };
 
+/** The Display HUD of the app, in its recorded mode, on the site (public/hud). */
+export const DISPLAY = {
+  heading: 'The same loop, in the lens.',
+  lead: 'On glasses with a display, Meta Glance shows the product, the price, and the prompt in the lens. This is a mock of that display, playing a recorded shop.',
+  frameTitle: 'Mock of the Meta Glance display',
+  play: 'Play the mock',
+  pause: 'Pause the mock',
+  textAlternativeIntro: 'The display shows, in a loop:',
+  steps: [
+    'Glance, camera on. No product in view. Hold a product up to hear its price.',
+    'Rye bread, 500 g, 2.60 EUR. Add to cart? The buttons Add and Skip, and the spoken line: Rye bread, five hundred grams, two sixty. Nod to add.',
+    'After a nod: Added: Rye bread. The total is 2.60 EUR, 1 item.',
+    'Oat drink, 1 L, 1.89 EUR. Warning: contains gluten. Add to cart?',
+    'After a shake: Skipped.',
+    'I do not know this product.',
+    'Camera off.',
+  ],
+};
+
 export const WHY = {
   heading: 'Why a look and a nod.',
   lead: 'A screen asks for your hands and your eyes. Meta Glance asks for neither.',
@@ -188,7 +207,7 @@ export const BUILDERS = {
     { term: 'Glance code', detail: 'A plain QR code with a short code inside, such as GL1 K3X7' },
     { term: 'A place', detail: 'A screen or a sticker with the code. The place registers with the Glance server and gets each result as an event' },
     { term: 'Glance server', detail: 'Links a session to the place that the person looks at, writes what the voice says, and confirms the nod' },
-    { term: 'Glasses', detail: "Ray-Ban Meta: the camera, the speakers, and the head-motion sensor that Meta's Wearables Device Access Toolkit gives an app" },
+    { term: 'Glasses', detail: "Ray-Ban Meta. Through Meta's Wearables Device Access Toolkit the app uses the camera stream, the head-motion sensor, and the touchpad. The voice is phone audio that plays on the speakers of the glasses" },
     { term: 'Phone', detail: 'An Android app that streams the camera, reads codes, and pixelates faces' },
     { term: 'Recognition', detail: 'Gemini, for products that carry no code' },
     { term: 'Voice', detail: 'ElevenLabs, in English and Italian' },
@@ -200,7 +219,7 @@ export const DIAGRAM = {
   title: 'How the Glance protocol works',
   description: 'A place shows a Glance code, the glasses see it, the phone sends the code and the nod to the Glance server, and the server confirms to the place.',
   parts: {
-    glasses: { title: 'Glasses', lines: ['Ray-Ban Meta', 'Camera', 'Speakers', 'Motion sensor'] },
+    glasses: { title: 'Glasses', lines: ['Ray-Ban Meta', 'Camera stream', 'Motion sensor', 'Touchpad'] },
     phone: { title: 'Phone', lines: ['Glance app', 'Reads the code', 'Face pixelation', 'Works screen off'] },
     server: { title: 'Glance server', lines: ['Sessions', 'Places', 'Spoken lines', 'Confirmation'] },
     model: { title: 'Model and data', lines: ['Gemini', 'Store list', 'Open Food Facts'] },
@@ -221,7 +240,7 @@ export const DIAGRAM = {
   ],
   textAlternative: [
     'A place, such as a checkout, a bus, or a gate, shows a Glance code. The camera of the glasses sees it.',
-    'The glasses send camera frames and the motion of the head to the phone, and play the voice.',
+    'The glasses send camera frames and the motion of the head to the phone. The voice is phone audio that plays on the speakers of the glasses.',
     'The phone reads the code, pixelates each face, and sends the code and the nod to the Glance server.',
     'The Glance server sends the spoken lines back to the phone.',
     'The place registers with the Glance server and gets the result when the person nods.',

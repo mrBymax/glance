@@ -852,6 +852,102 @@ main:focus {
   }
 }
 
+/*
+ * The display mock: the lens of the glasses as a line drawing on a dark stage, and the HUD square in it. The HUD is
+ * drawn for 600 x 600 pixels; the frame keeps that size and scales to its box, so its layout is the layout of the app.
+ */
+.lens-stage {
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: clamp(1.5rem, 1rem + 4vw, 4.5rem) clamp(0.75rem, 0.5rem + 2vw, 3rem);
+  border-radius: var(--radius-page);
+  background:
+    radial-gradient(55% 60% at 50% 45%, color-mix(in srgb, var(--color-text-primary) 8%, transparent), transparent 70%),
+    var(--color-background-body);
+  color: var(--color-text-primary);
+}
+
+@media (prefers-color-scheme: dark) {
+  .site .lens-stage {
+    background:
+      radial-gradient(55% 60% at 50% 45%, color-mix(in srgb, var(--color-text-primary) 6%, transparent), transparent 70%),
+      var(--color-background-surface);
+  }
+}
+
+.lens {
+  position: relative;
+  display: grid;
+  place-items: center;
+  inline-size: min(100%, 40rem);
+  aspect-ratio: 4 / 3;
+}
+
+.lens__outline {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  fill: none;
+  stroke: var(--color-border-emphasized);
+  stroke-width: 2;
+}
+
+.hud__screen {
+  position: relative;
+  inline-size: min(62%, 24rem);
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: var(--radius-container);
+  background: #000000;
+  box-shadow: 0 0 0 1px var(--color-border-emphasized);
+}
+
+.hud__still,
+.hud__frame {
+  position: absolute;
+  inset: 0;
+}
+
+.hud__still {
+  inline-size: 100%;
+  block-size: 100%;
+  transition: opacity var(--duration-medium) var(--ease-standard);
+}
+
+.hud__screen[data-ready='true'] .hud__still {
+  opacity: 0;
+}
+
+/* The frame keeps the 600 x 600 of the display and scales from its top left corner to the box. */
+.hud__frame {
+  inline-size: 600px;
+  block-size: 600px;
+  border: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.hud__control {
+  margin-block-start: var(--spacing-5);
+}
+
+/* On a phone the HUD takes the width of the stage, and the drawing of the lens, which it would cover, goes. */
+@media (max-width: 37.49rem) {
+  .lens {
+    aspect-ratio: 1 / 1;
+  }
+
+  .lens__outline {
+    display: none;
+  }
+
+  .hud__screen {
+    inline-size: 100%;
+  }
+}
+
 /* The spoken lines, in the dark captions window of the phone app. */
 .voice {
   display: grid;
