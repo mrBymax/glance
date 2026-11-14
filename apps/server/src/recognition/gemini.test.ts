@@ -60,6 +60,7 @@ it('sends one frame, the exclude list, the catalog, and the answer schema', asyn
 
   const contents = body.contents as { parts: { inlineData?: { mimeType: string; data: string }; text?: string }[] }[];
   expect(contents).toHaveLength(1);
+  // One image: recognition by sight makes 2 calls each second, so it gets no reference picture.
   expect(contents[0]!.parts).toEqual([
     { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } },
     { text: 'Exclude: rye-bread.' },

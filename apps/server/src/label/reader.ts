@@ -15,9 +15,12 @@ export type LabelAnswer = {
   itemConfidence: number;
 };
 
-/** Reads the label of one still. A call that fails rejects. */
+/** One reference picture of a store item, for the compare with the still. `name` is the name of the item in the store list. */
+export type LabelReference = { gtin: string; name: string; jpeg: Uint8Array };
+
+/** Reads the label of one still. `references` are the reference pictures of store items. A call that fails rejects. */
 export interface LabelReader {
-  read(jpeg: Uint8Array, opts: { signal: AbortSignal }): Promise<LabelAnswer>;
+  read(jpeg: Uint8Array, opts: { signal: AbortSignal; references?: readonly LabelReference[] }): Promise<LabelAnswer>;
 }
 
 const printed = z.string().nullable().transform((value) => {

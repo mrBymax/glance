@@ -1,7 +1,7 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, type Part, PartMediaResolutionLevel } from '@google/genai';
 import { z } from 'zod';
 import type { StoreEntry } from '../products/storeEntries';
-import { type LabelReader, NO_LABEL, parseLabelAnswer } from './reader';
+import { type LabelReader, type LabelReference, NO_LABEL, parseLabelAnswer } from './reader';
 
 /** The path of the instruction file, from the working directory apps/server. */
 export const LABEL_TEMPLATE_PATH = '../../agents/label.md';
@@ -42,6 +42,25 @@ export function labelResponseSchema(gtins: readonly string[]): unknown {
   }));
 }
 
+const jpegPart = (jpeg: Uint8Array): Part => ({ inlineData: { mimeType: 'image/jpeg', data: Buffer.from(jpeg).toString('base64') } });
+
+/**
+ * The parts of one request. With reference pictures, each picture follows a text part that names its item, and the
+ * still is the last image. A reference picture gets the low media resolution of its part (280 tokens for a Gemini 3
+ * model): the model compares the package as a whole and reads no small print in it.
+ */
+export function labelParts(jpeg: Uint8Array, references: readonly LabelReference[]): Part[] {
+  if (references.length === 0) return [jpegPart(jpeg), { text: 'Read this label.' }];
+  return [
+    ...references.flatMap((reference): Part[] => [
+      { text: `Reference picture of item ${reference.gtin}: ${reference.name}` },
+      { ...jpegPart(reference.jpeg), mediaResolution: { level: PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW } },
+    ]),
+    { text: 'The photo to read' },
+    jpegPart(jpeg),
+  ];
+}
+
 /**
  * One generateContent call for each still of a label, with no state between the calls.
  * The call shape matches the type definitions of @google/genai 3.3.0, as the recognition call does.
@@ -65,10 +84,7 @@ export function createGeminiLabelReader(deps: {
     async read(jpeg, opts) {
       const response = await ai.models.generateContent({
         model: deps.model,
-        contents: [
-          { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(jpeg).toString('base64') } },
-          { text: 'Read this label.' },
-        ],
+        contents: labelParts(jpeg, opts.references ?? []),
         config: {
           systemInstruction,
           responseMimeType: 'application/json',

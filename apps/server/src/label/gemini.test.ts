@@ -71,6 +71,49 @@ it('sends one still with the label instruction and the answer schema', async () 
   // A still keeps the default media resolution: the digits are small.
   expect(config).not.toHaveProperty('mediaResolution');
 });
+it('sends each reference picture before the still, with its item in a text part and the low media resolution', async () => {
+  const front = new Uint8Array([0xff, 0xd8, 1, 0xff, 0xd9]);
+  const back = new Uint8Array([0xff, 0xd8, 2, 0xff, 0xd9]);
+  const references = [
+    { gtin: '6438574558384', name: 'Paper cups', jpeg: front },
+    { gtin: '6438574558384', name: 'Paper cups', jpeg: back },
+    { gtin: '7312220096019', name: 'Biscoff', jpeg: front },
+  ];
+  await reader().read(JPEG, { signal: signal(), references });
+  const contents = calls[0]!.body.contents as { parts: unknown[] }[];
+  expect(contents).toHaveLength(1);
+  const picture = (jpeg: Uint8Array) => ({
+    inlineData: { mimeType: 'image/jpeg', data: Buffer.from(jpeg).toString('base64') },
+    mediaResolution: { level: 'MEDIA_RESOLUTION_LOW' },
+  });
+  expect(contents[0]!.parts).toEqual([
+    { text: 'Reference picture of item 6438574558384: Paper cups' }, picture(front),
+    { text: 'Reference picture of item 6438574558384: Paper cups' }, picture(back),
+    { text: 'Reference picture of item 7312220096019: Biscoff' }, picture(front),
+    { text: 'The photo to read' },
+    // The still keeps the default media resolution: the digits are small.
+    { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } },
+  ]);
+  expect(calls[0]!.body.generationConfig).not.toHaveProperty('mediaResolution');
+});
+it('with no reference picture the request is the still and one text part', async () => {
+  for (const opts of [{ signal: signal() }, { signal: signal(), references: [] }]) {
+    calls = [];
+    await reader().read(JPEG, opts);
+    const contents = calls[0]!.body.contents as { parts: unknown[] }[];
+    expect(contents[0]!.parts).toEqual([
+      { inlineData: { mimeType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64') } },
+      { text: 'Read this label.' },
+    ]);
+  }
+});
+it('the instruction file says how to use the reference pictures', () => {
+  expect(template).toMatch(/Reference picture of item/);
+  expect(template).toMatch(/another side/);
+  expect(template).toMatch(/other light/);
+  expect(template).toMatch(/background of a reference picture means nothing/);
+  expect(template).toMatch(/same product as a reference picture/);
+});
 type Schema = { required: string[]; properties: Record<string, { type?: unknown; items?: unknown; anyOf?: unknown[]; minimum?: number; maximum?: number }> };
 
 it('asks for digits, brand, name, pack size, confidence, and one item of the store list with its own confidence', () => {
