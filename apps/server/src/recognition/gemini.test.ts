@@ -10,7 +10,10 @@ import { NO_RESULT } from './result';
 const catalog = indexCatalog(readCatalogFile(fileURLToPath(new URL('../../catalog/catalog.dev.json', import.meta.url))));
 const template = readFileSync(RECOGNITION_TEMPLATE_PATH, 'utf8');
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
-const answer = { status: 'identified', productId: 'oat-drink-1l', candidates: [], confidence: 0.9, aimHint: 'none', gesture: 'none' };
+const answer = {
+  status: 'identified', productId: 'oat-drink-1l', candidates: [], confidence: 0.9, aimHint: 'none', gesture: 'none',
+  code: { visible: false, digits: null },
+};
 
 type Call = { url: string; headers: Headers; body: Record<string, unknown> };
 let calls: Call[];
