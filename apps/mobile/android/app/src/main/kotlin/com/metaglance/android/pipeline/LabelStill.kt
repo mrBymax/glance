@@ -5,6 +5,7 @@ import com.metaglance.core.barcode.CodeChoice
 import com.metaglance.core.barcode.CodeRead
 import com.metaglance.core.barcode.TextElement
 import com.metaglance.core.image.FaceResult
+import com.metaglance.core.image.RectPx
 import java.util.concurrent.ExecutionException
 
 /** What the phone does with the still photo of a barcode. */
@@ -25,13 +26,25 @@ sealed interface LabelOutcome {
  */
 object LabelStill {
     /** Each of the three steps blocks, so do not call this function on the main thread. */
-    fun read(photo: Bitmap, scan: (Bitmap) -> List<CodeHit>, readWords: (Bitmap) -> List<TextElement>, findFaces: (Bitmap) -> FaceResult): LabelOutcome {
+    fun read(photo: Bitmap, scan: (Bitmap) -> List<CodeHit>, readWords: (Bitmap) -> List<TextElement>, findFaces: (Bitmap) -> FaceResult): LabelOutcome = read(photo, scan, readWords, findFaces, findHeld = null)
+
+    /**
+     * The same with the detector of the held crop. The scanner and OCR read the full photo. A photo with no
+     * code goes out as the crop around the product in the hand, when `findHeld` gives a region.
+     */
+    fun read(
+        photo: Bitmap,
+        scan: (Bitmap) -> List<CodeHit>,
+        readWords: (Bitmap) -> List<TextElement>,
+        findFaces: (Bitmap) -> FaceResult,
+        findHeld: ((Bitmap) -> RectPx?)?
+    ): LabelOutcome {
         val source = StillPhoto.readable(photo)
         val hits = orNone { scan(source) }.filterNot { it.isQr }.map { it.toProductHit() }
         // OCR also runs when the scanner gave a code: the digits under the bars must not give another code.
         val words = orNone { readWords(source) }
         CodeChoice.ofStill(hits, words, source.width, source.height)?.let { return LabelOutcome.Code(it) }
-        return StillPhoto.prepareLabel(source, findFaces)?.let { LabelOutcome.Upload(it) } ?: LabelOutcome.Dropped
+        return StillPhoto.prepareLabel(source, findHeld, findFaces)?.let { LabelOutcome.Upload(it) } ?: LabelOutcome.Dropped
     }
 
     /** A step of ML Kit that fails is a photo with no code. The server can still read the photo. */

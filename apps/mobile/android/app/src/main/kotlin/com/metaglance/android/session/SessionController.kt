@@ -20,8 +20,10 @@ import com.metaglance.android.pipeline.CodeScanner
 import com.metaglance.android.pipeline.DigitReader
 import com.metaglance.android.pipeline.FaceFinder
 import com.metaglance.android.pipeline.FramePipeline
+import com.metaglance.android.pipeline.HeldFinder
 import com.metaglance.android.pipeline.LabelOutcome
 import com.metaglance.android.pipeline.LabelStill
+import com.metaglance.android.pipeline.PreparedStill
 import com.metaglance.android.pipeline.StillPhoto
 import com.metaglance.core.audio.AnswerSoundOnce
 import com.metaglance.core.audio.SpeechQueue
@@ -52,12 +54,15 @@ import com.metaglance.core.gesture.GestureReport
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.gesture.HeadSample
+import com.metaglance.core.image.HeldRegion
+import com.metaglance.core.image.RectPx
 import com.metaglance.core.image.SecondLook
 import com.metaglance.core.image.StillPolicy
 import com.metaglance.core.image.StreamSetup
 import com.metaglance.core.image.UploadGate
 import com.metaglance.core.image.WaitingStill
 import com.metaglance.core.image.WaitingStills
+import com.metaglance.core.image.withView
 import com.metaglance.core.input.HeadInput
 import com.metaglance.core.input.HeadWindowListener
 import com.metaglance.core.input.KeyInput
@@ -186,6 +191,10 @@ class SessionController(
 
     /** True when this camera start takes a still for each `glance.ambiguous` event. */
     private var secondLook = false
+
+    /** True when this camera start uploads the crop of the product in the hand. The frame thread and the stills read it. */
+    @Volatile
+    private var heldCrop = false
     private val answerSound = AnswerSound(app)
     private val answerSoundOnce = AnswerSoundOnce()
     private val motionRecorder = MotionRecorder(File(app.getExternalFilesDir("probe") ?: File(app.filesDir, "probe"), "motion"), scope, ::log)
@@ -797,6 +806,8 @@ class SessionController(
         log("label still: wait ${labelTiming.waitMs} ms, gap ${labelTiming.gapMs} ms")
         secondLook = store.takesSecondLook
         log(SecondLook.logLine(secondLook))
+        heldCrop = store.cropsHeld
+        log(HeldRegion.logLine(heldCrop))
         // The same holds for the stream settings. DatLink reads them in the call below.
         val stream = store.streamSetup
         if (!dat.startSession(withCamera = true, autoAttach = true)) {
@@ -823,6 +834,7 @@ class SessionController(
         // The frame work runs on one background thread. dat.frames keeps only the newest frame, so nothing queues.
         pipelineJob = scope.launch(Dispatchers.Default.limitedParallelism(1)) {
             val faces = FaceFinder()
+            val held = if (heldCrop) HeldFinder.open(app, ::log) else null
             val pipeline = FramePipeline(
                 gate = {
                     val link = socket
@@ -843,7 +855,6 @@ class SessionController(
                     val sent = socket?.sendFrame(header, jpeg) == true
                     tap?.onFrame(header, jpeg.size, sent)
                 },
-                // Each upload is the center of the frame, with each face pixelated.
                 findFaces = { faces.find(it) },
                 crop = true,
                 nextSeq = uploadSeq::incrementAndGet,
@@ -852,6 +863,7 @@ class SessionController(
                 },
                 holdStills = { holdsStills(SystemClock.elapsedRealtime()) },
                 stream = stream,
+                findHeld = held?.let { finder -> { frame -> finder.find(frame) } },
                 log = ::log
             )
             framePipeline = pipeline
@@ -862,6 +874,7 @@ class SessionController(
                 if (framePipeline === pipeline) framePipeline = null
                 pipeline.close()
                 faces.close()
+                held?.close()
             }
         }
     }
@@ -946,7 +959,7 @@ class SessionController(
                 val still = withContext(Dispatchers.Default) {
                     val faces = FaceFinder()
                     try {
-                        StillPhoto.prepare(photo) { faces.find(it) }
+                        withHeldFinder { findHeld -> StillPhoto.prepare(photo, findHeld) { faces.find(it) } }
                     } finally {
                         faces.close()
                     }
@@ -955,7 +968,7 @@ class SessionController(
                     log("still dropped: face detection failed")
                     return@launch
                 }
-                val header = FrameHeader(uploadSeq.incrementAndGet(), capturedAt, still.width, still.height, blurred = true, kind = FrameKind.STILL)
+                val header = stillHeader(still, capturedAt, FrameKind.STILL)
                 val sent = socket?.sendFrame(header, still.jpeg) == true
                 tap?.onFrame(header, still.jpeg.size, sent)
                 val result = if (sent) "sent" else "not sent, the socket is down"
@@ -1003,7 +1016,7 @@ class SessionController(
                     }
                     is LabelOutcome.Upload -> {
                         val still = outcome.still
-                        val header = FrameHeader(uploadSeq.incrementAndGet(), capturedAt, still.width, still.height, blurred = true, kind = FrameKind.LABEL)
+                        val header = stillHeader(still, capturedAt, FrameKind.LABEL)
                         val sent = socket?.sendFrame(header, still.jpeg) == true
                         tap?.onFrame(header, still.jpeg.size, sent)
                         val result = if (sent) "sent" else "not sent, the socket is down"
@@ -1049,7 +1062,7 @@ class SessionController(
                     log("reference still dropped: face detection failed")
                     return@launch
                 }
-                val header = FrameHeader(uploadSeq.incrementAndGet(), capturedAt, still.width, still.height, blurred = true, kind = FrameKind.LABEL)
+                val header = stillHeader(still, capturedAt, FrameKind.LABEL)
                 val sent = socket?.sendFrame(header, still.jpeg) == true
                 tap?.onFrame(header, still.jpeg.size, sent)
                 val result = if (sent) "sent" else "not sent, the socket is down"
@@ -1065,12 +1078,42 @@ class SessionController(
         val digits = DigitReader()
         val faces = FaceFinder()
         try {
-            return LabelStill.read(photo, { scanner.scan(it) }, { digits.read(it) }, { faces.find(it) })
+            return withHeldFinder { findHeld -> LabelStill.read(photo, { scanner.scan(it) }, { digits.read(it) }, { faces.find(it) }, findHeld) }
         } finally {
             scanner.close()
             digits.close()
             faces.close()
         }
+    }
+
+    /**
+     * Runs `prepare` with the detector of the held crop, or with null when the crop is off or the detector does
+     * not start. A detector that fails on the photo gives no region, so the still goes out as before the crop.
+     * `prepare` blocks, so do not call this function on the main thread.
+     */
+    private fun <T> withHeldFinder(prepare: (((Bitmap) -> RectPx?)?) -> T): T {
+        val finder = (if (heldCrop) HeldFinder.open(app, ::log) else null) ?: return prepare(null)
+        try {
+            return prepare { photo ->
+                try {
+                    finder.find(photo)
+                } catch (e: RuntimeException) {
+                    log("held crop: the detector failed on a still: ${e.message}")
+                    null
+                }
+            }
+        } finally {
+            finder.close()
+        }
+    }
+
+    /**
+     * The header of a still. With the held crop on, it says what the JPEG shows of the photo: the crop around the
+     * product in the hand, or the full photo. The center crop of the second look gets no view.
+     */
+    private fun stillHeader(still: PreparedStill, capturedAt: Long, kind: FrameKind): FrameHeader {
+        val header = FrameHeader(uploadSeq.incrementAndGet(), capturedAt, still.width, still.height, blurred = true, kind = kind)
+        return if (heldCrop && (still.held != null || still.whole)) header.withView(still.held, still.sourceWidth, still.sourceHeight) else header
     }
 
     private fun worn(snapshot: DatSnapshot): Boolean? = StateMapper.deviceState(snapshot).worn

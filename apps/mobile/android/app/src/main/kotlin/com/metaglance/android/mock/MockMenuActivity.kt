@@ -33,6 +33,7 @@ import com.metaglance.core.contract.NativeState
 import com.metaglance.core.gesture.GyroScript
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.Sensitivity
+import com.metaglance.core.image.HeldRegion
 import com.metaglance.core.image.SecondLook
 import com.metaglance.core.state.DatCompatibility
 import com.metaglance.core.state.DatFault
@@ -332,8 +333,8 @@ class MockMenuActivity : AppCompatActivity() {
     }
 
     /**
-     * The frame size and the frame rate that the app asks of the glasses, and the switch of the second look still,
-     * from the next camera start. Each tap goes to the next value. The value of the menu wins over the value of
+     * The frame size and the frame rate that the app asks of the glasses, the switch of the second look still, and
+     * the switch of the held crop, from the next camera start. Each tap goes to the next value. The value of the menu wins over the value of
      * the build from the first tap.
      */
     private fun addStreamItems() {
@@ -358,6 +359,13 @@ class MockMenuActivity : AppCompatActivity() {
             store.secondLookStill = !store.takesSecondLook
             secondLook.text = SecondLook.menuLabel(store.takesSecondLook)
             status("${SecondLook.menuLabel(store.takesSecondLook)}. The next camera start uses it.")
+        }
+        // Off gives the uploads of before the held crop: the full frame of each window.
+        lateinit var heldCrop: Button
+        heldCrop = item(HeldRegion.menuLabel(store.cropsHeld)) {
+            store.heldCrop = !store.cropsHeld
+            heldCrop.text = HeldRegion.menuLabel(store.cropsHeld)
+            status("${HeldRegion.menuLabel(store.cropsHeld)}. The next camera start uses it.")
         }
     }
 

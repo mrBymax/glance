@@ -58,6 +58,7 @@ android {
         buildConfigField("String", "STREAM_QUALITY", localQuality("glance.streamQuality", "HIGH"))
         buildConfigField("int", "STREAM_FPS", localInt("glance.streamFps", 7))
         buildConfigField("boolean", "SECOND_LOOK_STILL", localBool("glance.secondLookStill", false))
+        buildConfigField("boolean", "HELD_CROP", localBool("glance.heldCrop", true))
         testInstrumentationRunner = "com.metaglance.android.support.GlanceTestRunner"
     }
     // The demo build is the APK for the testers: not debuggable, with no probe screen and no cleartext traffic,
@@ -111,6 +112,7 @@ dependencies {
     implementation(libs.mlkit.barcode)
     implementation(libs.mlkit.face)
     implementation(libs.mlkit.text)
+    implementation(libs.mediapipe.tasks.vision)
     implementation(libs.media3.exoplayer)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.biometric)

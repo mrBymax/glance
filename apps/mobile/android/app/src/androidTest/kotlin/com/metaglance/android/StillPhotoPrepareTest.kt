@@ -6,8 +6,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.metaglance.android.pipeline.PreparedStill
 import com.metaglance.android.pipeline.StillPhoto
 import com.metaglance.core.image.FaceResult
+import com.metaglance.core.image.HeldRegion
 import com.metaglance.core.image.RectPx
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -57,6 +59,41 @@ class StillPhotoPrepareTest {
         photo.recycle()
     }
 
+    @Test
+    fun aPhotoWithARegionGoesOutAsTheCropAroundItWithNoScale() {
+        val photo = Bitmap.createBitmap(STILL_WIDTH, STILL_HEIGHT, Bitmap.Config.ARGB_8888)
+        val crop = HeldRegion.crop(REGION, STILL_WIDTH, STILL_HEIGHT)
+        for (prepare in listOf<(Bitmap) -> PreparedStill?>(
+            { StillPhoto.prepare(it, { REGION }) { FaceResult.Found(emptyList()) } },
+            { StillPhoto.prepareLabel(it, { REGION }) { FaceResult.Found(emptyList()) } }
+        )) {
+            val still = checkNotNull(prepare(photo)) { "The still was dropped." }
+            assertEquals(crop, still.held)
+            assertEquals(crop.width to crop.height, still.width to still.height)
+            assertEquals(STILL_WIDTH to STILL_HEIGHT, still.sourceWidth to still.sourceHeight)
+            assertTrue("A crop is not the whole photo.", !still.whole)
+            val image = BitmapFactory.decodeByteArray(still.jpeg, 0, still.jpeg.size)
+            assertEquals(crop.width to crop.height, image.width to image.height)
+            image.recycle()
+        }
+        photo.recycle()
+    }
+
+    @Test
+    fun aPhotoWithNoRegionGoesOutAsBeforeTheHeldCrop() {
+        val photo = Bitmap.createBitmap(STILL_WIDTH, STILL_HEIGHT, Bitmap.Config.ARGB_8888)
+        val label = checkNotNull(StillPhoto.prepareLabel(photo, { null }) { FaceResult.Found(emptyList()) })
+        assertNull(label.held)
+        assertTrue("The label still with no region is the whole photo.", label.whole)
+        assertEquals(STILL_WIDTH to STILL_HEIGHT, label.width to label.height)
+        // The second look keeps its center crop: 80 percent of the width and 70 percent of the height.
+        val second = checkNotNull(StillPhoto.prepare(photo, { null }) { FaceResult.Found(emptyList()) })
+        assertNull(second.held)
+        assertTrue("The center crop is not the whole photo.", !second.whole)
+        assertEquals(864 to 1008, second.width to second.height)
+        photo.recycle()
+    }
+
     /** Black and white stripes, each 12 pixels wide. */
     private fun stripes(): Bitmap {
         val bitmap = Bitmap.createBitmap(PHOTO_WIDTH, PHOTO_HEIGHT, Bitmap.Config.ARGB_8888)
@@ -83,6 +120,11 @@ class StillPhotoPrepareTest {
         const val STRIPE_PX = 12
         const val SMALL_WIDTH = 64
         const val SMALL_HEIGHT = 64
+
+        /** The size of a still of the glasses, and a can in a hand in it. */
+        const val STILL_WIDTH = 1080
+        const val STILL_HEIGHT = 1440
+        val REGION = RectPx(500, 600, 250, 500)
 
         /** The center crop of the photo is 2400 x 2800 pixels from (300, 600). Its long side becomes 1440. */
         const val OUT_WIDTH = 1234

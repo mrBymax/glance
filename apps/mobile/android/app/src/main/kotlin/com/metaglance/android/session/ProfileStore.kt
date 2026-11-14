@@ -105,6 +105,15 @@ class ProfileStore(context: Context) {
     val takesSecondLook: Boolean
         get() = secondLookStill ?: BuildConfig.SECOND_LOOK_STILL
 
+    /** The switch of the held crop that the mock menu set, or null for the value of the build. */
+    var heldCrop: Boolean?
+        get() = if (prefs.contains(KEY_HELD_CROP)) prefs.getBoolean(KEY_HELD_CROP, false) else null
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_HELD_CROP) else putBoolean(KEY_HELD_CROP, value) }.apply()
+
+    /** True when the next camera start uploads the crop of the product in the hand. */
+    val cropsHeld: Boolean
+        get() = heldCrop ?: BuildConfig.HELD_CROP
+
     /** True makes the app show its placeholder page in place of the phone UI. */
     var usePlaceholder: Boolean
         get() = prefs.getBoolean(KEY_USE_PLACEHOLDER, false)
@@ -156,6 +165,7 @@ class ProfileStore(context: Context) {
         const val KEY_STREAM_QUALITY = "streamQuality"
         const val KEY_STREAM_FPS = "streamFps"
         const val KEY_SECOND_LOOK_STILL = "secondLookStill"
+        const val KEY_HELD_CROP = "heldCrop"
         const val KEY_NOTIFICATIONS_ASKED = "notificationsAsked"
         val SESSION_KEYS = listOf(KEY_SESSION_ID, KEY_SESSION_TOKEN, KEY_SESSION_WS_URL, KEY_SESSION_LIVE)
     }

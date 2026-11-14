@@ -44,6 +44,7 @@ class MockMenuTest {
     private var streamQualityBefore: StreamQuality? = null
     private var streamFpsBefore: Int? = null
     private var secondLookBefore: Boolean? = null
+    private var heldCropBefore: Boolean? = null
 
     private val glance: GlanceApp get() = targetContext.applicationContext as GlanceApp
 
@@ -59,6 +60,7 @@ class MockMenuTest {
         streamQualityBefore = glance.profileStore.streamQuality
         streamFpsBefore = glance.profileStore.streamFps
         secondLookBefore = glance.profileStore.secondLookStill
+        heldCropBefore = glance.profileStore.heldCrop
     }
 
     @After
@@ -74,6 +76,7 @@ class MockMenuTest {
             glance.profileStore.streamQuality = streamQualityBefore
             glance.profileStore.streamFps = streamFpsBefore
             glance.profileStore.secondLookStill = secondLookBefore
+            glance.profileStore.heldCrop = heldCropBefore
             glance.session.applySensitivity()
         }
     }
@@ -240,6 +243,23 @@ class MockMenuTest {
         assertEquals(BuildConfig.SECOND_LOOK_STILL, glance.profileStore.takesSecondLook)
     }
 
+    @Test
+    fun theHeldCropItemSwitchesTheCropAndStoresIt() {
+        onMainSync { glance.profileStore.heldCrop = true }
+        scenarioRule.scenario.recreate()
+
+        tap("Held crop: on")
+        awaitStatus("Held crop: off. The next camera start uses it.")
+        assertEquals(false, glance.profileStore.heldCrop)
+        tap("Held crop: off")
+        awaitStatus("Held crop: on. The next camera start uses it.")
+        assertEquals(true, glance.profileStore.heldCrop)
+
+        // With no stored value, the value of the build counts.
+        onMainSync { glance.profileStore.heldCrop = null }
+        assertEquals(BuildConfig.HELD_CROP, glance.profileStore.cropsHeld)
+    }
+
     private fun type(hint: String, text: String) {
         scenarioRule.scenario.onActivity { activity ->
             val field = views<EditText>(activity).firstOrNull { it.hint?.toString() == hint }
@@ -298,7 +318,7 @@ class MockMenuTest {
             "Say add", "Say skip",
             "Meta AI missing", "Update required", "Stream error BATTERY_LOW", "Stream error THERMAL_HOT",
             "Save server URL", "Drop server link 10 s", "Sensitivity: gentle", "Sensitivity: normal", "Sensitivity: firm",
-            "Use placeholder page", "Save barcode waits", "Stream quality", "Stream frame rate", "Second look still"
+            "Use placeholder page", "Save barcode waits", "Stream quality", "Stream frame rate", "Second look still", "Held crop"
         )
     }
 }

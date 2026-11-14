@@ -9,10 +9,14 @@ import com.metaglance.core.barcode.CodeRead
 import com.metaglance.core.barcode.LabelPolicy
 import com.metaglance.core.contract.BarcodeSource
 import com.metaglance.core.frame.FrameHeader
+import com.metaglance.core.frame.FrameView
 import com.metaglance.core.image.DamageLog
 import com.metaglance.core.image.FaceResult
 import com.metaglance.core.image.FrameDamage
 import com.metaglance.core.image.FramePrep
+import com.metaglance.core.image.HeldCounts
+import com.metaglance.core.image.HeldRegion
+import com.metaglance.core.image.HeldUploads
 import com.metaglance.core.image.I420
 import com.metaglance.core.image.Pace
 import com.metaglance.core.image.RawFrame
@@ -21,6 +25,7 @@ import com.metaglance.core.image.SharpestFramePicker
 import com.metaglance.core.image.Sharpness
 import com.metaglance.core.image.StreamSetup
 import com.metaglance.core.image.UploadSkip
+import com.metaglance.core.image.withView
 import com.metaglance.core.kiosk.KioskCode
 import com.metaglance.core.kiosk.KioskDwell
 import com.metaglance.core.kiosk.SeenCode
@@ -46,6 +51,12 @@ import java.util.concurrent.atomic.AtomicLong
  * `onLabelStill` says that the caller must take one still now. `onUpload` gets a JPEG with its header.
  * `holdStills` returns true while a prompt waits for a head answer: no label still starts then, and `LabelPolicy`
  * drops a `still.request` that waited behind the prompt. Each callback runs on the frame thread.
+ *
+ * With `findHeld`, the held crop is on. Each frame that is not damaged goes through that detector, after the code
+ * scan. A frame with a region goes out as a crop around the region, cut from the frame with no scale. With no
+ * region, the full frame goes out one time each second (`HeldUploads`). The code scan, the kiosk code, and the
+ * label policy read the full frame in each case, and none of them needs an upload. Without `findHeld`, each
+ * window uploads its full frame, as before the held crop.
  */
 class FramePipeline(
     private val gate: () -> UploadSkip?,
@@ -62,6 +73,8 @@ class FramePipeline(
     private val holdStills: () -> Boolean = { false },
     /** What the app asked of the stream. A slow stream gets longer gaps for a missed frame. */
     stream: StreamSetup = StreamSetup.DEFAULT,
+    /** The detector of the held crop: the region of a frame that can be a product in a hand, in frame pixels. Null turns the crop off. */
+    findHeld: ((RawFrame) -> RectPx?)? = null,
     private val log: (String) -> Unit
 ) {
     private val scanner = CodeScanner()
@@ -71,7 +84,13 @@ class FramePipeline(
     private val ocrPace = Pace(OCR_EVERY_MS)
     private val labelRequestMs = AtomicLong(NO_REQUEST)
     private val stillGaveCode = AtomicBoolean()
-    private val picker = SharpestFramePicker<RawFrame>()
+    private val picker = SharpestFramePicker<Candidate>()
+
+    /** Null with the held crop off, and after the detector failed. */
+    private var findHeld = findHeld
+    private val heldUploads = HeldUploads()
+    private val heldCounts = HeldCounts()
+    private var sentCrop = false
     private val damageLog = DamageLog()
     private val times = StepTimes()
     private var seq = 0
@@ -81,7 +100,7 @@ class FramePipeline(
     /** Call it for each frame, on one background thread. It blocks while ML Kit reads the frame. */
     fun onFrame(frame: RawFrame) {
         val nowMs = SystemClock.elapsedRealtime()
-        times.report(nowMs)?.let(log)
+        times.report(nowMs)?.let { line -> log(if (findHeld != null) "$line, ${heldCounts.takeLine()}" else line) }
         val damaged = FrameDamage.isDamaged(frame.i420, frame.width, frame.height)
         damageLog.onFrame(nowMs, damaged)?.let(log)
         // The one NV21 copy of the frame. The steps for a region read the Y plane of the frame itself.
@@ -92,7 +111,11 @@ class FramePipeline(
         dwell.onFrame(nowMs, kioskCodes)?.let { onKioskText(KioskCode.format(it)) }
         times.of("product") { readProduct(nowMs, frame, if (damaged) emptyList() else hits.filterNot { it.isQr }) }
 
-        val picked = picker.offer(nowMs, frame, Sharpness.of(frame.i420, frame.width, frame.height), damaged) ?: return
+        val region = if (damaged) null else heldRegion(frame)
+        // The sharpness of a frame with a region is that of the region: the product counts, and not the room behind it.
+        val sharpness = if (region != null) Sharpness.of(frame.i420, frame.width, frame.height, region) else Sharpness.of(frame.i420, frame.width, frame.height)
+        val candidate = picker.offer(nowMs, Candidate(frame, region), sharpness, damaged, preferred = region != null) ?: return
+        val picked = candidate.frame
 
         val skip = gate()
         if (skip != lastSkip) {
@@ -101,19 +124,52 @@ class FramePipeline(
         }
         if (skip != null) return
 
+        // Null with the held crop off: the full frame of each window goes out, with no view in its header.
+        val view = if (findHeld != null) heldUploads.next(nowMs, candidate.region != null) ?: return else null
+        val crop = if (view == FrameView.CROP) candidate.region?.let { HeldRegion.crop(it, picked.width, picked.height) } else null
+
+        // Face detection reads the full frame also for a crop: it finds a face that the crop cuts.
         val faces = times.of("faces") { findFaces?.invoke(picked) ?: FaceResult.NotRun }
-        val prepared = times.of("pixelate") { FramePrep.prepare(picked, faces) }
+        val prepared = times.of("pixelate") { if (crop != null) FramePrep.prepare(picked, faces, crop) else FramePrep.prepare(picked, faces) }
         if (prepared == null) {
             log("frame dropped: face detection failed")
             return
         }
         val jpeg = times.of("jpeg") {
             val bitmap = Bitmap.createBitmap(prepared.argb, prepared.width, prepared.height, Bitmap.Config.ARGB_8888)
-            ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }.toByteArray().also { bitmap.recycle() }
+            val quality = if (crop != null) CROP_JPEG_QUALITY else JPEG_QUALITY
+            ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray().also { bitmap.recycle() }
         }
 
         seq = nextSeq?.invoke() ?: (seq + 1)
-        onUpload(FrameHeader(seq, System.currentTimeMillis(), prepared.width, prepared.height, prepared.blurred), jpeg)
+        val header = FrameHeader(seq, System.currentTimeMillis(), prepared.width, prepared.height, prepared.blurred)
+        if (view == null) {
+            onUpload(header, jpeg)
+            return
+        }
+        heldCounts.onUpload(view, prepared.width, prepared.height)
+        if (crop != null && !sentCrop) {
+            sentCrop = true
+            log("first crop: seq=$seq ${crop.width}x${crop.height} at ${crop.left},${crop.top} of ${picked.width}x${picked.height}, ${jpeg.size} bytes")
+        }
+        onUpload(header.withView(crop, picked.width, picked.height), jpeg)
+    }
+
+    /**
+     * The region of the frame that can be a product in a hand, or null. A detector that fails turns the held
+     * crop off for this stream, with one log line: each window then uploads its full frame again.
+     */
+    private fun heldRegion(frame: RawFrame): RectPx? {
+        val find = findHeld ?: return null
+        val region = try {
+            times.of("detector") { find(frame) }
+        } catch (e: RuntimeException) {
+            findHeld = null
+            log("held crop off: the detector failed: ${e.message}")
+            return null
+        }
+        heldCounts.onFrame(region != null)
+        return region
     }
 
     /** The server asked for a still with `still.request`. The next frame gives the request to the label policy, with its time. */
@@ -178,8 +234,17 @@ class FramePipeline(
         fallback
     }
 
+    /** A frame of the window with the region that the detector found in it. */
+    private class Candidate(val frame: RawFrame, val region: RectPx?)
+
     private companion object {
         const val JPEG_QUALITY = 80
+
+        /**
+         * A crop keeps the small print of a package. Measured on 140 crops of 2026-11-14: a median of 37 kB for
+         * a crop of a 720 x 1280 frame, and 15 kB for a crop of a 504 x 896 frame.
+         */
+        const val CROP_JPEG_QUALITY = 92
 
         /** `SystemClock.elapsedRealtime` never gives it. */
         const val NO_REQUEST = -1L

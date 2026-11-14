@@ -165,8 +165,9 @@ export function startFakeServer({
       log(`frame with a bad layout, ${message.length} bytes`);
       return;
     }
-    const { seq, w, h, blurred, kind = 'frame' } = frame.header;
-    log(`frame seq=${seq} ${w}x${h} blurred=${blurred} kind=${kind} ${frame.jpeg.length} bytes`);
+    const { seq, w, h, blurred, kind = 'frame', view } = frame.header;
+    // A phone with the held crop on says what the image shows. The view comes last, so a line of before keeps its start.
+    log(`frame seq=${seq} ${w}x${h} blurred=${blurred} kind=${kind} ${frame.jpeg.length} bytes${view ? ` view=${view}` : ''}`);
     if (saveFrames) writeFileSync(join(tmpdir(), 'glance-last.jpg'), frame.jpeg);
 
     const now = Date.now();
