@@ -4,7 +4,7 @@ import { codeOf, codeQuiet, endStillWait, holdUnknownLine, onFrameCode, onUnname
 import { say } from './say';
 import { type Turn, emit, nextPromptId, promptProductInView, qtyInCart, speak } from './turn';
 import type { RuleInput } from './types';
-import { inView, noteFrame } from './view';
+import { inView } from './view';
 import { warningsFor } from './warnings';
 
 /** Spec section 6.1: the first three glance prompts of a session name the yes input. */
@@ -14,7 +14,6 @@ type RecognitionInput = Extract<RuleInput, { type: 'recognition' }>;
 
 export function onRecognition(turn: Turn, input: RecognitionInput): void {
   const { s, now, ctx } = turn;
-  noteFrame(s, now);
   if (s.phase !== 'shopping' && s.phase !== 'checkout') return;
   const { result } = input;
   if (result.status !== 'none') s.lastTargetAt = now;
@@ -88,7 +87,7 @@ function openProductPrompt(turn: Turn, product: Product): void {
   const warnings = warningsFor(product, s.profile);
   // A sound never carries information alone: the line names each warning.
   const over = { promptId: id, ...(warnings.length > 0 ? { sound: 'warning' as const } : {}) };
-  s.prompt = { id, kind: 'product', mode, productId: product.id, doneAt: null };
+  s.prompt = { id, kind: 'product', mode, productId: product.id, startedAt: turn.now, doneAt: null };
   emit(turn, {
     type: 'glance.pending', promptId: id, kind: mode, product: toProductRef(product, s.profile.lang), warnings, qtyInCart: qty,
   });

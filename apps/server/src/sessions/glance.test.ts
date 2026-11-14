@@ -11,7 +11,7 @@ import { excludeList, inView } from './view';
 it('R1: a recognized product becomes the pending product and gets a glance prompt', () => {
   const h = harness();
   h.see(OAT);
-  expect(h.state.prompt).toEqual({ id: 'p-0001', kind: 'product', mode: 'new', productId: OAT, doneAt: null });
+  expect(h.state.prompt).toEqual({ id: 'p-0001', kind: 'product', mode: 'new', productId: OAT, startedAt: h.now, doneAt: null });
   expect(h.events()).toEqual(['glance.pending']);
   expect(h.event('glance.pending')).toEqual({
     type: 'glance.pending', promptId: 'p-0001', kind: 'new',

@@ -54,7 +54,7 @@ export function storeContract(name: string, open: () => Promise<Store>): void {
       const record: SessionRecord = {
         ...sessionRecord('s1'),
         seen: { 'oat-drink-1l': 5 },
-        prompt: { id: 'p-0001', kind: 'product', mode: 'new', productId: 'oat-drink-1l', doneAt: null },
+        prompt: { id: 'p-0001', kind: 'product', mode: 'new', productId: 'oat-drink-1l', startedAt: 3, doneAt: null },
         kioskId: 'k1',
       };
       await store.putSession(record);

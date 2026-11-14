@@ -28,7 +28,7 @@ function holdCode(h: Harness, outcome: BarcodeOutcome, ms: number): void {
 it('a scanned product gets the prompt of an identified product, with the price of the store', () => {
   const h = scanned();
   h.barcode(found(NUTELLA));
-  expect(h.state.prompt).toEqual({ id: 'p-0001', kind: 'product', mode: 'new', productId: NUTELLA, doneAt: null });
+  expect(h.state.prompt).toEqual({ id: 'p-0001', kind: 'product', mode: 'new', productId: NUTELLA, startedAt: h.now, doneAt: null });
   expect(h.event('glance.pending')).toMatchObject({ kind: 'new', product: { id: NUTELLA, priceCents: 399 }, qtyInCart: 0 });
   expect(h.speak()).toMatchObject({ line: { key: 'glance.new', hint: true }, promptId: 'p-0001' });
 });

@@ -5,7 +5,7 @@ import { noteAnswer } from './code';
 import { say } from './say';
 import { type Turn, emit, speak } from './turn';
 import type { RuleInput, SessionState } from './types';
-import { inView, inViewForHead } from './view';
+import { inView } from './view';
 
 const MAX_LINE_QTY = 99;
 
@@ -14,6 +14,11 @@ const MAX_LINE_QTY = 99;
  * After a stall of the link the samples arrive late, so the answer can arrive after the head window on the clock of
  * the server. The phone takes a sample of the head window that arrives this long after the window, at most.
  * The value is `LATE_MS` of `HeadInput` in the Android app.
+ *
+ * For a product prompt the ID of the prompt is the guard: the shopper heard the name and the price of that prompt.
+ * The product can be out of view, because recognition names a held product in few frames and the shopper lowers it
+ * while the line plays. The phone opens the head window of a product prompt while the line still plays, so the answer
+ * can arrive before `prompt.done`. A pay prompt keeps each condition: its line ended, and the kiosk code is in view.
  */
 export const HEAD_LATE_MS = 6000;
 /** The longest time that a stall or a still adds to one head window on the phone: `MAX_EXTRA_MS` of `HeadInput`. */
@@ -31,9 +36,12 @@ export function accepts(state: SessionState, intent: { source: IntentSource; pro
       return true;
     // R4. The phone is the judge of the head window. The server keeps the last time at which the phone can send the answer.
     case 'head': {
-      if (!state.profile.headGestures || prompt.doneAt === null || !targetInView(state, now)) return false;
+      if (!state.profile.headGestures) return false;
+      if (prompt.kind === 'pay' && (prompt.doneAt === null || !kioskInView(state, prompt.kioskId, now))) return false;
       const windowMs = state.profile.headWindowMs;
-      return windowMs === null || now - prompt.doneAt < windowMs + HEAD_MAX_EXTRA_MS + HEAD_LATE_MS;
+      // A prompt that an older server stored has no start time. Its time starts now.
+      const from = prompt.doneAt ?? (prompt as { startedAt?: number }).startedAt ?? now;
+      return windowMs === null || now - from < windowMs + HEAD_MAX_EXTRA_MS + HEAD_LATE_MS;
     }
     // R5.
     case 'voice':
@@ -44,12 +52,9 @@ export function accepts(state: SessionState, intent: { source: IntentSource; pro
   }
 }
 
-/** For a head answer. A stall of the frames never stands for a kiosk code in view: a nod that pays needs a report of the code. */
-function targetInView(state: SessionState, now: number): boolean {
-  const prompt = state.prompt;
-  if (!prompt) return false;
-  if (prompt.kind === 'product') return inViewForHead(state, prompt.productId, now);
-  return state.kioskSeen?.kioskId === prompt.kioskId && inView(state.kioskSeen.at, now);
+/** A nod that pays needs a report of the kiosk code in the view time. */
+function kioskInView(state: SessionState, kioskId: string, now: number): boolean {
+  return state.kioskSeen?.kioskId === kioskId && inView(state.kioskSeen.at, now);
 }
 
 export function onPromptDone(turn: Turn, input: Extract<RuleInput, { type: 'prompt.done' }>): void {
@@ -100,6 +105,8 @@ export function onAnswer(turn: Turn, kind: 'yes' | 'no', source: IntentSource, p
 function answerProductPrompt(turn: Turn, kind: 'yes' | 'no', prompt: Extract<SessionState['prompt'], { kind: 'product' }>): void {
   const { s, now } = turn;
   const { productId } = prompt;
+  // An answer before the end of the line finishes the prompt, so a later "remove" by voice names it (R10).
+  if (prompt.doneAt === null) s.lastDone = { promptId: prompt.id, kind: 'product', at: now, hinted: false };
   s.prompt = null;
   noteAnswer(s, now);
   // R8 and R10: no new prompt while the product stays in view.

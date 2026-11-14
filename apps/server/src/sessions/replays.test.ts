@@ -35,13 +35,13 @@ it('a one-frame change replaces the prompt, and each yes adds only the product o
   h.done(); h.yes('head');
   expect(h.state.cart.items.map((i) => i.productId)).toEqual([OAT]);
 });
-it('a late prompt.done for a replaced prompt opens no window', () => {
+it('a late prompt.done for a replaced prompt finishes no prompt', () => {
   const h = harness();
   h.see(OAT); const p1 = h.state.prompt!.id;
   h.at(500); h.see(RYE);
   h.send({ type: 'prompt.done', promptId: p1 });
   expect(h.state.prompt!.doneAt).toBeNull();
-  h.yes('head', p1); h.yes('head', h.state.prompt!.id);
+  h.yes('head', p1); h.yes('voice', h.state.prompt!.id);
   expect(h.state.cart).toEqual(EMPTY_CART);
 });
 it('an added product that flickers for 10 seconds gets no second prompt and no second unit', () => {

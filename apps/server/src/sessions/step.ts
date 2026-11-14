@@ -9,7 +9,7 @@ import { expireSecondLook, onRecognition } from './glance';
 import { isSolicited, newVoiceState, noteSight } from './guard';
 import { type Turn, emit } from './turn';
 import type { Effect, RuleContext, RuleInput, SessionState, SpeakEffect } from './types';
-import { inView, newFrameState } from './view';
+import { inView } from './view';
 
 export function createSessionState(profile: Profile, now: number): SessionState {
   return {
@@ -43,7 +43,6 @@ export function createSessionState(profile: Profile, now: number): SessionState 
     code: newCodeState(),
     slowAt: null,
     voice: newVoiceState(),
-    frames: newFrameState(),
   };
 }
 

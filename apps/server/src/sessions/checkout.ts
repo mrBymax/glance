@@ -127,7 +127,7 @@ function offer(turn: Turn, interrupt: boolean): void {
   const id = nextPromptId(s);
   const count = itemCount(s);
   const totalCents = s.cart.totalCents;
-  s.prompt = { id, kind: 'pay', kioskId: kiosk.id, doneAt: null };
+  s.prompt = { id, kind: 'pay', kioskId: kiosk.id, startedAt: turn.now, doneAt: null };
   emit(turn, {
     type: 'checkout.offered', promptId: id, kiosk, totalCents, itemCount: count, needsBiometric: needsBiometric(totalCents),
   });

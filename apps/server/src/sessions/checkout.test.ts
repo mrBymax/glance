@@ -89,12 +89,18 @@ it('R16: a nod 21 seconds after the head window does not pay', () => {
   h.yes('head');
   expect(payments(h)).toEqual([]);
 });
-it('R16: a stall of the frames does not stand for the code in view', () => {
+it('R16: a nod does not pay with no report of the code for 3 seconds', () => {
   const h = full(); h.done(); holdKiosk(h, 2000);
-  // No frame and no report of the code: for a product prompt this is a stall, and a nod counts. A nod never pays so.
+  // A nod adds a product that is out of view. A nod never pays so.
   h.advance(T.viewMs);
   h.yes('head');
   expect(payments(h)).toEqual([]);
+});
+it('R16: a nod does not pay while the line of the pay prompt plays', () => {
+  const h = full();
+  h.yes('head', h.state.prompt!.id);
+  expect(payments(h)).toEqual([]);
+  expect(h.state.prompt).toMatchObject({ kind: 'pay', doneAt: null });
 });
 it('R16: a late nod does not pay for a pay prompt that a cart change replaced', () => {
   const h = full(); h.done(); const old = h.state.prompt!.id;

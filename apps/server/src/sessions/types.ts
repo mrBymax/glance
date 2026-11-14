@@ -31,10 +31,13 @@ export type Line =
   | { key: 'ask.listening' } | { key: 'ask.noProduct' } | { key: 'ask.failed' } | { key: 'ask.answer'; text: string }
   | { key: 'barcode.notInStore' } | { key: 'barcode.unreadable' };
 
-/** doneAt is the time when the phone reported the end of the clip, or null while the clip plays. */
+/**
+ * startedAt is the time when the rules made the prompt. A prompt that an older server stored has none.
+ * doneAt is the time when the phone reported the end of the clip, or null while the clip plays.
+ */
 export type PromptState =
-  | { id: string; kind: 'product'; mode: 'new' | 'inCart'; productId: string; doneAt: number | null }
-  | { id: string; kind: 'pay'; kioskId: string; doneAt: number | null };
+  | { id: string; kind: 'product'; mode: 'new' | 'inCart'; productId: string; startedAt: number; doneAt: number | null }
+  | { id: string; kind: 'pay'; kioskId: string; startedAt: number; doneAt: number | null };
 
 /**
  * spotcheck: the kiosk asked for a spot check, and the voice waits for one product of the cart. No pay prompt exists yet.
@@ -96,17 +99,6 @@ export type VoiceState = {
   attemptSaid: boolean;
 };
 
-/**
- * What the rules know about the flow of the frames. A stall of the link from the glasses stops the frames and the
- * motion samples together, so a time with no result says nothing about the view.
- */
-export type FrameState = {
-  /** The last recognition result, or null for "never". */
-  at: number | null;
-  /** The last time with no recognition result that was longer than `FRAME_STALL_MS` of view.ts, or null. */
-  stall: { from: number; to: number } | null;
-};
-
 /** The rule numbers in the comments are those of spec section 6.2. Each time is a clock value in milliseconds. */
 export type SessionState = {
   phase: Phase;
@@ -163,8 +155,6 @@ export type SessionState = {
   slowAt: number | null;
   /** A session that an older server stored has no value here. guard.ts fills it. */
   voice: VoiceState;
-  /** A session that an older server stored has no value here. view.ts reads it. */
-  frames: FrameState;
 };
 
 export type RuleInputBody =
