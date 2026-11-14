@@ -2,9 +2,11 @@ import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { Button } from '@astryxdesign/core/Button';
 import { Heading } from '@astryxdesign/core/Heading';
 import { HStack } from '@astryxdesign/core/HStack';
+import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
 import { useState } from 'react';
+import { ASK_MESSAGE } from '../bridge/askMessage';
 import { useUi } from '../bridge/BridgeContext';
 import { CaptionList } from '../components/CaptionList';
 import { CartList } from '../components/CartList';
@@ -29,6 +31,8 @@ export function SessionScreen() {
     send({ t: 'session.end' });
     setEndOpen(false);
   };
+  // The server takes a question only while the shop is open.
+  const canAsk = state.phase === 'shopping' || state.phase === 'checkout';
   if (isPocket) return <PocketMode onLeave={() => setPocket(false)} />;
   const promptArea = () => {
     if (state.prompt?.kind === 'product') return <PromptCard prompt={state.prompt} />;
@@ -44,6 +48,7 @@ export function SessionScreen() {
       <CaptionList />
       <CartList />
       <HStack gap={2} wrap="wrap">
+        {canAsk ? <Button label={strings.ask} icon={<Icon icon="microphone" />} onClick={() => send(ASK_MESSAGE)} /> : null}
         {state.cart.items.length > 0 ? <Button label={strings.undo} onClick={() => send({ t: 'intent', kind: 'undo' })} /> : null}
         <Button label={strings.pocketMode} onClick={enterPocket} />
         <Button label={strings.settings} onClick={() => setSettingsOpen(true)} />

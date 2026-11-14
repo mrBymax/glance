@@ -101,6 +101,7 @@ export const EN = {
   budgetOver: 'Warning: over your budget.',
   budgetDetail: (total: string, budget: string) => `Total ${total}. Budget ${budget}.`,
 
+  ask: 'Ask a question',
   undo: 'Undo',
   end: 'End',
   repeat: 'Repeat',

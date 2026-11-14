@@ -225,6 +225,7 @@ Each action that the shopper can do with the head or the voice also has a button
 
 | Button | Where | Sends |
 |---|---|---|
+| "Ask a question", with a microphone icon | Action row. Shown in the phases `shopping` and `checkout`. | `ASK_MESSAGE` of `src/bridge/askMessage.ts`: `{ t: 'intent', kind: 'ask' }` |
 | Undo | Action row. Hidden while the cart is empty. | `{ t: 'intent', kind: 'undo' }` |
 | Repeat, with the name "Repeat the last line" | Under the captions. Hidden with no caption. | `{ t: 'intent', kind: 'repeat' }` |
 | Remove, with the name "Remove <product>" | Each cart line | `{ t: 'cart.edit', productId, qty }` with one unit less. The quantity 0 removes the line. |
@@ -232,6 +233,8 @@ Each action that the shopper can do with the head or the voice also has a button
 | End | Action row | Opens an `AlertDialog`. End sends `{ t: 'session.end' }`, and "Keep shopping" sends nothing. |
 
 End asks first, because the server takes no input for a session that ended.
+
+"Ask a question" needs no prompt ID. The Android app relays the intent, and the server then opens its question window. `BrowserBridge` posts it as each other intent. A browser session has no microphone, so that window closes with no question.
 
 `hapticFor(before, action, after)` in `src/state/haptics.ts` returns the pattern for one message, or `null`. `BridgeProvider` calls it for each message of the bridge and sends `{ t: 'haptic', pattern }` for a result. The Android app vibrates only for these messages.
 
