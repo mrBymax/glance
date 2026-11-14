@@ -1,4 +1,7 @@
-import { CreateKioskResponseSchema, type CreateKioskRequest, type CreateKioskResponse } from '@glance/shared';
+import {
+  CreateKioskResponseSchema, LatestSessionResponseSchema, SessionSnapshotSchema,
+  type CreateKioskRequest, type CreateKioskResponse, type LatestSessionResponse, type SessionSnapshot,
+} from '@glance/shared';
 
 /** The server answered, and the answer is an error or has the wrong shape. */
 export class ApiError extends Error {
@@ -36,4 +39,30 @@ export async function createKiosk(request: CreateKioskRequest, fetchFn: typeof f
 
 export function kioskEventsUrl(kioskId: string, token: string): string {
   return `/api/kiosks/${encodeURIComponent(kioskId)}/events?token=${encodeURIComponent(token)}`;
+}
+
+const enc = encodeURIComponent;
+
+/** Reads the snapshot of a session with GET /api/sessions/<id>. */
+export async function getSession(sessionId: string, token: string, fetchFn: typeof fetch = fetch): Promise<SessionSnapshot> {
+  const response = await fetchFn(`/api/sessions/${enc(sessionId)}?token=${enc(token)}`);
+  // The message holds no query, because the query holds the token of the session.
+  if (response.status >= 400) throw new ApiError(`GET /api/sessions/<id> failed with ${response.status}`, response.status);
+  const snapshot = SessionSnapshotSchema.safeParse(await jsonOf(response));
+  if (!snapshot.success) throw new ApiError('GET /api/sessions/<id> gave an answer that is not a snapshot', response.status);
+  return snapshot.data;
+}
+
+export function sessionEventsUrl(sessionId: string, token: string): string {
+  return `/api/sessions/${enc(sessionId)}/events?token=${enc(token)}`;
+}
+
+/** Reads the newest live session with GET /api/demo/latest. Returns null while no session is live (status 404). */
+export async function getLatestSession(key: string, fetchFn: typeof fetch = fetch): Promise<LatestSessionResponse | null> {
+  const response = await fetchFn(`/api/demo/latest?key=${enc(key)}`);
+  if (response.status === 404) return null;
+  if (response.status >= 400) throw new ApiError(`GET /api/demo/latest failed with ${response.status}`, response.status);
+  const latest = LatestSessionResponseSchema.safeParse(await jsonOf(response));
+  if (!latest.success) throw new ApiError('GET /api/demo/latest gave an answer that is not a session', response.status);
+  return latest.data;
 }
