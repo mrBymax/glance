@@ -18,7 +18,7 @@ The exit code of each script is 0 for a pass, and the last line is `result: pass
 
 ## The server and the Kotlin client
 
-`server-kotlin.mjs` needs `JAVA_HOME` with a JDK from 17 to 24. It runs the Gradle task `:core:integrationTest` of `apps/mobile/android` with the server address as `-Pglance.serverUrl`. The exit code is 0 for a pass.
+`server-kotlin.mjs` needs `JAVA_HOME` with a JDK from 17 to 24. It runs the Gradle task `:core:integrationTest` of `apps/mobile/android` with the server address as `-Pglance.serverUrl`.
 
 The test is `ServerSpineTest` in `apps/mobile/android/core/src/integrationTest`. It uses the real `GlanceApi`, `DeviceSocket`, `Codec`, and `FrameCodec`, and it plays one shop:
 
@@ -100,7 +100,6 @@ Known defect, which the test reports and which does not fail the run:
 
 ## Shared code
 
-`lib/pages.mjs` exports `startDevServer`, `startBrowser`, `openPage`, and `waitForText` for a test with web pages.
-
-
 `lib/server.mjs` exports `startFakeServer`. It removes each server variable of the shell from the environment of the server, sets `FAKE_RECOGNITION` and `FAKE_SPEECH`, and waits for `GET /healthz`. It throws when the answer does not show both fake switches. A script can give it the path of a `FAKE_RECOGNITION` script file.
+
+`lib/pages.mjs` exports `startDevServer`, `startBrowser`, `openPage`, and `waitForText` for a test with web pages.
