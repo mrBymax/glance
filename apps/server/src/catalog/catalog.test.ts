@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
-import { ProductSchema } from '@glance/shared';
+import { ProductSchema, normalizeGtin } from '@glance/shared';
 import oatDrink from '@glance/shared/fixtures/catalog/oat-drink-1l.json';
 import { priceConflicts } from '../products/resolver';
 import { readStoreListFile } from '../products/storeList';
@@ -46,9 +46,19 @@ it('the demo catalog holds only the products of the dev catalog that have a barc
     expect(product.gtin).toBeDefined();
     expect(product.lookAlikes.filter((id) => !indexCatalog(demo).get(id))).toEqual([]);
   }
+  expect(priceConflicts(demo, await readStoreListFile('catalog/store-list.demo.json').all())).toEqual([]);
+});
+// A person edits the demo store list for each demo, so no test names an item of it.
+it('the demo store list holds items with a right code, each one time, and with a price', async () => {
+  // The reader stops at a wrong check digit and at a code that the file holds two times.
   const items = await readStoreListFile('catalog/store-list.demo.json').all();
-  expect(items.map((item) => item.gtin)).toContain('5999571058020');
-  expect(priceConflicts(demo, items)).toEqual([]);
+  expect(items.length).toBeGreaterThan(0);
+  for (const item of items) {
+    expect(normalizeGtin(item.gtin)).toBe(item.gtin);
+    expect(item.priceCents).toBeGreaterThan(0);
+    expect(item.name.trim()).not.toBe('');
+  }
+  expect(new Set(items.map((item) => item.gtin)).size).toBe(items.length);
 });
 it('rejects a duplicate ID', () => {
   expect(() => indexCatalog([dev[0]!, dev[0]!])).toThrow(/oat-drink-1l/);

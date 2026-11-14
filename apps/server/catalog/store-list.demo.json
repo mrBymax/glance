@@ -1,3 +1,6 @@
 [
-  { "gtin": "5999571058020", "priceCents": 149, "name": "Hell Classic Zero Sugarfree", "brand": "Hell", "packSize": "250 ml" }
+  { "gtin": "5999571058020", "priceCents": 149, "name": "Hell Classic Zero Sugarfree", "brand": "Hell", "packSize": "250 ml" },
+  { "gtin": "6430062761764", "priceCents": 249, "name": "Kili Cascara Vadelma", "brand": "Kili", "packSize": "330 ml" },
+  { "gtin": "6430062761795", "priceCents": 249, "name": "Kili Cascara Yuzu + Sitruuna", "brand": "Kili", "packSize": "330 ml" },
+  { "gtin": "6430062761825", "priceCents": 249, "name": "Kili Cascara Mango + Ananas", "brand": "Kili", "packSize": "330 ml" }
 ]

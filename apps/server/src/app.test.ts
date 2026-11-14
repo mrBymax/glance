@@ -8,6 +8,8 @@ import { systemClock } from './clock';
 import { loadConfig } from './config';
 import { MemoryStore } from './db/memory';
 import { createFakeProductInfo } from './products/fakeProductInfo';
+import { scannedProductId } from './products/scanned';
+import { notInCatalog } from './products/storeEntries';
 import { DEFAULT_STORE_LIST_PATH, readStoreListFile } from './products/storeList';
 import { NO_RESULT } from './recognition/result';
 
@@ -99,11 +101,14 @@ it('starts with the demo catalog and the demo store list, and with an empty cata
     const real = await buildApp({ ...deps(), config, store: new MemoryStore(list), catalog: indexCatalog(list), storeList });
     try {
       expect((await real.inject({ method: 'GET', url: '/healthz' })).json()).toMatchObject({ ok: true, fakeRecognition: false });
-      // The energy drink of the demo store list is a product of the rules from the start.
+      // An item of the demo store list that the catalog does not hold is a product of the rules from the start.
+      // A person edits that list for each demo, so the test takes the item from the file.
+      const [entry] = notInCatalog((await storeList.all()).map((item) => ({ item, details: null })), list);
+      const productId = scannedProductId(entry!.item.gtin);
       const created = (await real.inject({ method: 'POST', url: '/api/sessions' })).json<{ sessionId: string }>();
       const session = (await real.sessions.get(created.sessionId))!;
-      session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'gtin-5999571058020', confidence: 0.9 }, still: false });
-      expect(session.state.prompt).toMatchObject({ kind: 'product', productId: 'gtin-5999571058020' });
+      session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId, confidence: 0.9 }, still: false });
+      expect(session.state.prompt).toMatchObject({ kind: 'product', productId });
     } finally {
       await real.close();
     }
