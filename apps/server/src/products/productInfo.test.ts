@@ -14,7 +14,23 @@ it('reads the fields of a product', () => {
     allergens: ['gluten', 'eggs', 'soy', 'mustard'],
     vegan: null,
     vegetarian: true,
+    texts: { names: ['Spaghetti Nº5', 'Spaghetti n.5'], brands: ['Barilla', 'BARILLA NORGE ASbarilla'], keywords: [] },
   });
+});
+it('reads the names of each language, each brand, the keywords, and the words of the categories', () => {
+  const details = parseOffAnswer(answer({
+    product_name: 'Hell Classic Zero energy drink', product_name_en: 'Hell Classic Zero energy drink', product_name_fi: ' Hell Classic Zero  energia juoma ',
+    generic_name_sv: 'Energidryck', generic_name: '', product_name_xx_long: 'no language', brands: 'Hell, Hell Energy',
+    _keywords: ['aspartame', 'zero', 7], categories_tags: ['en:energy-drinks', 'fi:energiajuomat', 'en:energy-drinks'],
+  }));
+  expect(details?.texts).toEqual({
+    names: ['Hell Classic Zero energy drink', 'Hell Classic Zero energia juoma', 'Energidryck'],
+    brands: ['Hell', 'Hell Energy'],
+    keywords: ['aspartame', 'zero', 'energy drinks', 'energiajuomat'],
+  });
+});
+it('gives empty texts for a product with none', () => {
+  expect(parseOffAnswer(answer({}))?.texts).toEqual({ names: [], brands: [], keywords: [] });
 });
 it('maps each of the 14 allergens, in the order of the contract', () => {
   expect(Object.values(OFF_ALLERGEN_TAGS).sort()).toEqual([...EU_ALLERGENS].sort());
@@ -55,7 +71,7 @@ it('takes the first brand with no extra spaces, and writes the quantity with a s
 });
 it('reads a field of the wrong type as no data and keeps the other fields', () => {
   const details = parseOffAnswer(answer({ brands: 7, quantity: '1 L', allergens_tags: 'en:milk', traces_tags: [3, 'en:eggs'], ingredients_analysis_tags: null }));
-  expect(details).toEqual({ brand: null, quantity: '1 L', allergens: null, vegan: null, vegetarian: null });
+  expect(details).toEqual({ brand: null, quantity: '1 L', allergens: null, vegan: null, vegetarian: null, texts: { names: [], brands: [], keywords: [] } });
 });
 it('reads an answer with the status 0, or with no product, as not found', () => {
   expect(parseOffAnswer({ code: '2999999999990', status: 0, status_verbose: 'product not found' })).toBeNull();
