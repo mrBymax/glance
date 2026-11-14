@@ -1,4 +1,4 @@
-import { type Lang, type Product, ProductSchema } from '@glance/shared';
+import { type Lang, type Product, ProductSchema, hasGs1CheckDigit } from '@glance/shared';
 
 export type CatalogReport = {
   /** The entries that pass the schema, with the first entry of each ID. */
@@ -12,16 +12,6 @@ const DEMO_PRODUCTS = 12;
 const MIN_VISUAL_CHARS = 20;
 const GTIN_LENGTHS = [8, 12, 13, 14];
 const SPOKEN_FIELDS = ['name', 'spokenName', 'spokenPack', 'spokenPackDetailed'] as const;
-
-/** The GS1 check: from the right, the digits count 1, 3, 1, 3, and the sum must end in 0. */
-function hasGs1CheckDigit(gtin: string): boolean {
-  let sum = 0;
-  for (let index = 0; index < gtin.length; index += 1) {
-    const digit = Number(gtin[gtin.length - 1 - index]);
-    sum += index % 2 === 0 ? digit : digit * 3;
-  }
-  return sum % 10 === 0;
-}
 
 function gtinError(gtin: string): string | null {
   if (!/^\d+$/.test(gtin) || !GTIN_LENGTHS.includes(gtin.length)) return 'gtin must have 8, 12, 13, or 14 digits';
