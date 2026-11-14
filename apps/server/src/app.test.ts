@@ -99,11 +99,11 @@ it('starts with the demo catalog and the demo store list, and with an empty cata
     const real = await buildApp({ ...deps(), config, store: new MemoryStore(list), catalog: indexCatalog(list), storeList });
     try {
       expect((await real.inject({ method: 'GET', url: '/healthz' })).json()).toMatchObject({ ok: true, fakeRecognition: false });
-      // The paper cups of the demo store list are a product of the rules from the start.
+      // The energy drink of the demo store list is a product of the rules from the start.
       const created = (await real.inject({ method: 'POST', url: '/api/sessions' })).json<{ sessionId: string }>();
       const session = (await real.sessions.get(created.sessionId))!;
-      session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'gtin-6438574558384', confidence: 0.9 }, still: false });
-      expect(session.state.prompt).toMatchObject({ kind: 'product', productId: 'gtin-6438574558384' });
+      session.dispatch({ type: 'recognition', result: { ...NO_RESULT, status: 'identified', productId: 'gtin-5999571058020', confidence: 0.9 }, still: false });
+      expect(session.state.prompt).toMatchObject({ kind: 'product', productId: 'gtin-5999571058020' });
     } finally {
       await real.close();
     }

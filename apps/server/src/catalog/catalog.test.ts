@@ -47,7 +47,7 @@ it('the demo catalog holds only the products of the dev catalog that have a barc
     expect(product.lookAlikes.filter((id) => !indexCatalog(demo).get(id))).toEqual([]);
   }
   const items = await readStoreListFile('catalog/store-list.demo.json').all();
-  expect(items.map((item) => item.gtin)).toContain('7394376616037');
+  expect(items.map((item) => item.gtin)).toContain('5999571058020');
   expect(priceConflicts(demo, items)).toEqual([]);
 });
 it('rejects a duplicate ID', () => {
