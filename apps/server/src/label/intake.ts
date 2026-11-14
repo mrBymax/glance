@@ -24,7 +24,8 @@ const LOGGED_MESSAGE_CHARS = 200;
 
 /**
  * Takes each frame with the kind `label`: one model call reads it, and the answer must select one item of the store list.
- * A match goes the way of a barcode of the phone. Each other end gives the rules the input `label` with `failed`.
+ * A match goes the way of a barcode of the phone. An answer with no digits, no brand, no name, and no item gives the rules
+ * the input `label` with `empty`: the still showed no product, so the voice says nothing. Each other end gives `failed`.
  * One call runs at a time for each session, and a session starts at most one call each 5 seconds.
  * A label frame that arrives too early, or for a session that does not shop, is dropped with no call.
  * `stopAll` ends each call, for the close of the app.
@@ -61,10 +62,12 @@ export function createLabelHandler(deps: {
     });
 
     let gtin: string | null = null;
+    let empty = false;
     try {
       const answer: LabelAnswer = await Promise.race([reader.read(jpeg, { signal: abort.signal }), late]);
       // What the model read, so that a person can see why a still gave no product.
       deps.log.info(`label answer seq=${seq} digits=${JSON.stringify(answer.digits)} brand=${JSON.stringify(answer.brand)} name=${JSON.stringify(answer.name)} confidence=${answer.confidence} item=${answer.item ?? 'null'} itemConfidence=${answer.itemConfidence} session=${session.id}`);
+      empty = answer.digits.length === 0 && answer.brand === null && answer.name === null && answer.item === null;
       gtin = matchLabel(answer, await deps.storeList.all(), deps.minConfidence, deps.minItemConfidence);
     } catch (error) {
       const { name, message } = error instanceof Error ? error : { name: 'Error', message: String(error) };
@@ -78,7 +81,7 @@ export function createLabelHandler(deps: {
 
     deps.log.info(`label session=${session.id} seq=${seq} match=${gtin ?? 'none'} ms=${Math.round(performance.now() - startedAt)}`);
     const result = gtin === null ? 'dropped' : await deps.report(session, gtin, 'label');
-    if (result !== 'product' && !session.stopped) session.dispatch({ type: 'label', read: 'failed' });
+    if (result !== 'product' && !session.stopped) session.dispatch({ type: 'label', read: empty ? 'empty' : 'failed' });
   };
 
   const onFrame: FrameHandler = (session, frame) => {

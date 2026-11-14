@@ -289,19 +289,21 @@ it('in fake mode a scripted code asks for a still, and the label frame gives the
     .toEqual({ id: 'gtin-3017624010701', name: 'Nutella', packSize: '400 g', priceCents: 399 });
   expect(await phone.next(isSpeak)).toMatchObject({ text: 'Nutella, four hundred grams, three ninety-nine. Nod to add.' });
 });
-it('in fake mode a script with no label answer reads nothing, and the voice says so one time', async () => {
+it('in fake mode a script with no label answer reads nothing, and the voice says nothing', async () => {
   const lines: string[] = [];
   const { phone } = await shop(
     { log: { level: 'info', stream: { write: (line) => { lines.push(line); } } } },
     { FAKE_RECOGNITION: tempScript({ steps: [] }), GEMINI_API_KEY: '' },
   );
   phone.sendFrame(label, JPEG);
-  expect(await phone.next(isSpeak)).toMatchObject({ text: 'I cannot read this code. Hold it closer.', promptId: null });
+  await vi.waitFor(() => expect(lines.join('')).toMatch(/label session=\S+ seq=9 match=none/));
   expect(lines.join('')).toContain('frame seq=9 w=1440 h=1080 blurred=true kind=label bytes=4');
   phone.sendFrame({ ...label, seq: 10 }, JPEG);
   // The second still comes too early for a second call.
   await vi.waitFor(() => expect(lines.join('')).toMatch(/label frame dropped: the last label call started \d+ ms ago. seq=10/));
-  expect(phone.messages.filter(isSpeak)).toHaveLength(1);
+  await serverReadAll(phone);
+  // The still showed no product, so no line says "I cannot read this code."
+  expect(phone.messages.filter(isSpeak)).toEqual([]);
 });
 it('in fake mode a barcode step reports its code as the phone does', async () => {
   const script = tempScript({ steps: [{ atMs: 0, forMs: 5000, barcode: SPAGHETTI }] });

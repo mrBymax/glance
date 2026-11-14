@@ -148,8 +148,11 @@ export type RuleInputBody =
   | { type: 'answer'; text: string | null }
   /** A barcode after its lookup. The phone reports a code one time each second while it is in view. */
   | { type: 'barcode'; outcome: BarcodeOutcome }
-  /** A label frame arrived (`started`), or its read gave no product of the store (`failed`). */
-  | { type: 'label'; read: 'started' | 'failed' };
+  /**
+   * A label frame arrived (`started`), its read gave no product of the store (`failed`),
+   * or the model read nothing in it (`empty`): the still showed no product.
+   */
+  | { type: 'label'; read: 'started' | 'failed' | 'empty' };
 export type RuleInput = RuleInputBody & { now: number };
 
 export type SpeakEffect = {

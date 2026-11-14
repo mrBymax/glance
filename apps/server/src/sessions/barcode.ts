@@ -40,7 +40,10 @@ export function onBarcode(turn: Turn, input: Extract<RuleInput, { type: 'barcode
   if (newAppearance) speak(turn, say({ key: 'barcode.notInStore' }));
 }
 
-/** A label frame: the still of a barcode that the phone could not read. The model reads it outside the rules. */
+/**
+ * A label frame: the still of a package that the phone could not read. The model reads it outside the rules.
+ * A read that failed gets the unreadable line. A still with no product in it gets no line.
+ */
 export function onLabel(turn: Turn, input: Extract<RuleInput, { type: 'label' }>): void {
   const { s, now } = turn;
   if (s.phase !== 'shopping' && s.phase !== 'checkout') return;

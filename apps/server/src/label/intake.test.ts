@@ -76,6 +76,19 @@ it('tells the rules that the read failed when the lookup of the match gives no p
   handler({ read: async () => ({ ...NO_LABEL, digits: ['3017624010701'] }) })(session, { header, jpeg: JPEG });
   await vi.waitFor(() => expect(inputs).toEqual([{ type: 'label', read: 'started' }, { type: 'label', read: 'failed' }]));
 });
+it('tells the rules that the still was empty when the answer has no digits, no brand, no name, and no item', async () => {
+  handler({ read: async () => ({ ...NO_LABEL, packSize: '500 g', confidence: 0.4 }) })(session, { header, jpeg: JPEG });
+  await vi.waitFor(() => expect(inputs).toEqual([{ type: 'label', read: 'started' }, { type: 'label', read: 'empty' }]));
+  expect(report).not.toHaveBeenCalled();
+});
+it('an answer that read a text or an item and selects no product is a failed read, not an empty still', async () => {
+  for (const part of [{ name: 'Nocciolata' }, { brand: 'Rigoni' }, { digits: ['4006381333931'] }, { item: '4006381333931', itemConfidence: 0.9 }]) {
+    inputs = [];
+    now += LABEL_EVERY_MS;
+    handler({ read: async () => ({ ...NO_LABEL, ...part }) })(session, { header, jpeg: JPEG });
+    await vi.waitFor(() => expect(inputs).toEqual([{ type: 'label', read: 'started' }, { type: 'label', read: 'failed' }]));
+  }
+});
 it('gives the reader a copy of the JPEG', async () => {
   const read = vi.fn<LabelReader['read']>(async () => NO_LABEL);
   const message = new Uint8Array(JPEG);
@@ -91,7 +104,7 @@ it('drops a label frame while a call of the session runs', async () => {
   expect(call.signals).toHaveLength(1);
   expect(lines.join('\n')).toContain('label frame dropped: a label call runs. seq=5');
   call.answer(NO_LABEL);
-  await vi.waitFor(() => expect(inputs).toContainEqual({ type: 'label', read: 'failed' }));
+  await vi.waitFor(() => expect(inputs).toContainEqual({ type: 'label', read: 'empty' }));
   now += LABEL_EVERY_MS;
   onFrame(session, { header: { ...header, seq: 6 }, jpeg: JPEG });
   expect(call.signals).toHaveLength(2);
@@ -101,7 +114,7 @@ it('starts at most one call each 5 seconds for a session, so a phone that sends 
   const read = vi.fn<LabelReader['read']>(async () => NO_LABEL);
   const onFrame = handler({ read });
   onFrame(session, { header, jpeg: JPEG });
-  await vi.waitFor(() => expect(inputs).toContainEqual({ type: 'label', read: 'failed' }));
+  await vi.waitFor(() => expect(inputs).toContainEqual({ type: 'label', read: 'empty' }));
   inputs = [];
   now += LABEL_EVERY_MS - 1;
   onFrame(session, { header: { ...header, seq: 5 }, jpeg: JPEG });

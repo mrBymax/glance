@@ -172,6 +172,16 @@ it('a label frame that gave no product gets the unreadable line, at most one tim
   expect(h.lines()).toEqual(['barcode.unreadable']);
 });
 
+it('a still that showed no product gets no line, also after the 10 seconds of the unreadable line', () => {
+  const h = scanned();
+  h.label('started'); h.label('empty');
+  expect(h.effects).toEqual([]);
+  h.advance(UNREADABLE_EVERY_MS); h.label('started'); h.label('empty');
+  expect(h.effects).toEqual([]);
+  // The empty still does not use the turn of the unreadable line.
+  h.label('failed');
+  expect(h.lines()).toEqual(['barcode.unreadable']);
+});
 it('a code that the model sees in 2 frames inside 2 seconds asks the phone for a still', () => {
   const h = scanned();
   code(h);
