@@ -361,6 +361,7 @@ flowchart LR
 | `RecognitionSlowTest` | The state "Recognition slow", with the command `slow` of the fake server of the app: the `error` event `recognition.slow` and its line arrive, the placeholder page gets the event, the app sends no error of its own, and the frames go on. |
 | `PaymentPromptTest` | The fingerprint above 50 EUR, with the command `bio` of the fake server of the app. Two tests show the real prompt of Android and close it with no finger: the back key sends `ok: false`, and `checkout.cancelled` closes the prompt. Four tests replace the prompt: a finger that does not match sends nothing and a match sends `ok: true` one time, a phone with no screen lock sends `ok: false` and `native.biometric_unavailable`, the screen is bright in pocket mode while the prompt shows, and the end of the checkout closes the prompt. |
 | `StillPhotoTest` | The sharp second look, with the command `amb` of the fake server of the app: one still of 576 x 896 pixels goes out with `kind: still` and `blurred: true`, two events within one second give one still, each upload has a number of its own, and a mock nod answers a prompt after a still. |
+| `StillPhotoPrepareTest` | `StillPhoto.prepare` with no glasses and no server: a photo of 3000 x 4000 pixels becomes a JPEG of 1234 x 1440 pixels, the face box that the test gives is pixelated, and the stripes outside it stay. A photo with no result of face detection is dropped. |
 | `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items change the stored settings. |
 | `HapticsPocketTest` | The 8 haptic buttons of the placeholder page give the 8 patterns, `haptics: false` gives none, and pocket mode dims the screen, hides the bars, and keeps the screen on. |
 | `VolumeKeysTest` | The volume keys with `mainYes: key`: volume up on a product prompt sends `intent yes` with the source `key` and adds the product, volume down sends `intent no`, and the media volume stays at 0. A key that stays down in pocket mode sends one yes. Before the first prompt, after the prompt ended, and with the head as the main yes, the app does not take the key. |
@@ -379,7 +380,7 @@ Run them with the script, in `scripts/integration`. It needs `adb`, FFmpeg, and 
 |---|---|
 | `npm install` | Installs `qrcode`, one time |
 | `node android/run-spine.mjs` | Starts the server in fake mode and the fake server of the app, sets `adb reverse` for both, builds the phone UI, builds and installs both APK files, and runs the suite `spine`. Then it removes both reverse entries and stops both servers. |
-| `node android/run-spine.mjs --integration` | Runs the five suites, each with a new server: `spine` (`SpineTest`), `state` (`DeviceStatesTest`, `SetupFlowTest`, `RecognitionSlowTest`), `page` (`PhoneUiPageTest`), `input` (`VolumeKeysTest`, `TouchpadInputTest`, `VoiceCommandsTest`), and `extra` (`PaymentPromptTest`, `StillPhotoTest`) |
+| `node android/run-spine.mjs --integration` | Runs the five suites, each with a new server: `spine` (`SpineTest`), `state` (`DeviceStatesTest`, `SetupFlowTest`, `RecognitionSlowTest`), `page` (`PhoneUiPageTest`), `input` (`VolumeKeysTest`, `TouchpadInputTest`, `VoiceCommandsTest`), and `extra` (`PaymentPromptTest`, `StillPhotoTest`, `StillPhotoPrepareTest`) |
 | `node android/run-spine.mjs --suite state` | Runs one suite. A list takes commas: `--suite state,page`. |
 | `node android/run-spine.mjs --runs 3` | Runs each selected suite three times, each time with a new server |
 | `node android/run-spine.mjs --all` | Runs each test class |
@@ -405,8 +406,8 @@ Rules of the script and of the tests:
 - `VolumeKeysTest` sends a volume key through the input system of Android only when the app must take it. For a key that Android must get, the test calls `MainActivity.onKeyDown` and reads the result, because the real key changes the media volume of the phone. If the volume is not 0 at the end of a test, the test sets it to 0 again.
 - The media volume is 0, so no line plays, and no test on the phone reaches the mute time of a line. `SpeechQueueTest` and `VoiceInputTest` of `core` check that rule. Check it by ear with sound: see "Checks with the glasses or with sound".
 - No test sends `setup.openUpdate`, because the SDK opens the Meta AI app for it.
-- The mock glasses give the image that `camera.setCapturedImage` got as the still photo, with its own size: 720 x 1280 for `scene.png`. So no test scales a still down to 1440 pixels.
-- No test image holds a face. Check the pixelated face by hand: start the fake server with `SAVE_FRAMES=1`, point the mock camera at a photo of a face, and open `glance-last.jpg` in the temp folder.
+- The mock glasses give the image that `camera.setCapturedImage` got as the still photo, with its own size: 720 x 1280 for `scene.png`. So no test with mock glasses scales a still down to 1440 pixels. `StillPhotoPrepareTest` gives `StillPhoto.prepare` a photo of 3000 x 4000 pixels for that.
+- No test image holds a face. `StillPhotoPrepareTest` gives the face box itself, so it checks the pixelated box of a still and not the face detection. Check the pixelated face by hand: start the fake server with `SAVE_FRAMES=1`, point the mock camera at a photo of a face, and open `glance-last.jpg` in the temp folder.
 - On a phone with no network of its own, `network` stays `offline`. `DeviceStatesTest` then checks the dropped server link in the frames, the line, and the messages only.
 
 Facts about MockDeviceKit that the tests found (DAT 1.0.1, Nothing Phone (1), Android 15):
