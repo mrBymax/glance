@@ -4,11 +4,9 @@ import { type Turn, emit, emitSessionState, itemCount, nextPromptId, speak } fro
 import type { RuleInput, SessionState } from './types';
 import { inView } from './view';
 
-/** A payment above this total needs a fingerprint on the phone (spec section 13). */
-export const BIOMETRIC_ABOVE_CENTS = 5000;
-
-export function needsBiometric(totalCents: number): boolean {
-  return totalCents > BIOMETRIC_ABOVE_CENTS;
+/** True when a payment of this total needs a fingerprint on the phone. A limit of null means that no payment needs one. */
+export function needsBiometric(totalCents: number, aboveCents: number | null): boolean {
+  return aboveCents !== null && totalCents > aboveCents;
 }
 
 /** While the mock payment runs, no input changes the cart or the checkout. */
@@ -129,7 +127,7 @@ function offer(turn: Turn, interrupt: boolean): void {
   const totalCents = s.cart.totalCents;
   s.prompt = { id, kind: 'pay', kioskId: kiosk.id, startedAt: turn.now, doneAt: null };
   emit(turn, {
-    type: 'checkout.offered', promptId: id, kiosk, totalCents, itemCount: count, needsBiometric: needsBiometric(totalCents),
+    type: 'checkout.offered', promptId: id, kiosk, totalCents, itemCount: count, needsBiometric: needsBiometric(totalCents, turn.ctx.biometricAboveCents),
   });
   speak(turn, say({ key: 'checkout.offer', kiosk, itemCount: count, totalCents }, { promptId: id, interrupt }));
 }
@@ -176,7 +174,7 @@ export function afterCartChange(turn: Turn): void {
 }
 
 /**
- * R16, for an accepted yes on the pay prompt. A total above the limit first needs the fingerprint check of the phone.
+ * R16, for an accepted yes on the pay prompt. When the server has a limit, a total above it first needs the fingerprint check of the phone.
  * The runtime starts the mock payment and answers with a payment.result input.
  */
 export function startPayment(turn: Turn): void {
@@ -184,7 +182,7 @@ export function startPayment(turn: Turn): void {
   const checkout = s.checkout;
   if (!checkout) return;
   s.prompt = null;
-  if (needsBiometric(s.cart.totalCents)) {
+  if (needsBiometric(s.cart.totalCents, turn.ctx.biometricAboveCents)) {
     checkout.step = 'biometric';
     speak(turn, say({ key: 'checkout.biometric' }));
     turn.out.push({ type: 'biometric.request' });

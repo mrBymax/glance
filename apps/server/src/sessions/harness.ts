@@ -86,7 +86,7 @@ export type Harness = {
 };
 
 export function harness(
-  opts: { profile?: ProfilePatch; products?: Product[]; cart?: string[]; secondLookWaitMs?: number } = {},
+  opts: { profile?: ProfilePatch; products?: Product[]; cart?: string[]; secondLookWaitMs?: number; biometricAboveCents?: number } = {},
 ): Harness {
   const catalog = indexCatalog([...readCatalogFile(DEV_CATALOG), ...(opts.products ?? [])]);
   const profile = { ...DEFAULT_PROFILE, ...opts.profile };
@@ -106,7 +106,7 @@ export function harness(
   let lastDoneId: string | undefined;
   const h: Harness = {
     state,
-    ctx: { catalog, secondLookWaitMs: opts.secondLookWaitMs ?? 0 },
+    ctx: { catalog, secondLookWaitMs: opts.secondLookWaitMs ?? 0, biometricAboveCents: opts.biometricAboveCents ?? null },
     now: START,
     effects: [],
     all: [],

@@ -42,7 +42,7 @@ function currentPrompt(state: SessionState, ctx: RuleContext): CurrentPrompt | n
       kiosk: state.checkout.kiosk,
       totalCents: state.cart.totalCents,
       itemCount: state.cart.items.reduce((count, item) => count + item.qty, 0),
-      needsBiometric: needsBiometric(state.cart.totalCents),
+      needsBiometric: needsBiometric(state.cart.totalCents, ctx.biometricAboveCents),
     };
   }
 

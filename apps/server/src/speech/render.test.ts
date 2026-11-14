@@ -178,7 +178,7 @@ it('speaks the Italian lines of a shop', () => {
     .toBe('Checkout 3, Demo Market. Un articolo, due euro e sessanta. Annuisci per pagare.');
   expect(it_({ key: 'checkout.paid', totalCents: 639 }))
     .toBe('Pagato. Sei euro e trentanove. La ricevuta è sul telefono. Fotocamera spenta.');
-  expect(it_({ key: 'checkout.biometric' })).toBe("Oltre cinquanta euro. Conferma con l'impronta sul telefono.");
+  expect(it_({ key: 'checkout.biometric' })).toBe("Conferma con l'impronta sul telefono.");
   expect(it_({ key: 'hint.lookAtCode' })).toBe('Guarda il codice della cassa, poi annuisci.');
   expect(it_({ key: 'info.help' }))
     .toBe('Solleva un prodotto per sentire il prezzo. Annuisci per aggiungerlo. Guarda il codice di una cassa e annuisci per pagare.');

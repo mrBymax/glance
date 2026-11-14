@@ -178,7 +178,7 @@ export const LINES_EN: LineTemplates = {
   'checkout.paid': (line, profile) =>
     `Paid. ${capitalize(spokenPrice(line.totalCents, profile.lang, 'full'))}. Your receipt is on your phone. Camera off.`,
   'checkout.failed': () => 'Payment failed. Nothing was charged. Look at the code to try again.',
-  'checkout.biometric': () => 'Over fifty euros. Confirm with your fingerprint on the phone.',
+  'checkout.biometric': () => 'Confirm with your fingerprint on the phone.',
   'spotcheck.ask': (line, profile) => `Quick check. Show me the ${nameInside(line.product, profile)}.`,
   'spotcheck.thanks': () => 'Thank you.',
   'info.total': (line, profile) => `${capitalize(itemCount(line.itemCount, profile))}. ${total(line.totalCents, profile)}`,

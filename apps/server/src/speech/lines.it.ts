@@ -146,7 +146,7 @@ export const LINES_IT: LineTemplates = {
   'checkout.paid': (line, profile) =>
     `Pagato. ${capitalize(spokenPrice(line.totalCents, profile.lang, 'full'))}. La ricevuta è sul telefono. Fotocamera spenta.`,
   'checkout.failed': () => 'Pagamento non riuscito. Nessun addebito. Guarda il codice per riprovare.',
-  'checkout.biometric': () => "Oltre cinquanta euro. Conferma con l'impronta sul telefono.",
+  'checkout.biometric': () => "Conferma con l'impronta sul telefono.",
   'spotcheck.ask': (line, profile) => `Controllo rapido. Mostrami questo prodotto: ${nameInside(line.product, profile)}.`,
   'spotcheck.thanks': () => 'Grazie.',
   'info.total': (line, profile) => `${capitalize(itemCount(line.itemCount, profile))}. ${total(line.totalCents, profile)}`,

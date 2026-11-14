@@ -177,6 +177,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     clock: deps.clock,
     catalog: products,
     secondLookWaitMs: config.secondLookWaitMs,
+    biometricAboveCents: config.biometricAboveCents,
     store: deps.store,
     bus,
     clipUrl: createClipUrl({

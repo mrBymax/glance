@@ -41,7 +41,7 @@ export type PromptState =
 
 /**
  * spotcheck: the kiosk asked for a spot check, and the voice waits for one product of the cart. No pay prompt exists yet.
- * biometric: the shopper said yes to a total above the limit, and the phone checks the fingerprint.
+ * biometric: the shopper said yes to a total above the limit of the server, and the phone checks the fingerprint.
  * suspended with suspendedBy null: the next report of the code gives the pay prompt.
  */
 export type CheckoutState = {
@@ -228,5 +228,8 @@ export type Verdict = { kind: IntentKind; source: IntentSource; promptId: string
 /** Why the guard dropped a line: its text is that of a line of the last 20 seconds, it came less than 3 seconds after another unsolicited line, or its appearance already had a line about a failed read. */
 export type DropReason = 'same text' | 'gap' | 'appearance';
 
-/** secondLookWaitMs: how long the look-alike line waits for the result of a still. 0 means that it does not wait. */
-export type RuleContext = { catalog: CatalogIndex; secondLookWaitMs: number };
+/**
+ * secondLookWaitMs: how long the look-alike line waits for the result of a still. 0 means that it does not wait.
+ * biometricAboveCents: a payment above this total needs a fingerprint. null means that no payment needs one.
+ */
+export type RuleContext = { catalog: CatalogIndex; secondLookWaitMs: number; biometricAboveCents: number | null };

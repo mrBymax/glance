@@ -8,7 +8,7 @@ it('uses the defaults', () => {
     port: 8080, publicBaseUrl: 'http://localhost:8080', mongodbUri: null, mongodbDb: 'glance',
     catalogPath: 'catalog/catalog.dev.json', geminiModel: 'gemini-3.5-flash-lite',
     geminiMediaResolution: 'default', minConfidence: 0.6, labelMinConfidence: 0.7, requireBlur: false, fakeRecognition: null, fakeSpeech: false,
-    speechCacheDir: '.cache/speech', saveFramesDir: null, paymentDelayMs: 1500, secondLookWaitMs: 0,
+    speechCacheDir: '.cache/speech', saveFramesDir: null, paymentDelayMs: 1500, secondLookWaitMs: 0, biometricAboveCents: null,
     storeListPath: 'catalog/store-list.dev.json', fakeProductInfo: false, offBaseUrl: 'https://world.openfoodfacts.org',
     productInfoUserAgent: 'MetaGlance/0.1 (https://github.com/mrBymax/glance)', productCacheDir: '.cache/products',
     referenceDir: 'catalog/reference', recognitionConcurrency: 8, recognitionReferences: 3,
@@ -68,6 +68,16 @@ it('reads the wait for the sharp second look, which is off at 0', () => {
   expect(() => loadConfig({ SECOND_LOOK_WAIT_MS: '-1' }, ['--fake'])).toThrow(/SECOND_LOOK_WAIT_MS/);
   expect(() => loadConfig({ SECOND_LOOK_WAIT_MS: '2.5' }, ['--fake'])).toThrow(/SECOND_LOOK_WAIT_MS/);
   expect(() => loadConfig({ SECOND_LOOK_WAIT_MS: '10001' }, ['--fake'])).toThrow(/SECOND_LOOK_WAIT_MS/);
+});
+it('reads the total above which a payment needs a fingerprint, and has no limit when it is not set', () => {
+  expect(loadConfig({}, ['--fake']).biometricAboveCents).toBeNull();
+  expect(loadConfig({ BIOMETRIC_ABOVE_CENTS: '' }, ['--fake']).biometricAboveCents).toBeNull();
+  expect(loadConfig({ BIOMETRIC_ABOVE_CENTS: '5000' }, ['--fake']).biometricAboveCents).toBe(5000);
+  expect(loadConfig({ BIOMETRIC_ABOVE_CENTS: '0' }, ['--fake']).biometricAboveCents).toBe(0);
+  expect(() => loadConfig({ BIOMETRIC_ABOVE_CENTS: '-1' }, ['--fake'])).toThrow(ConfigError);
+  expect(() => loadConfig({ BIOMETRIC_ABOVE_CENTS: '49.5' }, ['--fake'])).toThrow(/BIOMETRIC_ABOVE_CENTS/);
+  expect(() => loadConfig({ BIOMETRIC_ABOVE_CENTS: 'fifty' }, ['--fake'])).toThrow(/BIOMETRIC_ABOVE_CENTS/);
+  expect(() => loadConfig({ BIOMETRIC_ABOVE_CENTS: '100000001' }, ['--fake'])).toThrow(/BIOMETRIC_ABOVE_CENTS/);
 });
 it('reads the number of recognition calls that run at the same time, from 1 to 12', () => {
   expect(loadConfig({ RECOGNITION_CONCURRENCY: '1' }, ['--fake']).recognitionConcurrency).toBe(1);

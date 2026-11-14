@@ -305,9 +305,21 @@ it('R15: a suspended checkout ends when the cart gets empty, so an empty cart ne
   expect(payments(h)).toEqual([]);
 });
 
-const costly = () => { const h = harness({ products: [product('tv', 5001)], cart: ['tv'] }); h.kiosk(); return h; };
+it('a total above 50 EUR is paid after a yes with no biometric.request', () => {
+  const h = harness({ products: [product('tv', 5001)], cart: ['tv'] }); h.kiosk();
+  expect(h.event('checkout.offered')!.needsBiometric).toBe(false);
+  expect(toSnapshot('s-1', h.state, [], h.ctx).prompt).toMatchObject({ kind: 'pay', totalCents: 5001, needsBiometric: false });
+  h.done(); h.yes('head');
+  expect(h.effects).toEqual([{ type: 'payment.start', kiosk: KIOSK, totalCents: 5001 }]);
+  expect(h.state.checkout!.step).toBe('paying');
+  expect(h.all.some((e) => e.type === 'biometric.request')).toBe(false);
+});
 
-it('asks for a fingerprint above 50 EUR, and pays only after it', () => {
+const LIMIT = 5000;
+/** The server has a limit of 50 EUR, and the total is above it. */
+const costly = () => { const h = harness({ products: [product('tv', 5001)], cart: ['tv'], biometricAboveCents: LIMIT }); h.kiosk(); return h; };
+
+it('with a limit of 50 EUR, asks for a fingerprint above it, and pays only after it', () => {
   const h = costly();
   expect(h.event('checkout.offered')!.needsBiometric).toBe(true);
   h.done(); h.yes('head');
@@ -317,12 +329,19 @@ it('asks for a fingerprint above 50 EUR, and pays only after it', () => {
   h.send({ type: 'biometric.result', ok: true });
   expect(h.effects).toEqual([{ type: 'payment.start', kiosk: KIOSK, totalCents: 5001 }]);
 });
-it('needs no fingerprint at exactly 50 EUR', () => {
-  const h = harness({ products: [product('radio', 5000)], cart: ['radio'] });
+it('with a limit of 50 EUR, needs no fingerprint at exactly 50 EUR', () => {
+  const h = harness({ products: [product('radio', 5000)], cart: ['radio'], biometricAboveCents: LIMIT });
   h.kiosk();
   expect(h.event('checkout.offered')!.needsBiometric).toBe(false);
   h.done(); h.yes('head');
   expect(payments(h)).toHaveLength(1);
+});
+it('with a limit of 0, each total needs a fingerprint', () => {
+  const h = harness({ cart: [RYE], biometricAboveCents: 0 }); h.kiosk();
+  expect(h.event('checkout.offered')!.needsBiometric).toBe(true);
+  h.done(); h.yes('head');
+  expect(h.effects.at(-1)).toEqual({ type: 'biometric.request' });
+  expect(payments(h)).toEqual([]);
 });
 it('a failed fingerprint cancels the checkout', () => {
   const h = costly(); h.done(); h.yes('head');
@@ -332,9 +351,12 @@ it('a failed fingerprint cancels the checkout', () => {
   expect(h.state).toMatchObject({ phase: 'shopping', checkout: null });
 });
 it('a fingerprint result with no request starts no payment', () => {
-  const h = harness({ cart: [RYE] }); h.kiosk(); h.done();
+  const h = harness({ cart: [RYE], biometricAboveCents: LIMIT }); h.kiosk(); h.done();
   h.send({ type: 'biometric.result', ok: true });
   expect(h.effects).toEqual([]);
+  const noLimit = harness({ products: [product('tv', 5001)], cart: ['tv'] }); noLimit.kiosk(); noLimit.done();
+  noLimit.send({ type: 'biometric.result', ok: true });
+  expect(noLimit.effects).toEqual([]);
 });
 it('the fingerprint line has a high priority, interrupts, and is no prompt', () => {
   const h = costly(); h.done(); h.yes('head');
@@ -369,14 +391,14 @@ it('a second fingerprint result starts no second payment', () => {
   h.send({ type: 'biometric.result', ok: true });
   expect(payments(h)).toHaveLength(1);
 });
-it('the snapshot says that the pay prompt needs a fingerprint', () => {
+it('with a limit, the snapshot says that the pay prompt needs a fingerprint', () => {
   const h = costly();
   expect(toSnapshot('s-1', h.state, [], h.ctx).prompt).toMatchObject({ kind: 'pay', totalCents: 5001, needsBiometric: true });
-  const cheap = harness({ cart: [RYE] }); cheap.kiosk();
+  const cheap = harness({ cart: [RYE], biometricAboveCents: LIMIT }); cheap.kiosk();
   expect(toSnapshot('s-1', cheap.state, [], cheap.ctx).prompt).toMatchObject({ kind: 'pay', needsBiometric: false });
 });
-it('a cart change gives a pay prompt with the fingerprint value of the new total', () => {
-  const h = harness({ products: [product('radio', 5000)], cart: ['radio'] }); h.kiosk();
+it('with a limit, a cart change gives a pay prompt with the fingerprint value of the new total', () => {
+  const h = harness({ products: [product('radio', 5000)], cart: ['radio'], biometricAboveCents: LIMIT }); h.kiosk();
   h.send({ type: 'cart.edit', productId: 'radio', qty: 2 });
   expect(h.event('checkout.offered')).toMatchObject({ totalCents: 10000, needsBiometric: true });
 });

@@ -17,6 +17,8 @@ export type RuntimeDeps = {
   catalog: CatalogIndex;
   /** The wait of the rules for the result of a still. Not set means 0, which is off. */
   secondLookWaitMs?: number;
+  /** A payment above this total needs a fingerprint. Not set means null: no payment needs one. */
+  biometricAboveCents?: number | null;
   store: Store;
   bus: EventBus;
   /** The address of the speech clip, or null when no clip exists. */
@@ -175,7 +177,9 @@ export class SessionRuntime {
   }
 
   private ruleContext(): RuleContext {
-    return { catalog: this.deps.catalog, secondLookWaitMs: this.deps.secondLookWaitMs ?? 0 };
+    return {
+      catalog: this.deps.catalog, secondLookWaitMs: this.deps.secondLookWaitMs ?? 0, biometricAboveCents: this.deps.biometricAboveCents ?? null,
+    };
   }
 
   /** Makes `sink` the phone of the session. An older sink closes, so one phone gets each message. */

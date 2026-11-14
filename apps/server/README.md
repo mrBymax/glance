@@ -96,6 +96,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `SAVE_FRAMES` | not set | A directory for frames. When it is set, the server writes each frame there. See "Stored frames". Keep it not set for the demo and on the deployed server. |
 | `PAYMENT_DELAY_MS` | `1500` | The length of the mock payment. |
 | `SECOND_LOOK_WAIT_MS` | `0` | How long the look-alike line waits for the result of a still, in milliseconds, from 0 to 10000. `0` means off. See "Sharp second look". |
+| `BIOMETRIC_ABOVE_CENTS` | not set | A total above this number of cents needs a fingerprint check on the phone before the payment. An integer from 0 to 100000000. With no value, no payment needs a fingerprint. See "Fingerprint above a limit". |
 | `DEMO_KEY` | not set | The key of the paths under `/api/demo`. With no key, those paths answer 404. |
 | `REFERENCE_DIR` | `catalog/reference` | The folder with the reference pictures of the store items. See "Reference pictures". |
 | `STORE_LIST_PATH` | `catalog/store-list.dev.json` | The items that the store sells, with the barcode and the price of each. See "Barcode scan". |
@@ -1009,7 +1010,7 @@ The rules that exist:
 - A cart change during a pay prompt gives a new pay prompt with the new total. The old prompt cannot pay.
 - A checkout needs items in the cart. When the cart gets empty, the checkout ends, also while a product suspends it. So an empty cart never gets a pay prompt.
 - While the payment runs, no answer, no undo, and no cart edit has an effect.
-- A total above 50 EUR needs a fingerprint check on the phone before the payment. See "Fingerprint above 50 EUR".
+- By default, no payment needs a fingerprint: a nod pays each total. With `BIOMETRIC_ABOVE_CENTS` set, a total above that limit needs a fingerprint check on the phone before the payment. See "Fingerprint above a limit".
 - A barcode of a product that the store sells gets the prompt of that product. A code that the store does not sell gets one line. See "Barcode scan".
 - While the shopper shows a barcode, and for 3 seconds after, recognition gives no unknown line and no aim hint. The same holds while the server waits for a still and its label call.
 - 2 frames with a product that sight cannot name ask the phone for a still, and the label call reads the package. See "A product that sight cannot name".
@@ -1254,17 +1255,21 @@ The profile holds `budgetCents`, or `null` for no budget. The rule is in `change
 - When a removal brings the total back to the budget or under it, the next add that crosses the budget warns again.
 - A profile patch that lowers the budget under the total gives no event. The phone UI compares the two numbers by itself.
 
-### Fingerprint above 50 EUR
+### Fingerprint above a limit
 
-A nod is consent, not authentication. So a total above `BIOMETRIC_ABOVE_CENTS` (5000 cents) needs a fingerprint check on the phone. The rules are in `src/sessions/checkout.ts`.
+By default, no payment needs a fingerprint. An accepted yes on the pay prompt pays each total, and `needsBiometric` is always false. The phone gets no `biometric.request`.
 
-- `needsBiometric` in `checkout.offered` and in the pay prompt of the snapshot is true for a total above 50 EUR. A total of exactly 50 EUR needs no fingerprint.
-- An accepted yes on such a pay prompt starts no payment. The checkout gets the step `biometric`, and the pay prompt ends. The voice says "Over fifty euros. Confirm with your fingerprint on the phone." Then the phone gets the message `biometric.request`.
+A nod is consent, not authentication. The setting `BIOMETRIC_ABOVE_CENTS` adds a fingerprint check on the phone for a total above its value. The value is a number of cents, and `BIOMETRIC_ABOVE_CENTS=5000` gives a limit of 50 EUR. A value of `0` asks for a fingerprint for each payment. A value that is not an integer from 0 to 100000000 stops the server at its start. `loadConfig` reads the value, and the rules in `src/sessions/checkout.ts` get it in their context as `biometricAboveCents`.
+
+With the setting, these rules apply:
+
+- `needsBiometric` in `checkout.offered` and in the pay prompt of the snapshot is true for a total above the limit. A total of exactly the limit needs no fingerprint.
+- An accepted yes on such a pay prompt starts no payment. The checkout gets the step `biometric`, and the pay prompt ends. The voice says "Confirm with your fingerprint on the phone." Then the phone gets the message `biometric.request`.
 - The phone answers with `biometric.result`. With `ok: true` the payment starts. With `ok: false` the checkout ends as for a no: the line is "Checkout cancelled. Your cart is safe.", and the kiosk is muted until its code has left the view.
 - A `biometric.result` counts only in the step `biometric`. Each other one has no effect, so a result alone never pays.
 - In the step `biometric`, a yes, a no, an undo, a cart edit, and a recognition result have no effect. A stopped camera stream does not end the checkout, because the shopper looks at the phone.
 - The checkout still ends when its code was out of view for 30 seconds (R19), and with a stop intent. A result that arrives later has no effect.
-- A browser client has no fingerprint check. Its checkout above 50 EUR ends after those 30 seconds.
+- A browser client has no fingerprint check. Its checkout above the limit ends after those 30 seconds.
 - After a restart of the server, a session that waited for the fingerprint loads with no checkout.
 
 The steps of a checkout:
@@ -1275,8 +1280,8 @@ stateDiagram-v2
   offered --> suspended: product held up
   suspended --> offered: product left the view, code in view
   offered --> offered: cart change, or the code comes back after the head window
-  offered --> paying: accepted yes on the pay prompt, total of 50 EUR or less
-  offered --> biometric: accepted yes on the pay prompt, total above 50 EUR
+  offered --> paying: accepted yes on the pay prompt, no limit or total not above it
+  offered --> biometric: accepted yes on the pay prompt, total above BIOMETRIC_ABOVE_CENTS
   biometric --> paying: biometric.result with ok true
   biometric --> [*]: biometric.result with ok false, or code out of view for 30 seconds
   offered --> [*]: no, empty cart, or code out of view for 30 seconds

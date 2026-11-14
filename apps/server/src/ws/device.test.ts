@@ -21,20 +21,29 @@ let token: string;
 let session: SessionRuntime;
 let phone: TestPhone;
 
-beforeEach(async () => {
+/** Starts an app with `env` as its settings, makes a session, and connects its phone. */
+async function start(env: Record<string, string>): Promise<void> {
   onFrame = vi.fn<FrameHandler>();
   ask = vi.fn<RuntimeDeps['ask']>(async () => 'It contains gluten.');
-  t = await testApp({}, { onFrame, ask });
+  t = await testApp(env, { onFrame, ask });
   const res = await fetch(`${t.base}/api/sessions`, { method: 'POST' });
   ({ sessionId: id, token } = CreateSessionResponseSchema.parse(await res.json()));
   session = (await t.app.sessions.get(id))!;
   phone = await connectPhone(t, id, token);
   await phone.next((m) => m.t === 'snapshot');
-});
-afterEach(async () => {
+}
+async function stop(): Promise<void> {
   phone.close();
   await t.close();
-});
+}
+/** Replaces the app of the test with one that asks for a fingerprint above 50 EUR. */
+async function restartWithLimit(): Promise<void> {
+  await stop();
+  await start({ BIOMETRIC_ABOVE_CENTS: '5000' });
+}
+
+beforeEach(() => start({}));
+afterEach(stop);
 
 /** Resolves when the server has read each message that the phone sent before the call. */
 async function serverReadAll(): Promise<void> {
@@ -144,7 +153,21 @@ it('the word pay never adds a product', async () => {
   await serverReadAll();
   expect(session.state.cart.items).toEqual([]);
 });
-it('a payment above 50 EUR waits for the fingerprint result of the phone', async () => {
+it('a total above 50 EUR is paid after a yes with no biometric.request', async () => {
+  session.dispatch(seeOat);
+  session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
+  phone.send({ t: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
+  const kiosk = await t.app.kiosks.register({ name: 'Checkout 3', store: 'Demo Market' });
+  phone.send({ t: 'kiosk.seen', text: formatKioskCode(kiosk.code) });
+  const offered = await phone.next((m) => m.t === 'event' && m.event.type === 'checkout.offered');
+  expect(offered).toMatchObject({ event: { totalCents: 5670, needsBiometric: false } });
+  phone.send({ t: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
+  await vi.waitFor(() => expect(session.state.phase).toBe('paid'));
+  expect(session.state.lastReceipt).toMatchObject({ totalCents: 5670 });
+  expect(phone.messages.some((m) => m.t === 'biometric.request')).toBe(false);
+});
+it('with a limit of 50 EUR, a payment above it waits for the fingerprint result of the phone', async () => {
+  await restartWithLimit();
   session.dispatch(seeOat);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   phone.send({ t: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });
@@ -155,7 +178,7 @@ it('a payment above 50 EUR waits for the fingerprint result of the phone', async
   phone.send({ t: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0002' });
   await phone.next((m) => m.t === 'biometric.request');
   const texts = phone.messages.flatMap((m) => (m.t === 'speak' ? [m.text] : []));
-  expect(texts.at(-1)).toBe('Over fifty euros. Confirm with your fingerprint on the phone.');
+  expect(texts.at(-1)).toBe('Confirm with your fingerprint on the phone.');
   // The mock payment of a test takes 10 ms, so a payment that started would be over now.
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(session.state.checkout!.step).toBe('biometric');
@@ -163,7 +186,8 @@ it('a payment above 50 EUR waits for the fingerprint result of the phone', async
   await vi.waitFor(() => expect(session.state.phase).toBe('paid'));
   expect(session.state.lastReceipt).toMatchObject({ totalCents: 5670 });
 });
-it('a failed fingerprint check cancels the checkout, and the cart stays', async () => {
+it('with a limit of 50 EUR, a failed fingerprint check cancels the checkout, and the cart stays', async () => {
+  await restartWithLimit();
   session.dispatch(seeOat);
   session.dispatch({ type: 'intent', kind: 'yes', source: 'phone', promptId: 'p-0001' });
   session.dispatch({ type: 'cart.edit', productId: 'oat-drink-1l', qty: 30 });

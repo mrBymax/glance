@@ -35,6 +35,8 @@ export type Config = {
    * Set it only when the phone sends a still for each glance.ambiguous event.
    */
   secondLookWaitMs: number;
+  /** A payment above this total needs a fingerprint on the phone. null means that no payment needs one. */
+  biometricAboveCents: number | null;
   /** The key of the paths under /api/demo, or null. Without it those paths answer 404. */
   demoKey: string | null;
   /** The folder with the reference pictures of the store items. */
@@ -54,6 +56,8 @@ export class ConfigError extends Error {}
 const DEFAULT_FAKE_SCRIPT = 'fixtures/fake-script.json';
 /** The catalog file when CATALOG_PATH is not set. */
 export const DEFAULT_CATALOG_PATH = 'catalog/catalog.dev.json';
+/** The highest value of BIOMETRIC_ABOVE_CENTS: one million EUR. */
+const MAX_BIOMETRIC_ABOVE_CENTS = 100_000_000;
 
 /**
  * Reads the settings from the environment and the command line.
@@ -65,7 +69,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     const value = env[name];
     return value === undefined || value === '' ? null : value;
   };
-  const readNumber = (name: string, fallback: number, min: number, max: number, integer: boolean): number => {
+  const readNumber = <F extends number | null>(name: string, fallback: F, min: number, max: number, integer: boolean): number | F => {
     const text = read(name);
     if (text === null) return fallback;
     const value = Number(text);
@@ -118,6 +122,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     saveFramesDir: read('SAVE_FRAMES'),
     paymentDelayMs: readNumber('PAYMENT_DELAY_MS', 1500, 0, 600_000, true),
     secondLookWaitMs: readNumber('SECOND_LOOK_WAIT_MS', 0, 0, 10_000, true),
+    biometricAboveCents: readNumber('BIOMETRIC_ABOVE_CENTS', null, 0, MAX_BIOMETRIC_ABOVE_CENTS, true),
     demoKey: read('DEMO_KEY'),
     referenceDir: read('REFERENCE_DIR') ?? DEFAULT_REFERENCE_DIR,
     storeListPath: read('STORE_LIST_PATH') ?? DEFAULT_STORE_LIST_PATH,
