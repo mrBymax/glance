@@ -71,3 +71,6 @@ coverage/
 
 # Preserve .gitkeep files across repository
 !.gitkeep
+
+# Logs and saved frames of local demo runs
+logs/
