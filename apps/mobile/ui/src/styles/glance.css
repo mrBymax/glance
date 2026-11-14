@@ -153,6 +153,22 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/*
+ * The ring of an empty check box, a radio, or the budget field is the only sign of the control, so it needs a contrast of
+ * 3:1 on its surface.
+ * The stock border token gives 1.5:1 in light mode and 2:1 in dark mode.
+ */
+.astryx-radio-indicator:not([data-checked]),
+.astryx-checkbox-indicator:not([data-checked]),
+.astryx-number-input {
+  border-color: var(--color-icon-secondary);
+}
+
+/* A checked row keeps the canvas of the list. The filled box states the choice, as the filled dot of a radio row does. */
+.astryx-checkbox-list .astryx-item[data-selected] {
+  background-color: transparent;
+}
+
 /* Radio rows look like the rows of a check box list: an inset and a hairline between rows. */
 .astryx-radio-list-item {
   padding-inline: var(--spacing-3);
