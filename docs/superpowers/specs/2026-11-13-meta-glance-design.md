@@ -1,7 +1,7 @@
 # Meta Glance PoC - design document
 
 - Date: 2026-11-13
-- Status: draft 2, after five zero-context reviews. It waits for team approval.
+- Status: draft 3, after five zero-context reviews and the first team review on pull request 3. It waits for team approval.
 - Event: Junction 2026, Meta challenge "AI Glasses for Everyone, Everyday" (`CHALLENGE.md`)
 - Deadline: Sunday 2026-11-15 at 08:00 (team target). The public schedule says 10:00.
 - Research and reviews behind this document: the files in `docs/research/`
@@ -59,7 +59,6 @@ Anti-goals. Each one is a failure even if the demo works:
 - The voice states a guess as a fact, or guesses a price or an allergen.
 - The server stores a camera frame.
 - A feature works only for a shopper who can see, hear, speak, and nod.
-- The pitch presents a mock as real.
 
 ## 3. Constraints
 
@@ -134,7 +133,6 @@ C3, the parts that the challenge text asks for:
 - Captions, haptics, and a phone button for each action.
 - The preferences marked "core" in section 6.5.
 - Crop and face blur on the phone. No stored frame.
-- Checkout with the phone camera when the glasses are off.
 - The mirror page for judges and for the video.
 - Server on Vultr with HTTPS, the website with the video, the APK link, and the privacy page.
 
@@ -247,6 +245,7 @@ General:
 - R21. Silence never adds and never pays.
 - R22. After 3 minutes with no product and no kiosk in view, the camera stops. The voice and a haptic say so. The cart stays. The phone restarts the camera.
 - R23. "Cart" by voice speaks at most five lines, then "and more on your phone".
+- R24. If the glasses cannot stream, for example with a flat battery, Glance does not check out. The shopper uses a regular checkout: a staffed checkout, or a self-checkout where the shopper scans each product. The cart stays on the phone as a list.
 
 ### 6.3 Inputs
 
@@ -314,7 +313,7 @@ Each state has one cause sentence and one action on the phone, in one banner com
 | Stopped by the device | session state STOPPED | "Camera off." | A stopped session is final. If the link dropped or the hinge closed, create a new session when the glasses return. If not, wait for the shopper. |
 | Glasses off the face | wear state | | Stop uploads. Resume when worn. A stream that starts off the face pauses when worn, until a tap. |
 | Battery at 20 and 10 percent | battery level | "Glasses battery at twenty percent." | Information only |
-| Battery too low, too warm | stream error | "Camera off. Your cart is safe. You can pay with your phone." | Checkout with the phone camera |
+| Battery too low, too warm | stream error | "Camera off. Please use a regular checkout." | Regular checkout (rule R24). The cart stays on the phone as a list. |
 | Server not reachable | socket closed or timeout | "Connection lost. Your cart is safe. Glances are paused." | Reconnect with backoff, then "Back online." |
 | Recognition slow | 3 failed or late calls | "Recognition is slow right now." | Automatic |
 | Payment failed (mock) | kiosk test flag | "Payment failed. Nothing was charged. Look at the code to try again." | Look again |
@@ -375,7 +374,7 @@ Phone to server:
 - A binary message for each frame: 4 bytes with the header length, a JSON header (`seq`, `ts`, `w`, `h`, `blurred`), then the JPEG bytes.
 - `intent`: `kind` (`yes`, `no`, `undo`, `repeat`, `total`, `cart`, `help`, `stop`), `source` (`head`, `voice`, `touch`, `phone`, `key`, `camera`), and `promptId` for a yes or a no.
 - `prompt.done`: the ID of a prompt whose clip finished.
-- `kiosk.seen`: the text of the code and `source` (`glasses` or `phone`). At most one each second while the code is in view.
+- `kiosk.seen`: the text of the code. At most one each second while the code is in view.
 - `speech.final`: `text`, `confidence`, `locale`.
 - `device.state`: link, battery, wear, hinge, thermal level, stream state.
 
@@ -399,7 +398,7 @@ One union type, sent to the phone, the kiosk, the mirror page, and the HUD:
 
 The phone UI has no network code. Kotlin relays server events to the page and sends UI actions to the server.
 
-- Page to Kotlin: `setup.register`, `setup.requestCamera`, `session.start`, `session.end`, `intent`, `cart.edit`, `profile.set`, `pocket.set`, `haptic`, `kiosk.scanWithPhone`, `data.delete`.
+- Page to Kotlin: `setup.register`, `setup.requestCamera`, `session.start`, `session.end`, `intent`, `cart.edit`, `profile.set`, `pocket.set`, `haptic`, `data.delete`.
 - Kotlin to page: `native.state` (registration, permission, device, session, stream, network, capabilities) and each server event.
 
 `packages/shared` defines the bridge as an interface with two implementations. `AndroidBridge` uses the WebView. `BrowserBridge` talks to the server directly and fakes the native state, so the UI runs in a desktop browser.
@@ -511,7 +510,6 @@ The app never writes a frame to storage. Face detection is best effort at this r
 - Set the text zoom of the WebView from the font scale of the system.
 - Pocket mode: the page shows a black screen with the total, and Kotlin keeps the screen on.
 - Haptics run in Kotlin, with the patterns of section 6.4.
-- `kiosk.scanWithPhone` opens the Google code scanner and reports the code as `kiosk.seen` with source `phone`.
 - Volume keys send a yes or a no while a prompt is current, if section 16 selects that input.
 
 ### 9.9 Mock mode
@@ -535,7 +533,7 @@ Core screens:
 |---|---|
 | Setup | Three steps on one screen: link glasses, allow camera, ready. Each step says what opens, what to tap, and how to return, before the jump to Meta AI. |
 | Session | Status row (glasses, battery, camera, network). The card of the current prompt: name, pack size, large price, warnings, and Add and Skip buttons. Captions. Cart with a control for each row. Total. Undo, Pocket mode, Settings, End. One banner for the states of section 6.6. |
-| Checkout and receipt | Kiosk name, store, total, Pay and Cancel. "Scan the checkout code with the phone". Then the receipt with the line "Demo payment. No money moved." |
+| Checkout and receipt | Kiosk name, store, total, Pay and Cancel. Then the receipt with the line "Demo payment. No money moved." |
 
 Settings is a sheet on the Session screen with the core preferences, the privacy text, and "Delete my data".
 
@@ -723,7 +721,6 @@ Separate shots, each on real hardware:
 
 - Glasses off the face, then folded. The phone names each state. A fold ends the session, so the shot ends there.
 - Two look-alike products, if extra 3 is done.
-- Checkout with the phone camera.
 
 Fallbacks: mock mode with the phone camera if the glasses fail, labeled as a simulation, and a screen recording of the kiosk.
 
@@ -781,16 +778,15 @@ The team did not decide these. Review them.
 8. The answer for look-alike products is extra 3, above the HUD. The sharp second look is extra 9.
 9. The camera stops after 3 idle minutes.
 10. The kiosk code is a short text in a QR code, and it does not change in the PoC.
-11. Checkout with the phone camera is in the core, for a flat glasses battery.
-12. The mirror page is in the core, for judges and for the video.
-13. The core phone UI has three screens. The practice round and the welcome screen wait.
-14. The server sends events through a bus in the process. Atlas change streams are optional.
-15. The phone UI is bundled in the APK and has no network code.
-16. The payment is a mock, with a labeled receipt.
-17. Voice commands work in the language of the glasses only. Italian changes the output.
-18. If Motion and Inputs both fail, the volume keys of the phone are the yes and the no.
-19. Product recognition uses a text catalog in the prompt first, and reference photos only if the test fails.
-20. The pitch does not claim that the store installs nothing, or that the store lends glasses.
+11. The mirror page is in the core, for judges and for the video.
+12. The core phone UI has three screens. The practice round and the welcome screen wait.
+13. The server sends events through a bus in the process. Atlas change streams are optional.
+14. The phone UI is bundled in the APK and has no network code.
+15. The payment is a mock, with a labeled receipt.
+16. Voice commands work in the language of the glasses only. Italian changes the output.
+17. If Motion and Inputs both fail, the volume keys of the phone are the yes and the no.
+18. Product recognition uses a text catalog in the prompt first, and reference photos only if the test fails.
+19. The pitch does not claim that the store installs nothing, or that the store lends glasses.
 
 ## 22. Left to the builder
 
