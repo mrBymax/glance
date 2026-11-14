@@ -251,6 +251,28 @@ class HeadInputTest {
         assertEquals(yes, feed(nodAt(11_000), startMs = 0))
     }
 
+    // Phone times of the log, from 22:34:30.000. A still ran from 2106 to 6932, and no motion sample arrived from
+    // 2966 to 9618. The line of p-0003 started at 4928. The server replaced p-0003 at 9585, 33 ms before the samples
+    // of the stall arrived, so its head window closed with no sample. This test keeps the prompt, as the server does now.
+    @Test fun `the session of 2026-11-14, a nod in the stall of a still counts for the prompt that arrived in that stall`() {
+        input.setBlocked(true, 2966, Profiles.DEFAULT)
+        productLine(4928)
+        prompts.onPromptDone("p-0001", 7928)
+        val out = feed(nodAt(7000, thenMs = 3000), startMs = 0, arrival = { if (it < 2966) it else maxOf(it, 9618) })
+        assertEquals(yes, out)
+    }
+
+    @Test fun `the head window of a prompt that arrived in a stall has its full length after the stall`() {
+        input.setBlocked(true, 2966, Profiles.DEFAULT)
+        productLine(4928)
+        prompts.onPromptDone("p-0001", 7928)
+        input.setBlocked(false, 9618, Profiles.DEFAULT)
+        // The line ended 1690 ms before the end of the stall, so the window ends at 7928 + 8000 + 1690.
+        assertTrue(input.holdsStills(17_617, Profiles.DEFAULT))
+        assertFalse(input.holdsStills(17_618, Profiles.DEFAULT))
+        assertEquals(yes, feed(nodAt(16_500), startMs = 0, arrival = { if (it in 2966..9618) null else it }))
+    }
+
     @Test fun `a stall after the end of the head window does not open it again`() {
         finishedPrompt(1000)
         input.setBlocked(true, 10_000, Profiles.DEFAULT)

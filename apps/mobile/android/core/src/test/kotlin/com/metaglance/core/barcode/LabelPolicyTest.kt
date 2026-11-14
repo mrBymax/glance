@@ -141,12 +141,78 @@ class LabelPolicyTest {
         assertEquals(listOf(6000, 12000, 18000), policy.stills(100..60000 step 100))
     }
 
-    @Test fun `a still that must wait for a prompt uses no still gap and no still of the region`() {
-        val policy = LabelPolicy(dwellMs = 2500)
-        val held = (0..9000 step 100).filter { policy.onFrame(it.toLong(), regionInView = true, codeAccepted = false, hold = true) }
+    @Test fun `a region that waited behind a prompt needs its time again after the prompt, and the wait uses no still gap and no still of the region`() {
+        val dropped = ArrayList<LabelDrop>()
+        val policy = LabelPolicy(dwellMs = 2500, onDropped = dropped::add)
+        val held = (0..4000 step 100).filter { policy.onFrame(it.toLong(), regionInView = true, codeAccepted = false, hold = true) }
         assertEquals(emptyList<Int>(), held)
-        // The region waited long enough, so its still starts with the first frame after the prompt.
-        assertTrue(policy.onFrame(9100, regionInView = true, codeAccepted = false))
-        assertEquals(listOf(15_100, 21_100), (9200..40_000 step 100).filter { policy.onFrame(it.toLong(), regionInView = true, codeAccepted = false) })
+        assertEquals(emptyList<LabelDrop>(), dropped)
+        // The prompt got its answer at 4100. The still does not start right after it: the region asks again after its time.
+        assertEquals(listOf(6600, 12_600, 18_600), (4100..40_000 step 100).filter { policy.onFrame(it.toLong(), regionInView = true, codeAccepted = false) })
+        assertEquals(listOf(LabelDrop.REGION), dropped)
+    }
+
+    @Test fun `a region that waits behind a prompt for 3 seconds starts its time again`() {
+        val dropped = ArrayList<LabelDrop>()
+        val policy = LabelPolicy(dwellMs = 1000, onDropped = dropped::add)
+        // The region asks at 1000, 5000, and 9000, and each request is stale 3 seconds later.
+        (0..12_500 step 100).forEach { assertFalse(policy.onFrame(it.toLong(), regionInView = true, codeAccepted = false, hold = true)) }
+        assertEquals(listOf(LabelDrop.REGION, LabelDrop.REGION, LabelDrop.REGION), dropped)
+    }
+
+    @Test fun `a request that meets a prompt gives no still when the prompt gets its answer`() {
+        val dropped = ArrayList<LabelDrop>()
+        val policy = LabelPolicy(onDropped = dropped::add)
+        assertFalse(policy.onFrame(0, regionInView = false, codeAccepted = false, requested = true, hold = true))
+        (100..2000 step 100).forEach { assertFalse(policy.onFrame(it.toLong(), regionInView = false, codeAccepted = false, hold = true)) }
+        assertEquals(emptyList<LabelDrop>(), dropped)
+        // The head answer came at 2050. The product has its name, so the still has no use.
+        (2100..9000 step 100).forEach { assertFalse(policy.onFrame(it.toLong(), regionInView = false, codeAccepted = false)) }
+        assertEquals(listOf(LabelDrop.REQUEST), dropped)
+    }
+
+    @Test fun `a request that waits behind a prompt is dropped 3 seconds after it arrived`() {
+        val dropped = ArrayList<LabelDrop>()
+        val policy = LabelPolicy(onDropped = dropped::add)
+        (0..2900 step 100).forEach { assertFalse(policy.onFrame(it.toLong(), regionInView = false, codeAccepted = false, requested = it == 0, hold = true)) }
+        assertEquals(emptyList<LabelDrop>(), dropped)
+        assertFalse(policy.onFrame(3000, regionInView = false, codeAccepted = false, hold = true))
+        assertEquals(listOf(LabelDrop.REQUEST), dropped)
+        (3100..9000 step 100).forEach { assertFalse(policy.onFrame(it.toLong(), regionInView = false, codeAccepted = false, hold = it < 6000)) }
+        assertEquals(1, dropped.size)
+    }
+
+    @Test fun `a request that is 3 seconds old when a frame arrives is dropped, also with no prompt`() {
+        val dropped = ArrayList<LabelDrop>()
+        val policy = LabelPolicy(onDropped = dropped::add)
+        // A still stopped the frames for 3 seconds after the request arrived.
+        assertFalse(policy.onFrame(3000, regionInView = false, codeAccepted = false, requested = true, requestMs = 0))
+        assertEquals(listOf(LabelDrop.REQUEST), dropped)
+        assertTrue(policy.onFrame(3100, regionInView = false, codeAccepted = false, requested = true, requestMs = 200))
+    }
+
+    // Phone times of the log, from 22:34:34.180: still.request at 0, the first frame after a still at 2783,
+    // the prompts p-0003 and p-0004 from 750 to the head answer at 7165, and the next frame at 7212.
+    @Test fun `the session of 2026-11-14, a request that waited 7 seconds behind two prompts gives no still`() {
+        val dropped = ArrayList<LabelDrop>()
+        val policy = LabelPolicy(onDropped = dropped::add)
+        assertFalse(policy.onFrame(2783, regionInView = false, codeAccepted = false, requested = true, hold = true, requestMs = 0))
+        assertEquals(emptyList<LabelDrop>(), dropped)
+        (2850..7150 step 150).forEach { assertFalse(policy.onFrame(it.toLong(), regionInView = false, codeAccepted = false, hold = true)) }
+        assertEquals(listOf(LabelDrop.REQUEST), dropped)
+        // The old code took the still here, 47 ms after the nod that added the product.
+        (7212..15_000 step 150).forEach { assertFalse(policy.onFrame(it.toLong(), regionInView = false, codeAccepted = false)) }
+        assertEquals(1, dropped.size)
+    }
+
+    @Test fun `a new request while one waits behind a prompt takes its place`() {
+        val dropped = ArrayList<LabelDrop>()
+        val policy = LabelPolicy(onDropped = dropped::add)
+        assertFalse(policy.onFrame(0, regionInView = false, codeAccepted = false, requested = true, hold = true))
+        assertFalse(policy.onFrame(2000, regionInView = false, codeAccepted = false, requested = true, hold = true))
+        assertFalse(policy.onFrame(4900, regionInView = false, codeAccepted = false, hold = true))
+        assertEquals(emptyList<LabelDrop>(), dropped)
+        assertFalse(policy.onFrame(5000, regionInView = false, codeAccepted = false, hold = true))
+        assertEquals(listOf(LabelDrop.REQUEST), dropped)
     }
 }

@@ -27,6 +27,7 @@ import com.metaglance.core.kiosk.SeenCode
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * The path of each frame of the stream: the code scan, then the upload of the sharpest frame of each 150 ms.
@@ -43,8 +44,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * `gate` returns the reason to skip an upload, or null. `onKioskText` gets the full code text, for example
  * `GL1 K3X7`, when the dwell rule reports it. `onBarcode` gets a product code when the vote reports it.
  * `onLabelStill` says that the caller must take one still now. `onUpload` gets a JPEG with its header.
- * `holdStills` returns true while a prompt waits for a head answer: no label still starts then, and a
- * `still.request` waits for the first frame after it. Each callback runs on the frame thread.
+ * `holdStills` returns true while a prompt waits for a head answer: no label still starts then, and `LabelPolicy`
+ * drops a `still.request` that waited behind the prompt. Each callback runs on the frame thread.
  */
 class FramePipeline(
     private val gate: () -> UploadSkip?,
@@ -68,7 +69,7 @@ class FramePipeline(
     private val dwell = KioskDwell(gapMs = stream.gapMs(KioskDwell.DEFAULT_GAP_MS))
     private val vote = BarcodeVote(gapMs = stream.gapMs(BarcodeVote.DEFAULT_GAP_MS))
     private val ocrPace = Pace(OCR_EVERY_MS)
-    private val labelRequested = AtomicBoolean()
+    private val labelRequestMs = AtomicLong(NO_REQUEST)
     private val stillGaveCode = AtomicBoolean()
     private val picker = SharpestFramePicker<RawFrame>()
     private val damageLog = DamageLog()
@@ -115,8 +116,8 @@ class FramePipeline(
         onUpload(FrameHeader(seq, System.currentTimeMillis(), prepared.width, prepared.height, prepared.blurred), jpeg)
     }
 
-    /** The server asked for a still with `still.request`. The next frame gives the request to the label policy. */
-    fun requestLabelStill() = labelRequested.set(true)
+    /** The server asked for a still with `still.request`. The next frame gives the request to the label policy, with its time. */
+    fun requestLabelStill() = labelRequestMs.set(SystemClock.elapsedRealtime())
 
     /** The phone read a code in the label still. The next frame tells the label policy. */
     fun onLabelStillCode() = stillGaveCode.set(true)
@@ -141,9 +142,9 @@ class FramePipeline(
         if (stillGaveCode.getAndSet(false)) label.onStillCode()
         // A frame that waits in the socket is no reason to drop a still.
         val canUpload = gate().let { it == null || it == UploadSkip.STILL_SENDING }
-        val hold = holdStills()
-        val requested = !hold && labelRequested.getAndSet(false)
-        if (label.onFrame(nowMs, decoded != null || region != null, vote.accepted, requested, canUpload, hold)) {
+        val requestMs = labelRequestMs.getAndSet(NO_REQUEST)
+        val requested = requestMs != NO_REQUEST
+        if (label.onFrame(nowMs, decoded != null || region != null, vote.accepted, requested, canUpload, holdStills(), requestMs)) {
             // Why the still: a person who reads the log must see if the scanner or the server asked.
             log("label still asked: " + if (requested) "server request" else "region $region in ${frame.width}x${frame.height}")
             onLabelStill()
@@ -179,6 +180,9 @@ class FramePipeline(
 
     private companion object {
         const val JPEG_QUALITY = 80
+
+        /** `SystemClock.elapsedRealtime` never gives it. */
+        const val NO_REQUEST = -1L
 
         /** OCR runs at most 3 times each second, because it takes longer than the scan of a frame. */
         const val OCR_EVERY_MS = 333L

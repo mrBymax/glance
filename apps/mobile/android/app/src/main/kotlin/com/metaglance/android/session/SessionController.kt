@@ -25,6 +25,7 @@ import com.metaglance.android.pipeline.LabelStill
 import com.metaglance.android.pipeline.StillPhoto
 import com.metaglance.core.audio.AnswerSoundOnce
 import com.metaglance.core.audio.SpeechQueue
+import com.metaglance.core.barcode.LabelDrop
 import com.metaglance.core.barcode.LabelPolicy
 import com.metaglance.core.barcode.LabelTiming
 import com.metaglance.core.contract.Cart
@@ -51,8 +52,8 @@ import com.metaglance.core.gesture.GestureReport
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
 import com.metaglance.core.gesture.HeadSample
-import com.metaglance.core.image.StillPolicy
 import com.metaglance.core.image.SecondLook
+import com.metaglance.core.image.StillPolicy
 import com.metaglance.core.image.StreamSetup
 import com.metaglance.core.image.UploadGate
 import com.metaglance.core.image.WaitingStill
@@ -182,10 +183,10 @@ class SessionController(
     private val paymentConfirm = PaymentConfirm()
     private var stillPolicy = StillPolicy()
     private var waitingStills = WaitingStills()
-    private val answerSound = AnswerSound(app)
 
     /** True when this camera start takes a still for each `glance.ambiguous` event. */
     private var secondLook = false
+    private val answerSound = AnswerSound(app)
     private val answerSoundOnce = AnswerSoundOnce()
     private val motionRecorder = MotionRecorder(File(app.getExternalFilesDir("probe") ?: File(app.filesDir, "probe"), "motion"), scope, ::log)
     private val headTrace = HeadTrace()
@@ -794,9 +795,9 @@ class SessionController(
         val labelTiming = store.labelTiming
         stillPolicy = StillPolicy(labelTiming.stillEveryMs)
         log("label still: wait ${labelTiming.waitMs} ms, gap ${labelTiming.gapMs} ms")
-        // The same holds for the stream settings. DatLink reads them in the call below.
         secondLook = store.takesSecondLook
         log(SecondLook.logLine(secondLook))
+        // The same holds for the stream settings. DatLink reads them in the call below.
         val stream = store.streamSetup
         if (!dat.startSession(withCamera = true, autoAttach = true)) {
             // The SDK error of a failed start arrives through dat.faults, after this call returns.
@@ -846,7 +847,9 @@ class SessionController(
                 findFaces = { faces.find(it) },
                 crop = true,
                 nextSeq = uploadSeq::incrementAndGet,
-                label = labelTiming.labelPolicy(stream.gapMs(LabelPolicy.DEFAULT_GAP_MS)),
+                label = labelTiming.labelPolicy(stream.gapMs(LabelPolicy.DEFAULT_GAP_MS)) { drop ->
+                    log(if (drop == LabelDrop.REQUEST) "label still dropped: the request is stale" else "label still dropped: the region waited behind a prompt")
+                },
                 holdStills = { holdsStills(SystemClock.elapsedRealtime()) },
                 stream = stream,
                 log = ::log
@@ -925,10 +928,10 @@ class SessionController(
      * The sharp second look: the server cannot tell look-alike products apart in a frame of the stream, so the
      * app sends one still photo, which has more pixels. The contract has no request for it, and the event
      * `glance.ambiguous` is the signal. A still does not pass the upload gate, but it needs an open socket.
+     * It runs only with the setting `glance.secondLookStill`, which is off by default.
      */
     private fun takeStill() {
         val eventMs = SystemClock.elapsedRealtime()
-     * It runs only with the setting `glance.secondLookStill`, which is off by default.
         // Each DAT session has a policy of its own, and a capture ends the policy that started it.
         val policy = stillPolicy
         if (!datRunning || !policy.tryStart(eventMs)) return
@@ -972,9 +975,8 @@ class SessionController(
     private fun takeLabelStill() {
         val startMs = SystemClock.elapsedRealtime()
         if (datRunning && holdsStills(startMs)) {
-            // A prompt started after the frame path asked. The request stays for the first frame after the answer.
-            log("label still waits: a prompt waits for its answer")
-            framePipeline?.requestLabelStill()
+            // A prompt started after the frame path asked. The answer to it ends the reason for this still.
+            log("label still dropped: a prompt waits for its answer")
             return
         }
         val policy = stillPolicy

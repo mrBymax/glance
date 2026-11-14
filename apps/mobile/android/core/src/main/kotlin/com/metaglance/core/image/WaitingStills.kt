@@ -29,7 +29,7 @@ enum class WaitingStill(val maxWaitMs: Long) {
 /**
  * Keeps the stills that must not start while a prompt waits for a head answer: a still stalls the motion
  * samples for seconds, and the nod of the shopper is lost. A still that waits uses no time of `StillPolicy`.
- * The label still waits in `LabelPolicy`, in the frame path. Call each function on one thread.
+ * `LabelPolicy` holds the label still back, in the frame path. Call each function on one thread.
  */
 class WaitingStills {
     private val since = HashMap<WaitingStill, Long>()

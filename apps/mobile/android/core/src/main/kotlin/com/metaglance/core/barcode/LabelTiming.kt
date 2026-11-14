@@ -31,8 +31,11 @@ data class LabelTiming(val waitMs: Long, val gapMs: Long) {
      */
     val stillEveryMs: Long get() = minOf(StillPolicy.DEFAULT_EVERY_MS, gapMs)
 
-    /** `regionGapMs` is the time that a region keeps its wait with no frame that shows it. A slow stream needs a longer one. */
-    fun labelPolicy(regionGapMs: Long = LabelPolicy.DEFAULT_GAP_MS): LabelPolicy = LabelPolicy(dwellMs = waitMs, everyMs = gapMs, gapMs = regionGapMs)
+    /**
+     * `regionGapMs` is the time that a region keeps its wait with no frame that shows it. A slow stream needs a longer one.
+     * `onDropped` gets each still that the policy drops because its reason is gone.
+     */
+    fun labelPolicy(regionGapMs: Long = LabelPolicy.DEFAULT_GAP_MS, onDropped: (LabelDrop) -> Unit = {}): LabelPolicy = LabelPolicy(dwellMs = waitMs, everyMs = gapMs, gapMs = regionGapMs, onDropped = onDropped)
 
     companion object {
         /** The defaults of `glance.labelWaitMs` and `glance.labelGapMs` in the build of the app. */
