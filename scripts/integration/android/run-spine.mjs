@@ -12,7 +12,7 @@
 //   state  DeviceStatesTest, SetupFlowTest, and RecognitionSlowTest: each device and error state
 //   page   PhoneUiPageTest: the phone UI in the WebView
 //   input  VolumeKeysTest, TouchpadInputTest, and VoiceCommandsTest: the volume keys, the touchpad, and the voice
-//   extra  PaymentPromptTest: the fingerprint above 50 EUR
+//   extra  PaymentPromptTest and StillPhotoTest: the fingerprint above 50 EUR, and the sharp second look
 //
 // Use, in scripts/integration:
 //   node android/run-spine.mjs                 the spine suite, one time
@@ -47,7 +47,7 @@ const SUITES = {
   state: [STATES_CLASS, `${APP_ID}.SetupFlowTest`, `${APP_ID}.RecognitionSlowTest`],
   page: [`${APP_ID}.PhoneUiPageTest`],
   input: [`${APP_ID}.VolumeKeysTest`, `${APP_ID}.TouchpadInputTest`, `${APP_ID}.VoiceCommandsTest`],
-  extra: [`${APP_ID}.PaymentPromptTest`],
+  extra: [`${APP_ID}.PaymentPromptTest`, `${APP_ID}.StillPhotoTest`],
 };
 /** The clip of the kiosk that declines each payment, in the cache folder of the app. */
 const FAIL_KIOSK_CLIP = 'kiosk-fail.mp4';

@@ -16,6 +16,7 @@ import com.metaglance.android.dat.DatLink
 import com.metaglance.android.dat.ProbeDecisions
 import com.metaglance.android.pipeline.FaceFinder
 import com.metaglance.android.pipeline.FramePipeline
+import com.metaglance.android.pipeline.StillPhoto
 import com.metaglance.core.audio.SpeechQueue
 import com.metaglance.core.contract.Codec
 import com.metaglance.core.contract.DeviceState
@@ -32,8 +33,10 @@ import com.metaglance.core.contract.Profiles
 import com.metaglance.core.contract.ServerEvent
 import com.metaglance.core.contract.ServerToDevice
 import com.metaglance.core.frame.FrameHeader
+import com.metaglance.core.frame.FrameKind
 import com.metaglance.core.gesture.HeadGestureConfig
 import com.metaglance.core.gesture.HeadGestureDetector
+import com.metaglance.core.image.StillPolicy
 import com.metaglance.core.image.UploadGate
 import com.metaglance.core.input.HeadInput
 import com.metaglance.core.input.KeyInput
@@ -63,6 +66,7 @@ import com.metaglance.core.state.StopCauses
 import com.metaglance.core.state.StopFacts
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -132,6 +136,10 @@ class SessionController(
     )
     private val announcer = ConnectionAnnouncer()
     private val paymentConfirm = PaymentConfirm()
+    private var stillPolicy = StillPolicy()
+
+    /** The number of the last upload. The frames of the stream and the stills share it, on two threads. */
+    private val uploadSeq = AtomicInteger()
     private var headInput = newHeadInput()
 
     private var page: ((NativeToPage) -> Unit)? = null
@@ -483,6 +491,7 @@ class SessionController(
                 event?.let(prompts::onEvent)
                 // The checkout ended on the server, for example after 30 seconds with no kiosk code in view.
                 if (event is ServerEvent.CheckoutCancelled) closePaymentPrompt()
+                if (event is ServerEvent.GlanceAmbiguous) takeStill()
             }
             is ServerToDevice.Snapshot -> {
                 toPage(NativeToPage.Snapshot(message.session))
@@ -628,6 +637,7 @@ class SessionController(
         sawStreaming = false
         mainYesResolved = false
         headInput = newHeadInput()
+        stillPolicy = StillPolicy()
         if (!dat.startSession(withCamera = true, autoAttach = true)) {
             // The SDK error of a failed start arrives through dat.faults, after this call returns.
             scope.launch { sendError(if (INSUFFICIENT_SDK in sessionErrors) NativeErrors.SDK_TOO_OLD else NativeErrors.SESSION_FAILED) }
@@ -670,6 +680,7 @@ class SessionController(
                 // Each upload is the center of the frame, with each face pixelated.
                 findFaces = { faces.find(it) },
                 crop = true,
+                nextSeq = uploadSeq::incrementAndGet,
                 log = ::log
             )
             try {
@@ -677,6 +688,43 @@ class SessionController(
             } finally {
                 pipeline.close()
                 faces.close()
+            }
+        }
+    }
+
+    /**
+     * The sharp second look: the server cannot tell look-alike products apart in a frame of the stream, so the
+     * app sends one still photo, which has more pixels. The contract has no request for it, and the event
+     * `glance.ambiguous` is the signal. A still does not pass the upload gate, but it needs an open socket.
+     */
+    private fun takeStill() {
+        val eventMs = SystemClock.elapsedRealtime()
+        // Each DAT session has a policy of its own, and a capture ends the policy that started it.
+        val policy = stillPolicy
+        if (!datRunning || !policy.tryStart(eventMs)) return
+        scope.launch {
+            try {
+                val photo = dat.captureStill() ?: return@launch
+                val capturedAt = System.currentTimeMillis()
+                val still = withContext(Dispatchers.Default) {
+                    val faces = FaceFinder()
+                    try {
+                        StillPhoto.prepare(photo) { faces.find(it) }
+                    } finally {
+                        faces.close()
+                    }
+                }
+                if (still == null) {
+                    log("still dropped: face detection failed")
+                    return@launch
+                }
+                val header = FrameHeader(uploadSeq.incrementAndGet(), capturedAt, still.width, still.height, blurred = true, kind = FrameKind.STILL)
+                val sent = socket?.sendFrame(header, still.jpeg) == true
+                tap?.onFrame(header, still.jpeg.size, sent)
+                val result = if (sent) "sent" else "not sent, the socket is down"
+                log("still seq=${header.seq} ${still.width}x${still.height} ${still.jpeg.size} bytes $result, ${SystemClock.elapsedRealtime() - eventMs} ms after the event")
+            } finally {
+                policy.onEnd()
             }
         }
     }
