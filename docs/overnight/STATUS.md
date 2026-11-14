@@ -2,7 +2,7 @@
 
 ## Summary
 
-State on 2026-11-14 at about 10:10: phases A to E are done and merged in `feat/overnight-build`. No task is `todo`. Two tasks are `morning`: Plan 2 Task 4 (the probe on the real glasses) and Plan 4 Task 8 (late content and the publish check). `MORNING.md` holds each step that needs a person.
+State on 2026-11-14 at about 10:10: phases A to E are done and merged in `feat/overnight-build`. No task is `todo`. The draft pull request is https://github.com/mrBymax/glance/pull/7. Two tasks are `morning`: Plan 2 Task 4 (the probe on the real glasses) and Plan 4 Task 8 (late content and the publish check). `MORNING.md` holds each step that needs a person.
 
 What works, checked on the merged tree after the last merge:
 
@@ -136,4 +136,4 @@ Status values: `todo`, `done`, `blocked`, `morning`.
 | I | 1 | Integration: server and Kotlin client | C | main | done | merged in 8c5bba6 |
 | I | 2 | Integration: server and web pages | C | main | done | merged in 8c5bba6 |
 | I | 3 | Integration: app with mock glasses on the phone | C | main | done | merged in 8c5bba6 |
-| F | 1 | Draft pull request into main with the status table | end | main | todo | |
+| F | 1 | Draft pull request into main with the status table | end | main | done | PR 7 |
