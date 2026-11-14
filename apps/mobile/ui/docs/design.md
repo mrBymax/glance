@@ -49,7 +49,7 @@ Refero research on 2026-11-14: 5 style searches, 2 full styles, 11 screen search
 | Status as four pills with an icon and a word | Brink | Neutral muted surface | A problem state gets a warning glyph and its word, not only a color. |
 | Cart rows: name in full, then "pack, qty x unit" and Remove on the next line | Target list, Square ledger | List with dividers | A name of 80 characters wraps in full and never pushes the button out of the screen. |
 | Total as a large numeral at the end of the cart | Square Virtual Terminal (prior research) | Display size | The total is the second fact that a shopper asks for. |
-| Ask and Undo in a dock that sticks to the bottom | Voicenotes footer, Brink actions | Primary and secondary Button | The two fast actions stay under the thumb while the cart scrolls. |
+| Ask and Undo in a dock that sticks to the bottom | Voicenotes footer, Brink actions | Secondary Button | The two fast actions stay under the thumb while the cart scrolls. Neither commits, so neither is black. At a large font scale the dock scrolls with the page, because two rows of it covered a third of the screen. |
 | Settings as one icon button in the header | Uber, iOS convention | IconButton | It frees the action rows for actions of the shop. |
 | Choices of the settings as radio rows, not segments | ElevenReader, Uber allergies | RadioList | A segment of 62 px cut "While in view" and "Phone" at 360 px. A row holds a label of each length at 200 percent. |
 | Checkout sheet: store glyph, payee, item count, amount, fingerprint row, Pay, Cancel | App Store purchase sheet | BottomSheet, primary Button | The sheet states who gets paid and how much before the only commit. |
@@ -76,32 +76,38 @@ All colors are Neutral tokens of Astryx. The values are the computed values in C
 
 Type scale (Neutral on a touch screen: base 16 px, ratio 1.1736). Each size is in `rem`, so it grows with the font scale of the system.
 
+Measured in Chrome at 360 px and a root font of 100 percent:
+
 | Role | Size | Weight |
 |---|---|---|
-| Price, total, amount to pay | 2.625 rem (42 px) | 700, tabular digits |
-| Screen title (h1), product name | 1.625 rem (26 px) | 700 |
-| Section title (h2) | 1.1875 rem (19 px) | 700 |
-| Newest caption | 1.1875 rem (19 px) | 500 |
-| Body, older captions | 1 rem (16 px) | 400 |
-| Supporting text, status pills | 0.875 rem (14 px) | 500 |
+| Price, amount to pay | 2.625 rem (42 px) | 700, tabular digits |
+| Screen title (h1) | 1.625 rem (26 px) | 600 |
+| Product name, "Paid", total of the cart | 1.625 rem (26 px) | 700 |
+| Section title (h2): Captions, Cart, Settings | 1.375 rem (22 px) | 600 |
+| Captions | 1.1875 rem (19 px) | 500 for the newest line, 400 for the older lines |
+| Body | 1 rem (16 px) | 400 |
+| Status pills, quantity lines | 0.875 rem (14 px) | 500 and 400 |
 
-Spacing uses the Astryx steps of 4 px: 16 px page inset, 20 px card padding, 24 px between sections, 8 and 12 px inside a group. Radius: 12 px for a card (`--radius-container`), 10 px for a control (`--radius-element`), 28 px for a sheet (`--radius-page`), full for a pill.
+Spacing uses the Astryx steps of 4 px: 16 px page inset, 20 px card padding, 24 px between sections, 8 and 12 px inside a group. Radius: 12 px for a card (`--radius-container`), 10 px for a control (`--radius-element`), 28 px for a sheet (`--radius-page`), full for a pill and a mark.
+
+Astryx spacing is in `rem`, so at a root font of 200 percent each inset doubles: a 360 px screen kept 216 px for the text of a card. A container query (`max-width: 16rem` on the app element) detects a large font scale. It then sets the insets of the page, the cards, and the sheets to `--spacing-2`, hides the decorative marks beside headings, and lets the dock scroll with the page.
 
 ## Components
 
 - Each control is 48 x 48 CSS px or more: `src/styles/touch.css` raises the Astryx sizes, and `src/test/touchTargets.ts` checks each control in each test scene.
 - Every Astryx component that exists is used as is: Button, IconButton, Banner, Card, BottomSheet, AlertDialog, Stepper, List, RadioList, CheckboxList, NumberInput, ScrollableArea, Divider, Icon, Theme.
-- `src/styles/glance.css` holds the few app classes that Astryx has no prop for: the size of the numerals, the transcript window, the status pills, the dock, and the identity disc. Each value in it is an Astryx token or a `rem` value.
+- `src/styles/glance.css` holds the few app classes that Astryx has no prop for: the size of the numerals and titles, the transcript window, the status pills, the dock, the marks, and the insets at a large font scale. Each value in it is an Astryx token or a `rem` value.
+- At a large font scale a label of a button, a row, or a step takes a second line. Astryx cuts it with an ellipsis, so `glance.css` sets `white-space: normal` on those labels and lets each button grow in height from its 48 or 56 px minimum.
 
 ## Motion
 
-- A new caption fades in over `--duration-medium` (300 ms). Nothing else in the page moves by itself.
+- A new caption fades in over `--duration-medium` (300 ms). Each caption line keeps one size, so the older lines only move up inside the window. Nothing else in the page moves by itself.
 - The sheets and dialogs use the motion of Astryx, which caps each move at 200 ms with reduced motion.
 - With `prefers-reduced-motion: reduce`, the caption has no fade.
 
 ## Accessibility rules of the design
 
-- Contrast of 4.5:1 or more for each text, and 3:1 for each large text and each control border that carries meaning, in light and in dark mode.
+- Contrast of 4.5:1 or more for each text, and 3:1 for each large text and each control border that carries meaning, in light and in dark mode. The stock border token gave 1.5:1 for the ring of an empty check box, a radio, and the budget field. `glance.css` paints that ring with `--color-icon-secondary`: 5.41:1 in light mode and 5.65:1 in dark mode.
 - No text is cut and no element ends right of the screen at 360 px with a root font of 200 percent, in English and in Italian.
 - One `main`, one `h1`, headings in order, a name for each control, and the order of focus follows the order of reading.
 - One polite live region (`useSpokenText`) speaks each caption and each cart change. No other part of the page is a live region for the same text.
