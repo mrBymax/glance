@@ -88,8 +88,8 @@ class HeadAxes(private val config: HeadGestureConfig) {
     }
 
     private companion object {
-        /** In m/s2. A smaller reading is no reading: a motion file has 0 for a sensor that sent nothing. */
-        const val MIN_GRAVITY = 1.0
+        /** A smaller reading is no reading: a motion file has 0 for a sensor that sent nothing. Only the direction counts, so the unit does not matter. */
+        const val MIN_GRAVITY = 0.5
         const val GRAVITY_S = 1.0
 
         /** The pitch axis of the config, laid level, has at least this length when it is the ear axis: 60 degrees from the sky. */

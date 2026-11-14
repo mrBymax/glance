@@ -24,10 +24,6 @@ class MotionCsvTest {
         assertThrows(IllegalArgumentException::class.java) { MotionCsv.parse("1,2,3") }
     }
 
-    @Test fun `reads the gyroscope columns`() {
-        assertEquals(listOf(GyroSample(500000000, 0.34f, -0.02f, 0f)), MotionCsv.gyro(listOf(row)))
-    }
-
     // MockDeviceKit takes a row of 14 values only, and it skips a comment line. So the arrival time is a comment.
     @Test fun `writes the arrival time of a row as a comment line before the row`() {
         assertEquals("#a 123456\n$line", MotionCsv.formatTimed(row, 123456))

@@ -6,7 +6,10 @@ enum class Sensitivity { GENTLE, NORMAL, FIRM }
 
 /**
  * The limits of the head gesture detector. Angles are in rad, rates are in rad/s.
- * `pitchDownSign` is 1 or -1: the sign of the rate on `pitchAxis` when the head moves down.
+ *
+ * `pitchAxis` and `yawAxis` are the gyroscope axes of a nod and of a shake. `pitchDownSign` is 1 or -1: the sign
+ * of the rate on `pitchAxis` when the head moves down. A sample with an accelerometer reading needs the yaw axis
+ * and the sign not at all, and the pitch axis only as the axis from ear to ear: see `HeadAxes`.
  *
  * - `minStrokeRad`, `minPeakRadS`: the smallest stroke and the smallest top rate of a gesture.
  * - `maxNodRad`: a nod has no stroke larger than this.

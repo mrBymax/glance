@@ -6,10 +6,11 @@ import kotlin.math.roundToLong
 import kotlin.math.sign
 
 /**
- * Finds nods and shakes in gyroscope samples. Each time is the time of a sample, so samples that arrive late
+ * Finds nods and shakes in motion samples. Each time is the time of a sample, so samples that arrive late
  * and together give the same result as samples that arrive one by one.
  *
- * The detector integrates the pitch rate and the yaw rate to an angle, and cuts each angle into strokes.
+ * `HeadAxes` gives the pitch rate and the yaw rate of the head for each sample. The detector integrates each
+ * rate to an angle, and cuts each angle into strokes.
  * A stroke is a movement in one direction. It ends at a reversal, or when the head is quiet for `holdMs`.
  *
  * A nod is two opposite pitch strokes with no rest between them, down first or up first. The detector reports

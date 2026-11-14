@@ -62,8 +62,6 @@ object MotionCsv {
         return rows
     }
 
-    fun gyro(rows: List<MotionRow>): List<GyroSample> = rows.map { GyroSample(it.tNs, it.gyroX, it.gyroY, it.gyroZ) }
-
     /** The samples for the head gestures. A row holds 0 for a sensor that sent nothing, so such a row has no accelerometer reading. */
     fun head(rows: List<MotionRow>): List<HeadSample> = rows.map { row ->
         val accel = AccelSample(row.accelX, row.accelY, row.accelZ).takeUnless { it.x == 0f && it.y == 0f && it.z == 0f }
