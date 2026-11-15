@@ -11,40 +11,35 @@ const outDir = fileURLToPath(new URL('../diagrams/', import.meta.url));
 await mkdir(outDir, { recursive: true });
 const diagrams = [];
 
-/* 1. The loop: four steps on one rail, the nod as the focal step, and the return to the first step. */
+/* 1. The four steps of the protocol in a row, the nod as the focal step (page 10 of the script). */
 {
-  const slug = 'loop';
+  const slug = 'steps';
   const width = 1728;
-  const height = 384;
-  const xs = [250, 660, 1070, 1480];
-  const cy = 64;
-  const r = 56;
+  const height = 312;
+  const xs = [216, 648, 1080, 1512];
+  const cy = 96;
+  const r = 88;
   const steps = [
-    { n: '1', title: 'Look', icon: 'scan-eye', lines: ['Look at a Glance code,', 'or at a product.'] },
-    { n: '2', title: 'Hear', icon: 'audio-lines', lines: ['The voice says what it is', 'and what a nod will do.'] },
-    { n: '3', title: 'Nod', icon: 'check', lines: ['A nod confirms.', 'A shake says no.'], focal: true },
-    { n: '4', title: 'Done', icon: 'circle-check', lines: ['The place gets the answer', 'and acts on it.'] },
+    { n: '1', title: 'Look.', icon: 'scan-eye' },
+    { n: '2', title: 'Hear.', icon: 'audio-lines' },
+    { n: '3', title: 'Nod.', icon: 'check', focal: true },
+    { n: '4', title: 'Done.', icon: 'circle-check' },
   ];
-  let svg = svgOpen({ slug, width, height, title: 'The Glance loop', desc: 'Four steps: look at a Glance code, hear what a nod will do, nod to confirm, and the place acts on the answer; the next code starts the loop again.' });
-  // Connectors first, so the discs sit on top of them.
+  let svg = svgOpen({ slug, width, height, title: 'The four steps of the Glance protocol', desc: 'Four steps in a row: look at a Glance code, hear what a nod will do, nod to confirm, and the place gets the answer.' });
   for (let i = 0; i < 3; i += 1) {
-    const from = xs[i] + r + 14;
-    const to = xs[i + 1] - r - 14;
-    svg += arrow(`M${from},${cy} H${to}`, { end: [to, cy], direction: 'right' });
+    const from = xs[i] + r + 18;
+    const to = xs[i + 1] - r - 18;
+    svg += arrow(`M${from},${cy} H${to}`, { end: [to, cy], direction: 'right', width: 3 });
   }
-  svg += arrow('M1536,64 H1696 Q1704,64 1704,72 V352 Q1704,360 1696,360 H32 Q24,360 24,352 V72 Q24,64 32,64 H180', { end: [180, 64], direction: 'right', dashed: true });
-  svg += label(864, 342, 'The next code starts the loop again', { size: 26 });
   steps.forEach((step, i) => {
     const x = xs[i];
     const fill = step.focal ? T.accent : T.card;
     const ink = step.focal ? T.onAccent : T.ink;
     svg += `<circle cx="${x}" cy="${cy}" r="${r}" fill="${fill}" stroke="${step.focal ? T.accent : 'rgba(0,0,0,0.16)'}" stroke-width="2"/>`;
-    svg += text(x, cy + 16, step.n, { size: 46, weight: 700, fill: ink, anchor: 'middle' });
-    svg += iconAt(step.icon, x - 96, 150, 40, T.ink);
-    svg += text(x - 46, 186, step.title, { size: 46, weight: 650 });
-    step.lines.forEach((line, j) => { svg += text(x, 240 + j * 38, line, { size: 30, fill: T.secondary, anchor: 'middle' }); });
+    svg += text(x, cy + 30, step.n, { size: 84, weight: 700, fill: ink, anchor: 'middle' });
+    svg += text(x, 290, step.title, { size: 72, weight: 650, anchor: 'middle' });
   });
-  diagrams.push({ slug, title: 'The Glance loop', svg: `${svg}</svg>` });
+  diagrams.push({ slug, title: 'The four steps of the Glance protocol', svg: `${svg}</svg>` });
 }
 
 /* 2. The parts of the protocol: glasses, phone, Glance server, recognition, and a place. */
@@ -92,80 +87,33 @@ const diagrams = [];
   diagrams.push({ slug, title: 'How the Glance protocol works', svg: `${svg}</svg>` });
 }
 
-/* 3. The store demo as a storyboard: four moments and the line that the wearer hears at each one. */
-{
-  const slug = 'storyboard';
-  const width = 1728;
-  const height = 556;
-  const panels = [
-    { n: '1', title: ['Hold up a product'], line: ['Oat drink, one litre,', 'one eighty-nine.', 'Nod to add.'] },
-    { n: '2', title: ['Nod to add it'], line: ['Added oat drink.', 'Total four forty-nine.'] },
-    { n: '3', title: ['Look at the', 'checkout code'], line: ['Checkout 3 at Demo', 'Market. Two items,', 'four euros forty-nine.', 'Nod to pay.'] },
-    { n: '4', title: ['Nod to pay'], line: ['Paid. Four euros', 'forty-nine. Your', 'receipt is on your', 'phone. Camera off.'] },
-  ];
-  const xs = [0, 444, 888, 1332];
-  const w = 396;
-  const y = 80;
-  let svg = svgOpen({ slug, width, height, title: 'The store demo in four moments', desc: 'In the aisle the wearer holds up a product and hears its name and price, then nods to add it; at the checkout the wearer looks at the code, hears the store and the total, and nods to pay.' });
-  // The two places of the shop.
-  svg += text(0, 30, 'In the aisle', { size: 26, weight: 650, fill: T.secondary });
-  svg += `<line x1="0" x2="840" y1="50" y2="50" stroke="rgba(0,0,0,0.2)" stroke-width="2"/>`;
-  svg += text(888, 30, 'At the checkout', { size: 26, weight: 650, fill: T.secondary });
-  svg += `<line x1="888" x2="1728" y1="50" y2="50" stroke="rgba(0,0,0,0.2)" stroke-width="2"/>`;
-  for (let i = 0; i < 3; i += 1) {
-    const from = xs[i] + w + 6;
-    const to = xs[i + 1] - 6;
-    svg += arrow(`M${from},${y + 235} H${to}`, { end: [to, y + 235], direction: 'right' });
-  }
-  panels.forEach((panel, i) => {
-    const x = xs[i];
-    svg += `<rect x="${x}" y="${y}" width="${w}" height="470" rx="14" fill="${T.card}" stroke="rgba(0,0,0,0.12)" stroke-width="2"/>`;
-    svg += text(x + 28, y + 76, panel.n, { size: 64, weight: 700 });
-    panel.title.forEach((line, j) => { svg += text(x + 28, y + 136 + j * 40, line, { size: 32, weight: 650 }); });
-    svg += `<rect x="${x + 20}" y="${y + 210}" width="${w - 40}" height="240" rx="12" fill="${T.darkBody}"/>`;
-    svg += iconAt('audio-lines', x + 44, y + 230, 28, T.darkSecondary);
-    svg += text(x + 84, y + 253, 'You hear', { size: 24, fill: T.darkSecondary, extra: ' font-variation-settings="\'DRKM\' 1"' });
-    panel.line.forEach((line, j) => { svg += text(x + 44, y + 302 + j * 38, line, { size: 28, weight: 500, fill: '#ffffff' }); });
-  });
-  diagrams.push({ slug, title: 'The store demo in four moments', svg: `${svg}</svg>` });
-}
-
-/* 4. The head window of a product prompt and of a pay prompt, on an honest time axis (an example line of 3 s). */
+/* 4. The head window as built: it opens 300 ms after the line of each prompt starts, and a nod stops the line. */
 {
   const slug = 'head-window';
   const width = 1728;
-  const height = 336;
+  const height = 248;
   const x0 = 340;
   const s = 112;
   const at = (seconds) => x0 + seconds * s;
-  let svg = svgOpen({ slug, width, height, title: 'When a nod counts', desc: 'For a product, the head window opens 1.2 seconds after the voice line starts, so a nod during the line counts and stops the line; for a payment, the window opens only when the line has ended; both close 8 seconds after the line ends by default.' });
-  const rows = [
-    { y: 24, name: 'Voice line' },
-    { y: 112, name: 'Nod for a product' },
-    { y: 200, name: 'Nod for a payment' },
-  ];
-  rows.forEach((row) => { svg += text(0, row.y + 34, row.name, { size: 26, weight: 600 }); });
-  // The line: it plays until the nod at 2 s, and the rest of it is cut.
-  svg += `<rect x="${at(0)}" y="24" width="${2 * s}" height="48" rx="8" fill="${T.accent}"/>`;
-  svg += `<rect x="${at(2)}" y="25" width="${1 * s}" height="46" rx="8" fill="none" stroke="${T.accent}" stroke-width="2" stroke-dasharray="8 6"/>`;
+  let svg = svgOpen({ slug, width, height, title: 'When a nod counts', desc: 'For a product and for a payment, the head window opens 300 milliseconds after the voice line starts, so a nod during the line counts and stops the voice at once; the window closes 8 seconds after the line ends by default.' });
+  svg += text(0, 58, 'Voice line', { size: 26, weight: 600 });
+  svg += text(0, 146, 'Head window', { size: 26, weight: 600 });
+  // The line plays until the nod at 1.5 s; the rest of it is cut.
+  svg += `<rect x="${at(0)}" y="24" width="${1.5 * s}" height="48" rx="8" fill="${T.accent}"/>`;
+  svg += `<rect x="${at(1.5)}" y="25" width="${1.5 * s}" height="46" rx="8" fill="none" stroke="${T.accent}" stroke-width="2" stroke-dasharray="8 6"/>`;
   svg += iconAt('audio-lines', at(0) + 16, 34, 28, '#ffffff');
-  svg += text(at(3) + 24, 58, 'A nod at 2 s stops the line and adds the item.', { size: 26, weight: 600 });
-  // Head windows.
-  svg += `<rect x="${at(1.2)}" y="112" width="${(11 - 1.2) * s}" height="48" rx="8" fill="${T.card}" stroke="${T.ink}" stroke-width="2"/>`;
-  svg += text(at(2) + 26, 145, 'Opens 1.2 s after the line starts', { size: 24 });
-  svg += text(at(11) - 18, 145, 'Closes 8 s after the line ends', { size: 24, anchor: 'end' });
-  svg += `<rect x="${at(3)}" y="200" width="${8 * s}" height="48" rx="8" fill="${T.card}" stroke="${T.ink}" stroke-width="2"/>`;
-  svg += text(at(3) + 18, 233, 'Opens when the line ends. A move during the line never pays.', { size: 24 });
-  // The nod.
-  svg += `<line x1="${at(2)}" x2="${at(2)}" y1="16" y2="172" stroke="${T.ink}" stroke-width="2.5"/>`;
-  svg += `<circle cx="${at(2)}" cy="136" r="11" fill="${T.ink}"/>`;
-  // Axis.
-  svg += `<line x1="${x0}" x2="${at(12)}" y1="280" y2="280" stroke="rgba(0,0,0,0.3)" stroke-width="2"/>`;
+  svg += text(at(3) + 24, 58, 'A nod at 1.5 s stops the voice at once.', { size: 26, weight: 600 });
+  svg += `<rect x="${at(0.3)}" y="112" width="${(11 - 0.3) * s}" height="48" rx="8" fill="${T.card}" stroke="${T.ink}" stroke-width="2"/>`;
+  svg += text(at(1.5) + 26, 145, 'Opens 0.3 s after the line starts, for every prompt', { size: 24 });
+  svg += text(at(11) - 18, 145, 'Closes 8 s after the line', { size: 24, anchor: 'end' });
+  svg += `<line x1="${at(1.5)}" x2="${at(1.5)}" y1="16" y2="172" stroke="${T.ink}" stroke-width="2.5"/>`;
+  svg += `<circle cx="${at(1.5)}" cy="136" r="11" fill="${T.ink}"/>`;
+  svg += `<line x1="${x0}" x2="${at(12)}" y1="200" y2="200" stroke="rgba(0,0,0,0.3)" stroke-width="2"/>`;
   for (let t = 0; t <= 12; t += 1) {
-    svg += `<line x1="${at(t)}" x2="${at(t)}" y1="274" y2="${t % 2 === 0 ? 290 : 284}" stroke="rgba(0,0,0,0.3)" stroke-width="2"/>`;
-    if (t % 2 === 0) svg += text(at(t), 322, String(t), { size: 24, fill: T.secondary, anchor: 'middle' });
+    svg += `<line x1="${at(t)}" x2="${at(t)}" y1="194" y2="${t % 2 === 0 ? 210 : 204}" stroke="rgba(0,0,0,0.3)" stroke-width="2"/>`;
+    if (t % 2 === 0) svg += text(at(t), 242, String(t), { size: 24, fill: T.secondary, anchor: 'middle' });
   }
-  svg += text(0, 322, 'Seconds', { size: 24, fill: T.secondary });
+  svg += text(0, 242, 'Seconds', { size: 24, fill: T.secondary });
   diagrams.push({ slug, title: 'When a nod counts', svg: `${svg}</svg>` });
 }
 
@@ -241,10 +189,10 @@ const diagrams = [];
   const right = [
     { title: 'Vending machine', icon: 'cup-soda', lines: ['“Sparkling water, one fifty.', 'Nod to buy.”'] },
     { title: 'Table order', icon: 'utensils', lines: ['“Margherita, nine euros.', 'Nod to order.”'] },
-    { title: 'Exhibit', icon: 'frame', lines: ['“Room 3, painting 12.', 'Here is its story.” No nod.'] },
+    { title: 'Parking meter', icon: 'circle-parking', lines: ['“One hour of parking, two euros.', 'Nod to start.”'] },
   ];
   const hub = { x: 664, y: 120, w: 400, h: 260 };
-  let svg = svgOpen({ slug, width, height, title: 'Places the protocol enables', desc: 'The Glance loop in the middle, connected to six places: a checkout, which is built, and a bus ticket, a ticket gate, a vending machine, a table order, and an exhibit, which are examples that nobody built.' });
+  let svg = svgOpen({ slug, width, height, title: 'Places the protocol enables', desc: 'The Glance loop in the middle, connected to six places: a checkout, which is built, and a bus ticket, a ticket gate, a vending machine, a table order, and a parking meter, which are examples that nobody built.' });
   const fan = [180, 250, 320];
   fan.forEach((fy, i) => {
     const cy = ys[i] + cardH / 2;
