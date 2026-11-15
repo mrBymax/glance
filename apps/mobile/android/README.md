@@ -37,6 +37,8 @@ flowchart LR
     Probe[ProbeActivity, debug build] --> Link
     Probe --> Mock
     Menu[MockMenuActivity] --> Mock
+    Menu --> Store[AddProductActivity and StoreItemsActivity, debug build]
+    Store --> StoreApi[StoreApi] --> Server
     Menu --> Link
     Menu --> Session
 ```
@@ -1077,6 +1079,7 @@ The top line of the menu shows `NativeState` and `DeviceState` as JSON, live. Th
 
 | Group | Items |
 |---|---|
+| Store | `Add or edit a product`, `Store items`. Only in the debug build. See "Add a product from the phone". |
 | Mode | `Enable (registered)`, `Enable (not registered)`, `Disable`. Each one stops a running session first, and removes the forced values. |
 | Glasses | `Pair`, `Power on`, `Power off`, `Don`, `Doff`, `Fold`, `Unfold` |
 | Camera | `Phone camera`. `Still image`: select an image for the next still photo. |
@@ -1108,6 +1111,73 @@ The states of the app, and the items that make each one:
 | Battery too low | `Battery 3`, `Stream error BATTERY_LOW` | The session stops. Event `native.battery_low`. |
 | Too warm | `Thermal critical`, `Stream error THERMAL_HOT` | The session stops. Event `native.too_warm`. |
 | Server not reachable | `Drop server link 10 s` | `network` is `offline`. After 3 seconds the phone voice says the "Connection lost" line. |
+
+## Add a product from the phone
+
+The debug build adds a product to the store list of the server with the phone alone: scan the barcode, check the form, save, take the pictures. The server needs no restart, and a session that runs offers the product at once. The server side is "Add a product from the phone" in `apps/server/README.md`.
+
+```mermaid
+sequenceDiagram
+    participant Person
+    participant Screen as Add product
+    participant Play as Scanner of Google Play services
+    participant Server
+    Person->>Screen: Glance Mock, "Add or edit a product"
+    Screen->>Play: startScan for EAN-13, EAN-8, UPC-A, UPC-E
+    Play-->>Screen: the digits of the code
+    Screen->>Server: GET /api/store/items/:gtin
+    Server-->>Screen: the item of the store, or the data of Open Food Facts
+    Person->>Screen: the price, then Save
+    Screen->>Server: PUT /api/store/items/:gtin
+    Person->>Screen: Take a picture, or Choose from gallery
+    Screen->>Server: POST /api/store/items/:gtin/pictures, a JPEG of 1600 pixels
+    Note over Server: the glasses know the product, with no restart
+```
+
+1. Open "Glance Mock". The first group is `Store`. Tap `Add or edit a product`.
+2. The scanner opens at once. Point the phone at the barcode. If the scanner reads no code, close it, type the digits under the barcode, and tap `Use this code`.
+3. The form shows. For a product that the store has, it holds the data of the store. For a new product it holds the name, the brand, and the pack size of Open Food Facts, and the keyboard is on the price. Change what is wrong. A button `Use the name: ...` puts another name of Open Food Facts into the field.
+4. Type the price in euros, with a point or a comma, and tap `Save` or the done key of the keyboard. The top line says "Saved. The glasses know it now."
+5. Tap `Take a picture` for the front of the pack, and again for the side with the barcode. `Choose from gallery` takes up to 3 pictures of the phone. Each picture shows as a thumbnail with a `Delete` button. Recognition uses the newest 3 pictures of an item.
+6. Tap `Scan the next product`.
+
+`Store items` in the same group lists what the server has: the name, the price, the picture count, and the code of each item. A tap on an item opens the form for it. `Delete this item` on the form removes the item and its pictures.
+
+The two settings:
+
+| Setting | Where | Use |
+|---|---|---|
+| The server address | The field `Server URL` in "Glance Mock", group `App`. An empty field gives `glance.serverUrl` of the build. | Each call of the two screens goes there. The phone must reach the server: the same Wi-Fi and the address of the computer, or `adb reverse tcp:8080 tcp:8080` and `http://127.0.0.1:8080`. |
+| `STORE_EDIT` of the server | The environment of the server. The default is on. | With `STORE_EDIT=0` the screens say "This server has no store paths." |
+
+The screens need no key and no login. Each client that reaches the server can change its store list, so the server README says to set `STORE_EDIT=0` on a public address.
+
+- The scanner is the code scanner of Google Play services (`play-services-code-scanner` 16.1.0, `GmsBarcodeScanning`). It shows its own full screen, so the app has no camera code for it and needs no camera permission for it. It needs Google Play services on the phone.
+- Google Play services downloads the scanner module one time. The debug manifest asks for the download at install time, and the screen asks again when it opens. Until the download ends, a scan fails with the line "The scanner of Google Play services is not ready." Then scan again in a minute, or type the digits.
+- `Take a picture` starts the camera app of the phone, which writes into the cache of the app through a `FileProvider` (`<applicationId>.storefiles`). The app declares the camera permission for the mock glasses, and Android starts the camera app for such an app only after the person granted that permission. So the first tap asks for it. `Choose from gallery` is the photo picker of Android and needs no permission.
+- The phone turns each picture upright from its EXIF data, brings its long side to 1600 pixels, and sends a JPEG of quality 88. The top line shows the size of each one. The phone keeps no copy of a photo that the camera app took for this screen.
+- The price never passes through a floating point number: `PriceText` in `core` reads the digits. "2,5" is 250 cents.
+- The form has the limits of the server: a name of 1 to 80 characters, a price from 0.01 to 9999.99, a brand of at most 80 characters, and a pack size of at most 40.
+- A code needs a right check digit. A code of one store (it starts with 2, 02, or 04) is a normal code, and Open Food Facts has no data for it.
+- When a catalog product has the same code, the note above the form says its price: the glasses offer the catalog product.
+- Each error line names the cause and the next step: no answer from the server (with its address), a server with no store paths, a refused field, a picture that is no JPEG, or an item with 12 pictures.
+- The logic is in `core`, with JVM tests: `PriceText`, `StoreItemForm`, `CodeEntry`, `PictureScale`, and `StoreApi`. `ServerStoreTest` in `core/src/integrationTest` runs `StoreApi` against a real server in fake mode.
+- The two screens, the scanner library, and the `FileProvider` are in `app/src/debug`. The demo build has none of them, and its mock menu has no group `Store`.
+
+Check these on a phone. No test opens a screen of Android or of Google Play services:
+
+| Check | Expected |
+|---|---|
+| Install the debug build and open `Add or edit a product` at once. | The scanner opens, or the line "The scanner of Google Play services is not ready." shows. In that case the scanner opens some time later, with a network. |
+| Scan an EAN-13 code, and an EAN-8 code if a product with one is at hand. | The line `Code <13 digits>` shows, and then the form. |
+| Close the scanner with the back key. | "No code scanned. Scan again, or type the digits." |
+| Scan a product that Open Food Facts has. | The form has its name, brand, and pack size, and the keyboard is on the price with a point or a comma key. |
+| Type a price and tap the done key. | "Saved. The glasses know it now." The server logs `store item added`. |
+| Tap `Take a picture` for the first time. | Android asks for the camera permission, then the camera app opens. After the photo, the top line counts the kB that go out, and a thumbnail shows upright. |
+| Tap `Choose from gallery`. | The photo picker opens with no permission prompt. Each chosen picture shows as a thumbnail. |
+| With the keyboard open, look at the top line and the focused field. | Both stay in view above the keyboard. |
+| Show the barcode to the glasses in a session that ran before the save. | The prompt has the new name and price. |
+| Stop the server and tap `Use this code`. | "No answer from the server at <address>." |
 
 ## The fake server
 
@@ -1169,6 +1239,7 @@ flowchart LR
 | `BarcodeScanTest` | The barcode of a product, with the clips of `make-clips.mjs` and the fake server of the app. The sharp code gives `barcode.seen` with the source `barcode`, then 3 to 5 reports in 3.3 seconds. The digits with no bars, and the sharp digits under blurred bars, never give another code than their own. The kiosk clip gives `kiosk.seen`, no `barcode.seen`, and no still. The blurred bars give one frame with `kind: label`, and no code. With blurred bars in the stream and the sharp code as the still, the phone sends one `barcode.seen` and takes no other still. The command `label` gives a label frame, or `barcode.seen` when the still holds a code that the phone reads. Two commands within one second give one still, and a `label` right after `amb` gives none, with the second look still on. |
 | `LabelStillTest` | `LabelStill.read` with no glasses and no server. ML Kit reads the code of `barcode.png`, the blurred bars of `barcode-blurred.png` are one region with no text and the still goes to the server, and `scene.png` becomes a frame of 720 x 1280 pixels. With hits and words that the test gives: a photo of 3000 x 4000 pixels becomes 1200 x 1600 with no crop, a failed face detection drops the still, the digits under a region count and the digits of another product do not, and with no region only 12 or 13 digits count. |
 | `StillPhotoPrepareTest` | `StillPhoto.prepare` with no glasses and no server: a photo of 3000 x 4000 pixels becomes a JPEG of 1234 x 1440 pixels, the face box that the test gives is pixelated, and the stripes outside it stay. A photo with no result of face detection is dropped. |
+| `AddProductScreenTest` | The debug screens "Add product" and "Store items": the mock menu starts with their two items, a typed code with a wrong check digit or a wrong length gets its reason, and a right code and the list name the server address when no server answers. It opens no scanner, no camera app, and no picker. |
 | `MockMenuTest` | The mock menu: each item of the plan exists, the top line follows the mock glasses, and the App items, the Barcode fields, the Stream items, the item of the second look still, and the item of the held crop change the stored settings. |
 | `HapticsTest` | The vibrations of a session, with the fake server of the app and no message of the page: a product prompt gives `prompt`, the add gives `added`, the command `slow` gives `error`, and the command `rest` gives `cameraOff`. With `haptics: false` no vibration plays. |
 | `VolumeKeysTest` | The volume keys with `mainYes: key`: volume up on a product prompt sends `intent yes` with the source `key` and adds the product, volume down sends `intent no`, and the media volume stays at 0. A key that stays down sends one yes. Before the first prompt, after the prompt ended, and with the head as the main yes, the app does not take the key. |
