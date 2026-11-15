@@ -1,7 +1,9 @@
 // Builds the pitch deck: deck.src.html -> deck.html -> Meta-Glance-pitch.pdf and slides/NN-name.png.
-// It replaces {{icon name size}} with a Lucide icon and {{diagram slug}} with the SVG of diagrams/<slug>.html,
-// prints the slides with headless Chrome at 1920 x 1080, one slide per page, and checks each slide for overflow.
+// It replaces {{icon name size}} with a Lucide icon, {{diagram slug}} with the SVG of diagrams/<slug>.html, and
+// {{photo name|description}} with assets/photos/<name>.jpg or an empty photo slot, prints the slides with headless
+// Chrome at 1920 x 1080, one slide per page, and checks each slide for overflow.
 //   node docs/pitch/scripts/diagrams.mjs && node docs/pitch/scripts/build.mjs
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,6 +15,21 @@ const chrome = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Applic
 const here = (path) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 
 let html = await readFile(here('deck.src.html'), 'utf8');
+
+/*
+ * A photo slot: {{photo name|description}}, or {{photo name|description|sticker}} to show the Glance code sticker in
+ * the empty slot. When assets/photos/<name>.jpg exists, the slot shows that photo. Otherwise it shows a framed slot
+ * with the shot description, so only the image is missing.
+ */
+const photos = [];
+html = html.replace(/\{\{photo ([a-z0-9-]+)\|([^|}]+)(?:\|(sticker))?\}\}/g, (_, name, description, extra) => {
+  const file = `assets/photos/${name}.jpg`;
+  const hasPhoto = existsSync(here(file));
+  photos.push(`${name} (${hasPhoto ? 'photo' : 'slot'})`);
+  if (hasPhoto) return `<img class="photo__img" src="${file}" alt="${description.replace(/^PHOTO: /, '')}">`;
+  const sticker = extra === 'sticker' ? '<img class="photo__sticker" src="assets/media/glance-sticker.svg" alt="The Glance code sticker GL1 BUS4.">' : '';
+  return `<div class="photo__slot" data-photo="${name}">${sticker}<div class="photo__label"><span class="footage__mark">{{icon camera 28}} Photo</span><p class="photo__text">${description}</p><p class="photo__file">${file}</p></div></div>`;
+});
 html = html.replace(/\{\{icon ([a-z0-9-]+) (\d+)\}\}/g, (_, name, size) => iconSvg(name, { size: Number(size) }));
 const diagramSlugs = [...html.matchAll(/\{\{diagram ([a-z0-9-]+)\}\}/g)].map((match) => match[1]);
 for (const slug of diagramSlugs) {
@@ -75,4 +92,4 @@ for (const [index, name] of slides.entries()) {
 await page.emulateMediaType('print');
 await page.pdf({ path: here('Meta-Glance-pitch.pdf'), width: '1920px', height: '1080px', printBackground: true, preferCSSPageSize: true, pageRanges: '' });
 await browser.close();
-console.log(`built deck.html, Meta-Glance-pitch.pdf, and ${slides.length} slides; ${report.length} layout warnings`);
+console.log(`built deck.html, Meta-Glance-pitch.pdf, and ${slides.length} slides; ${report.length} layout warnings; photos: ${photos.join(', ') || 'none'}`);
