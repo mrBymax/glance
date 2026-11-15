@@ -153,6 +153,22 @@ it('keeps the card of a product prompt during a spot check', () => {
   expect(screen.getByText('Quick check.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
 });
+it('hides the idle hint while the pay prompt or the receipt is open', () => {
+  const idleHint = () => screen.queryByText('Hold a product up to hear its price.');
+  const { deliver } = renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.offered')] });
+  expect(screen.getByRole('dialog', { name: 'Checkout' })).toBeInTheDocument();
+  expect(idleHint()).toBeNull();
+  deliver(eventMessage('checkout.paid'));
+  expect(screen.getByRole('dialog', { name: 'Receipt' })).toBeInTheDocument();
+  expect(idleHint()).toBeNull();
+});
+it('shows the idle hint again when the checkout stops or the payment fails', () => {
+  const idleHint = () => screen.queryByText('Hold a product up to hear its price.');
+  const { deliver } = renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.offered'), eventMessage('checkout.cancelled')] });
+  expect(idleHint()).toBeInTheDocument();
+  deliver(eventMessage('checkout.offered', { promptId: 'p-0002' }), eventMessage('checkout.failed'));
+  expect(idleHint()).toBeInTheDocument();
+});
 it('ends the spot check message when the checkout stops', () => {
   const { deliver } = renderWithUi(<SessionScreen />, { messages: [eventMessage('checkout.spotcheck')] });
   deliver(eventMessage('checkout.cancelled'));
