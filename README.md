@@ -116,7 +116,11 @@ curl http://localhost:8080/healthz
 
 ### A barcode demo with the products at hand
 
-The server knows a barcode only when the store list holds it. `apps/server/catalog/store-list.dev.json` has 10 products of Italian supermarkets. To add the products on the table:
+The server knows a barcode only when the store list holds it. `apps/server/catalog/store-list.dev.json` has 10 products of Italian supermarkets.
+
+The fast way to add a product needs the phone alone, and no restart: open "Glance Mock" on the phone, tap "Add or edit a product", scan the barcode, type the price, and take the pictures. `apps/mobile/android/README.md` has the steps, in "Add a product from the phone". The server writes the item into the file of `STORE_LIST_PATH`.
+
+To add the products on the table by hand:
 
 1. Open `apps/server/catalog/store-list.dev.json`.
 2. Add one entry for each product. `gtin` is the row of digits under the barcode: 8, 12, or 13 digits, with no space. `priceCents` is the price in cents. `name` is the name that the voice says.

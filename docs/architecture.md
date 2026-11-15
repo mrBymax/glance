@@ -130,6 +130,7 @@ Facts that the diagram does not show:
 | Server | Browser, mirror page, Display HUD | `GET /api/sessions/:id/events` | A stream of `ServerEvent` |
 | Mirror page | Server | `GET /api/demo/latest` | Answer `LatestSessionResponse`: the ID and the token of the newest live session |
 | `npm run reference` | Server | `POST`, `GET`, `DELETE /api/demo/reference` | The reference pictures of the store items: take one through the glasses, list them, remove them |
+| Android app, debug menu | Server | `GET`, `PUT`, `DELETE /api/store/items/:gtin`, and `/pictures` below it | The store items and their reference pictures: add, change, and remove them while the server runs. The paths take no key, and `STORE_EDIT=0` turns them off |
 | Kiosk page | Server | `POST /api/kiosks` | `CreateKioskRequest`, answer `CreateKioskResponse` |
 | Server | Kiosk page | `GET /api/kiosks/:id/events` | A stream of `KioskEvent` |
 | Android app, mirror page | Server | `GET /api/speech/<hash>.mp3` | Answer: the MP3 of a line |
@@ -416,11 +417,11 @@ sequenceDiagram
   end
 ```
 
-Recognition by sight also knows the store list. Its instruction lists each store item that the catalog does not hold, with the ID `gtin-<13 digits>`, and the answer schema takes these IDs. A clear frame of a store item then gives `identified`, and the product goes through `ProductResolver` to the normal prompt. The server reads the store list one time at its start, with the details that the product cache holds, and makes no call to Open Food Facts then.
+Recognition by sight also knows the store list. Its instruction lists each store item that the catalog does not hold, with the ID `gtin-<13 digits>`, and the answer schema takes these IDs. A clear frame of a store item then gives `identified`, and the product goes through `ProductResolver` to the normal prompt. The server reads the store list one time at its start, with the details that the product cache holds, and makes no call to Open Food Facts then. An item that the paths under `/api/store` add, change, or remove counts with the next call, with no restart: see "Add a product from the phone" in `apps/server/README.md`.
 
 Rules of this path:
 
-- The store list decides what the store sells and at which price. It is the file of `STORE_LIST_PATH`, behind the interface `StoreList`, so an ERP client can take its place.
+- The store list decides what the store sells and at which price. It is the file of `STORE_LIST_PATH`, behind the interface `StoreList`, so an ERP client can take its place. The paths under `/api/store` write the file while the server runs.
 - A catalog product with the `gtin` of the code wins over the store list. It keeps the price and the spoken texts of the catalog.
 - Each other product is built from the store item and the details of Open Food Facts. The store list gives the name and the price. Open Food Facts gives the allergens and the diets, and the brand and the pack size when the store list has none. The server does not read the name of Open Food Facts, which is often in another language or only a part of the name. The ID of the product is `gtin-<13 digits>`, and `ScannedProducts` keeps it for the process. The rules find it by that ID as they find a catalog product: the cart, the warnings, the snapshot, a question, and the spot check need no change. No client sees a new type.
 - At its start, a server with real product details reads the details of each store item that the cache does not hold, in the background, one read each 5 seconds. So the first prompt of an item does not wait for Open Food Facts.

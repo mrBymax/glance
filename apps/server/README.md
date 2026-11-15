@@ -106,6 +106,7 @@ With real recognition and real speech (`npm run dev` with both keys in `.env` an
 | `SECOND_LOOK_WAIT_MS` | `0` | How long the look-alike line waits for the result of a still, in milliseconds, from 0 to 10000. `0` means off. See "Sharp second look". |
 | `BIOMETRIC_ABOVE_CENTS` | not set | A total above this number of cents needs a fingerprint check on the phone before the payment. An integer from 0 to 100000000. With no value, no payment needs a fingerprint. See "Fingerprint above a limit". |
 | `DEMO_KEY` | not set | The key of the paths under `/api/demo`. With no key, those paths answer 404. |
+| `STORE_EDIT` | on | `0` means off. The paths under `/api/store` then answer 404. They take no key, so set `0` on a server with a public address. See "Add a product from the phone". |
 | `REFERENCE_DIR` | `catalog/reference` | The folder with the reference pictures of the store items. See "Reference pictures". |
 | `STORE_LIST_PATH` | `catalog/store-list.dev.json` | The items that the store sells, with the barcode and the price of each. See "Barcode scan". |
 | `FAKE_PRODUCT_INFO` | off | `1` means on. The server then reads the details of a scanned product from `fixtures/product-info`. |
@@ -905,6 +906,8 @@ sequenceDiagram
 | `src/products/resolver.ts` | `ProductResolver.resolve`: the catalog, then the store list, then the details |
 | `src/products/warmup.ts` | `startWarmUp`: the reads of the start, for each store item that the product cache does not hold |
 | `src/products/storeEntries.ts` | `readStoreEntries`: the store list as the server reads it one time at its start, with the details that the product cache holds |
+| `src/products/liveStore.ts` | `LiveStore`: the entries as they are now, and the signal for each item that a person adds, changes, or removes while the server runs |
+| `src/http/store.ts` | The paths under `/api/store`. See "Add a product from the phone" |
 | `src/products/barcodes.ts` | `createBarcodeReports`: the check of a code, its lookup, and the rule input `barcode` |
 | `src/sessions/barcode.ts`, `src/sessions/code.ts` | The rules |
 | `src/label/` | The label frame: the model call, the match against the store list, and the frame handler |
@@ -937,6 +940,8 @@ The file stands in for the ERP of a supermarket. `StoreList` is the interface:
 export interface StoreList {
   byGtin(gtin13: string): Promise<StoreItem | undefined>;
   all(): Promise<readonly StoreItem[]>;
+  put(item: StoreItem): Promise<void>;
+  remove(gtin13: string): Promise<boolean>;
 }
 export type StoreItem = { gtin: string; priceCents: number; name: string; brand?: string; packSize?: string };
 ```
@@ -948,6 +953,7 @@ To use an ERP, write a function that returns a `StoreList`, and return it from `
 - The phone reports a code one time each second while it is in view, and each report calls `byGtin`. So the client must cache its answers.
 - `all` runs for each label frame. The client must keep the list in memory.
 - `gtin` of each item has 13 digits. `priceCents` is an integer above 0.
+- `put` adds an item or replaces the item with its code, and `remove` resolves `false` for a code that the list does not hold. The paths under `/api/store` call them. An ERP that takes no change from the server rejects both, or the server runs with `STORE_EDIT=0`.
 
 ### Product details from Open Food Facts
 
@@ -1101,7 +1107,8 @@ A store item has a name and a price, and no description of its package. With a c
 - Each item that the catalog does not hold by its `gtin` is a line of the recognition instruction and an ID of the answer schema. `ScannedProducts` holds its product from the start, so the rules and a fake script find it by its ID.
 - `identified` with the ID of a store item opens the normal prompt. Before the result reaches the rules, `ProductResolver.resolve` reads the product again, as for a scanned barcode. After the warm-up read an item, this read comes from the cache and the prompt opens with no wait. Before that, the first prompt of the item makes the call to Open Food Facts for its allergens, inside the 2500 ms of a lookup.
 - A result of a later frame can reach the rules before a result that waits for its read. An item that the store list no longer holds gets no prompt, with the log line `recognition result dropped: the store does not sell <id>`.
-- The store list is read at the start. An ERP that changes its list needs a restart of the server before recognition and the label call know a new item. A barcode of the phone finds a new item at once.
+- An item that the paths under `/api/store` add, change, or remove counts with the next call, with no restart. See "Add a product from the phone".
+- A change that does not go through these paths is another case: a file that a person edits, or an ERP that changes its list by itself. Recognition and the label call then know a new item only after a restart of the server. A barcode of the phone finds a new item of an ERP at once.
 
 ### Label frames
 
@@ -1109,7 +1116,7 @@ A frame with the kind `label` is the still of a package that the phone could not
 
 - The call uses `GEMINI_API_KEY` and `GEMINI_MODEL`, the instruction `agents/label.md`, a response schema of its own, the default media resolution for the still, one attempt, and a time limit of 8 seconds.
 - The call also gets the reference pictures of the store items, when the folder of `REFERENCE_DIR` holds some. See "Reference pictures".
-- The instruction holds the store list in place of `{{storeList}}`: one line for each item, with its `gtin`, its name, and its brand and pack size when the store list or the product cache has them. It holds no price. The server builds the instruction and the schema one time, at its start.
+- The instruction holds the store list in place of `{{storeList}}`: one line for each item, with its `gtin`, its name, and its brand and pack size when the store list or the product cache has them. It holds no price. The server builds the instruction and the schema one time for each state of the store list: at its start, and again after a change through the paths under `/api/store`.
 - The answer is `digits` (a list of digit runs), `brand`, `name`, `packSize`, `confidence`, `item`, and `itemConfidence`. `item` is the `gtin` of the one store item that the package is, or `null`. The schema lets it take only a code of the store list. An answer that fails the schema counts as an empty one.
 - The instruction says: the package text can be in another language than the name in the store list ("Kartonkipikari / Pappersmugg" is "Paper cups"), choose an item only when the package is that product and not a similar one, answer `null` when not sure, and never guess a digit.
 - `matchLabel` in `src/label/match.ts` selects the store item. Free text of the model never becomes a product by itself:
@@ -1302,6 +1309,71 @@ Measured in the test of 2026-11-14, with Ray-Ban Meta glasses and the real model
 - In one still the barcode was about 95 pixels wide, which is too small to read. The model read the name on the package right.
 
 Not measured: the label call with `item`, the store items in the recognition instruction, and the still for an unknown product have not run with the real model. The distance at which the phone or the model reads a code is not known.
+
+### Add a product from the phone
+
+A person adds a store item while the server runs, with the phone alone: the debug menu of the Android app scans the barcode, shows a form, and takes the pictures. See "Add a product from the phone" in `apps/mobile/android/README.md`. The app uses the paths below, and `curl` can use them too.
+
+| Call | Body | Answer |
+|---|---|---|
+| `GET /api/store/items` | | 200, `{ items }`: each item with `gtin`, `name`, `brand`, `packSize`, `priceCents`, and `pictures` (a count) |
+| `GET /api/store/items/:gtin` | | 200: `item` (or `null` when the store does not have the code), `pictures`, `picturesUsed`, `productInfo`, `suggestion`, and `catalogPriceCents` |
+| `PUT /api/store/items/:gtin` | `{ "name", "priceCents", "brand"?, "packSize"? }` | 201 for a new item and 200 for a replaced one, with the item |
+| `DELETE /api/store/items/:gtin` | | 200, `{ gtin, removed, pictures }`. It also removes the reference pictures of the item |
+| `GET /api/store/items/:gtin/pictures` | | 200, `{ gtin, pictures }`: each picture with `name`, `bytes`, and `addedAt`, newest first |
+| `POST /api/store/items/:gtin/pictures` | a JPEG, with the content type `image/jpeg` | 201, `{ gtin, pictures }` |
+| `GET /api/store/items/:gtin/pictures/:name` | | 200, the JPEG |
+| `DELETE /api/store/items/:gtin/pictures/:name` | | 200, `{ gtin, pictures }` |
+
+- These paths take no key. Each client that can reach the server can change the store list and the pictures. That is right for a server on the computer of the team. A server on a public address must set `STORE_EDIT=0`: each path then answers 404. The start log has one warning while the paths are on.
+- `:gtin` has 8, 12, or 13 digits, and the server keeps 13. A wrong length or check digit gets 400 with `{ "error": "bad_gtin" }`. A code of one store (it starts with 2, 02, or 04) is a normal item.
+- `PUT` checks the body: `name` has 1 to 80 characters, `priceCents` is an integer from 1 to 999999, `brand` has at most 80 characters, and `packSize` at most 40. A bad body gets 400 with `{ "error": "bad_request", "fields": ["name"] }`. The server removes the spaces at the ends of a text and makes each run of spaces and line ends one space.
+- `GET` of one item reads Open Food Facts through `ProductInfo.byGtin`: the cache, the time limit of 2000 ms, and the pauses of each other read. `productInfo` is `found`, `not_found`, or `failed`. `suggestion` has `names` (the product name and the generic name in each language that the database has), `brand`, `packSize`, `allergens`, `vegan`, and `vegetarian`. The app fills the form of a new item with it. The server still never speaks a name of Open Food Facts: the name of the item is the one that the person saves.
+- `catalogPriceCents` is the price of the catalog product with the same code, or `null`. A catalog product wins over the store item, so the glasses offer that price.
+- A picture has at most 4 MB and must start with the bytes of a JPEG. A larger body gets 413 with `too_large`, another content type gets 415 with `unsupported_media_type`, another file gets 400 with `not_jpeg`, a code that the store does not have gets 409 with `no_item`, and the thirteenth picture of one item gets 409 with `too_many_pictures`.
+- A picture goes to the `ReferenceImages` store, as a picture of `npm run reference` does. `picturesUsed` is 3: a label call and a frame call use the newest 3 pictures of an item.
+- `:name` must be the name of a picture of the item, as the list gives it. Each other text gets 404, so a name cannot hold a path.
+
+A change needs no restart, also for a session that runs. `LiveStore` in `src/products/liveStore.ts` holds the entries as they are now and tells each change:
+
+| Part | How it follows a change |
+|---|---|
+| The store list file | `put` and `remove` of `StoreList` write the file of `STORE_LIST_PATH` again: a temp file takes its name, so no reader gets a part of it. An item keeps its line, and a new item is the last line |
+| A barcode, a label match, and the read before a prompt | `ProductResolver` and the label handler ask the `StoreList` with each call |
+| The products of the rules | `ScannedProducts` gets the product of the item again, so the next prompt has the new name and price |
+| The recognition instruction and its answer schema | Built again with the first frame call after the change |
+| The label instruction, its answer schema, and its reference pictures | Built again with the first label call after the change |
+| The reference pictures of a frame call | Read again at once, and after each picture that the paths add or remove |
+| The observe pipeline | The search index takes the item or loses it, and the candidates of a small store are the list of that time |
+| The speech clips | The prompt lines of the new item get their clips in the background. `FAKE_SPEECH` makes none |
+| Open Food Facts | One read in the background for a code that the cache does not hold. `FAKE_PRODUCT_INFO` makes none |
+
+- A removed item gets no prompt: its barcode gives "This product is not in this store.", and a recognition result with its ID is dropped. A cart that already holds it keeps its line.
+- The server writes the file that `STORE_LIST_PATH` names. With the default, that is `catalog/store-list.dev.json` of the repository: `git status` then shows the change, and a test of the server wants a fixture for each item of that file. So do not commit it. For a demo, copy the file and set `STORE_LIST_PATH`, or use `catalog/store-list.demo.json`.
+- Each change gets one log line: `store item added`, `store item replaced`, `store item removed`, or `reference picture saved`, with the code.
+
+The walk-through, with a server on port 8080 and a product with the code `6430062761795`:
+
+```bash
+# What the store and Open Food Facts have for the code.
+curl -s http://localhost:8080/api/store/items/6430062761795
+
+# Add the item, or replace it.
+curl -s -X PUT http://localhost:8080/api/store/items/6430062761795 \
+  -H 'content-type: application/json' \
+  -d '{ "name": "Kili Cascara Yuzu", "priceCents": 249, "brand": "Kili", "packSize": "330 ml" }'
+
+# Add a picture of its front, then list the pictures.
+curl -s -X POST http://localhost:8080/api/store/items/6430062761795/pictures \
+  -H 'content-type: image/jpeg' --data-binary @front.jpg
+curl -s http://localhost:8080/api/store/items/6430062761795/pictures
+
+# Each item, and then the item away again.
+curl -s http://localhost:8080/api/store/items
+curl -s -X DELETE http://localhost:8080/api/store/items/6430062761795
+```
+
+After the `PUT`, a phone that shows the barcode gets the prompt with the price 2.49, with no new session.
 
 ## Speech clips
 
@@ -1977,13 +2049,14 @@ The paths are those of spec section 8.1. Each body and each answer is a type of 
 | `GET /api/speech/<hash>.mp3` | | 200, the MP3 of a clip |
 | `GET /api/demo/latest?key=<DEMO_KEY>` | | 200, `LatestSessionResponse` |
 | `POST`, `GET`, `DELETE /api/demo/reference?key=<DEMO_KEY>` | | The reference pictures. See "Reference pictures". |
+| `GET`, `PUT`, `DELETE /api/store/items...` | | The store items and their pictures, with no key. See "Add a product from the phone". |
 | `GET /healthz` | | 200, the state of the switches: `fakeRecognition`, `fakeSpeech`, `fakeProductInfo`, `store` (`memory` or `mongo`), `saveFrames`, and `recognitionPipeline` (`frame` or `observe`) |
 
 - `wsUrl` of a new session is `PUBLIC_BASE_URL` with `ws` in place of `http`, plus `/ws/device?session=<id>&token=<token>`.
 - A body that fails its schema gets 400 with `{ "error": "bad_request" }`. An unknown session gets 404 with `{ "error": "not_found" }`. An unknown key in a profile patch is dropped.
 - A 204 says only that the server took the input. The outcome arrives as events.
 - Each path with a session ID needs `?token=<token>` with the token of that session. `GET /api/kiosks/:id/events` needs the token of the kiosk. `POST /api/sessions`, `POST /api/kiosks`, the speech path, and `GET /healthz` need no token.
-- A missing or wrong token gets 401 with `{ "error": "unauthorized" }`. So does a query string with two `token` keys. The server checks the ID first and the token second, and reads the body last: an unknown ID gets 404, and a wrong token with a bad body gets 401, also when the body is no JSON. Two cases get 400 before the check: a body above the size limit of Fastify, and a body with a content type that is not JSON.
+- A missing or wrong token gets 401 with `{ "error": "unauthorized" }`. So does a query string with two `token` keys. The server checks the ID first and the token second, and reads the body last: an unknown ID gets 404, and a wrong token with a bad body gets 401, also when the body is no JSON. Two cases get an answer before the check: a body above the size limit of Fastify gets 413 with `too_large`, and a body with a content type that the server does not read gets 415 with `unsupported_media_type`.
 - `tokenMatches` in `src/http/auth.ts` compares a token in constant time.
 - The request log holds the method and the path with no query string, because the query string holds the token.
 - `GET /api/demo/latest` gives the ID and the token of the newest session that has not stopped. The mirror page follows the session of the phone with it. The path answers 404 with `{ "error": "not_found" }` when `DEMO_KEY` is not set, when the key is wrong, and when no session is live. The key opens each session, so use a long random value.
