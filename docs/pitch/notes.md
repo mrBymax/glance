@@ -97,7 +97,7 @@ Glance is not a shopping app. Glance is a protocol.
 
 Look again at what happened at that checkout. A place showed a code. The glasses read it. A voice said what a nod would do. A nod confirmed, and the place got the answer.
 
-Look, hear, nod, done. Not one of those steps is about groceries.
+look. nod. done., done. Not one of those steps is about groceries.
 
 ### Page 11
 

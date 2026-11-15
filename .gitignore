@@ -69,8 +69,12 @@ coverage/
 .nyc_output/
 .superpowers/
 
-# Video mockup local media symlink
+# Video mockup local media symlink and exports
 assets/video-mockup/media
+assets/video-mockup/exports/
+
+# Raylight local OAuth token cache
+.raylight-token.json
 
 # Preserve .gitkeep files across repository
 !.gitkeep

@@ -4,7 +4,7 @@ This file holds the design direction of `@glance/site`: the brief, the research,
 
 ## Brief
 
-The site presents Meta Glance as a protocol for AI glasses: a place shows a Glance code, the glasses read it, the voice says what a nod will do, and a nod confirms. Look, hear, nod. The store is the first demo of that loop, not its limit. The page has one page and no store.
+The site presents Meta Glance as a protocol for AI glasses: a place shows a Glance code, the glasses read it, the voice says what a nod will do, and a nod confirms. look. nod. done.. The store is the first demo of that loop, not its limit. The page has one page and no store.
 
 - The page shows the loop, the places that can use it (a bus ticket first), the store demo, how to build on it, and why a look and a nod matter. It is a product page: it states no test log, no availability, no price, no partner, and no certification.
 - Every caption, subtitle, and label must pass one test: does a visitor lose anything without it? If not, it is not on the page.
