@@ -11,7 +11,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Only the MockDeviceKit feed from the phone camera uses this permission. -->
+    <!-- The MockDeviceKit feed from the phone camera uses this permission. Because the app declares it, the debug
+         screen "Add product" also needs it before Android starts the camera app for a photo. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 

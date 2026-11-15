@@ -1,6 +1,7 @@
 package com.metaglance.android.mock
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.net.Uri
@@ -90,6 +91,8 @@ class MockMenuActivity : AppCompatActivity() {
     }
 
     private fun addItems() {
+        addStoreItems()
+
         group("Mode")
         item("Enable (registered)") { setMode("Mock mode on, registered") { mock.enable(registered = true) } }
         item("Enable (not registered)") { setMode("Mock mode on, not registered") { mock.enable(registered = false) } }
@@ -190,6 +193,18 @@ class MockMenuActivity : AppCompatActivity() {
 
         group("Stream")
         addStreamItems()
+    }
+
+    /**
+     * The two store screens: add a product to the store list of the server, and see what the list holds.
+     * They are in `app/src/debug`, so the menu of the demo build has no such item.
+     */
+    private fun addStoreItems() {
+        val add = Intent().setClassName(this, STORE_ADD_SCREEN)
+        if (packageManager.resolveActivity(add, 0) == null) return
+        group("Store")
+        item("Add or edit a product") { startActivity(add) }
+        item("Store items") { startActivity(Intent().setClassName(this, STORE_ITEMS_SCREEN)) }
     }
 
     /** Each change of mode stops a running session first, and waits for its end. */
@@ -415,6 +430,8 @@ class MockMenuActivity : AppCompatActivity() {
     private companion object {
         const val NO_GLASSES = "No mock glasses are paired. Tap Pair first."
         const val NOT_ENABLED = "Mock mode is off. Tap Enable first."
+        const val STORE_ADD_SCREEN = "com.metaglance.android.store.AddProductActivity"
+        const val STORE_ITEMS_SCREEN = "com.metaglance.android.store.StoreItemsActivity"
         const val PAD_DP = 12
         const val GROUP_GAP_DP = 16
         const val STATE_HEIGHT_DP = 150

@@ -116,6 +116,8 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.biometric)
+    // The barcode scanner of the debug screen "Add product". The demo build does not have that screen.
+    debugImplementation(libs.play.services.code.scanner)
 
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.core)
