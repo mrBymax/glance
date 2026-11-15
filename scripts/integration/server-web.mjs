@@ -74,7 +74,7 @@ async function playShop(server, phoneUrl, websiteUrl, browser, problems) {
   const phone = await openPage(
     browser, 'phone UI', `${phoneUrl}/?ready=1&api=${encodeURIComponent(server.url)}`, { width: 412, height: 915 }, problems,
   );
-  await waitForText(phone, 'phone UI', 'h1', 'Set up Glance');
+  await waitForText(phone, 'phone UI', 'h1', 'Set up in four steps');
   // The dev build keeps the bridge of the page in window.glanceBridge. The test reads the events that the bridge delivers.
   await phone.evaluate(() => {
     window.glanceMessages = [];
@@ -178,7 +178,7 @@ async function playShop(server, phoneUrl, websiteUrl, browser, problems) {
   console.log('phone UI: the captions show the line of the payment, and the bridge forgot the session');
 
   await phone.locator(button('Done')).click();
-  await waitForText(phone, 'phone UI', 'h1', 'Set up Glance');
+  await waitForText(phone, 'phone UI', 'h1', 'Set up in four steps');
   console.log('phone UI: receipt answered with Done, the setup screen shows again');
 }
 
