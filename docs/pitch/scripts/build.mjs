@@ -5,6 +5,7 @@
 //   node docs/pitch/scripts/diagrams.mjs && node docs/pitch/scripts/build.mjs
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { iconSvg } from './lib.mjs';
@@ -13,6 +14,9 @@ const require = createRequire(process.env.PUPPETEER_FROM ?? 'C:/Users/marco/Desk
 const puppeteer = require('puppeteer-core');
 const chrome = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const here = (path) => fileURLToPath(new URL(`../${path}`, import.meta.url));
+
+// The anti-slop character check: a banned character stops the build.
+execFileSync(process.execPath, [fileURLToPath(new URL('check-chars.mjs', import.meta.url))], { stdio: 'inherit' });
 
 let html = await readFile(here('deck.src.html'), 'utf8');
 
