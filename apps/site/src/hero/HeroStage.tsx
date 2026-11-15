@@ -10,6 +10,18 @@ type Phase = 'poster' | 'loading' | 'playing' | 'ended' | 'failed';
 /** The query flag of scripts/capture-poster.mjs: the stage shows the last frame on a clear background and stops. */
 const isPosterCapture = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('poster');
 
+/**
+ * The query flag of scripts/check-mark.mjs: `?frame=1.5` shows that time of the clip, in seconds of the clip, in the
+ * normal layout of the hero, and stops there.
+ */
+function stillFrameTime(): number | null {
+  if (typeof window === 'undefined') return null;
+  const value = new URLSearchParams(window.location.search).get('frame');
+  if (value === null) return null;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
 function canAutoplay(): boolean {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
@@ -57,6 +69,8 @@ export function HeroStage() {
   const startedRef = useRef(false);
   const [phase, setPhase] = useState<Phase>('poster');
   const posterCapture = isPosterCapture();
+  const frameTime = stillFrameTime();
+  const isStill = posterCapture || frameTime !== null;
 
   const start = async () => {
     const canvas = canvasRef.current;
@@ -76,6 +90,14 @@ export function HeroStage() {
         setPhase('ended');
         return;
       }
+      if (frameTime !== null) {
+        setTimeout(() => {
+          animation.seek(frameTime);
+          document.documentElement.dataset.frameReady = 'true';
+        }, 1000);
+        setPhase('ended');
+        return;
+      }
       animation.play();
       setPhase('playing');
     } catch {
@@ -88,13 +110,13 @@ export function HeroStage() {
   const startOnMount = useEffectEvent(() => void start());
 
   useEffect(() => {
-    if (posterCapture) {
+    if (isStill) {
       startOnMount();
       return undefined;
     }
     if (!canAutoplay()) return undefined;
     return afterLoadAndIdle(() => startOnMount());
-  }, [posterCapture]);
+  }, [isStill]);
 
   useEffect(() => () => animationRef.current?.dispose(), []);
 
@@ -108,7 +130,7 @@ export function HeroStage() {
 
   return (
     <div className="hero-media" data-phase={phase} data-capture={posterCapture ? 'poster' : undefined}>
-      <m.div className="hero-media__frame" style={reduceMotion || posterCapture ? undefined : { scale: depth, opacity: fade }}>
+      <m.div className="hero-media__frame" style={reduceMotion || isStill ? undefined : { scale: depth, opacity: fade }}>
         <Picture
           className="hero-media__poster"
           name="hero-poster"
