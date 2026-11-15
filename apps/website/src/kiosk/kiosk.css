@@ -21,3 +21,18 @@
  */
 .kiosk-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kiosk h1 { font-size: calc(var(--kiosk-row-size) * 1.5); line-height: 1.2; }
+/*
+ * A portrait or narrow screen has no room for the code and the panel side by side: on 1080 x 1920 the panel kept 400 px
+ * and each word broke. There the code is above the panel.
+ * The sizes come from the width, so a 1080p screen keeps a total of 160 px and a row of 48 px after a turn of 90 degrees.
+ * The code takes 45 percent of the height at most, so a cart of seven lines fits below it.
+ */
+@media (orientation: portrait), (max-width: 60rem) {
+  .kiosk {
+    --kiosk-total-size: 14.9vw;
+    --kiosk-row-size: 4.5vw;
+    --kiosk-code-size: max(15cm, min(92vw, 45vh));
+    flex-direction: column;
+  }
+  .kiosk-panel { flex: none; align-self: stretch; }
+}

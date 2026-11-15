@@ -21,3 +21,12 @@ it('lets the panel go below the width of its longest word, so that a long name d
   const rule = /\.kiosk-panel\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
   expect(rule).toMatch(/min-inline-size:\s*0/);
 });
+it('puts the code above the panel on a portrait or narrow screen, with sizes from the width', () => {
+  const block = /@media \(orientation: portrait\), \(max-width: 60rem\) \{([\s\S]*)\}\s*$/.exec(css)?.[1] ?? '';
+  expect(block).toMatch(/\.kiosk\s*\{[^}]*flex-direction:\s*column/);
+  expect(block).toMatch(/\.kiosk-panel\s*\{[^}]*align-self:\s*stretch/);
+  const vw = (name: string) => Number(new RegExp(`${name}:\\s*([\\d.]+)vw`).exec(block)?.[1]);
+  expect(vw('--kiosk-total-size') * 10.8).toBeGreaterThanOrEqual(160);
+  expect(vw('--kiosk-row-size') * 10.8).toBeGreaterThanOrEqual(48);
+  expect(block).toContain('--kiosk-code-size: max(15cm, min(92vw, 45vh))');
+});
