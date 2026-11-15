@@ -2,6 +2,7 @@ import { useReducedMotion, useScroll, useTransform } from 'motion/react';
 import * as m from 'motion/react-m';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { assetUrl, Picture } from '../components/Picture';
+import { HERO, REPOSITORY } from '../content/site';
 import type { HeroAnimation } from './animation';
 
 /** poster: the still last frame. playing: the clip runs once. ended: the clip rests on its last frame. */
@@ -57,7 +58,8 @@ function afterLoadAndIdle(run: () => void): () => void {
 }
 
 /**
- * The animation of the Meta Glance mark, which ends on a Glance code. The poster of the last frame shows first, at the
+ * The animation of the Meta Glance mark, which ends on a card with the QR code of the repository. The card links to the
+ * repository. The poster of the last frame shows first, at the
  * same size, so the animation moves no other content. Three.js loads after the page load, only when motion is
  * allowed. The clip plays once, in less than 5 seconds, and rests on its last frame, so it needs no pause control.
  * With reduced motion or Save-Data, the poster stays.
@@ -79,7 +81,7 @@ export function HeroStage() {
     setPhase('loading');
     try {
       const { startHeroAnimation } = await import('./animation');
-      const animation = await startHeroAnimation({ canvas, qrSource: assetUrl('kiosk-code.png'), onEnd: () => setPhase('ended') });
+      const animation = await startHeroAnimation({ canvas, qrSource: assetUrl('repository-code.png'), onEnd: () => setPhase('ended') });
       animationRef.current = animation;
       if (posterCapture) {
         // The QR texture loads after the GLB. One second is ample on a local server.
@@ -136,12 +138,14 @@ export function HeroStage() {
           name="hero-poster"
           widths={[480, 960, 1440]}
           sizes="(min-width: 64rem) 40rem, 80vw"
-          alt="The Meta Glance mark as a card that holds a Glance code."
+          alt={HERO.posterAlt}
           width={1440}
           height={1440}
           isPriority
         />
         <canvas ref={canvasRef} className="hero-media__canvas" data-visible={showsCanvas} aria-hidden="true" />
+        {/* Over the card of the last frame, which the poster shows too. */}
+        <a className="hero-media__link" href={REPOSITORY.url} aria-label={REPOSITORY.cardLabel} />
       </m.div>
     </div>
   );

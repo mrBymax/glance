@@ -488,6 +488,24 @@ main:focus {
 .hero-media__frame {
   position: relative;
   min-block-size: 8rem;
+  container-type: size;
+}
+
+/*
+ * The link over the card of the last frame. The view of the last frame is 3.8 units on its short side, and the card
+ * with its frame is 2.55 units wide, so the card fills 67 percent of the short side, at the centre.
+ */
+.hero-media__link {
+  position: absolute;
+  inset: 0;
+  inline-size: calc(min(100cqi, 100cqb) * 0.67);
+  block-size: calc(min(100cqi, 100cqb) * 0.67);
+  margin: auto;
+  border-radius: 14%;
+}
+
+.site .hero-media__link:focus-visible {
+  border-radius: 14%;
 }
 
 .hero-media__poster,
@@ -1399,12 +1417,17 @@ main:focus {
   padding-block-start: var(--site-section-space);
 }
 
-/* The last frame of the hero animation returns as the closing object, the kiosk code that a nod pays. */
+/* The last frame of the hero animation returns as the closing object: the card with the code of the repository. */
 .closing__mark {
   display: block;
   inline-size: 12rem;
-  block-size: auto;
   margin: 0 auto var(--spacing-8);
+}
+
+.closing__mark img {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
 }
 
 .site-footer {

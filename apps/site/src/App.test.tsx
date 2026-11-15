@@ -150,7 +150,16 @@ it('plays the animation once after the load, and never with reduced motion, with
   renderPage();
   await load();
   expect(startHeroAnimation).toHaveBeenCalledTimes(1);
+  // The card at the end shows the QR code of the repository.
+  expect(String(vi.mocked(startHeroAnimation).mock.calls[0]?.[0].qrSource)).toMatch(/repository-code\.png$/);
   getContext.mockRestore();
+});
+
+it('links the card of the hero and the card of the closing to the repository', () => {
+  renderPage();
+  const links = screen.getAllByRole('link', { name: 'Meta Glance on GitHub' });
+  expect(links).toHaveLength(2);
+  for (const link of links) expect(link).toHaveAttribute('href', 'https://github.com/mrBymax/glance');
 });
 
 it('has no axe violation of WCAG 2.2 A and AA that jsdom can check', async () => {

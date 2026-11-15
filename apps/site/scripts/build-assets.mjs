@@ -1,7 +1,8 @@
 // Writes the optimized images of the site into src/assets/generated. Run it after a source image changes: npm run assets.
 //   - Each team photo of assets/team_pics becomes a 4:5 portrait in AVIF and WebP, at three widths.
 //   - Each screen capture of the phone app in media/ becomes AVIF and WebP at two widths.
-//   - The kiosk code of the hero card becomes a PNG with a quiet zone of four modules.
+//   - The Glance code of the kiosk drawing, and the code on the card at the end of the hero, which holds the address of
+//     the repository, become PNGs with a quiet zone of four modules.
 // The output is committed, so a build needs neither sharp nor qrcode.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +18,8 @@ const RATIO = 5 / 4;
 
 // The same text as the kiosk of the demo server: "GL1 " and the kiosk code (apps/website on the app branch).
 const KIOSK_CODE_TEXT = 'GL1 K3X7';
+// The address of the repository, as src/content/site.ts states it (REPOSITORY_URL).
+const REPOSITORY_URL = 'https://github.com/mrBymax/glance';
 const QR_SIZE = 1024;
 
 await mkdir(out(''), { recursive: true });
@@ -112,5 +115,8 @@ await sharp({ create: { width: 1200, height: 630, channels: 3, background: '#f1f
 // that the animation README asks for, so the rounded corners of the card cut no finder square.
 const card = await QRCode.toBuffer(KIOSK_CODE_TEXT, { errorCorrectionLevel: 'M', margin: 4, width: QR_SIZE, color: { dark: '#000000', light: '#ffffff' } });
 await writeFile(out('kiosk-code.png'), card);
+// The card of the hero: level Q corrects a quarter of the modules, for a code seen on a turning 3D card.
+const repositoryCard = await QRCode.toBuffer(REPOSITORY_URL, { errorCorrectionLevel: 'Q', margin: 4, width: QR_SIZE, color: { dark: '#000000', light: '#ffffff' } });
+await writeFile(out('repository-code.png'), repositoryCard);
 
-console.log(`wrote ${TEAM_PHOTOS.length * WIDTHS.length * 2} team images, ${SCREENS.length * 4} screen images, and kiosk-code.png into src/assets/generated`);
+console.log(`wrote ${TEAM_PHOTOS.length * WIDTHS.length * 2} team images, ${SCREENS.length * 4} screen images, kiosk-code.png, and repository-code.png into src/assets/generated`);

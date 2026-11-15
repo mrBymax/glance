@@ -2,14 +2,16 @@ import { Button } from '@astryxdesign/core/Button';
 import { Link } from '@astryxdesign/core/Link';
 import { Picture } from '../components/Picture';
 import { Logo } from '../components/Logo';
-import { CLOSING, FOOTER, SECTIONS } from '../content/site';
+import { CLOSING, FOOTER, REPOSITORY, SECTIONS } from '../content/site';
 import { Reveal } from '../motion/Reveal';
 
 export function Closing() {
   return (
     <section className="section closing" aria-labelledby="closing-title">
       <Reveal className="container container--narrow center">
-        <Picture className="closing__mark" name="hero-poster" widths={[480, 960]} sizes="12rem" width={960} height={960} alt="" />
+        <a className="closing__mark" href={REPOSITORY.url} aria-label={REPOSITORY.cardLabel}>
+          <Picture name="hero-poster" widths={[480, 960]} sizes="12rem" width={960} height={960} alt="" />
+        </a>
         <h2 id="closing-title" className="statement">
           {CLOSING.heading}
         </h2>

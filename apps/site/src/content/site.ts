@@ -26,6 +26,17 @@ export type SectionId = (typeof SECTIONS)[number]['id'];
 export const HERO = {
   primaryAction: { label: 'See how it works', href: '#how-it-works' },
   secondaryAction: { label: 'See what you can build', href: '#use-cases' },
+  /** The still of the animation: its last frame, the card. */
+  posterAlt: 'The Meta Glance mark as a card with a QR code of the Meta Glance repository.',
+};
+
+/**
+ * The repository of the project. The card at the end of the hero animation, and the same card in the closing section,
+ * show it as a QR code (scripts/build-assets.mjs writes it), and both cards link to it.
+ */
+export const REPOSITORY = {
+  url: 'https://github.com/mrBymax/glance',
+  cardLabel: 'Meta Glance on GitHub',
 };
 
 export const INTRO = {
