@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920">
+<title>Meta Glance pitch deck</title>
+<!--
+  The source of the pitch deck. It follows script.md: the pitch pages 1 to 12 of the script, the team, and the recap.
+  The technical deep dive lives separately in technical.src.html. scripts/build.mjs replaces each icon, diagram, and
+  photo placeholder, writes deck.html, and prints it to Meta-Glance-pitch.pdf and slides/*.png. Each slide is 1920 x 1080.
+  Tokens: the stock Neutral theme of Astryx, as the site uses it. The captions are the captions window of the app.
+-->
+<style>
+@font-face {
+  font-family: 'Optimistic VF';
+  src: url('../../apps/site/public/fonts/OptimisticVF.woff2') format('woff2');
+  font-weight: 300 800;
+  font-stretch: 80% 100%;
+}
+@page { size: 1920px 1080px; margin: 0; }
+:root {
+  --canvas: #f1f1f1;
+  --card: #ffffff;
+  --ink: #000000;
+  --secondary: #474747;
+  --icon-secondary: #6a6a6a;
+  --accent: #1b1b1b;
+  --on-accent: #ffffff;
+  --border: rgba(0, 0, 0, 0.08);
+  --success: #2f7d33;
+  --success-fill: #198100;
+  --dark-body: #1b1b1b;
+  --dark-line: #333333;
+  --dark-secondary: #9e9e9e;
+  --radius-page: 28px;
+  --radius-container: 12px;
+  --shadow-high: 0 2px 2px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(0, 0, 0, 0.1);
+  --gutter: 96px;
+  --font: 'Optimistic VF', 'Segoe UI', Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #8a8a8a; }
+body { font-family: var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; }
+p, h1, h2, h3, ul, ol, figure, blockquote { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+.icon { display: inline-block; flex: none; vertical-align: middle; }
+
+/* One slide is one page of 1920 x 1080. */
+.slide {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--canvas);
+  padding: 80px var(--gutter) 0;
+  break-after: page;
+  page-break-after: always;
+}
+.slide:last-child { break-after: auto; page-break-after: auto; }
+@media screen { .slide { margin: 0 auto 24px; } }
+
+.kicker { display: flex; align-items: center; gap: 14px; color: var(--secondary); font-size: 26px; font-weight: 600; line-height: 1.2; }
+.kicker b { color: var(--ink); font-weight: 650; }
+.tag { display: inline-flex; align-items: center; padding: 4px 16px; border-radius: 999px; background: rgba(0, 0, 0, 0.07); color: var(--ink); font-size: 24px; font-weight: 600; }
+.headline { margin-top: 18px; max-width: 1680px; font-size: 64px; font-weight: 650; line-height: 1.06; letter-spacing: -0.025em; text-wrap: balance; }
+.foot {
+  position: absolute;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: 36px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 48px;
+  color: var(--secondary);
+  font-size: 24px;
+  line-height: 1.3;
+}
+.foot .page { flex: none; font-variant-numeric: tabular-nums; }
+.source { max-width: 1560px; }
+
+.card { background: var(--card); border-radius: var(--radius-page); box-shadow: inset 0 0 0 2px var(--border); }
+.dark {
+  background: radial-gradient(60% 60% at 72% 40%, rgba(255, 255, 255, 0.09), transparent 70%), var(--dark-body);
+  color: #ffffff;
+  font-variation-settings: 'DRKM' 1;
+}
+.monitor { display: inline-block; padding: 16px; border-radius: 26px; background: var(--accent); box-shadow: var(--shadow-high); }
+.monitor img { display: block; border-radius: 12px; }
+
+/* The captions window of the phone app: what the glasses say, as text. */
+.captions {
+  padding: 36px 52px 46px;
+  border: 2px solid var(--dark-line);
+  border-radius: 32px;
+  background: var(--dark-body);
+  color: #ffffff;
+  font-variation-settings: 'DRKM' 1;
+}
+.captions__head { display: flex; align-items: center; gap: 14px; color: var(--dark-secondary); font-size: 28px; font-weight: 600; }
+.captions__older { margin-top: 24px; color: var(--dark-secondary); font-size: 40px; line-height: 1.25; }
+.captions__line { margin-top: 18px; font-size: 64px; font-weight: 550; line-height: 1.16; letter-spacing: -0.01em; text-wrap: balance; }
+
+/* A slot where the owner's photo drops in: assets/photos/<name>.jpg. */
+.photo { position: relative; overflow: hidden; border-radius: var(--radius-page); background: var(--dark-body); }
+.photo__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.photo__slot {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(70% 70% at 50% 40%, rgba(255, 255, 255, 0.07), transparent 70%), var(--dark-body);
+  color: #ffffff;
+  font-variation-settings: 'DRKM' 1;
+}
+.photo__slot::before, .footage::before {
+  content: '';
+  position: absolute;
+  inset: 28px;
+  border-radius: 14px;
+  background:
+    linear-gradient(#fff, #fff) top left / 44px 3px no-repeat,
+    linear-gradient(#fff, #fff) top left / 3px 44px no-repeat,
+    linear-gradient(#fff, #fff) top right / 44px 3px no-repeat,
+    linear-gradient(#fff, #fff) top right / 3px 44px no-repeat,
+    linear-gradient(#fff, #fff) bottom left / 44px 3px no-repeat,
+    linear-gradient(#fff, #fff) bottom left / 3px 44px no-repeat,
+    linear-gradient(#fff, #fff) bottom right / 44px 3px no-repeat,
+    linear-gradient(#fff, #fff) bottom right / 3px 44px no-repeat;
+  opacity: 0.45;
+}
+.photo__label { position: relative; display: grid; justify-items: center; gap: 14px; max-width: 78%; text-align: center; }
+.photo__text { font-size: 34px; font-weight: 500; line-height: 1.28; text-wrap: balance; }
+.photo__file { color: var(--dark-secondary); font-size: 24px; }
+.photo__sticker { position: absolute; height: 62%; width: auto; filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.5)); }
+.footage__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px 8px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+/* Pitch pages 1 and 2: the black page of the cold open. */
+.s-cold { background: #000000; display: grid; place-items: center; padding: 0 110px; }
+.s-cold .captions { width: 100%; }
+.s-cold .captions { padding: 40px 64px 52px; }
+.s-cold .captions__line { font-size: 78px; text-wrap: wrap; }
+.s-cold .captions__older { font-size: 44px; }
+
+/* Pitch page 3: two photo slots. */
+.s-two .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 8px; }
+.s-two h2 { font-size: 56px; font-weight: 650; letter-spacing: -0.02em; }
+.s-two .photo { height: 800px; margin-top: 28px; }
+
+/* Pitch page 4: one number. */
+.s-number { display: flex; flex-direction: column; justify-content: center; padding-bottom: 120px; }
+.s-number .numeral { font-size: 380px; font-weight: 700; line-height: 0.86; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
+.s-number .claim { margin-top: 44px; max-width: 1500px; font-size: 52px; font-weight: 550; line-height: 1.2; letter-spacing: -0.01em; text-wrap: balance; }
+.s-number .aside { position: absolute; left: var(--gutter); right: var(--gutter); bottom: 120px; padding-top: 28px; border-top: 2px solid rgba(0, 0, 0, 0.12); font-size: 34px; line-height: 1.3; }
+
+/* Pitch pages 5, 6, and 11: a full photo with the title and the captions on top. */
+.s-full { padding: 24px; background: #000000; }
+.s-full .photo { position: absolute; inset: 24px; }
+.s-full .over-title { position: absolute; left: 96px; top: 84px; z-index: 2; color: #ffffff; font-size: 80px; font-weight: 700; letter-spacing: -0.03em; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.5); font-variation-settings: 'DRKM' 1; }
+.s-full .scrim { position: absolute; inset: 24px; z-index: 1; border-radius: var(--radius-page); background: linear-gradient(rgba(0, 0, 0, 0.45), transparent 26%, transparent 58%, rgba(0, 0, 0, 0.55)); pointer-events: none; }
+.s-full .captions { position: absolute; left: 160px; right: 160px; bottom: 76px; z-index: 2; }
+.s-full .photo__slot { place-items: start center; padding-top: 250px; }
+.s-pov .captions { right: auto; left: 96px; width: 860px; }
+.s-bus .photo__slot { place-items: start start; padding: 250px 0 0 140px; }
+.s-bus .photo__label { justify-items: start; text-align: left; max-width: 820px; }
+.s-bus .photo__sticker { right: 200px; top: 90px; height: 640px; }
+.s-bus .scrim { background: linear-gradient(transparent 58%, rgba(0, 0, 0, 0.55)); }
+
+/* Pitch pages 7 and 8: the kiosk page. */
+.s-kiosk { padding-top: 36px; text-align: center; }
+.s-kiosk .monitor img { width: 1180px; height: auto; }
+.s-kiosk .captions { width: 1600px; margin: 28px auto 0; text-align: left; }
+.s-kiosk .captions__line { font-size: 52px; text-wrap: wrap; }
+.nothing { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 56px; text-align: left; }
+.nothing p { font-size: 64px; font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; }
+.nothing span { display: block; margin-bottom: 6px; color: var(--secondary); font-size: 34px; font-weight: 500; letter-spacing: 0; }
+
+/* Pitch page 9: the turn. */
+.s-turn { background: #ffffff; display: flex; flex-direction: column; justify-content: center; padding-bottom: 60px; }
+.s-turn .not { color: var(--secondary); font-size: 72px; font-weight: 550; letter-spacing: -0.02em; }
+.s-turn .is { margin-top: 28px; font-size: 176px; font-weight: 700; line-height: 1; letter-spacing: -0.045em; }
+
+/* Pitch page 10: the four steps. */
+.s-steps { display: grid; align-content: center; }
+
+/* Pitch page 12: four places. */
+.s-places { display: flex; flex-direction: column; justify-content: center; padding-bottom: 40px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; }
+.tile { display: grid; justify-items: start; align-content: space-between; height: 400px; padding: 44px 40px; }
+.tile .glyph { display: grid; place-items: center; width: 112px; height: 112px; border-radius: 999px; background: rgba(0, 0, 0, 0.06); }
+.tile h2 { font-size: 46px; font-weight: 650; line-height: 1.12; letter-spacing: -0.015em; }
+.s-places .any { margin-top: 64px; font-size: 60px; font-weight: 650; line-height: 1.12; letter-spacing: -0.02em; }
+
+/* Team. */
+.s-team .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; margin-top: 60px; }
+.s-team img { width: 100%; aspect-ratio: 4 / 5; height: auto; object-fit: cover; border-radius: var(--radius-page); }
+.s-team h3 { margin-top: 24px; font-size: 36px; font-weight: 650; }
+.s-team p { margin-top: 8px; color: var(--secondary); font-size: 26px; line-height: 1.32; }
+
+/* Recap. */
+.s-recap { padding: 24px; }
+.s-recap .stage { position: relative; height: 100%; border-radius: var(--radius-page); display: grid; justify-items: center; align-content: center; text-align: center; padding: 0 120px; }
+.s-recap .logo { height: 150px; width: auto; }
+.s-recap .name { margin-top: 64px; font-size: 150px; font-weight: 700; line-height: 1; letter-spacing: -0.035em; }
+.s-recap .punch { margin-top: 32px; max-width: 1400px; color: #e2e2e2; font-size: 44px; font-weight: 500; line-height: 1.25; text-wrap: balance; }
+.s-recap .ask { margin-top: 44px; padding: 20px 36px; border-radius: 999px; background: #ffffff; color: #000000; font-size: 34px; font-weight: 650; font-variation-settings: 'DRKM' 0; }
+.s-recap .small { position: absolute; left: 0; right: 0; bottom: 48px; display: grid; gap: 6px; color: var(--dark-secondary); font-size: 24px; }
+.s-recap .small span:first-child { color: #e2e2e2; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- Pitch page 1 -->
+<section class="slide s-cold" data-name="p01-oat-drink">
+  <div class="captions">
+    <p class="captions__head">{{icon captions 32}} Captions</p>
+    <p class="captions__line">Oat drink, one litre, one eighty-nine.<br>Nod to add.</p>
+  </div>
+</section>
+
+<!-- Pitch page 2 -->
+<section class="slide s-cold" data-name="p02-added">
+  <div class="captions">
+    <p class="captions__head">{{icon captions 32}} Captions</p>
+    <p class="captions__older">Oat drink, one litre, one eighty-nine. Nod to add.</p>
+    <p class="captions__line">Added oat drink.</p>
+  </div>
+</section>
+
+<!-- Pitch page 3 -->
+<section class="slide s-two" data-name="p03-two-options">
+  <div class="pair">
+    <div><h2>Queue and unload</h2><div class="photo">{{photo checkout-queue|PHOTO: a queue at a checkout belt}}</div></div>
+    <div><h2>One hand short</h2><div class="photo">{{photo one-hand-short|PHOTO: a shopper with a basket in one hand and a phone in the other}}</div></div>
+  </div>
+</section>
+
+<!-- Pitch page 4 -->
+<section class="slide s-number" data-name="p04-83-percent">
+  <p class="numeral">83%</p>
+  <p class="claim">of visually impaired consumers find information on food packaging difficult or impossible to access (GS1 UK)</p>
+  <p class="aside">Ceiling cameras: a refit of every store. Amazon removed them from its Fresh stores in 2024.</p>
+  <footer class="foot"><span class="source">Sources: research commissioned by GS1 UK, reported by Retail Times (8 January 2026) and Packaging Europe (12 January 2026); Retail Dive, 3 April 2024.</span><span></span></footer>
+</section>
+
+<!-- Pitch page 5 -->
+<section class="slide s-full s-pov" data-name="p05-fanta">
+  <div class="photo">{{photo pov-product|PHOTO: first-person, a hand holds a Fanta}}</div>
+  <div class="scrim"></div>
+  <h1 class="over-title">We moved the camera.</h1>
+  <div class="captions">
+    <p class="captions__head">{{icon captions 32}} Captions</p>
+    <p class="captions__line">Fanta, two sixty. Nod to add.</p>
+  </div>
+</section>
+
+<!-- Pitch page 6 -->
+<section class="slide s-full s-pov" data-name="p06-added-fanta">
+  <div class="photo">{{photo pov-product|PHOTO: first-person, a hand holds a Fanta}}</div>
+  <div class="scrim"></div>
+  <h1 class="over-title">We moved the camera.</h1>
+  <div class="captions">
+    <p class="captions__head">{{icon captions 32}} Captions</p>
+    <p class="captions__older">Fanta, two sixty. Nod to add.</p>
+    <p class="captions__line">Added Fanta. Total four forty-nine.</p>
+  </div>
+</section>
+
+<!-- Pitch page 7 -->
+<section class="slide s-kiosk" data-name="p07-checkout">
+  <div class="monitor"><img src="assets/screens/kiosk-connected.png" alt="The kiosk page: the Glance code, Checkout 3, Demo Market, waiting for your nod, 4.49 EUR, Fanta and oat drink."></div>
+  <div class="captions">
+    <p class="captions__head">{{icon captions 32}} Captions</p>
+    <p class="captions__line">Checkout 3 at Demo Market.<br>Two items, four euros forty-nine. Nod to pay.</p>
+  </div>
+</section>
+
+<!-- Pitch page 8 -->
+<section class="slide s-kiosk" data-name="p08-paid">
+  <div class="monitor"><img src="assets/screens/kiosk-paid-clean.png" alt="The kiosk page after the payment: Paid, 4.49 EUR, Fanta and oat drink."></div>
+  <div class="nothing">
+    <p><span>Unloaded:</span> nothing.</p>
+    <p><span>Scanned:</span> nothing.</p>
+    <p><span>Touched:</span> nothing.</p>
+    <p><span>Installed by the store:</span> nothing.</p>
+  </div>
+</section>
+
+<!-- Pitch page 9 -->
+<section class="slide s-turn" data-name="p09-protocol">
+  <p class="not">Glance is not a shopping app.</p>
+  <p class="is">Glance is a protocol.</p>
+</section>
+
+<!-- Pitch page 10 -->
+<section class="slide s-steps" data-name="p10-steps">
+  <div>{{diagram steps}}</div>
+</section>
+
+<!-- Pitch page 11 -->
+<section class="slide s-full s-bus" data-name="p11-bus">
+  <div class="photo">{{photo bus-door|PHOTO: a bus door with a Glance code sticker|sticker}}</div>
+  <div class="scrim"></div>
+  <div class="captions">
+    <p class="captions__head">{{icon captions 32}} Captions</p>
+    <p class="captions__line">Line 4 to the harbor. Single ticket. Nod to buy.</p>
+  </div>
+</section>
+
+<!-- Pitch page 12 -->
+<section class="slide s-places" data-name="p12-places">
+  <div class="tiles">
+    <div class="tile card"><span class="glyph">{{icon ticket 56}}</span><h2>Ticket<br>gate</h2></div>
+    <div class="tile card"><span class="glyph">{{icon cup-soda 56}}</span><h2>Vending<br>machine</h2></div>
+    <div class="tile card"><span class="glyph">{{icon circle-parking 56}}</span><h2>Parking<br>meter</h2></div>
+    <div class="tile card"><span class="glyph">{{icon utensils 56}}</span><h2>Restaurant<br>table</h2></div>
+  </div>
+  <p class="any">Any place that can show a code can take a nod.</p>
+</section>
+
+<!-- Team -->
+<section class="slide s-team" data-name="team">
+  <p class="kicker">Team</p>
+  <h1 class="headline">Four builders who want to make this real.</h1>
+  <div class="grid">
+    <div><img src="assets/media/team-adb.jpg" alt="Alessandro De Biasi"><h3>Alessandro De Biasi</h3><p>MSc AI and Cybersecurity, University of Udine and Klagenfurt (double degree)</p></div>
+    <div><img src="assets/media/team-fb.jpg" alt="Federico Bertossi"><h3>Federico Bertossi</h3><p>BSc Computer Science, University of Udine. Software Engineer</p></div>
+    <div><img src="assets/media/team-mc.jpg" alt="Marco Ceccon"><h3>Marco Ceccon</h3><p>Software Engineer</p></div>
+    <div><img src="assets/media/team-ml.jpg" alt="Michele Lizzit"><h3>Michele Lizzit</h3><p>MSc Cybersecurity, ETH Zurich. PhD candidate in Computer Science, University of Udine</p></div>
+  </div>
+</section>
+
+<!-- Recap -->
+<section class="slide s-recap" data-name="recap">
+  <div class="stage dark">
+    <img class="logo" src="assets/media/logo-dark.svg" alt="Meta Glance">
+    <h1 class="name">Look. Nod. Done.</h1>
+    <p class="small"><span>Meta Glance, Junction 2026</span><span>An independent project, built with Ray-Ban Meta glasses and the Meta Wearables Device Access Toolkit. Not a product of Meta.</span></p>
+  </div>
+</section>
+
+</body>
+</html>

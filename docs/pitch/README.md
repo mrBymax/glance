@@ -2,6 +2,55 @@
 
 This directory contains the canonical context documents for the Meta Glance 3-minute pitch deck and synchronized Raylight video demo for HackJunction 2026.
 
+## The deck of the final
+
+`Meta-Glance-pitch.pdf` is the deck of the final: pages of 1920 x 1080, in the design of the site. It follows `script.md`, the pitch script of the owner: the 12 pitch pages of the script, a team page, a recap page, and backup pages B1 to B9 for questions. It replaces the 5-slide outline of `00-master-deck.md`, which holds figures that nobody verified.
+
+| File | Content |
+|---|---|
+| `Meta-Glance-pitch.pdf` | The deck |
+| `script.md` | The pitch script of the owner, word for word |
+| `slides/` | One PNG of each page, for the video editor |
+| `notes.md` | The script per page, with the cues for the footage |
+| `design.md` | The design decisions, the references, and the build steps |
+| `deck.src.html` | The source of the pages; `deck.html` is the built page |
+| `diagrams/` | The six diagrams, each as a standalone page |
+| `assets/photos/` | The photos of the owner (see "Photo slots") |
+| `assets/screens/` | Screens of the app, the kiosk page, and the HUD mockup from their replay modes, and frames of the animation |
+| `assets/media/` | Team photos, the logo, the Glance code sticker, and the crops that the pages use |
+| `scripts/` | The capture and build scripts |
+
+To build again: `node docs/pitch/scripts/diagrams.mjs && node docs/pitch/scripts/build.mjs`. `design.md` has the full steps.
+
+### Photo slots
+
+Four pitch pages wait for a photo or a video frame of the owner. The titles and the captions are already on the page; only the image is missing. Each slot has one file with a fixed name:
+
+| File | Page | Shot |
+|---|---|---|
+| `assets/photos/checkout-queue.jpg` | 3, left | A queue at a checkout belt |
+| `assets/photos/one-hand-short.jpg` | 3, right | A shopper with a basket in one hand and a phone in the other |
+| `assets/photos/pov-product.jpg` | 5 and 6 | First-person, a hand holds a Fanta |
+| `assets/photos/bus-door.jpg` | 11 | A bus door with a Glance code sticker |
+
+To fill a slot:
+
+1. Save the image as a JPEG with the name of the table in `docs/pitch/assets/photos/`. Landscape works best; the page crops it to fill the slot (`object-fit: cover`), so keep the subject near the center. The pages 5, 6, and 11 fill the whole page, so use at least 1920 x 1080 pixels there.
+2. Run `node docs/pitch/scripts/build.mjs`. The build uses each file that exists and keeps the framed slot for each file that does not. Its last line lists each slot as `photo` or `slot`.
+
+Where each photo comes from:
+
+| File | Source | Frame |
+|---|---|---|
+| `checkout-queue.jpg` | The team's footage, `scanner_checkout_2.mp4` (archive 001) | 3.4 s, the sharpest frame of 1.6 to 3.6 s, cropped to the slot. A self-checkout with a shopper waiting behind, seen from the back. |
+| `one-hand-short.jpg` | The team's footage, `scanner_fanta_pickup_2.mp4` (archive 002) | 8.2 s: the basket in one hand, a bottle and a handheld scanner in the other. The neighbor frames blur the scanner. |
+| `pov-product.jpg` | First-person footage through the glasses, `20261114_163739_33a2575f.mp4` (Downloads, 14 November 2026) | 9.0 s, the sharpest of 7.5 to 10 s: one hand holds a 1.5 L Fanta bottle (back label, "PALAUTA MINUT", barcode) in front of the soft-drink shelf. Cropped to the middle band of the 1376 x 1824 frame and scaled to 1872 x 1032. The captions of pages 5 and 6 name the Fanta. |
+| `bus-door.jpg` | Brett Sayles, "White and Blue Bus on the Road", Pexels, https://www.pexels.com/photo/8536723/ (file https://images.pexels.com/photos/8536723/pexels-photo-8536723.jpeg, 4740 x 3264) | Cropped below the destination sign and right of the operator logo, to the door and the window left of it. `scripts/bus-photo.mjs` puts the Glance code sticker on that window, in place of a yellow notice, and crops to 1872 x 1032. The QR of the final JPEG decodes to `GL1 BUS4`. |
+
+Photo credits: bus photo by Brett Sayles on Pexels, under the Pexels licence (free to use, no attribution required). The other photos come from the team's own footage.
+
+For the bus page, print the sticker of `assets/media/glance-sticker.svg` (or `.png`, 1200 x 1560 pixels). It holds a real QR code with the valid Glance code `GL1 BUS4`, in the style of the kiosk page. `node docs/pitch/scripts/sticker.mjs <code>` draws it for another code. No place has the code `BUS4` today.
+
 ## Structure and Pacing
 
 The presentation runs for strictly 180 seconds (~420 spoken words at 140 words per minute). Each beat corresponds to one presentation slide and one synchronized video scene block.
