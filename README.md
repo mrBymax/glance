@@ -1,5 +1,7 @@
 # Meta Glance
 
+> Disclaimer: we are not affiliated with Meta and this is not an official Meta product (we asked to use the logo for the repo and the PoC to show how seamless the integration within their existing system is). Please, contact us if you want it removed.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/Glance%20Dark.png">
   <source media="(prefers-color-scheme: light)" srcset="assets/Glance.png">
