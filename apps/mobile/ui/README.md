@@ -167,6 +167,7 @@ flowchart LR
 - The server sends `budget.exceeded` one time, when an add crosses the budget. `reduce` keeps the warning, and `CartList` shows "Warning: over your budget." with the total of the cart and the budget above the total. The warning ends when a `cart.updated` has a total at or under the budget, and when a new budget is `null` or not under the total.
 - `glance.ambiguous` sets `lookAlikes`. While no product prompt is current, the prompt area shows `LookAlikeNotice`: "I cannot tell which product this is.", "Turn the front to me.", and the name and the pack size of each candidate. It shows no price, because the voice never guesses a price. The next `glance.pending`, the next `cart.updated`, and a snapshot clear it.
 - `checkout.spotcheck` sets `spotCheck` to its product. While it is set, the session screen shows one info banner above the prompt area: "Quick check." and "Show me the <product>.". A product prompt keeps its card under the banner. `checkout.offered`, `checkout.cancelled`, `checkout.paid`, and a snapshot clear it.
+- With no prompt, no look-alike notice, and no spot check, the prompt area shows the idle card "Hold a product up to hear its price.". While a pay prompt is current or the receipt shows, the prompt area is empty, because the checkout sheet is open above the page.
 - `useStrings()` gives the strings to a component that needs no other part of `useUi()`. With no `BridgeProvider` above, it gives the English strings.
 - A snapshot replaces the session data, and it clears the error, the budget warning, and the look-alike list.
 - A product of a barcode scan has the ID `gtin-<13 digits>`, and its name comes from Open Food Facts. The page handles it as each other product: it shows the name as the server sends it, and it sends the ID back in `cart.edit`. Such a name can have 80 characters, so the card, the cart, and the receipt wrap it and never cut it. `src/test/scanned.ts` has two such products for the tests.
@@ -217,7 +218,7 @@ stateDiagram-v2
   session --> setup: local.reset, or a native state before the notification step
 ```
 
-- `loading` shows until the host sends the first `native.state`. It shows the logo as its `h1`, and a spinner.
+- `loading` shows until the host sends the first `native.state`. It shows the logo as its `h1`, and a spinner. The logo, the ring of the spinner, and its text start at the same left edge.
 - The setup screen opens with the logo, then the `h1` "Set up in four steps". See "Logo".
 - The list of steps shows only the four labels. The text and the button of the current step sit below the list, under a heading with the label of the step. Inside a vertical step the content is indented, and "Start shopping" did not fit at a root font size of 200 percent on a 360 px screen.
 - Step 1, link: the page says that Meta AI opens, what to confirm there, and how to return. If the Meta AI app is missing, the step shows a link to its Play Store page (`META_AI_STORE_URL`). With no network it shows the cause as a warning and Try again. While the registration runs, it shows a spinner with "Waiting for Meta AI." and no button. The taps of the jump to Meta AI show as a numbered list.
@@ -240,7 +241,7 @@ Each action that the shopper can do with the head or the voice also has a button
 
 End asks first, because the server takes no input for a session that ended.
 
-- The dock of Ask and Undo sticks to the bottom of the screen while the page scrolls. At a large font scale its buttons take two rows, so it scrolls with the page there (`src/styles/glance.css`).
+- The dock of Ask and Undo sticks to the bottom of the screen while the page scrolls. On a page shorter than the screen it sits at the bottom edge too, with no canvas below it. At a large font scale its buttons take two rows, so it scrolls with the page there (`src/styles/glance.css`).
 - The header of the session screen holds the logo as its `h1`, and Settings: an icon button with the name "Settings" at the end of the row.
 - The captions show in a dark window of fixed height (`CaptionList`). It scrolls to its newest line, so a new caption moves no other content of the page. The newest line is in full ink, and the older lines are gray.
 

@@ -43,6 +43,8 @@ export function SessionScreen() {
     if (state.lookAlikes) return <LookAlikeNotice candidates={state.lookAlikes} />;
     // During a spot check the banner above says what to do.
     if (state.spotCheck) return null;
+    // The pay prompt and the receipt show in the checkout sheet. The idle hint is not true while one of them is open.
+    if (state.prompt?.kind === 'pay' || (state.checkout === 'paid' && state.receipt)) return null;
     return (
       <Card className="glance-card glance-idle">
         <HStack gap={4} vAlign="center">

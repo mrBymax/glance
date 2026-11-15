@@ -67,9 +67,13 @@
   from { opacity: 0; transform: translateY(0.5rem); }
 }
 
-/* The spinner of the loading screen sits under the left edge of the logo, not in the middle of the screen. */
+/*
+ * The spinner of the loading screen sits under the left edge of the logo, not in the middle of the screen.
+ * Astryx centers the ring above its label, so the ring starts at the left edge of the label here.
+ */
 .glance-start {
   align-self: flex-start;
+  align-items: flex-start;
 }
 
 /* The disc that holds the glyph of a step or a state: the store of a checkout, the check of a payment. */
@@ -152,11 +156,16 @@
   from { opacity: 0; transform: translateY(0.25rem); }
 }
 
-/* The two fast actions stay under the thumb while the page scrolls. */
+/*
+ * The two fast actions stay under the thumb while the page scrolls.
+ * The auto margin puts the dock at the bottom edge when the page is shorter than the screen.
+ * The negative end margin covers the end padding of the page (paddingBlock 4), which showed as a strip under the dock.
+ */
 .glance-dock {
   position: sticky;
   inset-block-end: 0;
   z-index: 1;
+  margin-block: auto calc(var(--spacing-4) * -1);
   margin-inline: calc(var(--glance-inset) * -1);
   padding: var(--spacing-3) var(--glance-inset);
   border-block-start: var(--border-width) solid var(--color-border);
@@ -248,7 +257,7 @@
   /* Two rows of large buttons would cover a third of the screen, so the dock scrolls with the page. */
   .glance-dock {
     position: static;
-    margin-inline: 0;
+    margin: 0;
     padding: 0;
     border: none;
     background: transparent;

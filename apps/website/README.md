@@ -74,7 +74,7 @@ Values that a person fills. Each one has a default that the page can show.
 
 ## Kiosk page
 
-`/kiosk` is the screen at the checkout. It shows a QR code with the text `GL1 <code>`, and the glasses of the shopper read that code. Open the page in full screen on a screen with a height of 1080 px or more.
+`/kiosk` is the screen at the checkout. It shows a QR code with the text `GL1 <code>`, and the glasses of the shopper read that code. Open the page in full screen on a screen of 1920 x 1080 px or more. The screen can be landscape or portrait.
 
 Query flags of `/kiosk`:
 
@@ -129,7 +129,7 @@ The server selects each state after `idle`. The page only shows it.
 - When the server refuses the stream, the browser does not open it again. This occurs after a restart of a server with no `MONGODB_URI`, which keeps its kiosks in memory. The page then registers a new kiosk each 3 seconds until one call succeeds. The new kiosk has a new code.
 - Each load of the page makes a new kiosk. The server has no call that removes one.
 
-`src/kiosk/kiosk.css` holds the sizes. On a screen of 1920 x 1080 px the total has a font of 160 px, a row has a font of 48 px, and the code is 960 px wide. The code is never smaller than 15 cm, with its quiet zone. To measure, open `/kiosk?replay=1` at 100 percent zoom, wait for the cart, and run this in the console. It must print `[true, true, true]`.
+`src/kiosk/kiosk.css` holds the sizes. On a screen of 1920 x 1080 px the total has a font of 160 px, a row has a font of 48 px, and the code is 960 px wide. The code is never smaller than 15 cm, with its quiet zone. On a portrait screen, or a screen narrower than 60 rem, the code is above the panel and the sizes come from the width: on 1080 x 1920 px the total and the row keep 160 px and 48 px, and the code is 864 px wide (45 percent of the height at most), so a cart of seven lines fits below it. To measure, open `/kiosk?replay=1` at 100 percent zoom, wait for the cart, and run this in the console. It must print `[true, true, true]`.
 
 ```js
 const box = (selector) => document.querySelector(selector).getBoundingClientRect();
