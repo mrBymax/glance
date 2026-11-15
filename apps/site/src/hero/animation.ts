@@ -1,21 +1,22 @@
 /*
  * The Three.js scene of the hero. HeroStage imports this module on demand, so Three.js and the GLB load after the first paint.
- * The GLB and its player are the files of assets/animation. The site frames the mark closer than example.html, with a
- * narrow field of view, renders its authored colors with no tone mapping, and plays the clip a little faster.
+ * The GLB and its player are the files of assets/animation. The site frames the mark closer than example.html, draws the
+ * mark with the colors of the logo symbol (src/hero/logoMark.ts), and plays the clip a little faster.
  */
-import { AmbientLight, DirectionalLight, NoToneMapping, PerspectiveCamera, Scene, SRGBColorSpace, WebGLRenderer } from 'three';
+import { NoToneMapping, OrthographicCamera, Scene, SRGBColorSpace, WebGLRenderer } from 'three';
 import { loadMetaGlanceAnimation } from '../../../../assets/animation/metaGlancePlayer.js';
 import glbUrl from '../../../../assets/animation/meta-glances-placeholder.glb?url';
+import markColorsUrl from '../assets/generated/mark-colors.bin?url';
+import { dressLogoMark } from './logoMark';
 
 /*
- * example.html puts the camera 13 units away with a field of view of 45 degrees, for a full window. The hero frame is
- * smaller, so it shows a band of 3.8 units: the card at the end fills most of the frame. A narrow field of view seen from
- * farther away keeps the two loops of the mark even, as in the flat logo, where a wide one swells the near loop.
+ * example.html puts a perspective camera 13 units away. The tube of the mark is deep: its two loops lie up to 0.9 units
+ * apart front to back, so a camera with perspective draws the near loop larger and tilts the symbol. The hero uses an
+ * orthographic camera: the mark that faces the viewer has the outline of the flat logo, loop for loop.
  */
-const FIELD_OF_VIEW = 18;
 /*
  * The band of the scene that the frame shows, in units. The mark is smaller than the card that it turns into, so the
- * camera starts closer, on the mark, and moves back to the card while the mark turns into the frame of the card.
+ * view starts close, on the mark, and widens to the card while the mark turns into the frame of the card.
  */
 const MARK_HEIGHT = 2.4;
 const CARD_HEIGHT = 3.8;
@@ -32,9 +33,6 @@ function visibleHeight(clipTime: number): number {
  * asks for a pause control. It then rests on its last frame.
  */
 const SPEED = 1.25;
-// Light that shows the vertex colors close to their authored values, with soft shading on the tube.
-const AMBIENT = 0.9;
-const KEY = 1.1;
 
 export type HeroAnimation = {
   /** Length of the clip in seconds, at its own speed. */
@@ -55,38 +53,42 @@ export type HeroAnimationOptions = {
 export async function startHeroAnimation({ canvas, qrSource, onEnd }: HeroAnimationOptions): Promise<HeroAnimation> {
   const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  /*
-   * No tone mapping and no environment map: the blue of the mark is in its vertex colors (#3BA8F0 to #4BBDFD in sRGB)
-   * and its emissive color, and tone mapping or reflections of a room turn it pale. The output is sRGB.
-   */
+  // No tone mapping: the colors of the mark are the sRGB colors of the logo, and the card is white.
   renderer.toneMapping = NoToneMapping;
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.setClearColor(0x000000, 0);
 
   const scene = new Scene();
-  const camera = new PerspectiveCamera(FIELD_OF_VIEW, 1, 0.1, 200);
+  const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 40);
+  camera.position.set(0, 0, 13);
+  let aspect = 1;
 
-  scene.add(new AmbientLight(0xffffff, AMBIENT));
-  const keyLight = new DirectionalLight(0xffffff, KEY);
-  keyLight.position.set(2, 4, 10);
-  scene.add(keyLight);
-
-  const player = await loadMetaGlanceAnimation({ variant: 'placeholder', glbUrl, qrSource, loop: false });
+  // The card and the subtitle are emissive, and the mark is unlit, so the scene needs no light.
+  const [player, markColors] = await Promise.all([
+    loadMetaGlanceAnimation({ variant: 'placeholder', glbUrl, qrSource, loop: false }),
+    fetch(markColorsUrl).then(async (response) => (response.ok ? new Uint8Array(await response.arrayBuffer()) : null)),
+  ]);
   scene.add(player.root);
+  const mark = markColors ? dressLogoMark(player.root, markColors) : null;
+  const pose = () => mark?.update(player.action.time);
+  pose();
 
   const placeCamera = () => {
-    const distance = visibleHeight(player.action.time) / 2 / Math.tan(((FIELD_OF_VIEW / 2) * Math.PI) / 180);
-    // A narrow stage keeps the whole mark in view: the camera moves back when the stage is taller than it is wide.
-    camera.position.set(0, 0, camera.aspect < 1 ? distance / camera.aspect : distance);
+    // A narrow stage keeps the whole band in view: when the stage is taller than it is wide, the band sets the width.
+    const height = visibleHeight(player.action.time) / Math.min(aspect, 1);
+    camera.top = height / 2;
+    camera.bottom = -height / 2;
+    camera.left = (-height * aspect) / 2;
+    camera.right = (height * aspect) / 2;
+    camera.updateProjectionMatrix();
   };
 
   const resize = () => {
     const { clientWidth, clientHeight } = canvas;
     if (clientWidth === 0 || clientHeight === 0) return;
     renderer.setSize(clientWidth, clientHeight, false);
-    camera.aspect = clientWidth / clientHeight;
+    aspect = clientWidth / clientHeight;
     placeCamera();
-    camera.updateProjectionMatrix();
     // A new size clears the canvas. After the end no loop draws again, so this draws the frame once.
     renderer.render(scene, camera);
   };
@@ -104,6 +106,7 @@ export async function startHeroAnimation({ canvas, qrSource, onEnd }: HeroAnimat
     const delta = last === null ? 0 : Math.min((now - last) / 1000, 0.1);
     last = now;
     player.update(delta * SPEED);
+    pose();
     placeCamera();
     renderer.render(scene, camera);
     if (player.action.time >= player.duration) {
@@ -135,6 +138,7 @@ export async function startHeroAnimation({ canvas, qrSource, onEnd }: HeroAnimat
       isPlaying = false;
       stopLoop();
       player.seek(seconds);
+      pose();
       placeCamera();
       renderer.render(scene, camera);
     },
@@ -142,6 +146,7 @@ export async function startHeroAnimation({ canvas, qrSource, onEnd }: HeroAnimat
       stopLoop();
       visibility.disconnect();
       resizeObserver.disconnect();
+      mark?.dispose();
       player.dispose();
       renderer.dispose();
     },
