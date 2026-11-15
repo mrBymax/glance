@@ -1,3 +1,5 @@
+The deck uses a Fanta in place of the rye bread (owner's decision, 15 November).
+
 Descriptions
 
 ## Project Name

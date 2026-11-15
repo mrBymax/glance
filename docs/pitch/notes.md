@@ -1,6 +1,6 @@
 # Speaker notes of the pitch deck
 
-These notes go with `Meta-Glance-pitch.pdf`. The spoken text of each page is the text of `script.md`, the script of the owner, word for word. These notes add only the cues for the footage of the video, marked **Footage**, and short pointers for the backup pages.
+These notes go with `Meta-Glance-pitch.pdf`. The spoken text of each page is the text of `script.md`, the script of the owner, word for word. One change: the second product is a Fanta at 2.60, not a rye bread (owner's decision, 15 November). These notes add only the cues for the footage of the video, marked **Footage**, and short pointers for the backup pages.
 
 The pages of the PDF:
 
@@ -54,11 +54,11 @@ Stores tried to fix this with cameras in the ceiling. Every store needed a refit
 
 So we moved the camera. It sits on the shopper.
 
-I pick up the next product and look at it. "Rye bread, two sixty." A look only tells me. Nothing enters my cart until I nod.
+I pick up the next product and look at it. "Fanta, two sixty." A look only tells me. Nothing enters my cart until I nod.
 
 Nod.
 
-**Footage.** First person: two hands hold the rye bread; the voice says "Rye bread, two sixty. Nod to add." Then the nod.
+**Footage.** First person: a hand holds the Fanta, and the voice says "Fanta, two sixty. Nod to add." Then the nod.
 
 ### Page 6
 

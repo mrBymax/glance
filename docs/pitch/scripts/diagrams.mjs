@@ -182,14 +182,14 @@ const diagrams = [];
   const cardH = 150;
   const ys = [0, 175, 350];
   const left = [
-    { title: 'Checkout', icon: 'shopping-basket', lines: ['“… Two items, four euros', 'forty-nine. Nod to pay.”'], built: true },
-    { title: 'Bus ticket', icon: 'bus', lines: ['“Line 4 to the harbor.', 'Single ticket. Nod to buy.”'] },
-    { title: 'Ticket gate', icon: 'door-open', lines: ['“Platform gate 2.', 'Nod to open.”'] },
+    { title: 'Checkout', icon: 'shopping-basket', lines: ['"Two items, four euros', 'forty-nine. Nod to pay."'], built: true },
+    { title: 'Bus ticket', icon: 'bus', lines: ['"Line 4 to the harbor.', 'Single ticket. Nod to buy."'] },
+    { title: 'Ticket gate', icon: 'door-open', lines: ['"Platform gate 2.', 'Nod to open."'] },
   ];
   const right = [
-    { title: 'Vending machine', icon: 'cup-soda', lines: ['“Sparkling water, one fifty.', 'Nod to buy.”'] },
-    { title: 'Table order', icon: 'utensils', lines: ['“Margherita, nine euros.', 'Nod to order.”'] },
-    { title: 'Parking meter', icon: 'circle-parking', lines: ['“One hour of parking, two euros.', 'Nod to start.”'] },
+    { title: 'Vending machine', icon: 'cup-soda', lines: ['"Sparkling water, one fifty.', 'Nod to buy."'] },
+    { title: 'Table order', icon: 'utensils', lines: ['"Margherita, nine euros.', 'Nod to order."'] },
+    { title: 'Parking meter', icon: 'circle-parking', lines: ['"One hour of parking, two euros.', 'Nod to start."'] },
   ];
   const hub = { x: 664, y: 120, w: 400, h: 260 };
   let svg = svgOpen({ slug, width, height, title: 'Places the protocol enables', desc: 'The Glance loop in the middle, connected to six places: a checkout, which is built, and a bus ticket, a ticket gate, a vending machine, a table order, and a parking meter, which are examples that nobody built.' });

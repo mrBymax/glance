@@ -47,7 +47,7 @@ The first version of the deck (18 slides in the order title, problem, solution, 
 | What the glasses say, in the captions window of the app (pages 1, 2, 5, 6, 7, 11) | The phone UI (`apps/mobile/ui`, the dark captions window), owner brief | The captions read as speech. The earlier line stays above in gray, as the app shows it, on each "same page, new caption" pair. |
 | Photo slots for the owner's photos (pages 3, 5, 6, 11), with the titles and captions already laid out | Owner brief: no stock or generated image | A missing photo shows as a framed dark slot with the shot description and the file name. `build.mjs` swaps in `assets/photos/<name>.jpg` when it exists. |
 | The Glance code sticker drawn as a real QR code (`GL1 BUS4`), error correction M and a quiet zone of 4 modules | `apps/website/src/kiosk/qr.ts`, `packages/shared/src/kioskCode.ts` | It can be printed for the bus shot. A check of the PNG against the QR matrix found no wrong module. |
-| Pages 7 and 8 from the replay of the kiosk page | `apps/website/src/kiosk/kioskRun.ts` | The replay shows the exact state of the script: Checkout 3, Demo Market, rye bread 2.60 and oat drink 1.89, 4.49 EUR, waiting for the nod, then paid. |
+| Pages 7 and 8 from the replay of the kiosk page | `apps/website/src/kiosk/kioskRun.ts` | The replay shows Checkout 3, Demo Market, two items, and 4.49 EUR, waiting for the nod and then paid. The capture script renames the rye bread of the replay to Fanta (2.60) and hides the demo note, so the page matches the script. |
 | The head window drawn as built now: it opens 300 ms after the line of each prompt starts | `apps/mobile/android/README.md` (the head window, after commit `2a82c11`) | The first deck drew the older rule (1.2 s, product prompts only). |
 
 ## Tokens

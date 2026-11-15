@@ -215,7 +215,8 @@ ul, ol { padding: 0; list-style: none; }
 .s-recap .name { margin-top: 64px; font-size: 150px; font-weight: 700; line-height: 1; letter-spacing: -0.035em; }
 .s-recap .punch { margin-top: 32px; max-width: 1400px; color: #e2e2e2; font-size: 44px; font-weight: 500; line-height: 1.25; text-wrap: balance; }
 .s-recap .ask { margin-top: 44px; padding: 20px 36px; border-radius: 999px; background: #ffffff; color: #000000; font-size: 34px; font-weight: 650; font-variation-settings: 'DRKM' 0; }
-.s-recap .small { position: absolute; left: 0; right: 0; bottom: 56px; color: var(--dark-secondary); font-size: 24px; }
+.s-recap .small { position: absolute; left: 0; right: 0; bottom: 48px; display: grid; gap: 6px; color: var(--dark-secondary); font-size: 24px; }
+.s-recap .small span:first-child { color: #e2e2e2; font-weight: 600; }
 
 /* Backup divider. */
 .s-divider { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 96px; padding-top: 0; }
@@ -333,31 +334,31 @@ ul, ol { padding: 0; list-style: none; }
 </section>
 
 <!-- Pitch page 5 -->
-<section class="slide s-full s-pov" data-name="p05-rye-bread">
-  <div class="photo">{{photo rye-bread|PHOTO: first-person, two hands hold a rye bread}}</div>
+<section class="slide s-full s-pov" data-name="p05-fanta">
+  <div class="photo">{{photo pov-product|PHOTO: first-person, a hand holds a Fanta}}</div>
   <div class="scrim"></div>
   <h1 class="over-title">We moved the camera.</h1>
   <div class="captions">
     <p class="captions__head">{{icon captions 32}} Captions</p>
-    <p class="captions__line">Rye bread, two sixty. Nod to add.</p>
+    <p class="captions__line">Fanta, two sixty. Nod to add.</p>
   </div>
 </section>
 
 <!-- Pitch page 6 -->
-<section class="slide s-full s-pov" data-name="p06-added-rye-bread">
-  <div class="photo">{{photo rye-bread|PHOTO: first-person, two hands hold a rye bread}}</div>
+<section class="slide s-full s-pov" data-name="p06-added-fanta">
+  <div class="photo">{{photo pov-product|PHOTO: first-person, a hand holds a Fanta}}</div>
   <div class="scrim"></div>
   <h1 class="over-title">We moved the camera.</h1>
   <div class="captions">
     <p class="captions__head">{{icon captions 32}} Captions</p>
-    <p class="captions__older">Rye bread, two sixty. Nod to add.</p>
-    <p class="captions__line">Added rye bread. Total four forty-nine.</p>
+    <p class="captions__older">Fanta, two sixty. Nod to add.</p>
+    <p class="captions__line">Added Fanta. Total four forty-nine.</p>
   </div>
 </section>
 
 <!-- Pitch page 7 -->
 <section class="slide s-kiosk" data-name="p07-checkout">
-  <div class="monitor"><img src="assets/screens/kiosk-connected.png" alt="The kiosk page: the Glance code, Checkout 3, Demo Market, waiting for your nod, 4.49 EUR, rye bread and oat drink."></div>
+  <div class="monitor"><img src="assets/screens/kiosk-connected.png" alt="The kiosk page: the Glance code, Checkout 3, Demo Market, waiting for your nod, 4.49 EUR, Fanta and oat drink."></div>
   <div class="captions">
     <p class="captions__head">{{icon captions 32}} Captions</p>
     <p class="captions__line">Checkout 3 at Demo Market.<br>Two items, four euros forty-nine. Nod to pay.</p>
@@ -366,7 +367,7 @@ ul, ol { padding: 0; list-style: none; }
 
 <!-- Pitch page 8 -->
 <section class="slide s-kiosk" data-name="p08-paid">
-  <div class="monitor"><img src="assets/screens/kiosk-paid-clean.png" alt="The kiosk page after the payment: Paid, 4.49 EUR, rye bread and oat drink."></div>
+  <div class="monitor"><img src="assets/screens/kiosk-paid-clean.png" alt="The kiosk page after the payment: Paid, 4.49 EUR, Fanta and oat drink."></div>
   <div class="nothing">
     <p><span>Unloaded:</span> nothing.</p>
     <p><span>Scanned:</span> nothing.</p>
@@ -426,7 +427,7 @@ ul, ol { padding: 0; list-style: none; }
     <h1 class="name">Look. Nod. Done.</h1>
     <p class="punch">Glance tells, nod buys: a protocol for paying with your glasses.</p>
     <p class="ask">Our ask: we want to keep building Glance, full time, with Meta.</p>
-    <p class="small">Meta Glance &middot; Junction 2026. An independent project, built with Ray-Ban Meta glasses and Meta&rsquo;s Wearables Device Access Toolkit. Not a product of Meta.</p>
+    <p class="small"><span>Meta Glance, Junction 2026</span><span>An independent project, built with Ray-Ban Meta glasses and the Meta Wearables Device Access Toolkit. Not a product of Meta.</span></p>
   </div>
 </section>
 
@@ -451,7 +452,7 @@ ul, ol { padding: 0; list-style: none; }
 
 <!-- B1 -->
 <section class="slide" data-name="b1-protocol">
-  <p class="kicker"><b>Backup</b> &middot; The protocol</p>
+  <p class="kicker"><b>Backup</b> The protocol</p>
   <h1 class="headline">The Glance protocol links a person, a place, and a nod.</h1>
   <div class="diagram">{{diagram parts}}</div>
   <footer class="foot"><span class="source">A place registers with the Glance server, shows its code, and gets the result when you nod. That is the whole integration.</span><span class="page">B1</span></footer>
@@ -459,7 +460,7 @@ ul, ol { padding: 0; list-style: none; }
 
 <!-- B2 -->
 <section class="slide" data-name="b2-stores">
-  <p class="kicker"><b>Backup</b> &middot; Glance for stores</p>
+  <p class="kicker"><b>Backup</b> Glance for stores</p>
   <h1 class="headline">Glance for stores</h1>
   <p class="intro">Our initial use-case focuses on usage within stores, and is ready to deploy out of the box.</p>
   <ul class="bullets">
@@ -476,7 +477,7 @@ ul, ol { padding: 0; list-style: none; }
 
 <!-- B3 -->
 <section class="slide" data-name="b3-under-the-hood">
-  <p class="kicker"><b>Backup</b> &middot; Under the hood</p>
+  <p class="kicker"><b>Backup</b> Under the hood</p>
   <h1 class="headline">Under the hood</h1>
   <p class="paragraph">The store prototype is built on the Meta Wearables Device Access Toolkit with Gemini recognition. Glance recovers from a lost connection, a paused session and a low battery. If a fault cannot be recovered, it fails safely: no exit barcode is issued, the barrier stays closed, and you pay at a regular checkout with your cart still on your phone.</p>
   <div class="numbers">
@@ -490,27 +491,27 @@ ul, ol { padding: 0; list-style: none; }
 
 <!-- B4 -->
 <section class="slide" data-name="b4-nod">
-  <p class="kicker"><b>Backup</b> &middot; When a nod counts</p>
+  <p class="kicker"><b>Backup</b> When a nod counts</p>
   <h1 class="headline">You never wait for the voice: a nod counts while it speaks.</h1>
   <div class="diagram">{{diagram head-window}}</div>
   <div class="confirmed">
-    <div class="card"><span class="glyph">{{icon check 34}}</span><h3>Nod while the voice speaks</h3><p>A nod or a shake during the line stops the voice at once. Confirmed on Ray-Ban Meta glasses on 14 November 2026.</p></div>
-    <div class="card"><span class="glyph">{{icon check 34}}</span><h3>Phone locked in a pocket</h3><p>The camera, the voice, and the nods run with the screen off. Confirmed on Ray-Ban Meta glasses on 14 November 2026.</p></div>
+    <div class="card"><span class="glyph">{{icon check 34}}</span><h3>Nod while the voice speaks</h3><p>A nod or a shake during the line stops the voice at once. We confirmed it with Ray-Ban Meta glasses on 14 November 2026.</p></div>
+    <div class="card"><span class="glyph">{{icon check 34}}</span><h3>Phone locked in a pocket</h3><p>The camera, the voice, and the nods run with the screen off. We confirmed it with Ray-Ban Meta glasses on 14 November 2026.</p></div>
   </div>
-  <footer class="foot"><span class="source">The voice line in the drawing is an example of 3 seconds. A nod counts only for the line you are hearing, and at a checkout only while its code is in view.</span><span class="page">B4</span></footer>
+  <footer class="foot"><span class="source">The voice line in the drawing is an example of 3 seconds. A nod counts only for the line you hear, and at a checkout only while its code is in view.</span><span class="page">B4</span></footer>
 </section>
 
 <!-- B5 -->
 <section class="slide" data-name="b5-trust">
-  <p class="kicker"><b>Backup</b> &middot; Consent and privacy</p>
-  <h1 class="headline">Nothing happens by accident, and nobody nearby is exposed.</h1>
+  <p class="kicker"><b>Backup</b> Consent and privacy</p>
+  <h1 class="headline">Nothing happens by accident, and the people nearby stay private.</h1>
   <div class="two-col">
     <div class="col card">
       <h2>{{icon shield-check 40}} Consent</h2>
       <ul class="checks">
         <li>{{icon check 28}}<span>Looking never changes your cart. A nod counts only for the product you just heard, while it is still in view.</span></li>
         <li>{{icon check 28}}<span>At a checkout, a nod pays only while its code is in view.</span></li>
-        <li>{{icon check 28}}<span>A shake cancels: &ldquo;Checkout cancelled. Your cart is safe.&rdquo; A shake after an add takes it back.</span></li>
+        <li>{{icon check 28}}<span>A shake cancels: "Checkout cancelled. Your cart is safe." A shake after an add takes it back.</span></li>
         <li>{{icon check 28}}<span>A nod is consent, not identity. A fingerprint above an amount is one server setting away.</span></li>
       </ul>
     </div>
@@ -526,12 +527,12 @@ ul, ol { padding: 0; list-style: none; }
       </div>
     </div>
   </div>
-  <footer class="foot"><span class="source">Source: docs/protocol.md, &ldquo;Security and privacy as built&rdquo;.</span><span class="page">B5</span></footer>
+  <footer class="foot"><span class="source">Source: docs/protocol.md, "Security and privacy as built".</span><span class="page">B5</span></footer>
 </section>
 
 <!-- B6 -->
 <section class="slide s-biz" data-name="b6-meta">
-  <p class="kicker"><b>Backup</b> &middot; Why it matters to Meta</p>
+  <p class="kicker"><b>Backup</b> Why it matters to Meta</p>
   <h1 class="headline">For Meta: a reason to wear the glasses every day.</h1>
   <div class="body">
     <div>{{diagram layers}}</div>
@@ -543,12 +544,12 @@ ul, ol { padding: 0; list-style: none; }
     </div>
   </div>
   <div class="ask-band"><p>Our ask: we want to keep building Glance, full time, with Meta.</p><span>A working loop today, a path from one checkout to the glasses.</span></div>
-  <footer class="foot"><span class="source">No price, fee, or partner is set. This is the case for the platform, not a revenue forecast.</span><span class="page">B6</span></footer>
+  <footer class="foot"><span class="source">We set no price, fee, or partner. This page makes the case for the platform. It is not a revenue forecast.</span><span class="page">B6</span></footer>
 </section>
 
 <!-- B7 -->
 <section class="slide" data-name="b7-competition">
-  <p class="kicker"><b>Backup</b> &middot; Competition</p>
+  <p class="kicker"><b>Backup</b> Competition</p>
   <h1 class="headline">Others solve one part. Glance closes the loop.</h1>
   <table class="compare">
     <colgroup><col style="width:500px"><col style="width:180px"><col style="width:200px"><col style="width:220px"><col style="width:220px"><col></colgroup>
@@ -561,7 +562,7 @@ ul, ol { padding: 0; list-style: none; }
       <tr><td><b>Self-checkout kiosk</b></td><td class="no">{{icon x 32}}</td><td class="no">{{icon x 32}}</td><td class="no">{{icon x 32}}</td><td class="no">{{icon x 32}}</td><td class="status">Common in stores</td></tr>
       <tr><td><b>Amazon Just Walk Out</b></td><td class="yes">{{icon check 36}}</td><td class="yes">{{icon check 36}}</td><td class="no">{{icon x 32}}</td><td class="no">{{icon x 32}}</td><td class="status">Left US Amazon Fresh, 2024</td></tr>
       <tr><td><b>Phone tap or QR payment</b></td><td class="no">{{icon x 32}}</td><td class="no">{{icon x 32}}</td><td class="q">a terminal</td><td class="no">{{icon x 32}}</td><td class="status">Everywhere</td></tr>
-      <tr><td><b>&ldquo;Hey Meta, scan and pay&rdquo;</b></td><td class="yes">{{icon check 36}}</td><td class="yes">{{icon check 36}}</td><td class="yes">{{icon check 36}}</td><td class="q">not stated</td><td class="status">Test in India, Oct 2025</td></tr>
+      <tr><td><b>"Hey Meta, scan and pay"</b></td><td class="yes">{{icon check 36}}</td><td class="yes">{{icon check 36}}</td><td class="yes">{{icon check 36}}</td><td class="q">not stated</td><td class="status">Test in India, Oct 2025</td></tr>
       <tr><td><b>Meta AI and Be My Eyes</b></td><td class="yes">{{icon check 36}}</td><td class="yes">{{icon check 36}}</td><td class="yes">{{icon check 36}}</td><td class="no">{{icon x 32}}</td><td class="status">Shipping, no payment</td></tr>
     </tbody>
   </table>
@@ -571,7 +572,7 @@ ul, ol { padding: 0; list-style: none; }
 
 <!-- B8 -->
 <section class="slide" data-name="b8-go-to-market">
-  <p class="kicker"><b>Backup</b> &middot; Go-to-market <span class="tag">Roadmap</span></p>
+  <p class="kicker"><b>Backup</b> Go-to-market <span class="tag">Roadmap</span></p>
   <h1 class="headline">Start at one checkout. Grow to every place that can show a code.</h1>
   <div class="diagram">{{diagram gtm}}</div>
   <p class="first">{{icon users 36}}<span><b>First wearers:</b> the people who gain the most. Blind and low-vision shoppers, and anyone with full hands.</span></p>
@@ -580,11 +581,11 @@ ul, ol { padding: 0; list-style: none; }
 
 <!-- B9 -->
 <section class="slide s-vision" data-name="b9-beyond-stores">
-  <p class="kicker"><b>Backup</b> &middot; Glance beyond stores <span class="tag">Vision</span></p>
+  <p class="kicker"><b>Backup</b> Glance beyond stores <span class="tag">Vision</span></p>
   <h1 class="headline">Our vision is a world where you leave your phone at home, and you do everything in a glance.</h1>
   <div class="diagram">{{diagram places}}</div>
-  <p class="row"><img src="assets/screens/hud-prompt.png" alt="The Display HUD mockup: rye bread, 500 g, 2.60 EUR, add to cart."><span><b>On glasses with a display,</b> the same prompt in the lens: a mockup on the Meta Ray-Ban Display toolkit.<br><b>In the future,</b> the same glance and nod can send money to a friend.</span></p>
-  <footer class="foot"><span class="source">Example lines. Today only the checkout is built.</span><span class="page">B9</span></footer>
+  <p class="row"><img src="assets/screens/hud-prompt.png" alt="The Display HUD mockup: Fanta, 1.5 L, 2.60 EUR, add to cart."><span><b>On glasses with a display,</b> the same prompt in the lens: a mockup on the Meta Ray-Ban Display toolkit.<br><b>In the future,</b> the same glance and nod can send money to a friend.</span></p>
+  <footer class="foot"><span class="source">The lines are examples. Today only the checkout exists.</span><span class="page">B9</span></footer>
 </section>
 
 </body>
