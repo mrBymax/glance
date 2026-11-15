@@ -12,6 +12,7 @@ const EXCEPTIONS = new Set(['script.md']);
 
 const FILES = [
   'deck.src.html',
+  'technical.src.html',
   'notes.md',
   'design.md',
   'README.md',

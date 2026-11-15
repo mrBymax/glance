@@ -1,12 +1,11 @@
 # Speaker notes of the pitch deck
 
-These notes go with `Meta-Glance-pitch.pdf`. The spoken text of each page is the text of `script.md`, the script of the owner, word for word. One change: the second product is a Fanta at 2.60, not a rye bread (owner's decision, 15 November). These notes add only the cues for the footage of the video, marked **Footage**, and short pointers for the backup pages.
+These notes go with `Meta-Glance-pitch.pdf` (14 pitch slides) and `Meta-Glance-technical.pdf` (technical deep dive, ordered to follow each topic in the pitch). The spoken text of each page is the text of `script.md`, the script of the owner, word for word. One change: the second product is a Fanta at 2.60, not a rye bread (owner's decision, 15 November). These notes add only the cues for the footage of the video, marked **Footage**, and pointers for the technical slides.
 
-The pages of the PDF:
+The pages of the pitch deck (`Meta-Glance-pitch.pdf`):
 
 - Pages 1 to 12: the pitch pages of the script.
-- Page 13: Team. Page 14: Recap. The script leaves both as TODO.
-- Page 15: Backup. Pages B1 to B9 after it, for the questions of the judges.
+- Page 13: Team. Page 14: Recap.
 
 ## Project name and tagline
 
@@ -118,28 +117,26 @@ This is a vision that we have, where you can leave the phone at home.
 
 ## Team presentation and recap
 
-The script leaves this part as TODO, so these two pages have no spoken text yet.
-
 ### Page 13: Team
 
-The four people in alphabetical order, with their titles: Alessandro De Biasi, Federico Bertossi, Marco Ceccon, Michele Lizzit.
+We are four engineers from Udine, Klagenfurt, and Zurich who tested and tuned this on real Ray-Ban Meta hardware in this arena tonight.
 
 ### Page 14: Recap
 
-The page shows the logo of the project, the tagline "Look. Nod. Done.", the punchline of the script ("Glance tells, nod buys: a protocol for paying with your glasses.") under it, and the ask: "Our ask: we want to keep building Glance, full time, with Meta."
+Your phone stays in your pocket. Keep your hands for life. Look. Nod. Done.
 
 **Footage.** The last nod at the kiosk and the "Paid" screen, before the recap page.
 
-## Backup pages, for questions
+## Technical deep-dive deck (`Meta-Glance-technical.pdf`)
 
-These pages are not part of the timed pitch.
+Organized to mirror the order topics appear in the pitch:
 
-- **B1, the protocol.** The parts: glasses, phone, Glance server, recognition, and a place. The dashed path is the code that the camera sees.
-- **B2, Glance for stores.** The seven points of the script, as written.
-- **B3, under the hood.** The paragraph of the script, and three numbers: 7 frames each second, 30 Hz head motion, and 1.2 s for one recognition call (the median of 146 frames, 14 November 2026).
-- **B4, when a nod counts.** The head window opens 300 ms after the line of each prompt starts, for a product and for a payment, and a nod or a shake during the line stops the voice at once. The nod while the voice speaks and the session with the phone locked in a pocket ran on the real glasses on 14 November 2026.
-- **B5, consent and privacy.** A nod counts only for the line you hear, and at a checkout only while its code is in view. Faces are pixelated on the phone. The server writes no frame to disk.
-- **B6, why it matters to Meta, and the ask.**
-- **B7, competition.** Each row has its source in the footer.
-- **B8, go-to-market.** A roadmap: a store pilot, more places, the loop in the glasses.
-- **B9, Glance beyond stores.** The vision of the script. Only the checkout is built.
+- **01, head gestures and screen-off sessions (Pitch 1-2).** The head window opens 300 ms after the line of each prompt starts, for a product and for a payment, and a nod or a shake during the line stops the voice at once. Both barge-in nods and screen-off pocket sessions ran on real glasses on 14 November 2026.
+- **02, store workflow and accessibility (Pitch 3-4).** Full hands, blind and low-vision access, no ceiling refit, catalog-grounded prices and allergens, and redundant input controls.
+- **03, existing store and wearable systems (Pitch 4).** Comparison against S Group scan-and-go, self-checkout kiosks, Amazon Just Walk Out, phone tap/QR, India UPI test, and Meta AI + Be My Eyes.
+- **04, hardware, recognition, and scale (Pitch 5-6).** 7 fps stream, 30 Hz head motion, 1.2 s median recognition call (146 frames, 14 November 2026), and the observe + verify pipeline (0 wrong names across 644 calls, 27% prompt tokens).
+- **05, consent rules and local privacy (Pitch 7-8).** A nod counts only for the line you hear, and at a checkout only while its code stays in view. Faces are pixelated on the phone before upload, and no frame is written to disk.
+- **06, the Glance protocol (Pitch 9-10).** The parts: glasses, phone, Glance server, recognition, and a place showing a GL1 code.
+- **07, beyond stores and Display HUD (Pitch 11-12).** Protocol extensions for transit, gates, vending, parking, and tables, plus the Display HUD mockup.
+- **08, platform fit for Meta AI glasses.** Hardware readiness, reusable interaction layer, daily habits, and audio-first accessibility.
+- **09, rollout path.** Store checkout pilot first, then expansion to other code-based places.
