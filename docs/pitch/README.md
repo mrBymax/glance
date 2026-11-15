@@ -38,6 +38,17 @@ To fill a slot:
 1. Save the image as a JPEG with the name of the table in `docs/pitch/assets/photos/`. Landscape works best; the page crops it to fill the slot (`object-fit: cover`), so keep the subject near the center. The pages 5, 6, and 11 fill the whole page, so use at least 1920 x 1080 pixels there.
 2. Run `node docs/pitch/scripts/build.mjs`. The build uses each file that exists and keeps the framed slot for each file that does not. Its last line lists each slot as `photo` or `slot`.
 
+Where each photo comes from:
+
+| File | Source | Frame |
+|---|---|---|
+| `checkout-queue.jpg` | The team's footage, `scanner_checkout_2.mp4` (archive 001) | 3.4 s, the sharpest frame of 1.6 to 3.6 s, cropped to the slot. A self-checkout with a shopper waiting behind, seen from the back. |
+| `one-hand-short.jpg` | The team's footage, `scanner_fanta_pickup_2.mp4` (archive 002) | 8.2 s: the basket in one hand, a bottle and a handheld scanner in the other. The neighbor frames blur the scanner. |
+| `rye-bread.jpg` | Not yet | It waits for the first-person footage of the glasses. |
+| `bus-door.jpg` | Not yet | No footage of a bus. No online photo is in the deck yet. |
+
+Photo credits: none. Each photo in the deck comes from the team's own footage.
+
 For the bus page, print the sticker of `assets/media/glance-sticker.svg` (or `.png`, 1200 x 1560 pixels). It holds a real QR code with the valid Glance code `GL1 BUS4`, in the style of the kiosk page. `node docs/pitch/scripts/sticker.mjs <code>` draws it for another code. No place has the code `BUS4` today.
 
 ## Structure and Pacing
