@@ -8,14 +8,9 @@ The pages of the PDF:
 - Page 13: Team. Page 14: Recap. The script leaves both as TODO.
 - Page 15: Backup. Pages B1 to B9 after it, for the questions of the judges.
 
-## Project name
+## Project name and tagline
 
-The recap page shows one name: "Meta Glance: Look, Nod, Done", because it matches the website. The owner picks one of the four names of the script:
-
-- Meta Glance: Glance, Nod, Go
-- Meta Glance: Look, Nod, Paid
-- Meta Glance: Look, Nod, Done
-- Meta Glance: Pay with a Nod
+The name is Meta Glance, and the tagline is "Look. Nod. Done.", as on the website. The recap page shows the logo of the project and the tagline. This settles the four name lines of the script (Glance, Nod, Go; Look, Nod, Paid; Look, Nod, Done; Pay with a Nod).
 
 ## 0:00 Cold open: the first wow (10 s)
 
@@ -131,7 +126,7 @@ The four people in alphabetical order, with their titles: Alessandro De Biasi, F
 
 ### Page 14: Recap
 
-The page shows the project name, the punchline of the script ("Glance tells, nod buys: a protocol for paying with your glasses."), and the ask: "Our ask: we want to keep building Glance, full time, with Meta."
+The page shows the logo of the project, the tagline "Look. Nod. Done.", the punchline of the script ("Glance tells, nod buys: a protocol for paying with your glasses.") under it, and the ask: "Our ask: we want to keep building Glance, full time, with Meta."
 
 **Footage.** The last nod at the kiosk and the "Paid" screen, before the recap page.
 
