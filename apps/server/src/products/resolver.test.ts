@@ -6,7 +6,7 @@ import { createFakeProductInfo } from './fakeProductInfo';
 import type { ProductDetails, ProductInfo } from './productInfo';
 import { ProductResolver, priceConflicts } from './resolver';
 import { ScannedProducts, gtinOfScannedId, scannedProduct, scannedProductId, spokenPack, withScanned } from './scanned';
-import { DEFAULT_STORE_LIST_PATH, type StoreItem, type StoreList, readStoreListFile } from './storeList';
+import { DEFAULT_STORE_LIST_PATH, type StoreItem, type StoreListReader, readStoreListFile } from './storeList';
 
 const catalog = indexCatalog(readCatalogFile(fileURLToPath(new URL('../../catalog/catalog.dev.json', import.meta.url))));
 const storeList = readStoreListFile(DEFAULT_STORE_LIST_PATH);
@@ -27,7 +27,7 @@ beforeEach(() => {
 
 type Info = Pick<ProductInfo, 'byGtin'>;
 
-function resolver(over: { storeList?: StoreList; info?: Info; budgetMs?: number } = {}): ProductResolver {
+function resolver(over: { storeList?: StoreListReader; info?: Info; budgetMs?: number } = {}): ProductResolver {
   return new ProductResolver({
     catalog, storeList: over.storeList ?? storeList, info: over.info ?? createFakeProductInfo(), scanned,
     log: (line) => { logLines.push(line); }, ...(over.budgetMs === undefined ? {} : { budgetMs: over.budgetMs }),
@@ -139,14 +139,14 @@ it('a later resolve replaces the product that had no details', async () => {
   expect(scanned.get('gtin-3017624010701')).toMatchObject({ name: { en: 'Nutella' }, allergens: ['milk', 'nuts'] });
 });
 it('rejects when the store list does not answer inside the budget, or fails', async () => {
-  const slow: StoreList = { byGtin: () => never(), all: async () => [] };
+  const slow: StoreListReader = { byGtin: () => never(), all: async () => [] };
   await expect(resolver({ storeList: slow, budgetMs: 20 }).resolve(NUTELLA)).rejects.toThrow(/store list.*20 ms/);
-  const broken: StoreList = { byGtin: async () => { throw new Error('ERP is down'); }, all: async () => [] };
+  const broken: StoreListReader = { byGtin: async () => { throw new Error('ERP is down'); }, all: async () => [] };
   await expect(resolver({ storeList: broken }).resolve(NUTELLA)).rejects.toThrow(/ERP is down/);
 });
 it('gives the store list and the database one budget together', async () => {
   const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
-  const slowList: StoreList = { byGtin: async () => { await wait(60); return nutella; }, all: async () => [nutella] };
+  const slowList: StoreListReader = { byGtin: async () => { await wait(60); return nutella; }, all: async () => [nutella] };
   const slowInfo: Info = { byGtin: async () => { await wait(60); return details; } };
   const product = await resolver({ storeList: slowList, info: slowInfo, budgetMs: 90 }).resolve(NUTELLA);
   expect(product?.allergens).toBeNull();

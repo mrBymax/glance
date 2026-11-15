@@ -1,6 +1,6 @@
 import { TIMING } from '@glance/shared';
 import type { Clock } from '../clock';
-import type { StoreEntry } from '../products/storeEntries';
+import type { EntriesSource } from '../products/storeEntries';
 import type { Recognizer } from '../recognition/gemini';
 import { NO_RESULT, type RecognitionResult } from '../recognition/result';
 import { type ReferenceImage, type ReferenceImages, REFERENCES_FOR_ITEM } from '../reference/images';
@@ -65,8 +65,8 @@ const queryOf = (seen: { brand: string | null; name: string | null; variant: str
  */
 export function createObservePipeline(deps: {
   observer: Observer; verifier: Verifier; search: ProductSearch;
-  /** The store list as it was at the start of the server. With at most MAX_VERIFY_CANDIDATES items, each one is a candidate when the search finds none. */
-  entries: readonly StoreEntry[];
+  /** The store list. A function gives it as it is now. With at most MAX_VERIFY_CANDIDATES items, each one is a candidate when the search finds none. */
+  entries: EntriesSource;
   /** The reference pictures of the candidates. null: the verify call gets no picture. */
   references: ReferenceImages | null;
   /** The product ID that the rules know for a code of 13 digits. */
@@ -77,8 +77,9 @@ export function createObservePipeline(deps: {
   log: (line: string) => void;
 }): { forSession(sessionId: string): Recognizer } {
   const candidatesFor = async (found: readonly Candidate[]): Promise<VerifyCandidate[]> => {
+    const entries = typeof deps.entries === 'function' ? deps.entries() : deps.entries;
     const gtins = found.length > 0 ? found.map((candidate) => candidate.gtin)
-      : deps.entries.length <= MAX_VERIFY_CANDIDATES ? deps.entries.map((entry) => entry.item.gtin) : [];
+      : entries.length <= MAX_VERIFY_CANDIDATES ? entries.map((entry) => entry.item.gtin) : [];
     const pictures = deps.references === null ? new Map<string, ReferenceImage[]>() : await deps.references.all().catch((error: unknown) => {
       deps.log(`reference pictures not read. ${error instanceof Error ? error.message : String(error)}`);
       return new Map<string, ReferenceImage[]>();

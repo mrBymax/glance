@@ -2,7 +2,7 @@ import { type Product, normalizeGtin } from '@glance/shared';
 import type { CatalogIndex } from '../catalog/catalog';
 import type { ProductDetails, ProductInfo } from './productInfo';
 import { type ScannedProducts, scannedProduct } from './scanned';
-import type { StoreItem, StoreList } from './storeList';
+import type { StoreItem, StoreListReader } from './storeList';
 
 /** One lookup has this time: the store list first, then the database with what is left. */
 export const BARCODE_LOOKUP_MS = 2500;
@@ -33,7 +33,7 @@ export class ProductResolver {
   private readonly budgetMs: number;
 
   constructor(private readonly deps: {
-    catalog: CatalogIndex; storeList: StoreList; info: Pick<ProductInfo, 'byGtin'>;
+    catalog: CatalogIndex; storeList: StoreListReader; info: Pick<ProductInfo, 'byGtin'>;
     /** Gets each product that the catalog does not hold. */
     scanned: ScannedProducts;
     budgetMs?: number;

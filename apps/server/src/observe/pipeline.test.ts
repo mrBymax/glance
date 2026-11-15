@@ -105,6 +105,26 @@ it('gives each item of a small store as a candidate when the frames have no word
   expect(await look()).toMatchObject({ status: 'identified', productId: `gtin-${HELL}` });
   expect(verifyInputs[0]!.candidates).toHaveLength(4);
 });
+it('reads the store list as it is at each verify call', async () => {
+  let current = entries;
+  const verifyInputs: Parameters<Verifier['verify']>[0][] = [];
+  const observations = [seen(), seen(), seen(), seen()];
+  let now = 0;
+  const live = createObservePipeline({
+    observer: { observe: async () => observations.shift() ?? NOT_HELD },
+    verifier: { verify: async (input) => { verifyInputs.push(input); return answer({}); } },
+    search: createProductSearch(entries), entries: () => current, references: null, productIdOf: scannedProductId,
+    clock: { now: () => now }, minVerifyConfidence: 0.9, log: () => undefined,
+  });
+  const look = (session: string) => {
+    now += 400;
+    return live.forSession(session).recognize(frame, { exclude: [], still: true, signal: new AbortController().signal });
+  };
+  await look('s1');
+  current = entries.slice(0, 2);
+  await look('s1');
+  expect(verifyInputs.map((input) => input.candidates.length)).toEqual([4, 2]);
+});
 it('gives no candidate in a large store when the frames have no word of an item', async () => {
   const more = [...entries, ...['4006381333931', '8076800195057'].map((gtin): StoreEntry => ({ item: { gtin, priceCents: 100, name: `Item ${gtin}` }, details: null }))];
   const { look, verifyInputs } = pipeline([seen(), seen()], answer({}), more);

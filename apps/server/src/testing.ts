@@ -1,5 +1,5 @@
 // Test helpers. No product code imports this file.
-import { mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +13,7 @@ import { systemClock } from './clock';
 import { loadConfig } from './config';
 import { MemoryStore } from './db/memory';
 import { createFakeProductInfo } from './products/fakeProductInfo';
-import { readStoreListFile } from './products/storeList';
+import { type StoreList, type StoreListReader, readStoreListFile } from './products/storeList';
 
 const DEV_CATALOG = fileURLToPath(new URL('../catalog/catalog.dev.json', import.meta.url));
 const DEV_STORE_LIST = fileURLToPath(new URL('../catalog/store-list.dev.json', import.meta.url));
@@ -22,8 +22,8 @@ const PRODUCT_FIXTURES = fileURLToPath(new URL('../fixtures/product-info', impor
 export type TestApp = { app: FastifyInstance; base: string; wsBase: string; store: MemoryStore; close(): Promise<void> };
 
 /**
- * Starts the app on a free port of 127.0.0.1, with a memory store, the dev catalog, the dev store list,
- * and the product details of the fixtures, so no test calls Open Food Facts.
+ * Starts the app on a free port of 127.0.0.1, with a memory store, the dev catalog, a copy of the dev store list
+ * in a temp directory, and the product details of the fixtures. So no test calls Open Food Facts, and no test writes the dev list.
  * The config has fake speech, a payment of 10 ms, and a speech cache and a reference folder in new temp directories that close() removes. `env` changes it, and `over` replaces dependencies of the app.
  */
 export async function testApp(env: Record<string, string> = {}, over: Partial<AppDeps> = {}): Promise<TestApp> {
@@ -32,9 +32,11 @@ export async function testApp(env: Record<string, string> = {}, over: Partial<Ap
   const cacheDir = mkdtempSync(join(tmpdir(), 'glance-speech-'));
   // A test app never reads or writes the reference pictures of a person: its folder is empty and temporary.
   const referenceDir = mkdtempSync(join(tmpdir(), 'glance-reference-'));
+  const storeDir = mkdtempSync(join(tmpdir(), 'glance-store-'));
+  const storeListPath = join(storeDir, 'store-list.json');
+  copyFileSync(DEV_STORE_LIST, storeListPath);
   const removeCacheDir = (): void => {
-    rmSync(cacheDir, { recursive: true, force: true });
-    rmSync(referenceDir, { recursive: true, force: true });
+    for (const dir of [cacheDir, referenceDir, storeDir]) rmSync(dir, { recursive: true, force: true });
   };
   let app: FastifyInstance;
   try {
@@ -46,7 +48,7 @@ export async function testApp(env: Record<string, string> = {}, over: Partial<Ap
     }, []);
     app = await buildApp({
       config, clock: systemClock, store, catalog: indexCatalog(products), log: false,
-      storeList: readStoreListFile(DEV_STORE_LIST), productInfo: createFakeProductInfo(PRODUCT_FIXTURES), ...over,
+      storeList: readStoreListFile(storeListPath), productInfo: createFakeProductInfo(PRODUCT_FIXTURES), ...over,
     });
     await app.listen({ host: '127.0.0.1', port: 0 });
     // The port is known only now, and the session answer builds the socket address from this value.
@@ -63,6 +65,14 @@ export async function testApp(env: Record<string, string> = {}, over: Partial<Ap
     removeCacheDir();
   };
   return { app, base, wsBase: `ws://127.0.0.1:${port}`, store, close };
+}
+
+/** A store list of a test that no one can change: `put` and `remove` reject. */
+export function readOnly(list: StoreListReader): StoreList {
+  const refuse = async (): Promise<never> => {
+    throw new Error('The store list of this test is read only.');
+  };
+  return { ...list, put: refuse, remove: refuse };
 }
 
 /** Reads the events stream of a fetch response. `next` gives the JSON of the next `data:` message. */

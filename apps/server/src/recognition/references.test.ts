@@ -256,3 +256,30 @@ it('does not keep an upload that failed', async () => {
   fail = false;
   expect(await shared(jpeg(1))).toEqual({ fileData: { fileUri: 'files/1', mimeType: 'image/jpeg' } });
 });
+it('follows a store list that changes: the pictures of a new item are in the parts after the next read', async () => {
+  await add(NUTELLA, 1);
+  let current: StoreEntry[] = [entry(CUPS, 'Paper cups')];
+  const held = createFrameReferences({
+    store, entries: () => current, products: dev, perItem: 1, dir: 'catalog/reference', clock: { now: () => now }, log: (line) => lines.push(line),
+  });
+  await held.refresh();
+  expect(held.current()).toEqual([]);
+  current = [...current, entry(NUTELLA, 'Nutella')];
+  await held.refresh();
+  expect(held.current()).toEqual([{ text: 'Reference picture of gtin-3017624010701: Nutella' }, picture(jpeg(1))]);
+  current = [];
+  await held.refresh();
+  expect(held.current()).toEqual([]);
+});
+it('reads the folder again after the server removed one picture', async () => {
+  await add(NUTELLA, 1);
+  await add(NUTELLA, 2);
+  const held = references(2);
+  await held.refresh();
+  expect(held.current()).toHaveLength(4);
+  const watched = refreshOnChange(store, held);
+  const [newest] = await store.list(NUTELLA);
+  expect(await watched.removeOne(NUTELLA, 'none.jpg')).toBe(false);
+  expect(await watched.removeOne(NUTELLA, newest!.file)).toBe(true);
+  await vi.waitFor(() => expect(held.current()).toEqual([{ text: 'Reference picture of gtin-3017624010701: Nutella' }, picture(jpeg(1))]));
+});

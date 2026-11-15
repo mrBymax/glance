@@ -48,6 +48,8 @@ export type Config = {
   biometricAboveCents: number | null;
   /** The key of the paths under /api/demo, or null. Without it those paths answer 404. */
   demoKey: string | null;
+  /** The paths under /api/store exist. They take no key, so a server on a public address sets STORE_EDIT=0. */
+  storeEdit: boolean;
   /** The folder with the reference pictures of the store items. */
   referenceDir: string;
   /** The file with the items that the store sells. */
@@ -141,6 +143,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: readon
     secondLookWaitMs: readNumber('SECOND_LOOK_WAIT_MS', 0, 0, 10_000, true),
     biometricAboveCents: readNumber('BIOMETRIC_ABOVE_CENTS', null, 0, MAX_BIOMETRIC_ABOVE_CENTS, true),
     demoKey: read('DEMO_KEY'),
+    storeEdit: read('STORE_EDIT') !== '0',
     referenceDir: read('REFERENCE_DIR') ?? DEFAULT_REFERENCE_DIR,
     storeListPath: read('STORE_LIST_PATH') ?? DEFAULT_STORE_LIST_PATH,
     fakeProductInfo,

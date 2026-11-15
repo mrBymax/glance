@@ -188,3 +188,16 @@ it('rejects when the caller aborts the call', async () => {
   abort.abort();
   await expect(call).rejects.toThrow(/aborted/);
 });
+it('follows a store list that changes: the next call has the new item in its instruction and its schema', async () => {
+  let current = entries.slice(0, 1);
+  const live = createGeminiLabelReader({ apiKey: 'test-key', model: 'gemini-3.5-flash-lite', template, entries: () => current, fetch: fetchStub });
+  await live.read(JPEG, { signal: signal() });
+  current = entries.slice(0, 2);
+  await live.read(JPEG, { signal: signal() });
+
+  const cupsLine = '- gtin: 6438574558384 | name: Paper cups';
+  expect(calls.map((call) => JSON.stringify(call.body.systemInstruction).includes(cupsLine))).toEqual([false, true]);
+  const schemaOf = (call: Call) => (call.body.generationConfig as { responseJsonSchema: unknown }).responseJsonSchema;
+  expect(schemaOf(calls[0]!)).toEqual(labelResponseSchema(GTINS.slice(0, 1)));
+  expect(schemaOf(calls[1]!)).toEqual(labelResponseSchema(GTINS.slice(0, 2)));
+});

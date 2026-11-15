@@ -3,7 +3,7 @@ import type { FrameHeader } from '@glance/shared';
 import { type CatalogIndex, indexCatalog } from '../catalog/catalog';
 import { jpegPart, referencePicturePart } from '../label/gemini';
 import { scannedProduct } from '../products/scanned';
-import type { StoreEntry } from '../products/storeEntries';
+import { type EntriesSource, fromEntries } from '../products/storeEntries';
 import { buildSystemInstruction, recognitionResponseSchema, userText } from './prompt';
 import { NO_RESULT, type RecognitionResult, normalizeResult } from './result';
 
@@ -52,10 +52,11 @@ export function createGeminiRecognizer(deps: {
   apiKey: string; model: string; mediaResolution: 'default' | 'low'; minConfidence: number;
   catalog: CatalogIndex; template: string;
   /**
-   * The store items that the catalog does not hold, as they were at the start of the server. The model can name each one
-   * by the ID of a scanned product. A script that tests the catalog alone gives an empty list.
+   * The store items that the catalog does not hold. The model can name each one by the ID of a scanned product.
+   * A function gives the items as they are now: the instruction and the schema are built again after a change of the list.
+   * A script that tests the catalog alone gives an empty list.
    */
-  storeEntries: readonly StoreEntry[];
+  storeEntries: EntriesSource;
   /**
    * The parts of the reference pictures as they are now, read at the start of each call. See references.ts.
    * With none, and with an empty list, the request holds the frame alone.
@@ -65,18 +66,25 @@ export function createGeminiRecognizer(deps: {
   fetch?: typeof fetch;
 }): Recognizer {
   const ai = new GoogleGenAI({ apiKey: deps.apiKey, ...(deps.fetch ? { httpOptions: { fetch: deps.fetch } } : {}) });
-  const systemInstruction = buildSystemInstruction(deps.template, deps.catalog.products, deps.storeEntries);
-  const instructionWithReferences = buildSystemInstruction(deps.template, deps.catalog.products, deps.storeEntries, true);
-  // Each product that the model can name. The check of an answer needs only the IDs.
-  const known = indexCatalog([
-    ...deps.catalog.products, ...deps.storeEntries.map((entry) => scannedProduct(entry.item, entry.details)),
-  ]);
-  const responseSchema = recognitionResponseSchema(known.products.map((product) => product.id));
-  // The ID of a store item is `gtin-<13 digits>`, so the instruction shows the model the code of each one.
-  const shownCodes = new Set(deps.storeEntries.map((entry) => entry.item.gtin));
+  const forStore = fromEntries(deps.storeEntries, (storeEntries) => {
+    // Each product that the model can name. The check of an answer needs only the IDs.
+    const known = indexCatalog([
+      ...deps.catalog.products, ...storeEntries.map((entry) => scannedProduct(entry.item, entry.details)),
+    ]);
+    return {
+      systemInstruction: buildSystemInstruction(deps.template, deps.catalog.products, storeEntries),
+      instructionWithReferences: buildSystemInstruction(deps.template, deps.catalog.products, storeEntries, true),
+      known,
+      responseSchema: recognitionResponseSchema(known.products.map((product) => product.id)),
+      // The ID of a store item is `gtin-<13 digits>`, so the instruction shows the model the code of each one.
+      shownCodes: new Set(storeEntries.map((entry) => entry.item.gtin)),
+    };
+  });
 
   return {
     async recognize(jpeg, opts) {
+      // One read for the whole call: the answer is checked against the list that the model got.
+      const { systemInstruction, instructionWithReferences, known, responseSchema, shownCodes } = forStore();
       // A still is the sharp second look at a package, so it keeps the default resolution.
       const low = deps.mediaResolution === 'low' && !opts.still;
       const references = deps.references?.() ?? [];

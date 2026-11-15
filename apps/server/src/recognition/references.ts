@@ -4,7 +4,7 @@ import { type Product, normalizeGtin } from '@glance/shared';
 import type { Clock } from '../clock';
 import { referencePicturePart } from '../label/gemini';
 import { scannedProductId } from '../products/scanned';
-import type { StoreEntry } from '../products/storeEntries';
+import type { EntriesSource, StoreEntry } from '../products/storeEntries';
 import type { ReferenceImage, ReferenceImages } from '../reference/images';
 
 /**
@@ -138,8 +138,8 @@ export async function loadFrameReferences(
  */
 export function createFrameReferences(deps: {
   store: ReferenceImages;
-  /** The store list as it was at the start of the server. */
-  entries: readonly StoreEntry[];
+  /** The store list. A function gives it as it is now, so the next read selects the pictures of a new item. */
+  entries: EntriesSource;
   /** The catalog products. */
   products: readonly Product[];
   /** The number of pictures of one item in a frame call. 0: a frame call gets no picture. */
@@ -161,7 +161,8 @@ export function createFrameReferences(deps: {
   const read = async (): Promise<void> => {
     try {
       const fresh = deps.clock.now() - builtAt < FRAME_REFERENCES_MAX_AGE_MS ? held : undefined;
-      const loaded = await loadFrameReferences(deps.store, deps.entries, deps.products, deps.perItem, fresh, deps.picturePart);
+      const entries = typeof deps.entries === 'function' ? deps.entries() : deps.entries;
+      const loaded = await loadFrameReferences(deps.store, entries, deps.products, deps.perItem, fresh, deps.picturePart);
       if (loaded === held) return;
       const changed = loaded.state !== held?.state;
       held = loaded;
@@ -205,6 +206,11 @@ export function createFrameReferences(deps: {
 export function refreshOnChange(store: ReferenceImages, held: { refresh(): Promise<void> }): ReferenceImages {
   return {
     ...store,
+    async removeOne(gtin, file) {
+      const removed = await store.removeOne(gtin, file);
+      if (removed) void held.refresh();
+      return removed;
+    },
     async add(gtin, jpeg) {
       const picture = await store.add(gtin, jpeg);
       void held.refresh();

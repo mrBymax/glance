@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
@@ -63,4 +63,67 @@ it('the dev store list holds real codes with a price, a brand, and a pack size',
     expect(item.packSize).toBeTruthy();
   }
   expect(items.map((item) => item.gtin)).toContain('3017624010701');
+});
+
+const FILE_LINES = [
+  '[',
+  '  { "gtin": "3017624010701", "priceCents": 399, "name": "Nutella", "brand": "Ferrero", "packSize": "400 g" },',
+  '  { "gtin": "80177173", "priceCents": 45, "name": "Nutella" }',
+  ']',
+  '',
+];
+it('put adds an item at the end of the file, and the next read has it', async () => {
+  const path = tempList(FILE_LINES.join('\n'));
+  const list = readStoreListFile(path);
+  const spaghetti = { gtin: '8076800195057', priceCents: 109, name: 'Spaghetti "n.5"', packSize: '500 g' };
+  await list.put(spaghetti);
+  expect(await list.byGtin('8076800195057')).toEqual(spaghetti);
+  expect(await list.all()).toHaveLength(3);
+  expect(readFileSync(path, 'utf8')).toBe([
+    FILE_LINES[0], FILE_LINES[1], `${FILE_LINES[2]},`,
+    '  { "gtin": "8076800195057", "priceCents": 109, "name": "Spaghetti \\"n.5\\"", "packSize": "500 g" }', ']', '',
+  ].join('\n'));
+  expect(await readStoreListFile(path).all()).toEqual(await list.all());
+});
+it('put replaces an item in its place, and keeps the code and the line ends as the file had them', async () => {
+  const path = tempList(FILE_LINES.join('\r\n'));
+  const list = readStoreListFile(path);
+  await list.put({ gtin: '0000080177173', priceCents: 55, name: 'Nutella mini', brand: 'Ferrero' });
+  expect((await list.all()).map((item) => item.priceCents)).toEqual([399, 55]);
+  expect(readFileSync(path, 'utf8')).toBe([
+    FILE_LINES[0], FILE_LINES[1], '  { "gtin": "80177173", "priceCents": 55, "name": "Nutella mini", "brand": "Ferrero" }', ']', '',
+  ].join('\r\n'));
+});
+it('a put of an item as it is leaves each byte of a file in this format', async () => {
+  const path = tempList(FILE_LINES.join('\n'));
+  await readStoreListFile(path).put({ gtin: '3017624010701', priceCents: 399, name: 'Nutella', brand: 'Ferrero', packSize: '400 g' });
+  expect(readFileSync(path, 'utf8')).toBe(FILE_LINES.join('\n'));
+});
+it('remove takes an item out of the list and the file, and answers false for a code that the list does not hold', async () => {
+  const path = tempList(FILE_LINES.join('\n'));
+  const list = readStoreListFile(path);
+  expect(await list.remove('8076800195057')).toBe(false);
+  expect(await list.remove('3017624010701')).toBe(true);
+  expect(await list.byGtin('3017624010701')).toBeUndefined();
+  expect(readFileSync(path, 'utf8')).toBe(['[', FILE_LINES[2], ']', ''].join('\n'));
+  expect(await list.remove('0000080177173')).toBe(true);
+  expect(readFileSync(path, 'utf8')).toBe('[]\n');
+  expect(await readStoreListFile(path).all()).toEqual([]);
+});
+it('changes that start together all reach the file, and no temp file stays', async () => {
+  const path = tempList([]);
+  const list = readStoreListFile(path);
+  const codes = ['3017624010701', '8076800195057', '8001250120120', '5449000000996'];
+  await Promise.all(codes.map((gtin, index) => list.put({ gtin, priceCents: 100 + index, name: `Item ${index}` })));
+  expect((await readStoreListFile(path).all()).map((item) => item.gtin)).toEqual(codes);
+  expect(readdirSync(tempDir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+});
+it('a write that fails rejects with the file name and leaves the list as it was', async () => {
+  const gone = mkdtempSync(join(tmpdir(), 'glance-store-list-gone-'));
+  const path = join(gone, 'list.json');
+  writeFileSync(path, FILE_LINES.join('\n'));
+  const list = readStoreListFile(path);
+  rmSync(gone, { recursive: true, force: true });
+  await expect(list.put({ gtin: '8076800195057', priceCents: 109, name: 'Spaghetti' })).rejects.toThrow(/Cannot write the store list file/);
+  expect(await list.all()).toHaveLength(2);
 });

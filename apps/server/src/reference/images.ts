@@ -27,6 +27,8 @@ export interface ReferenceImages {
   read(image: ReferenceImage): Promise<Uint8Array>;
   /** Removes each picture of one item. Returns the number of pictures that it removed. */
   remove(gtin: string): Promise<number>;
+  /** Removes one picture by its name inside the item. Resolves false when the item has no picture with this name. */
+  removeOne(gtin: string, file: string): Promise<boolean>;
 }
 
 /** The folder when REFERENCE_DIR is not set. Git ignores it: a reference picture can show a room and people. */
@@ -130,6 +132,12 @@ export function createFolderReferences(dir: string, clock: Clock): ReferenceImag
       const count = (await list(gtin)).length;
       await rm(folder, { recursive: true, force: true });
       return count;
+    },
+    async removeOne(gtin, file) {
+      // Only a name of the folder list is removed, so a text with a path in it removes nothing.
+      if (!(await list(gtin)).some((picture) => picture.file === file)) return false;
+      await rm(join(folderOf(gtin), file), { force: true });
+      return true;
     },
   };
 }

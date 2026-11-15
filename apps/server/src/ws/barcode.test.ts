@@ -7,7 +7,7 @@ import type { AppDeps } from '../app';
 import { type LabelAnswer, type LabelReader, NO_LABEL } from '../label/reader';
 import type { Recognizer } from '../recognition/gemini';
 import { NO_RESULT, type RecognitionResult } from '../recognition/result';
-import { type TestApp, type TestPhone, connectPhone, testApp } from '../testing';
+import { type TestApp, type TestPhone, connectPhone, readOnly, testApp } from '../testing';
 
 // Each app of this file reads the product details from the fixtures of FAKE_PRODUCT_INFO, or from a reader of the test.
 
@@ -224,7 +224,7 @@ it('a stored session loads after a restart when the store list fails, and keeps 
   await (await first.t.app.sessions.get(first.id))!.settled();
   first.phone.close();
 
-  const down = { byGtin: async () => { throw new Error('The ERP is down.'); }, all: async () => [] };
+  const down = readOnly({ byGtin: async () => { throw new Error('The ERP is down.'); }, all: async () => [] });
   const second = await testApp({}, { store: first.t.store, storeList: down });
   apps.push(second);
   const phone = await connectPhone(second, first.id, first.token);

@@ -59,6 +59,8 @@ const counts = (word: string): boolean => word.length >= 3 || /\d/.test(word);
 export function createProductSearch(entries: readonly StoreEntry[]): ProductSearch & {
   /** Takes a new item, or a newer entry of an item: the product database gave its texts after the start. */
   put(entry: StoreEntry): void;
+  /** Takes an item out. The weight of each word then counts the items that are left. */
+  remove(gtin13: string): void;
 } {
   const indexed = (entry: StoreEntry): Indexed => {
     const { item, details } = entry;
@@ -169,6 +171,9 @@ export function createProductSearch(entries: readonly StoreEntry[]): ProductSear
     put: (entry) => {
       byGtin.set(entry.item.gtin, indexed(entry));
       count();
+    },
+    remove: (gtin13) => {
+      if (byGtin.delete(gtin13)) count();
     },
   };
 }

@@ -7,7 +7,7 @@ import { FAKE_PRODUCT_INFO_DIR } from '../products/fakeProductInfo';
 import { createOpenFoodFactsInfo } from '../products/openFoodFacts';
 import { DEFAULT_STORE_LIST_PATH, readStoreListFile } from '../products/storeList';
 import type { FetchFn } from '../speech/elevenlabs';
-import { type TestApp, type TestPhone, connectPhone, testApp } from '../testing';
+import { type TestApp, type TestPhone, connectPhone, readOnly, testApp } from '../testing';
 import type { Recognizer } from './gemini';
 import { NO_RESULT, type RecognitionResult } from './result';
 
@@ -247,7 +247,7 @@ it('with fake product details the start makes no warm-up', async () => {
 it('a store item that the store list no longer holds gets no prompt', async () => {
   const items = await readStoreListFile(DEFAULT_STORE_LIST_PATH).all();
   let sold = true;
-  const storeList = { all: async () => items, byGtin: async (gtin: string) => (sold ? items.find((item) => item.gtin === gtin) : undefined) };
+  const storeList = readOnly({ all: async () => items, byGtin: async (gtin: string) => (sold ? items.find((item) => item.gtin === gtin) : undefined) });
   recognize.mockResolvedValue({ ...NO_RESULT, status: 'identified', productId: 'gtin-3017624010701', confidence: 0.9 });
   const app = await testApp({}, {
     recognizer: { recognize }, storeList, log: { level: 'info', stream: { write: (line) => { logLines.push(line); } } },
@@ -263,13 +263,13 @@ it('a store item that the store list no longer holds gets no prompt', async () =
 it('a store item whose read fails still gets its prompt, with the details of the start', async () => {
   const items = await readStoreListFile(DEFAULT_STORE_LIST_PATH).all();
   let down = false;
-  const storeList = {
+  const storeList = readOnly({
     all: async () => items,
     byGtin: async (gtin: string) => {
       if (down) throw new Error('The ERP is down.');
       return items.find((item) => item.gtin === gtin);
     },
-  };
+  });
   recognize.mockResolvedValue({ ...NO_RESULT, status: 'identified', productId: 'gtin-3017624010701', confidence: 0.9 });
   const app = await testApp({}, {
     recognizer: { recognize }, storeList, log: { level: 'info', stream: { write: (line) => { logLines.push(line); } } },

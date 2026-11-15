@@ -4,7 +4,7 @@ import { DEFAULT_PROFILE } from '@glance/shared';
 import type { BarcodeReport } from '../products/barcodes';
 import type { PicturePart } from '../recognition/references';
 import type { ReferenceImage, ReferenceImages } from '../reference/images';
-import type { StoreList } from '../products/storeList';
+import type { StoreListReader } from '../products/storeList';
 import { PRODUCT_KNOWN_MS, STILL_AFTER_ANSWER_MS } from '../sessions/code';
 import type { SessionRuntime } from '../sessions/runtime';
 import { createSessionState } from '../sessions/step';
@@ -15,7 +15,7 @@ import { LABEL_TIMEOUT_MS, type LabelAnswer, type LabelReader, NO_LABEL } from '
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
 const header = { seq: 4, ts: 4, w: 1440, h: 1080, blurred: true, kind: 'label' as const };
 const nutella = { gtin: '3017624010701', priceCents: 399, name: 'Nutella', brand: 'Ferrero', packSize: '400 g' };
-const storeList: StoreList = { byGtin: async () => nutella, all: async () => [nutella] };
+const storeList: StoreListReader = { byGtin: async () => nutella, all: async () => [nutella] };
 
 let inputs: RuleInputBody[];
 let stopListeners: (() => void)[];
@@ -62,6 +62,7 @@ function memoryReferences(pictures: [string, Uint8Array][] = []): ReferenceImage
       return imagesOf(gtin)[0]!;
     },
     read: async (image) => added[image.addedAt]![1],
+    removeOne: async () => false,
     remove: async () => 0,
   };
 }

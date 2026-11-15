@@ -1,6 +1,6 @@
 import { GoogleGenAI, type Part, PartMediaResolutionLevel } from '@google/genai';
 import { z } from 'zod';
-import type { StoreEntry } from '../products/storeEntries';
+import { type EntriesSource, type StoreEntry, fromEntries } from '../products/storeEntries';
 import { type LabelReader, type LabelReference, NO_LABEL, parseLabelAnswer } from './reader';
 
 /** The path of the instruction file, from the working directory apps/server. */
@@ -72,23 +72,27 @@ export function labelParts(jpeg: Uint8Array, references: readonly LabelReference
  * One generateContent call for each still of a label, with no state between the calls.
  * The call shape matches the type definitions of @google/genai 3.3.0, as the recognition call does.
  * The still keeps the default media resolution, because the digits under a barcode are small.
- * The store list can change the size of the instruction, so the reader builds the instruction and the schema one time.
+ * The store list can change the size of the instruction, so the reader builds the instruction and the schema one time
+ * for each list. A function as `entries` gives the list as it is now, and a change of the list builds them again.
  */
 export function createGeminiLabelReader(deps: {
   apiKey: string; model: string;
   /** The text of agents/label.md, with the placeholder for the store list. */
   template: string;
-  /** The store list as it was at the start of the server. */
-  entries: readonly StoreEntry[];
+  /** The store list. A function gives it as it is now. */
+  entries: EntriesSource;
   /** In place of the global fetch, for a test. */
   fetch?: typeof fetch;
 }): LabelReader {
   const ai = new GoogleGenAI({ apiKey: deps.apiKey, ...(deps.fetch ? { httpOptions: { fetch: deps.fetch } } : {}) });
-  const systemInstruction = buildLabelInstruction(deps.template, deps.entries);
-  const responseSchema = labelResponseSchema(deps.entries.map((entry) => entry.item.gtin));
+  const forStore = fromEntries(deps.entries, (entries) => ({
+    systemInstruction: buildLabelInstruction(deps.template, entries),
+    responseSchema: labelResponseSchema(entries.map((entry) => entry.item.gtin)),
+  }));
 
   return {
     async read(jpeg, opts) {
+      const { systemInstruction, responseSchema } = forStore();
       const response = await ai.models.generateContent({
         model: deps.model,
         contents: labelParts(jpeg, opts.references ?? []),

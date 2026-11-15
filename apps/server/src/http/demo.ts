@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { type LatestSessionResponse, normalizeGtin } from '@glance/shared';
 import { type CapturedReference, ReferenceCaptureError } from '../label/intake';
-import type { StoreList } from '../products/storeList';
+import type { StoreListReader } from '../products/storeList';
 import type { ReferenceImages } from '../reference/images';
 import type { SessionRuntime } from '../sessions/runtime';
 import { queryValue, tokenMatches } from './auth';
@@ -27,7 +27,7 @@ const CAPTURE_STATUS: Record<ReferenceCaptureError['reason'], [number, string]> 
  * the picture is saved. GET lists each store item with its picture count, and DELETE removes the pictures of one item.
  */
 export function registerDemoRoutes(app: FastifyInstance, deps: {
-  demoKey: string | null; storeList: StoreList; references: ReferenceImages;
+  demoKey: string | null; storeList: StoreListReader; references: ReferenceImages;
   /** Marks a session: its next label frame is a reference picture of the item. Rejects with a ReferenceCaptureError. */
   capture: (session: SessionRuntime, gtin: string) => Promise<CapturedReference>;
 }): void {

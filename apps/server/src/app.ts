@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import { type Lang, formatKioskCode } from '@glance/shared';
+import { type Lang, type Product, formatKioskCode } from '@glance/shared';
 import { EventBus } from './bus';
 import type { CatalogIndex } from './catalog/catalog';
 import type { Clock } from './clock';
@@ -10,15 +10,17 @@ import { registerDemoRoutes } from './http/demo';
 import { registerKioskRoutes } from './http/kiosks';
 import { registerSessionRoutes } from './http/sessions';
 import { registerSpeechRoutes } from './http/speech';
+import { registerStoreRoutes } from './http/store';
 import { KioskService } from './kiosk/kiosks';
 import { createPayments } from './kiosk/payment';
 import { createLabelHandler } from './label/intake';
 import { type LabelReader, NO_LABEL } from './label/reader';
 import { createBarcodeReports } from './products/barcodes';
+import { type LiveStore, openLiveStore } from './products/liveStore';
 import type { ProductInfo } from './products/productInfo';
 import { ProductResolver } from './products/resolver';
 import { ScannedProducts, gtinOfScannedId, scannedProduct, scannedProductId, withScanned } from './products/scanned';
-import { type StoreEntry, notInCatalog, readStoreEntries } from './products/storeEntries';
+import { notInCatalog } from './products/storeEntries';
 import type { StoreList } from './products/storeList';
 import { startWarmUp } from './products/warmup';
 import { type ReferenceImages, createFolderReferences } from './reference/images';
@@ -37,17 +39,20 @@ import { type FrameHandler, frameLogLine, registerDeviceSocket } from './ws/devi
 
 export type AppDeps = {
   config: Config; clock: Clock; store: Store; catalog: CatalogIndex;
-  /** What the store sells, by barcode. main.ts reads the file of STORE_LIST_PATH. */
+  /** What the store sells, by barcode. main.ts reads the file of STORE_LIST_PATH. The paths under /api/store write it. */
   storeList: StoreList;
   /** The details of a scanned product. main.ts makes the reader of Open Food Facts, or the fixture reader of FAKE_PRODUCT_INFO. */
   productInfo: ProductInfo;
-  /** The store list as main.ts read it for the recognizer and the label reader. Without it the app reads the list itself. */
-  storeEntries?: readonly StoreEntry[];
+  /**
+   * The entries of `storeList` and the signal for each change of it. main.ts makes it, because the recognizer and the
+   * label reader read it. Without it the app reads the list itself.
+   */
+  liveStore?: LiveStore;
   /** false gives no log. An object sends each log line to its stream. */
   log?: boolean | { level: string; stream: { write(line: string): void } };
   /** Names the product of each frame. Fake recognition does not use it. */
   recognizer?: Recognizer;
-  /** Runs after each read of the warm-up, with the code of the store item. The search index of main.ts takes the new details. */
+  /** Runs after each read of the warm-up and of a new item, with the code of the store item. The search index of main.ts takes the new details. */
   onProductRead?: (gtin13: string) => void | Promise<void>;
   /** Gives each session a recognizer of its own, in place of `recognizer`. The observe pipeline needs it. */
   recognizerFor?: (sessionId: string) => Recognizer;
@@ -93,14 +98,17 @@ const FAKE_ANSWER: Record<Lang, string> = { en: 'I do not have that information.
 /** The body of a request with the JSON content type and a text that is no JSON. */
 const NOT_JSON = Symbol('not JSON');
 
-const ERROR_NAMES: Record<number, string> = { 400: 'bad_request', 401: 'unauthorized', 404: 'not_found' };
+const ERROR_NAMES: Record<number, string> = {
+  400: 'bad_request', 401: 'unauthorized', 404: 'not_found', 413: 'too_large', 415: 'unsupported_media_type',
+};
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { config } = deps;
   // The rules find each product of the store list by its ID, as they find a catalog product.
   // Each store item is in the index from the start, so recognition by sight and a fake script can name it.
   const scanned = new ScannedProducts();
-  const storeEntries = deps.storeEntries ?? await readStoreEntries(deps.storeList, deps.productInfo, (line) => console.error(line));
+  const liveStore = deps.liveStore ?? await openLiveStore(deps.storeList, deps.productInfo, (line) => console.error(line));
+  const storeEntries = liveStore.current();
   for (const entry of notInCatalog(storeEntries, deps.catalog.products)) scanned.put(scannedProduct(entry.item, entry.details));
   const products = withScanned(deps.catalog, scanned);
   // A script that the server cannot use stops the start, before a timer or a socket exists.
@@ -146,6 +154,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       done(null, NOT_JSON);
     }
   });
+  // The picture of a store item. The route sets the size limit.
+  app.addContentTypeParser('image/jpeg', { parseAs: 'buffer' }, (_request, body, done) => done(null, body));
 
   // A body that is no JSON gets 400 on an unknown path too, as before the parser gave it to the handlers.
   app.setNotFoundHandler((request, reply) => (request.body === NOT_JSON
@@ -188,22 +198,39 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.closers.add(() => clipWarmUp.stop());
     clipWarmUp.add(notInCatalog(storeEntries, deps.catalog.products).flatMap((entry) => scanned.get(scannedProductId(entry.item.gtin)) ?? []));
   }
+  /** Reads a store item with the details of the product database, for the rules, the clips, and the search index. */
+  const readWithDetails = async (gtin: string): Promise<Product | null> => {
+    const product = await resolver.resolve(gtin);
+    // The product database can give the pack size, which is a part of a prompt line.
+    if (product) clipWarmUp?.add([product]);
+    await deps.onProductRead?.(gtin);
+    return product;
+  };
   // Not awaited: the start of the server does not wait for Open Food Facts. The fixtures of FAKE_PRODUCT_INFO need no read.
   if (!config.fakeProductInfo) {
     const warmUp = startWarmUp({
       entries: notInCatalog(storeEntries, deps.catalog.products), info: deps.productInfo, log: (line) => app.log.info(line),
-      resolver: {
-        resolve: async (gtin) => {
-          const product = await resolver.resolve(gtin);
-          // The product database can give the pack size, which is a part of a prompt line.
-          if (product) clipWarmUp?.add([product]);
-          await deps.onProductRead?.(gtin);
-          return product;
-        },
-      },
+      resolver: { resolve: readWithDetails },
     });
     app.closers.add(() => warmUp.stop());
   }
+  // An item that a person adds or changes while the server runs gets what each item got at the start: its product for
+  // the rules, its clips, and its read of the product database. A session that runs finds it with its next frame or code.
+  // A removed item stays in `scanned`, so a cart that holds it keeps its line. The resolver gives no product for its
+  // code, so no barcode and no recognition result opens a prompt for it.
+  liveStore.onChange((change) => {
+    if (change.kind !== 'put') return;
+    const [entry] = notInCatalog([change.entry], deps.catalog.products);
+    if (!entry) return;
+    const product = scannedProduct(entry.item, entry.details);
+    scanned.put(product);
+    clipWarmUp?.add([product]);
+    if (config.fakeProductInfo) return;
+    const { gtin } = entry.item;
+    void deps.productInfo.holds(gtin).then((held) => (held ? null : readWithDetails(gtin))).catch((error: unknown) => {
+      app.log.warn(`product info: the new item was not read. gtin=${gtin} ${error instanceof Error ? error.message : String(error)}`);
+    });
+  });
   let ask: RuntimeDeps['ask'];
   if (fakeScript !== null) ask = async (_question, _product, lang) => FAKE_ANSWER[lang];
   else ask = deps.ask ?? (async () => { throw new Error('The server has no answer service.'); });
@@ -320,6 +347,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerKioskRoutes(app, { kiosks });
   registerSpeechRoutes(app, { cache: clips, fake: config.fakeSpeech });
   registerDemoRoutes(app, { demoKey: config.demoKey, storeList: deps.storeList, references, capture: readLabel.capture });
+  if (config.storeEdit) {
+    registerStoreRoutes(app, {
+      live: liveStore, storeList: deps.storeList, productInfo: deps.productInfo, references, products: deps.catalog.products,
+    });
+  }
   registerDeviceSocket(app, {
     onFrame: (session, frame) => (frame.header.kind === 'label' ? readLabel(session, frame) : onStreamFrame(session, frame)),
     onOpen: (session) => player?.start(session, { fakeDevice: false }),

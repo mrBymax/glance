@@ -12,6 +12,7 @@ import { scannedProductId } from './products/scanned';
 import { notInCatalog } from './products/storeEntries';
 import { DEFAULT_STORE_LIST_PATH, readStoreListFile } from './products/storeList';
 import { NO_RESULT } from './recognition/result';
+import { readOnly } from './testing';
 
 const products = readCatalogFile(fileURLToPath(new URL('../catalog/catalog.dev.json', import.meta.url)));
 const deps = (): AppDeps => ({
@@ -148,7 +149,7 @@ it('tells the caller each store item that the warm-up read, so a search index ca
   const read: string[] = [];
   const real = await buildApp({
     ...base, config: loadConfig({ FAKE_PRODUCT_INFO: '0' }, ['--fake']),
-    storeList: { byGtin: async (gtin) => (gtin === item.gtin ? item : undefined), all: async () => [item] },
+    storeList: readOnly({ byGtin: async (gtin) => (gtin === item.gtin ? item : undefined), all: async () => [item] }),
     productInfo: { ...base.productInfo, holds: async () => held, byGtin: async (gtin) => { held = true; return base.productInfo.byGtin(gtin); } },
     onProductRead: (gtin) => { read.push(gtin); },
   });

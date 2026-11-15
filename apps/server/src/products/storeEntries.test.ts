@@ -4,13 +4,13 @@ import { readCatalogFile } from '../catalog/catalog';
 import { createFakeProductInfo } from './fakeProductInfo';
 import type { ProductDetails, ProductInfo } from './productInfo';
 import { notInCatalog, readStoreEntries } from './storeEntries';
-import { DEFAULT_STORE_LIST_PATH, type StoreItem, type StoreList, readStoreListFile } from './storeList';
+import { DEFAULT_STORE_LIST_PATH, type StoreItem, type StoreListReader, readStoreListFile } from './storeList';
 
 const nutella: StoreItem = { gtin: '3017624010701', priceCents: 399, name: 'Nutella', brand: 'Ferrero', packSize: '400 g' };
 const cups: StoreItem = { gtin: '6438574558384', priceCents: 349, name: 'Paper cups' };
 const barista: StoreItem = { gtin: '7394376616037', priceCents: 229, name: 'Barista oat drink', brand: 'Oatly', packSize: '1 L' };
 const details: ProductDetails = { brand: 'Ferrero', quantity: '400 g', allergens: ['milk', 'nuts'], vegan: false, vegetarian: true };
-const listOf = (items: StoreItem[]): StoreList => ({ byGtin: async (gtin) => items.find((item) => item.gtin === gtin), all: async () => items });
+const listOf = (items: StoreItem[]): StoreListReader => ({ byGtin: async (gtin) => items.find((item) => item.gtin === gtin), all: async () => items });
 
 it('reads each item with the details that the reader holds, and makes no read of the database', async () => {
   const info = {

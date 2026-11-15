@@ -6,7 +6,7 @@ import type { SessionRuntime } from '../sessions/runtime';
 import type { RuleInputBody } from '../sessions/types';
 import { clipKey } from '../speech/clips';
 import { ELEVENLABS_MODEL, type Synthesize } from '../speech/elevenlabs';
-import { type TestApp, type TestPhone, connectPhone, testApp } from '../testing';
+import { type TestApp, type TestPhone, connectPhone, readOnly, testApp } from '../testing';
 
 // No test of this file reaches ElevenLabs. Each app gets a synthesize function of the test.
 
@@ -112,7 +112,7 @@ it('with ElevenLabs down, the line goes out with no clip, and the prompt still t
 it('makes the clips of the prompts of each store item at the start, so the first prompt waits for no call', async () => {
   const item = { gtin: '6430062761795', priceCents: 249, name: 'Kili Cascara Yuzu + Sitruuna', brand: 'Kili', packSize: '330 ml' };
   const warm = await testApp({ ...REAL_SPEECH, SPEECH_WARM_UP: '1' }, {
-    synthesize, storeList: { byGtin: async (gtin) => (gtin === item.gtin ? item : undefined), all: async () => [item] },
+    synthesize, storeList: readOnly({ byGtin: async (gtin) => (gtin === item.gtin ? item : undefined), all: async () => [item] }),
   });
   apps.push(warm);
   await vi.waitFor(() => expect(synthesize).toHaveBeenCalledTimes(3), { timeout: 3000 });

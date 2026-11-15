@@ -19,8 +19,9 @@ import { createFakeProductInfo } from './products/fakeProductInfo';
 import { createOpenFoodFactsInfo } from './products/openFoodFacts';
 import type { ProductInfo } from './products/productInfo';
 import { priceConflicts } from './products/resolver';
+import { openLiveStore } from './products/liveStore';
 import { scannedProductId } from './products/scanned';
-import { type StoreEntry, notInCatalog, readStoreEntries } from './products/storeEntries';
+import { type EntriesSource, fromEntries, notInCatalog } from './products/storeEntries';
 import { type StoreList, readStoreListFile } from './products/storeList';
 import { ELEVENLABS_MODEL, createSynthesize } from './speech/elevenlabs';
 import { FakeScriptError } from './recognition/fake';
@@ -45,7 +46,7 @@ async function openStore(config: Config): Promise<Store> {
 
 /** The real recognizer, or undefined with fake recognition. loadConfig has checked that the key exists. */
 function openRecognizer(
-  config: Config, catalog: CatalogIndex, entries: readonly StoreEntry[], references: () => readonly Part[],
+  config: Config, catalog: CatalogIndex, entries: EntriesSource, references: () => readonly Part[],
 ): Recognizer | undefined {
   if (config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
   return createGeminiRecognizer({
@@ -54,7 +55,7 @@ function openRecognizer(
     mediaResolution: config.geminiMediaResolution,
     minConfidence: config.minConfidence,
     catalog,
-    storeEntries: notInCatalog(entries, catalog.products),
+    storeEntries: fromEntries(entries, (all) => notInCatalog(all, catalog.products)),
     template: readFileSync(RECOGNITION_TEMPLATE_PATH, 'utf8'),
     references,
   });
@@ -66,7 +67,7 @@ function openRecognizer(
  * A catalog product with a code of the store list keeps its catalog ID, as a barcode gives it.
  */
 function openObservePipeline(
-  config: Config, catalog: CatalogIndex, entries: readonly StoreEntry[], search: ProductSearch, references: ReferenceImages,
+  config: Config, catalog: CatalogIndex, entries: EntriesSource, search: ProductSearch, references: ReferenceImages,
   log: (line: string) => void,
 ): AppDeps['recognizerFor'] {
   if (config.recognitionPipeline !== 'observe' || config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
@@ -88,7 +89,7 @@ function openObservePipeline(
 }
 
 /** The reader of label stills, or undefined with fake recognition. It uses the key and the model of recognition. */
-function openLabelReader(config: Config, entries: readonly StoreEntry[]): LabelReader | undefined {
+function openLabelReader(config: Config, entries: EntriesSource): LabelReader | undefined {
   if (config.fakeRecognition !== null || config.geminiApiKey === null) return undefined;
   return createGeminiLabelReader({
     apiKey: config.geminiApiKey, model: config.geminiModel, template: readFileSync(LABEL_TEMPLATE_PATH, 'utf8'), entries,
@@ -123,10 +124,11 @@ async function main(): Promise<void> {
   const ask = openAsk(config);
   const storeList = openStoreList(config);
   const productInfo = openProductInfo(config);
-  // One read of the store list for the whole run: recognition and the label reader build their instructions from it.
-  const storeEntries = await readStoreEntries(storeList, productInfo, (line) => console.error(line));
-  const storeItems = storeEntries.map((entry) => entry.item);
-  const search = createProductSearch(storeEntries);
+  // One read of the store list at the start. Recognition, the label reader, and the reference pictures then read
+  // `liveStore.current` with each call, so they follow each item that the paths under /api/store add, change, or remove.
+  const liveStore = await openLiveStore(storeList, productInfo, (line) => console.error(line));
+  const storeItems = liveStore.current().map((entry) => entry.item);
+  const search = createProductSearch(liveStore.current());
   // Fake recognition makes no frame call, so it gets no part and no upload. The observe pipeline sends no picture
   // with a frame: its verify call reads the pictures of its candidates from the folder.
   const frameCallKey = config.fakeRecognition === null && config.recognitionPipeline === 'frame' ? config.geminiApiKey : null;
@@ -136,20 +138,26 @@ async function main(): Promise<void> {
   // The frame calls and the label calls share the upload of each picture.
   const picturePart = frameCallKey === null ? null : sharePictureParts(createPictureUploader({ apiKey: frameCallKey }), systemClock);
   const frameReferences = createFrameReferences({
-    store: folder, entries: storeEntries, products: catalog.products, dir: config.referenceDir, clock: systemClock,
+    store: folder, entries: liveStore.current, products: catalog.products, dir: config.referenceDir, clock: systemClock,
     perItem: frameCallKey === null ? 0 : config.recognitionReferences,
     ...(picturePart === null ? {} : { picturePart }),
     log: (line) => logReferences(line),
   });
   // The app does not exist yet, as for the reference pictures.
   let logPipeline: (line: string) => void = (line) => console.error(line);
-  const recognizerFor = openObservePipeline(config, catalog, storeEntries, search, folder, (line) => logPipeline(line));
-  const recognizer = recognizerFor ? undefined : openRecognizer(config, catalog, storeEntries, frameReferences.current);
-  const labelReader = openLabelReader(config, storeEntries);
+  const recognizerFor = openObservePipeline(config, catalog, liveStore.current, search, folder, (line) => logPipeline(line));
+  const recognizer = recognizerFor ? undefined : openRecognizer(config, catalog, liveStore.current, frameReferences.current);
+  const labelReader = openLabelReader(config, liveStore.current);
+  liveStore.onChange((change) => {
+    if (change.kind === 'put') search.put(change.entry);
+    else search.remove(change.gtin);
+    // The pictures of a new item go into the next frame call, and those of a removed item leave it.
+    void frameReferences.refresh();
+  });
   // loadConfig has checked that the key exists when FAKE_SPEECH is off.
   const synthesize = config.fakeSpeech || config.elevenlabsApiKey === null ? undefined : createSynthesize(config.elevenlabsApiKey);
   const app = await buildApp({
-    config, clock: systemClock, store, catalog, storeList, productInfo, storeEntries,
+    config, clock: systemClock, store, catalog, storeList, productInfo, liveStore,
     references: refreshOnChange(folder, frameReferences),
     ...(picturePart === null ? {} : { picturePart }),
     ...(recognizer ? { recognizer } : {}), ...(recognizerFor ? { recognizerFor } : {}), ...(labelReader ? { labelReader } : {}), ...(ask ? { ask } : {}), ...(synthesize ? { synthesize } : {}),
@@ -165,6 +173,7 @@ async function main(): Promise<void> {
   app.log.info(`store: ${config.mongodbUri === null ? 'memory' : 'mongo'}`);
   app.log.info(`catalog: ${catalog.products.length} products`);
   app.log.info(`store list: ${config.storeListPath}, ${storeItems.length} items`);
+  if (config.storeEdit) app.log.warn('The paths under /api/store are open: each client that reaches this server can change the store list. STORE_EDIT=0 turns them off.');
   logReferences = (line) => app.log.info(line);
   // The first read logs the pictures. A later change of the folder gets the same line again.
   await frameReferences.refresh();

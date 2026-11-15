@@ -22,6 +22,11 @@ it('reads the demo key, and an empty value counts as not set', () => {
   expect(loadConfig({ ...KEYS, DEMO_KEY: '' }, []).demoKey).toBeNull();
   expect(loadConfig({ ...KEYS, DEMO_KEY: 'k-demo' }, []).demoKey).toBe('k-demo');
 });
+it('has the paths under /api/store on, and STORE_EDIT=0 turns them off', () => {
+  expect(loadConfig(KEYS, []).storeEdit).toBe(true);
+  expect(loadConfig({ ...KEYS, STORE_EDIT: '1' }, []).storeEdit).toBe(true);
+  expect(loadConfig({ ...KEYS, STORE_EDIT: '0' }, []).storeEdit).toBe(false);
+});
 it('needs no key in fake mode', () => {
   expect(loadConfig({}, ['--fake'])).toMatchObject({
     fakeRecognition: 'fixtures/fake-script.json', fakeSpeech: true, fakeProductInfo: true, geminiApiKey: null, elevenlabsApiKey: null,

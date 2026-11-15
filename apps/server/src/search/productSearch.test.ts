@@ -107,6 +107,16 @@ it('scores from 0 to 1', async () => {
     expect(candidate.score).toBeLessThanOrEqual(1);
   }
 });
+it('takes an item out with no restart, and the words of the items that are left weigh again', async () => {
+  const index = createProductSearch(entries);
+  const vadelma = '6430062761764';
+  expect((await index.search({ brand: 'Kili', variant: 'Vadelma' }, 5))[0]!.gtin).toBe(vadelma);
+  index.remove(vadelma);
+  index.remove('4006381333931');
+  expect(await index.get(vadelma)).toBeUndefined();
+  expect((await index.search({ brand: 'Kili', variant: 'Vadelma' }, 5)).map((candidate) => candidate.gtin)).not.toContain(vadelma);
+  expect(await index.search({ digits: [vadelma] }, 5)).toEqual([]);
+});
 it('takes a newer entry of an item, and a new item, with no restart', async () => {
   const index = createProductSearch(entries.slice(0, 4));
   expect(await index.search({ name: 'Kartonkipikari' }, 5)).toEqual([]);

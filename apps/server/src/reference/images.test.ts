@@ -77,6 +77,21 @@ it('removes the pictures of one item and returns their count', async () => {
   expect(await references.remove(NUTELLA)).toBe(0);
   expect([...(await references.all()).keys()]).toEqual([SPAGHETTI]);
 });
+it('removes one picture by its name, and nothing for a name that the item does not have', async () => {
+  const references = store();
+  const older = await references.add(NUTELLA, jpeg(1));
+  now += 1;
+  const newer = await references.add(NUTELLA, jpeg(2));
+  await references.add(SPAGHETTI, jpeg(3));
+  for (const name of ['none.jpg', `../${SPAGHETTI}/${now}.jpg`, `..\\${SPAGHETTI}\\${now}.jpg`, '']) {
+    expect(await references.removeOne(NUTELLA, name)).toBe(false);
+  }
+  expect(await references.removeOne(NUTELLA, newer.file)).toBe(true);
+  expect(await references.removeOne(NUTELLA, newer.file)).toBe(false);
+  expect((await references.list(NUTELLA)).map((picture) => picture.file)).toEqual([older.file]);
+  expect(await references.list(SPAGHETTI)).toHaveLength(1);
+  await expect(references.removeOne('..', older.file)).rejects.toThrow(/13 digits/);
+});
 
 const image = (gtin: string, addedAt: number, bytes = 100): ReferenceImage => ({ gtin, file: `${addedAt}.jpg`, bytes, addedAt });
 const byItem = (...items: [string, ReferenceImage[]][]) => new Map(items);

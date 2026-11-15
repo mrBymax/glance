@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { Clock } from '../clock';
 import type { BarcodeReport } from '../products/barcodes';
-import type { StoreList } from '../products/storeList';
+import type { StoreListReader } from '../products/storeList';
 import { type ReferenceImages, selectReferences } from '../reference/images';
 import { saveFrameWith } from '../recognition/intake';
 import type { PicturePart } from '../recognition/references';
@@ -53,7 +53,7 @@ type Mark = { gtin: string; resolve: (captured: CapturedReference) => void; end:
 export function createLabelHandler(deps: {
   /** null: the server has no reader, and each label frame is dropped. */
   reader: LabelReader | null;
-  storeList: StoreList; report: BarcodeReport; log: FastifyBaseLogger; clock: Clock;
+  storeList: StoreListReader; report: BarcodeReport; log: FastifyBaseLogger; clock: Clock;
   /** For a match by brand and name. */
   minConfidence: number;
   /** For the item that the model chose from the store list. */

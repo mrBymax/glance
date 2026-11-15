@@ -220,3 +220,22 @@ it('puts the reference pictures before the frame, and their rules into the instr
   expect(instructions[1]).not.toContain('## Reference pictures');
   expect(calls[0]!.body.generationConfig).not.toHaveProperty('mediaResolution');
 });
+it('follows a store list that changes: the next call has the new item in its instruction and its schema, and can name it', async () => {
+  let storeEntries: StoreEntry[] = [];
+  const live = createGeminiRecognizer({
+    apiKey: 'test-key', model: 'gemini-3.5-flash-lite', mediaResolution: 'default', minConfidence: 0.6,
+    catalog, storeEntries: () => storeEntries, template, fetch: fetchStub,
+  });
+  const idsOf = (call: Call) => (call.body.generationConfig as { responseJsonSchema: { properties: { productId: { anyOf: { enum?: string[] }[] } } } })
+    .responseJsonSchema.properties.productId.anyOf[0]!.enum;
+  reply = modelSays(JSON.stringify({ ...answer, productId: 'gtin-6438574558384' }));
+
+  expect(await live.recognize(JPEG, opts())).toMatchObject({ status: 'unknown', productId: null });
+  storeEntries = [cups];
+  expect(await live.recognize(JPEG, opts())).toMatchObject({ status: 'identified', productId: 'gtin-6438574558384' });
+  storeEntries = [];
+  expect(await live.recognize(JPEG, opts())).toMatchObject({ status: 'unknown', productId: null });
+
+  expect(calls.map((call) => JSON.stringify(call.body.systemInstruction).includes('- id: gtin-6438574558384 | name: Paper cups'))).toEqual([false, true, false]);
+  expect(calls.map((call) => idsOf(call)!.includes('gtin-6438574558384'))).toEqual([false, true, false]);
+});
