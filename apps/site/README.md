@@ -34,6 +34,14 @@ node scripts/check-page.mjs                 # default URL http://localhost:18421
 
 It runs axe (WCAG 2.2 A and AA, and best practice) at 360, 768, 1440, and 1920 px in light and dark mode, checks target sizes and sideways scroll, prints the heading outline and the landmarks, walks the keyboard focus, and measures the load: bytes, requests, LCP, and CLS. It exits with 1 on a problem. `CHROME_PATH` names Chrome when it is not in `C:/Program Files/Google/Chrome/Application/chrome.exe`.
 
+The check of the hero mark runs against `npm run dev`:
+
+```bash
+node scripts/check-mark.mjs [page URL] [out dir]   # default URL http://localhost:18420/, out dir check-mark/
+```
+
+It opens the first frame of the clip and the hold before the card (`?frame=0` and `?frame=2`) at 1440 x 900 and 360 x 800, sets the symbol of `assets/Glance Dark.svg` on the box of the mark, and measures the silhouette (IoU, at least 0.97) and the color of 15 points of the stroke (CIEDE2000 at most 5, none lighter or greyer than the symbol). It writes a side-by-side image, an overlay image, and a report for each frame, and exits with 1 when a check fails.
+
 ## Deploy
 
 Copy `dist/` to any static host: GitHub Pages, Netlify, Vercel, an S3 bucket, or nginx. No server code and no redirect rule is needed: the page is one `index.html`.
