@@ -44,7 +44,7 @@ Where each photo comes from:
 |---|---|---|
 | `checkout-queue.jpg` | The team's footage, `scanner_checkout_2.mp4` (archive 001) | 3.4 s, the sharpest frame of 1.6 to 3.6 s, cropped to the slot. A self-checkout with a shopper waiting behind, seen from the back. |
 | `one-hand-short.jpg` | The team's footage, `scanner_fanta_pickup_2.mp4` (archive 002) | 8.2 s: the basket in one hand, a bottle and a handheld scanner in the other. The neighbor frames blur the scanner. |
-| `rye-bread.jpg` | Not yet | It waits for the first-person footage of the glasses. |
+| `rye-bread.jpg` | First-person footage through the glasses, `20261114_163739_33a2575f.mp4` (Downloads, 14 November 2026) | 9.0 s, the sharpest of 7.5 to 10 s: one hand holds a 1.5 L Fanta bottle (back label, "PALAUTA MINUT", barcode) in front of the soft-drink shelf. Cropped to the middle band of the 1376 x 1824 frame and scaled to 1872 x 1032. The footage has no rye bread: the captions of pages 5 and 6 still name it. |
 | `bus-door.jpg` | Brett Sayles, "White and Blue Bus on the Road", Pexels, https://www.pexels.com/photo/8536723/ (file https://images.pexels.com/photos/8536723/pexels-photo-8536723.jpeg, 4740 x 3264) | Cropped below the destination sign and right of the operator logo, to the door and the window left of it. `scripts/bus-photo.mjs` puts the Glance code sticker on that window, in place of a yellow notice, and crops to 1872 x 1032. The QR of the final JPEG decodes to `GL1 BUS4`. |
 
 Photo credits: bus photo by Brett Sayles on Pexels, under the Pexels licence (free to use, no attribution required). The other photos come from the team's own footage.
