@@ -1,0 +1,1482 @@
+/*
+ * The page classes. Colors, radii, durations, and the base spacing are Astryx Neutral tokens.
+ * The type scale of the page is larger than the app scale, so it lives here in rem, and each size grows with the
+ * font size of the browser. docs/design.md holds the reasons.
+ */
+
+:root {
+  --site-gutter: clamp(1rem, 0.5rem + 2.5vw, 2rem);
+  --site-max: 82rem;
+  --site-measure: 40rem;
+  --site-section-space: clamp(4rem, 2.5rem + 6vw, 8rem);
+  /* The header rows below, plus the 1 px hairline. SiteHeader also measures it into --site-header-measured. */
+  --site-header-height: calc(4rem + 1px);
+
+  --site-display: clamp(2.75rem, 1.8rem + 4.6vw, 5rem);
+  --site-statement: clamp(2rem, 1.4rem + 3vw, 3.75rem);
+  --site-title: clamp(1.875rem, 1.4rem + 2.2vw, 3.25rem);
+  --site-chapter: clamp(1.625rem, 1.3rem + 1.4vw, 2.5rem);
+  --site-lead: clamp(1.125rem, 1.02rem + 0.45vw, 1.375rem);
+  --site-body: 1.0625rem;
+  --site-small: 0.9375rem;
+  --site-numeral: clamp(4.5rem, 3rem + 6vw, 8rem);
+
+  scroll-padding-top: calc(var(--site-header-measured, var(--site-header-height)) + var(--spacing-6));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Two rows in the header below 56.25rem: the anchors take their own row. */
+@media (max-width: 56.24rem) {
+  :root {
+    --site-header-height: calc(6.5rem + 1px);
+  }
+}
+
+/* Optimistic for each text of the page, also inside the components of Astryx and inside the nested dark themes. */
+[data-astryx-theme] {
+  --font-family-body: 'Optimistic VF', 'Optimistic Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-family-heading: var(--font-family-body);
+}
+
+/* The DRKM axis of Optimistic thins the strokes of light text on a dark ground, so a weight looks the same in both schemes. */
+[data-theme='dark'] {
+  font-variation-settings: 'DRKM' 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .site {
+    font-variation-settings: 'DRKM' 1;
+  }
+}
+
+body {
+  background: var(--color-background-body);
+}
+
+.site {
+  min-block-size: 100dvh;
+  background: var(--color-background-body);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-body);
+  font-size: var(--site-body);
+  line-height: 1.55;
+  overflow-x: clip;
+}
+
+.site :where(h1, h2, h3, p) {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.site :where(h1, h2, h3) {
+  font-family: var(--font-family-heading);
+  text-wrap: balance;
+}
+
+.site :where(ul, ol) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site :where(a:not(.astryx-button)) {
+  color: inherit;
+}
+
+.site :where(a:not(.astryx-button)):focus-visible,
+main:focus-visible {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 3px;
+  border-radius: var(--radius-inner);
+}
+
+main:focus {
+  outline: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  inset-block-start: var(--spacing-2);
+  inset-inline-start: var(--spacing-2);
+  z-index: 20;
+  padding: var(--spacing-3) var(--spacing-4);
+  border-radius: var(--radius-element);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* Layout */
+
+.container {
+  inline-size: 100%;
+  max-inline-size: var(--site-max);
+  margin-inline: auto;
+  padding-inline: var(--site-gutter);
+}
+
+.container--narrow {
+  max-inline-size: calc(var(--site-measure) + 2 * var(--site-gutter) + 8rem);
+}
+
+.center {
+  text-align: center;
+}
+
+.section {
+  padding-block: var(--site-section-space);
+}
+
+.section + .section {
+  padding-block-start: 0;
+}
+
+.section-head {
+  display: grid;
+  gap: var(--spacing-4);
+  max-inline-size: 48rem;
+  margin-block-end: clamp(2.5rem, 1.5rem + 3vw, 4.5rem);
+}
+
+.section-head--center {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.statement {
+  font-size: var(--site-statement);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.section-title {
+  font-size: var(--site-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+}
+
+.lead {
+  max-inline-size: var(--site-measure);
+  color: var(--color-text-secondary);
+  font-size: var(--site-lead);
+  line-height: 1.5;
+}
+
+.center .lead,
+.section-head--center .lead {
+  margin-inline: auto;
+}
+
+.statement + .lead {
+  margin-block-start: var(--spacing-6);
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+}
+
+.action-row--center {
+  justify-content: center;
+  margin-block-start: var(--spacing-8);
+}
+
+/* The primary and the secondary action of the hero and of the closing: 48 px high, the size of the app. */
+.action-row .astryx-button {
+  min-block-size: 3rem;
+  padding-inline: var(--spacing-6);
+  font-size: var(--site-body);
+}
+
+/*
+ * A button keeps its place under the pointer: no move and no scale on hover, focus, or press. Astryx scales a pressed
+ * button to 0.98; the owner asked for color changes only, which Astryx also gives.
+ */
+.site .astryx-button,
+.site .astryx-button:hover,
+.site .astryx-button:active,
+.site .astryx-button:focus-visible {
+  transform: none !important;
+}
+
+/* Header */
+
+.site-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 10;
+  border-block-end: var(--border-width, 1px) solid var(--color-border);
+  background: color-mix(in srgb, var(--color-background-body) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(16px);
+}
+
+.site-header__inner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: 4rem;
+  grid-template-areas: 'home nav action';
+  align-items: center;
+  gap: var(--spacing-4);
+  max-inline-size: var(--site-max);
+  margin-inline: auto;
+  padding-inline: var(--site-gutter);
+}
+
+.site-header__home {
+  grid-area: home;
+  display: inline-flex;
+  min-block-size: 2.75rem;
+  align-items: center;
+  text-decoration: none;
+}
+
+.site-header__nav {
+  grid-area: nav;
+  min-inline-size: 0;
+}
+
+.site-header__nav ul {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-1);
+}
+
+.site-header__nav a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  padding-inline: var(--spacing-3);
+  border-radius: var(--radius-full);
+  color: var(--color-text-secondary);
+  font-size: var(--site-small);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
+}
+
+.site-header__nav a:hover {
+  color: var(--color-text-primary);
+  background: var(--color-overlay-hover);
+}
+
+.site-header__nav a[aria-current='true'] {
+  color: var(--color-text-primary);
+}
+
+/* The links paint above the pill, which is positioned and would otherwise cover them. */
+.site-header__nav a {
+  position: relative;
+  z-index: 1;
+}
+
+.site-header__nav ul {
+  position: relative;
+}
+
+/* The pill under the current link. Its left edge is the left edge of the list, so x is the offset of the link. */
+.site-header__pill {
+  position: absolute;
+  inset-block: calc(50% - 1.125rem);
+  inset-inline-start: 0;
+  block-size: 2.25rem;
+  border-radius: var(--radius-full);
+  background: var(--color-background-card);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.site-header__action {
+  grid-area: action;
+}
+
+.site-header__action .astryx-button {
+  min-block-size: 2.75rem;
+  padding-inline: var(--spacing-4);
+}
+
+@media (max-width: 56.24rem) {
+  .site-header__inner {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: 3.5rem 3rem;
+    grid-template-areas:
+      'home action'
+      'nav nav';
+    row-gap: 0;
+  }
+
+  .site-header__nav {
+    margin-inline: calc(var(--site-gutter) * -1);
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* The fade at the right edge shows that the row of links scrolls. */
+    mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);
+  }
+
+  .site-header__nav ul {
+    justify-content: flex-start;
+    inline-size: max-content;
+    padding-inline: var(--site-gutter);
+    padding-block-end: var(--spacing-1);
+  }
+}
+
+/* The logo keeps a clear space of half its height on each side from the next element. */
+.logo img {
+  display: block;
+  block-size: auto;
+  max-inline-size: 100%;
+}
+
+.site-footer .logo {
+  margin-block-end: var(--spacing-2);
+}
+
+/*
+ * Hero: a dark stage in each color scheme, as a full-bleed film would be. With the header and one gap above and one
+ * below, it fills the first viewport: its height is the viewport (100dvh, with 100vh for older browsers) less the header
+ * height that SiteHeader measures into --site-header-measured, and less two gaps. The gap is the same on all four sides.
+ */
+.hero {
+  --hero-gap: clamp(0.5rem, 1.5vw, 1.5rem);
+  display: grid;
+  block-size: calc(100vh - var(--site-header-measured, var(--site-header-height)) - 2 * var(--hero-gap));
+  block-size: calc(100dvh - var(--site-header-measured, var(--site-header-height)) - 2 * var(--hero-gap));
+  min-block-size: 32rem;
+  max-block-size: 68rem;
+  margin: var(--hero-gap);
+  overflow: clip;
+  border-radius: var(--radius-page);
+  /* A soft spot of light behind the object, from the text color of the dark theme. */
+  background:
+    radial-gradient(60% 55% at 50% 34%, color-mix(in srgb, var(--color-text-primary) 9%, transparent), transparent 70%),
+    var(--color-background-body);
+  color: var(--color-text-primary);
+}
+
+@media (max-width: 37.49rem) {
+  .hero {
+    min-block-size: 34rem;
+  }
+}
+
+/* In the dark scheme the page canvas is dark too, so the dark stages take the lighter surface of the dark theme. */
+@media (prefers-color-scheme: dark) {
+  .site .hero {
+    background:
+      radial-gradient(60% 55% at 50% 34%, color-mix(in srgb, var(--color-text-primary) 7%, transparent), transparent 70%),
+      var(--color-background-surface);
+  }
+
+  .site .phone,
+  .site .kiosk,
+  .site .bus-scene__plate {
+    background: color-mix(in srgb, var(--color-background-body) 55%, black);
+    box-shadow: inset 0 0 0 1px var(--color-border-emphasized);
+  }
+}
+
+/* The media takes each pixel that the text leaves. */
+.hero__inner {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
+  gap: clamp(0.75rem, 0.25rem + 1.5vw, 2rem);
+  inline-size: 100%;
+  max-inline-size: var(--site-max);
+  min-block-size: 0;
+  margin-inline: auto;
+  padding: clamp(0.75rem, 0.25rem + 1.5vw, 2rem) var(--site-gutter) clamp(1.5rem, 0.75rem + 2.5vw, 3.5rem);
+}
+
+.hero__copy {
+  display: grid;
+  justify-items: center;
+  gap: var(--spacing-3);
+  max-inline-size: 46rem;
+  text-align: center;
+}
+
+.hero__title {
+  display: grid;
+  gap: var(--spacing-2);
+}
+
+.hero__name {
+  color: var(--color-text-secondary);
+  font-size: var(--site-lead);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+}
+
+.hero__claim {
+  font-size: var(--site-display);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+
+.hero__sentence {
+  max-inline-size: 36rem;
+  font-size: var(--site-lead);
+  line-height: 1.45;
+}
+
+.hero__copy .action-row {
+  justify-content: center;
+  margin-block-start: var(--spacing-2);
+}
+
+@media (max-width: 37.49rem) {
+  .action-row {
+    flex-direction: column;
+    align-self: stretch;
+    justify-self: stretch;
+  }
+
+  .action-row .astryx-button {
+    inline-size: 100%;
+  }
+
+  .hero__copy {
+    gap: var(--spacing-2);
+  }
+}
+
+.hero__origin {
+  color: var(--color-text-secondary);
+  font-size: var(--site-small);
+}
+
+.hero-media {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  justify-self: stretch;
+  inline-size: 100%;
+  min-block-size: 0;
+  margin: 0;
+}
+
+/* The frame takes its size from the grid, not from its content, so neither the poster nor the canvas moves the text. */
+.hero-media__frame {
+  position: relative;
+  min-block-size: 8rem;
+  container-type: size;
+}
+
+/*
+ * The link over the card of the last frame. The view of the last frame is 3.8 units on its short side, and the card
+ * with its frame is 2.55 units wide, so the card fills 67 percent of the short side, at the centre.
+ */
+.hero-media__link {
+  position: absolute;
+  inset: 0;
+  inline-size: calc(min(100cqi, 100cqb) * 0.67);
+  block-size: calc(min(100cqi, 100cqb) * 0.67);
+  margin: auto;
+  border-radius: 14%;
+}
+
+.site .hero-media__link:focus-visible {
+  border-radius: 14%;
+}
+
+.hero-media__poster,
+.hero-media__canvas {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.hero-media__poster {
+  object-fit: contain;
+  transition: opacity var(--duration-medium) var(--ease-standard);
+}
+
+.hero-media__canvas {
+  opacity: 0;
+}
+
+.hero-media__canvas[data-visible='true'] {
+  opacity: 1;
+}
+
+.hero-media[data-phase='playing'] .hero-media__poster,
+.hero-media[data-phase='ended'] .hero-media__poster {
+  opacity: 0;
+}
+
+/* The poster capture of scripts/capture-poster.mjs: a square frame on a clear page. */
+.hero-media[data-capture='poster'] .hero-media__frame {
+  inline-size: 720px;
+  block-size: 720px;
+}
+
+.hero-media[data-capture='poster'] .hero-media__poster {
+  display: none;
+}
+
+/* How it works: one large numeral for each step, as the app shows one large number on each screen. */
+
+.section--intro {
+  padding-block: var(--site-section-space);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--spacing-10) var(--spacing-8);
+}
+
+.step {
+  display: grid;
+  align-content: start;
+  gap: var(--spacing-2);
+  padding-block-start: var(--spacing-4);
+  border-block-start: 1px solid var(--color-border-emphasized);
+}
+
+@media (max-width: 37.49rem) {
+  .steps {
+    gap: var(--spacing-6);
+  }
+
+  .step {
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    column-gap: var(--spacing-4);
+  }
+
+  .step__numeral-box {
+    grid-row: span 2;
+  }
+}
+
+/* The box clips the numeral while it rises into place. */
+.step__numeral-box {
+  display: block;
+  overflow: hidden;
+  line-height: 1;
+}
+
+.step__numeral {
+  display: inline-block;
+  font-size: var(--site-numeral);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.step__title {
+  font-size: var(--site-chapter);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+
+.step__body {
+  max-inline-size: 22rem;
+  color: var(--color-text-secondary);
+}
+
+/* Feature chapters: text beside a large rounded stage, the side alternating. */
+
+.chapters {
+  display: grid;
+  gap: clamp(4rem, 2.5rem + 6vw, 8rem);
+}
+
+.chapter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--spacing-8);
+  align-items: center;
+  scroll-margin-block-start: calc(var(--site-header-measured, var(--site-header-height)) + var(--spacing-6));
+}
+
+@media (min-width: 64rem) {
+  .chapter {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(3rem, 1rem + 4vw, 5rem);
+  }
+
+  .chapter--reverse {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+
+  .chapter--reverse .chapter__copy {
+    order: 2;
+  }
+}
+
+.chapter__copy {
+  display: grid;
+  gap: var(--spacing-4);
+}
+
+.chapter__title {
+  font-size: var(--site-chapter);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.chapter__body {
+  max-inline-size: 34rem;
+  font-size: var(--site-lead);
+  line-height: 1.5;
+}
+
+.points {
+  display: grid;
+  gap: var(--spacing-4);
+  margin-block-start: var(--spacing-2);
+}
+
+.points li {
+  display: grid;
+  gap: var(--spacing-1);
+  padding-block-start: var(--spacing-4);
+  border-block-start: 1px solid var(--color-border);
+}
+
+.points__title {
+  font-weight: var(--font-weight-semibold);
+}
+
+.points__body {
+  color: var(--color-text-secondary);
+}
+
+.stage {
+  display: grid;
+}
+
+.stage__media {
+  display: grid;
+  place-items: center;
+  min-block-size: clamp(22rem, 16rem + 18vw, 36rem);
+  padding: clamp(1.5rem, 1rem + 3vw, 3.5rem);
+  border-radius: var(--radius-page);
+  background: var(--color-background-card);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  overflow: hidden;
+}
+
+/* A phone screen of the app, in a plain device outline. */
+.phone {
+  align-self: center;
+  inline-size: min(100%, 17rem);
+  block-size: max-content;
+  padding: 0.5rem;
+  border-radius: 2.25rem;
+  background: var(--color-accent);
+  box-shadow: var(--shadow-med);
+}
+
+.phone__screen {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  border-radius: 1.75rem;
+}
+
+.phone-pair {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: clamp(0.75rem, 0.25rem + 2vw, 2rem);
+  inline-size: 100%;
+}
+
+.phone-pair .phone {
+  inline-size: min(47%, 15rem);
+}
+
+.phone-pair .phone:nth-child(2) {
+  margin-block-start: clamp(1.5rem, 1rem + 3vw, 4rem);
+}
+
+/* Use cases: cards on the canvas. The bus card spans two columns and shows its code and its spoken line. */
+.use-cases {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--spacing-4);
+}
+
+@media (min-width: 40rem) {
+  .use-cases {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .use-case--feature {
+    grid-column: 1 / -1;
+  }
+}
+
+/* In two columns, five small cards leave one alone: the last one takes the full row. */
+@media (min-width: 40rem) and (max-width: 63.99rem) {
+  .use-case:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 64rem) {
+  .use-cases {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .use-case--feature {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+}
+
+.use-case {
+  display: grid;
+  align-content: start;
+  gap: var(--spacing-2);
+  padding: clamp(1.25rem, 1rem + 1vw, 2rem);
+  border-radius: var(--radius-page);
+  background: var(--color-background-card);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.use-case__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-end: var(--spacing-2);
+}
+
+.use-case__glyph {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border-radius: var(--radius-full);
+  background: var(--color-neutral);
+  color: var(--color-text-primary);
+}
+
+.use-case--feature .use-case__glyph {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.use-case__tag {
+  padding: var(--spacing-1) var(--spacing-3);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: var(--site-small);
+  font-weight: var(--font-weight-semibold);
+}
+
+.use-case__title {
+  font-size: 1.375rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+}
+
+.use-case--feature .use-case__title {
+  font-size: var(--site-chapter);
+}
+
+.use-case__body {
+  max-inline-size: 34rem;
+  color: var(--color-text-secondary);
+}
+
+.use-case--feature .use-case__body {
+  color: var(--color-text-primary);
+  font-size: var(--site-lead);
+  line-height: 1.5;
+}
+
+/* The bus scene: the code on a white plate, as by a door, and the line that the voice says. */
+.bus-scene {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--spacing-5);
+  margin-block-start: var(--spacing-6);
+}
+
+.bus-scene__plate {
+  padding: var(--spacing-2);
+  border-radius: var(--radius-container);
+  background: var(--color-accent);
+}
+
+.bus-scene__plate img {
+  display: block;
+  inline-size: clamp(6rem, 4rem + 6vw, 9rem);
+  block-size: auto;
+  border-radius: var(--radius-element);
+}
+
+.bus-scene__voice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+  padding: var(--spacing-4) var(--spacing-5);
+  border: 1px solid var(--color-border-emphasized);
+  border-radius: var(--radius-container);
+  background: var(--color-background-body);
+  color: var(--color-text-primary);
+  font-size: clamp(1.125rem, 1rem + 0.8vw, 1.5rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+}
+
+.bus-scene__voice svg {
+  flex: none;
+  margin-block-start: 0.3em;
+  color: var(--color-icon-secondary);
+}
+
+@media (max-width: 37.49rem) {
+  .bus-scene {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+}
+
+/*
+ * The display mock: the lens of the glasses as a line drawing on a dark stage, and the HUD square in it. The HUD is
+ * drawn for 600 x 600 pixels; the frame keeps that size and scales to its box, so its layout is the layout of the app.
+ */
+.lens-stage {
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: clamp(1.5rem, 1rem + 4vw, 4.5rem) clamp(0.75rem, 0.5rem + 2vw, 3rem);
+  border-radius: var(--radius-page);
+  background:
+    radial-gradient(55% 60% at 50% 45%, color-mix(in srgb, var(--color-text-primary) 8%, transparent), transparent 70%),
+    var(--color-background-body);
+  color: var(--color-text-primary);
+}
+
+@media (prefers-color-scheme: dark) {
+  .site .lens-stage {
+    background:
+      radial-gradient(55% 60% at 50% 45%, color-mix(in srgb, var(--color-text-primary) 6%, transparent), transparent 70%),
+      var(--color-background-surface);
+  }
+}
+
+.lens {
+  position: relative;
+  display: grid;
+  place-items: center;
+  inline-size: min(100%, 40rem);
+  aspect-ratio: 4 / 3;
+}
+
+.lens__outline {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  fill: none;
+  stroke: var(--color-border-emphasized);
+  stroke-width: 2;
+}
+
+.hud__screen {
+  position: relative;
+  inline-size: min(62%, 24rem);
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: var(--radius-container);
+  background: #000000;
+  box-shadow: 0 0 0 1px var(--color-border-emphasized);
+}
+
+.hud__still,
+.hud__frame {
+  position: absolute;
+  inset: 0;
+}
+
+.hud__still {
+  inline-size: 100%;
+  block-size: 100%;
+  transition: opacity var(--duration-medium) var(--ease-standard);
+}
+
+.hud__screen[data-ready='true'] .hud__still {
+  opacity: 0;
+}
+
+/* The frame keeps the 600 x 600 of the display and scales from its top left corner to the box. */
+.hud__frame {
+  inline-size: 600px;
+  block-size: 600px;
+  border: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.hud__control {
+  margin-block-start: var(--spacing-5);
+}
+
+/* On a phone the HUD takes the width of the stage, and the drawing of the lens, which it would cover, goes. */
+@media (max-width: 37.49rem) {
+  .lens {
+    aspect-ratio: 1 / 1;
+  }
+
+  .lens__outline {
+    display: none;
+  }
+
+  .hud__screen {
+    inline-size: 100%;
+  }
+}
+
+/* The spoken lines, in the dark captions window of the phone app. */
+.voice {
+  display: grid;
+  gap: var(--spacing-4);
+  inline-size: min(100%, 34rem);
+  padding: clamp(1.25rem, 1rem + 1.5vw, 2.25rem);
+  border: 1px solid var(--color-border-emphasized);
+  border-radius: var(--radius-container);
+  background: var(--color-background-body);
+  color: var(--color-text-primary);
+}
+
+.voice__title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-weight: var(--font-weight-semibold);
+}
+
+.voice__line {
+  font-size: clamp(1.375rem, 1.1rem + 1.4vw, 2.25rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+}
+
+.voice__line--older {
+  color: var(--color-text-secondary);
+  font-size: var(--site-lead);
+  font-weight: var(--font-weight-normal);
+}
+
+.privacy-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(0.75rem, 0.5rem + 1.5vw, 1.5rem);
+  inline-size: min(100%, 34rem);
+}
+
+.privacy-pair__item {
+  display: grid;
+  gap: var(--spacing-2);
+  margin: 0;
+  font-size: var(--site-small);
+  font-weight: var(--font-weight-semibold);
+}
+
+.privacy-pair__image {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  border-radius: var(--radius-container);
+}
+
+/*
+ * The kiosk page as a screen in a bezel. The screen takes the canvas of the page and its text colors, so it is light in
+ * the light scheme and dark in the dark scheme. The code stays on its white card with the quiet zone.
+ */
+.kiosk {
+  container: kiosk / inline-size;
+  inline-size: 100%;
+  padding: 0.625rem;
+  border-radius: calc(var(--radius-container) + 0.625rem);
+  background: var(--color-accent);
+  box-shadow: var(--shadow-med);
+}
+
+.kiosk__screen {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--spacing-5);
+  padding: clamp(1rem, 0.5rem + 2vw, 2rem);
+  border-radius: var(--radius-container);
+  background: var(--color-background-body);
+  color: var(--color-text-primary);
+}
+
+@container kiosk (min-width: 30rem) {
+  .kiosk__screen {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  }
+}
+
+.kiosk__code {
+  display: block;
+  inline-size: min(100%, 16rem);
+  block-size: auto;
+  margin-inline: auto;
+  border-radius: var(--radius-element);
+}
+
+.kiosk__text {
+  display: grid;
+  gap: var(--spacing-1);
+}
+
+.kiosk__place {
+  color: var(--color-text-secondary);
+  font-size: var(--site-small);
+}
+
+.kiosk__state {
+  font-size: clamp(1.25rem, 1rem + 1vw, 1.75rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+
+.kiosk__amount {
+  font-size: clamp(2.25rem, 1.6rem + 2.6vw, 3.5rem);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.kiosk__lines {
+  display: grid;
+  gap: var(--spacing-1);
+  margin: var(--spacing-2) 0 0;
+  font-size: var(--site-small);
+}
+
+.kiosk__lines div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+}
+
+.kiosk__lines dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.control__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: var(--spacing-8);
+}
+
+.control__item {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: var(--spacing-2);
+  text-align: center;
+}
+
+.control__glyph {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border-radius: var(--radius-full);
+  background: var(--color-neutral);
+}
+
+.control__item-title {
+  margin-block-start: var(--spacing-2);
+  line-height: 1.3;
+  font-size: 1.25rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.control__item-body {
+  max-inline-size: 22rem;
+  color: var(--color-text-secondary);
+}
+
+/* Technology: the diagram of the parts. One of its two drawings shows, after the width of the figure. */
+
+.diagram {
+  container: diagram / inline-size;
+  margin: 0 0 clamp(3rem, 2rem + 3vw, 5rem);
+  padding: clamp(1rem, 0.5rem + 2vw, 3rem);
+  border-radius: var(--radius-page);
+  background: var(--color-background-card);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.diagram__svg {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  margin-inline: auto;
+  overflow: visible;
+  font-family: var(--font-family-body);
+}
+
+/* The wide drawing needs 70 rem of figure: its 1480 units are then 0.76 px or more, so its 18.5-unit text is 14 px. */
+.diagram__svg--wide {
+  display: none;
+}
+
+.diagram__svg--tall {
+  max-inline-size: 26rem;
+}
+
+@container diagram (min-width: 70rem) {
+  .diagram__svg--wide {
+    display: block;
+  }
+
+  .diagram__svg--tall {
+    display: none;
+  }
+}
+
+.dg-box rect {
+  fill: var(--color-background-body);
+  stroke: var(--color-border-emphasized);
+  stroke-width: 1.5;
+}
+
+.dg-box text {
+  font-size: 18.5px;
+  fill: var(--color-text-secondary);
+}
+
+.dg-box .dg-box__title {
+  font-size: 24px;
+  font-weight: var(--font-weight-semibold);
+  fill: var(--color-text-primary);
+}
+
+.dg-box .dg-box__line {
+  fill: var(--color-text-primary);
+}
+
+.dg-arrow path {
+  fill: none;
+  stroke: var(--color-icon-secondary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dg-arrow polygon {
+  fill: var(--color-icon-secondary);
+}
+
+/* The one focal path: the QR code that the camera sees, not a message on the network. */
+.dg-arrow--focal path {
+  stroke: var(--color-text-primary);
+  stroke-width: 3;
+  stroke-dasharray: 10 7;
+}
+
+.dg-arrow--focal polygon {
+  fill: var(--color-text-primary);
+}
+
+.dg-label rect {
+  fill: var(--color-background-card);
+}
+
+.dg-label text,
+.dg-legend text {
+  font-size: 18.5px;
+  font-weight: var(--font-weight-medium);
+  fill: var(--color-text-secondary);
+}
+
+.dg-legend__rule {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.dg-legend__sample {
+  stroke: var(--color-icon-secondary);
+  stroke-width: 2;
+}
+
+.dg-legend__sample--focal {
+  stroke: var(--color-text-primary);
+  stroke-width: 3;
+  stroke-dasharray: 10 7;
+}
+
+.specs {
+  display: grid;
+  margin: 0;
+  border-block-start: 1px solid var(--color-border-emphasized);
+}
+
+.specs__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--spacing-1);
+  padding-block: var(--spacing-4);
+  border-block-end: 1px solid var(--color-border);
+}
+
+@media (min-width: 40rem) {
+  .specs__row {
+    grid-template-columns: minmax(9rem, 1fr) minmax(0, 3fr);
+    gap: var(--spacing-6);
+  }
+}
+
+.specs dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.specs dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+/* Team */
+
+.team {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-8) var(--spacing-6);
+}
+
+@media (min-width: 64rem) {
+  .team {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 37.49rem) {
+  .team {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-6) var(--spacing-3);
+  }
+
+  .team__name {
+    font-size: 1.0625rem;
+  }
+}
+
+/* Each card spans three rows of the list (photo, name, title), so the names and the titles of a row line up. */
+.team__member {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: var(--spacing-2);
+  align-content: start;
+}
+
+.team__photo {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: var(--radius-container);
+  background: var(--color-background-muted);
+}
+
+.team__name {
+  font-size: 1.25rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.team__frame {
+  margin-block-end: var(--spacing-1);
+}
+
+.team__role {
+  color: var(--color-text-secondary);
+  font-size: var(--site-small);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+/* FAQ: the heading on the left, the questions on the right. */
+
+.faq {
+  display: grid;
+  gap: var(--spacing-8);
+}
+
+@media (min-width: 64rem) {
+  .faq {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    align-items: start;
+  }
+}
+
+.faq__list {
+  border-block-start: 1px solid var(--color-border);
+}
+
+.faq__item {
+  border-block-end: 1px solid var(--color-border);
+}
+
+.faq__heading {
+  margin: 0;
+}
+
+.faq__button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  inline-size: 100%;
+  min-block-size: 3.5rem;
+  padding: var(--spacing-4) var(--spacing-1);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.faq__button:focus-visible {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-inner);
+}
+
+.faq__chevron {
+  display: inline-grid;
+  flex: none;
+  color: var(--color-icon-secondary);
+}
+
+.faq__chevron svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+}
+
+.faq__panel {
+  overflow: hidden;
+}
+
+.faq__question {
+  font-size: 1.1875rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+}
+
+.faq__answer {
+  max-inline-size: var(--site-measure);
+  font-size: var(--site-body);
+  line-height: 1.55;
+  padding: 0 var(--spacing-1) var(--spacing-5);
+  color: var(--color-text-secondary);
+}
+
+/* Closing and footer */
+
+.closing {
+  padding-block-start: var(--site-section-space);
+}
+
+/* The last frame of the hero animation returns as the closing object: the card with the code of the repository. */
+.closing__mark {
+  display: block;
+  inline-size: 12rem;
+  margin: 0 auto var(--spacing-8);
+}
+
+.closing__mark img {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.site-footer {
+  padding-block: var(--spacing-12);
+  border-block-start: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--site-small);
+}
+
+.site-footer__inner {
+  display: grid;
+  gap: var(--spacing-8);
+}
+
+@media (min-width: 56.25rem) {
+  .site-footer__inner {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+
+.site-footer__brand {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: var(--spacing-4);
+  max-inline-size: var(--site-measure);
+}
+
+.site-footer__nav ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  column-gap: var(--spacing-10);
+}
+
+.site-footer__nav a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.site-footer__nav a:hover {
+  text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-media__poster,
+  .site-header__nav a {
+    transition: none;
+  }
+}

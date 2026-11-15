@@ -1,0 +1,28 @@
+/*
+ * The font of the site: Optimistic VF, the file that the owner supplied, unchanged (its licence forbids changes).
+ * vite.config.ts serves this file in place of the fonts.css of the Neutral theme, which loads Figtree from Google Fonts.
+ * The file is in public/fonts, so its path has no hash and index.html can preload it.
+ * Axes of the file: wght 300 to 800, wdth 80 to 100, ital 0 to 1, and DRKM 0 to 1 ("Dark Mode").
+ */
+@font-face {
+  font-family: 'Optimistic VF';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 800;
+  font-stretch: 80% 100%;
+  src: url('/fonts/OptimisticVF.woff2') format('woff2');
+}
+
+/*
+ * Arial with the metrics of Optimistic, so the swap moves no line. The values come from the advance width of a
+ * sentence of the page in both fonts (size-adjust) and from the hhea ascent (2044) and descent (533) of Optimistic
+ * at 2000 units to the em.
+ */
+@font-face {
+  font-family: 'Optimistic Fallback';
+  src: local('Arial'), local('ArialMT'), local('Helvetica');
+  size-adjust: 106.33%;
+  ascent-override: 96.12%;
+  descent-override: 25.06%;
+  line-gap-override: 0%;
+}

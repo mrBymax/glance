@@ -1,0 +1,26 @@
+/*
+ * Noto Sans, the font of the Display toolkit, from the build (@fontsource/noto-sans, SIL Open Font License 1.1).
+ * index.html holds an element with the ID that the toolkit looks for, uit-noto-sans-font, so the toolkit does not add
+ * its link to Google Fonts. The page makes no request to another host.
+ */
+@font-face {
+  font-family: 'Noto Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('@fontsource/noto-sans/files/noto-sans-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('@fontsource/noto-sans/files/noto-sans-latin-700-normal.woff2') format('woff2');
+}
