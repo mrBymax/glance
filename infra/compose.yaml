@@ -1,0 +1,32 @@
+# The server and the proxy on one machine: docker compose -f infra/compose.yaml up -d --build
+# Compose reads infra/.env for DOMAIN, and the server gets each variable of that file.
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    env_file: .env
+    volumes:
+      - speech:/data/speech
+    restart: unless-stopped
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../apps/website/dist:/srv/website:ro
+      - ../apps/display-pow/dist:/srv/hud:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+    restart: unless-stopped
+volumes:
+  speech:
+  caddy_data:
+  caddy_config:

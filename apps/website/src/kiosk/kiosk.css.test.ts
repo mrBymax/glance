@@ -1,0 +1,32 @@
+import { readFileSync } from 'node:fs';
+import { expect, it } from 'vitest';
+
+const css = readFileSync('src/kiosk/kiosk.css', 'utf8');
+const vh = (name: string) => Number(new RegExp(`${name}:\\s*([\\d.]+)vh`).exec(css)?.[1]);
+
+it('gives a total of 160 px or more and a row of 48 px or more on a 1080p screen', () => {
+  expect(vh('--kiosk-total-size') * 10.8).toBeGreaterThanOrEqual(160);
+  expect(vh('--kiosk-row-size') * 10.8).toBeGreaterThanOrEqual(48);
+});
+it('keeps the code at 15 cm or more, as large as the screen allows', () => {
+  expect(css).toContain('--kiosk-code-size: max(15cm, min(50vw, 92vh))');
+});
+it('keeps each product name on one line, so that the cart lines fit and the code keeps its place', () => {
+  const rule = /\.kiosk-name\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  expect(rule).toMatch(/white-space:\s*nowrap/);
+  expect(rule).toMatch(/overflow:\s*hidden/);
+  expect(rule).toMatch(/text-overflow:\s*ellipsis/);
+});
+it('lets the panel go below the width of its longest word, so that a long name does not push the code', () => {
+  const rule = /\.kiosk-panel\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  expect(rule).toMatch(/min-inline-size:\s*0/);
+});
+it('puts the code above the panel on a portrait or narrow screen, with sizes from the width', () => {
+  const block = /@media \(orientation: portrait\), \(max-width: 60rem\) \{([\s\S]*)\}\s*$/.exec(css)?.[1] ?? '';
+  expect(block).toMatch(/\.kiosk\s*\{[^}]*flex-direction:\s*column/);
+  expect(block).toMatch(/\.kiosk-panel\s*\{[^}]*align-self:\s*stretch/);
+  const vw = (name: string) => Number(new RegExp(`${name}:\\s*([\\d.]+)vw`).exec(block)?.[1]);
+  expect(vw('--kiosk-total-size') * 10.8).toBeGreaterThanOrEqual(160);
+  expect(vw('--kiosk-row-size') * 10.8).toBeGreaterThanOrEqual(48);
+  expect(block).toContain('--kiosk-code-size: max(15cm, min(92vw, 45vh))');
+});

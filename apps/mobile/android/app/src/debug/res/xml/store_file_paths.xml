@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The folder of the cache where the camera app writes the photo of "Add product". The app deletes each file after its upload. -->
+<paths>
+    <cache-path name="store_pictures" path="store-pictures/" />
+</paths>

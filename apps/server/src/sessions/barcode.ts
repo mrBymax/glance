@@ -1,0 +1,81 @@
+import { isConfirmed } from './checkout';
+import { LABEL_ANSWER_MS, codeOf, endStillWait, speakUnknown } from './code';
+import { onIdentified } from './glance';
+import { say } from './say';
+import { type Turn, promptProductInView, speak } from './turn';
+import type { RuleInput } from './types';
+import { inView } from './view';
+
+/**
+ * A barcode after its lookup. A product takes the path of a product that recognition named,
+ * so one appearance gets one prompt (R1), and a yes adds it at the price of the store.
+ * A code that the store does not sell gets one line for each appearance, and never a prompt.
+ */
+export function onBarcode(turn: Turn, input: Extract<RuleInput, { type: 'barcode' }>): void {
+  const { s, now } = turn;
+  const { outcome } = input;
+  if (s.phase !== 'shopping' && s.phase !== 'checkout') return;
+  if (outcome.kind === 'invalid') return;
+
+  const code = codeOf(s);
+  code.at = now;
+  code.acceptedAt = now;
+  code.stillsOpen = 0;
+  s.lastTargetAt = now;
+  // The code has the voice now, as a product or as the line for a code that the store does not sell.
+  endStillWait(s);
+  // A prompt would suspend the checkout that waits for its payment.
+  if (isConfirmed(s)) return;
+
+  if (outcome.kind === 'product') {
+    // R9: the shopper just skipped this product. Recognition by sight drops it for the same time.
+    if (s.excluded.some((entry) => entry.productId === outcome.productId)) return;
+    onIdentified(turn, outcome.productId);
+    return;
+  }
+
+  // The line waits while the shopper answers the prompt of a product in view. The time does not move, so it plays after.
+  if (promptProductInView(s, now)) return;
+  const before = code.miss;
+  const newAppearance = !before || before.gtin !== outcome.gtin || !inView(before.at, now);
+  const said = !newAppearance && before.said !== false;
+  // A line that came too close to another line gets a new chance with the next report of the code, one second later.
+  code.miss = { gtin: outcome.gtin, at: now, said: said || speak(turn, say({ key: 'barcode.notInStore' })) !== 'gap' };
+}
+
+/**
+ * A label frame: the still of a package that the phone could not read. The model reads it outside the rules.
+ * While the call runs, the voice of recognition is quiet. A still with no product in it gets no line.
+ * A call that gave no answer gets no line: in the session of 2026-11-14 a call ended after 8 seconds, and
+ * "I cannot read this code." played 12 seconds after the shopper put the product down.
+ * A read that failed gets one line: the unknown line when it waits for this still, else the unreadable line.
+ * The guard of guard.ts lets one such line through for each appearance, so a product that stays in view gets no line for each still.
+ */
+export function onLabel(turn: Turn, input: Extract<RuleInput, { type: 'label' }>): void {
+  const { s, now } = turn;
+  if (s.phase !== 'shopping' && s.phase !== 'checkout') return;
+  const code = codeOf(s);
+  s.lastTargetAt = now;
+  if (input.read === 'started') {
+    code.at = now;
+    code.waitUntil = now + LABEL_ANSWER_MS;
+    return;
+  }
+
+  const unknownWaits = code.unknownHeldAt !== null;
+  endStillWait(s);
+  if (input.read === 'empty' || input.read === 'error') {
+    // The still showed no product, or nobody read it. Recognition by sight has the voice again at once:
+    // the next frame with a product that it cannot name starts the unknown rule again.
+    code.at = null;
+    return;
+  }
+  code.at = now;
+  if (isConfirmed(s)) return;
+  if (unknownWaits) {
+    // Sight asked for this still, and no barcode was in view: "I cannot read this code." would name a code that nobody showed.
+    if (!promptProductInView(s, now)) speakUnknown(turn);
+    return;
+  }
+  speak(turn, say({ key: 'barcode.unreadable' }));
+}

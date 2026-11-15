@@ -1,0 +1,28 @@
+{
+  "name": "@glance/display-pow",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@glance/shared": "*",
+    "@wearables-ui-toolkit/mrbd": "^130.33.0",
+    "@wearables-ui-toolkit/androidx-shapes": "^130.33.0",
+    "@wearables-ui-toolkit/icons": "^130.33.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}

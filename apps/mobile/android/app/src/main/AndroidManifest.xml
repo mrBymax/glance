@@ -1,0 +1,62 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- SessionService keeps a session alive with the screen off. Its two types match the two reasons:
+         the link to the glasses, and the voice of the app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The MockDeviceKit feed from the phone camera uses this permission. Because the app declares it, the debug
+         screen "Add product" also needs it before Android starts the camera app for a photo. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- From Android 11, an app sees the speech engine of the phone only with this entry. PhoneVoice uses it. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
+    <application android:name=".GlanceApp" android:label="Glance" android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.Glance">
+        <meta-data android:name="com.meta.wearable.mwdat.APPLICATION_ID" android:value="${mwdat_application_id}" />
+        <meta-data android:name="com.meta.wearable.mwdat.CLIENT_TOKEN" android:value="${mwdat_client_token}" />
+
+        <!-- Meta AI returns to the app through the glance scheme. One activity has this filter, so Android does not ask. -->
+        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="glance" />
+            </intent-filter>
+        </activity>
+
+        <service android:name=".session.SessionService" android:exported="false"
+            android:foregroundServiceType="connectedDevice|mediaPlayback" />
+
+        <!-- The mock menu is a second launcher icon in each build type: mock mode is the fallback of the live demo.
+             It has a task of its own, so a change from the menu to "Glance" and back keeps both screens. -->
+        <activity android:name=".mock.MockMenuActivity" android:exported="true" android:label="Glance Mock"
+            android:icon="@mipmap/ic_launcher_mock" android:roundIcon="@mipmap/ic_launcher_mock"
+            android:screenOrientation="portrait" android:launchMode="singleTask"
+            android:taskAffinity="com.metaglance.android.mock">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

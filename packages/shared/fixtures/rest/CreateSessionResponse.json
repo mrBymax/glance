@@ -1,0 +1,5 @@
+{
+  "sessionId": "s-1",
+  "token": "t-1",
+  "wsUrl": "ws://localhost:8080/ws/device?session=s-1&token=t-1"
+}

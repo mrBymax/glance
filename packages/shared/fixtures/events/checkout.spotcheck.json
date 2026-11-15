@@ -1,0 +1,9 @@
+{
+  "type": "checkout.spotcheck",
+  "product": {
+    "id": "rye-bread",
+    "name": "Rye bread",
+    "packSize": "500 g",
+    "priceCents": 260
+  }
+}

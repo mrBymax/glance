@@ -1,0 +1,23 @@
+{
+  "code": "8001250120120",
+  "product": {
+    "code": "8001250120120",
+    "product_name": "De Cecco Spaghetti Nr. 12",
+    "product_name_en": "De Cecco Spaghetti Nr. 12",
+    "product_name_it": "Spaghetti n° 12",
+    "brands": "De Cecco",
+    "quantity": "500g",
+    "allergens_tags": [],
+    "traces_tags": [
+      "en:mustard",
+      "en:soybeans"
+    ],
+    "ingredients_analysis_tags": [
+      "en:palm-oil-free",
+      "en:maybe-vegan",
+      "en:maybe-vegetarian"
+    ]
+  },
+  "status": 1,
+  "status_verbose": "product found"
+}

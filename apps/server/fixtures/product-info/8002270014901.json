@@ -1,0 +1,20 @@
+{
+  "code": "8002270014901",
+  "product": {
+    "code": "8002270014901",
+    "product_name": "S. Pellegrino Water",
+    "product_name_en": "S. Pellegrino Water",
+    "product_name_it": "Acqua San Pellegrino",
+    "brands": "San Pellegrino",
+    "quantity": "1 L",
+    "allergens_tags": [],
+    "traces_tags": [],
+    "ingredients_analysis_tags": [
+      "en:palm-oil-content-unknown",
+      "en:vegan",
+      "en:vegetarian"
+    ]
+  },
+  "status": 1,
+  "status_verbose": "product found"
+}

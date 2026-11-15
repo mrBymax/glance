@@ -1,0 +1,264 @@
+package com.metaglance.android.pipeline
+
+import android.graphics.Bitmap
+import android.os.SystemClock
+import com.metaglance.core.barcode.BarcodeRegion
+import com.metaglance.core.barcode.BarcodeVote
+import com.metaglance.core.barcode.CodeChoice
+import com.metaglance.core.barcode.CodeRead
+import com.metaglance.core.barcode.LabelPolicy
+import com.metaglance.core.contract.BarcodeSource
+import com.metaglance.core.frame.FrameHeader
+import com.metaglance.core.frame.FrameView
+import com.metaglance.core.image.DamageLog
+import com.metaglance.core.image.FaceResult
+import com.metaglance.core.image.FrameDamage
+import com.metaglance.core.image.FramePrep
+import com.metaglance.core.image.HeldCounts
+import com.metaglance.core.image.HeldRegion
+import com.metaglance.core.image.HeldUploads
+import com.metaglance.core.image.I420
+import com.metaglance.core.image.Pace
+import com.metaglance.core.image.PreparedFrame
+import com.metaglance.core.image.RawFrame
+import com.metaglance.core.image.RectPx
+import com.metaglance.core.image.SharpestFramePicker
+import com.metaglance.core.image.Sharpness
+import com.metaglance.core.image.StreamSetup
+import com.metaglance.core.image.UploadSkip
+import com.metaglance.core.image.withView
+import com.metaglance.core.kiosk.KioskCode
+import com.metaglance.core.kiosk.KioskDwell
+import com.metaglance.core.kiosk.SeenCode
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+
+/**
+ * The path of each frame of the stream: the code scan, then the upload of the sharpest frame of each 150 ms.
+ * No frame is written to storage.
+ *
+ * One scan of the frame gives the kiosk code and the product barcode. A barcode region that did not decode is
+ * read again in a larger scale, and then with OCR for the digits under the bars. `BarcodeVote` decides when a
+ * product code is reported, and `LabelPolicy` decides when a still photo must read the code.
+ *
+ * A damaged frame (`FrameDamage`) is a frame with no product code and no barcode region, because the scanner
+ * reports the blocks of such a frame as regions. It is never uploaded. Its kiosk code counts: the scan runs in
+ * each case, and a QR code that decodes to a kiosk text is not a product of the blocks.
+ *
+ * `gate` returns the reason to skip an upload, or null. `onKioskText` gets the full code text, for example
+ * `GL1 K3X7`, when the dwell rule reports it. `onBarcode` gets a product code when the vote reports it.
+ * `onLabelStill` says that the caller must take one still now. `onUpload` gets a JPEG with its header, and the
+ * context image of a crop or null.
+ * `holdStills` returns true while a prompt waits for a head answer: no label still starts then, and `LabelPolicy`
+ * drops a `still.request` that waited behind the prompt. Each callback runs on the frame thread.
+ *
+ * With `findHeld`, the held crop is on. Each frame that is not damaged goes through that detector, after the code
+ * scan. A frame with a region goes out as a crop around the region, cut from the frame with no scale. The crop
+ * carries its context image: the full frame in a small size, in which the server model sees if a hand holds the
+ * object. With no region, the full frame goes out one time each second (`HeldUploads`). The code scan, the kiosk code, and the
+ * label policy read the full frame in each case, and none of them needs an upload. Without `findHeld`, each
+ * window uploads its full frame, as before the held crop.
+ */
+class FramePipeline(
+    private val gate: () -> UploadSkip?,
+    private val onKioskText: (String) -> Unit,
+    private val onUpload: (FrameHeader, ByteArray, ByteArray?) -> Unit,
+    private val onBarcode: (CodeRead) -> Unit = {},
+    private val onLabelStill: () -> Unit = {},
+    private val findFaces: ((RawFrame) -> FaceResult)? = null,
+    /** It has no effect: each upload is the full frame. `SessionController` still passes it. */
+    @Suppress("UNUSED_PARAMETER") crop: Boolean = false,
+    /** Gives the number of the next upload. Without it, this pipeline counts its uploads from 1. */
+    private val nextSeq: (() -> Int)? = null,
+    private val label: LabelPolicy = LabelPolicy(),
+    private val holdStills: () -> Boolean = { false },
+    /** What the app asked of the stream. A slow stream gets longer gaps for a missed frame. */
+    stream: StreamSetup = StreamSetup.DEFAULT,
+    /** The detector of the held crop: the region of a frame that can be a product in a hand, in frame pixels. Null turns the crop off. */
+    findHeld: ((RawFrame) -> RectPx?)? = null,
+    private val log: (String) -> Unit
+) {
+    private val scanner = CodeScanner()
+    private val digits = DigitReader()
+    private val dwell = KioskDwell(gapMs = stream.gapMs(KioskDwell.DEFAULT_GAP_MS))
+    private val vote = BarcodeVote(gapMs = stream.gapMs(BarcodeVote.DEFAULT_GAP_MS))
+    private val ocrPace = Pace(OCR_EVERY_MS)
+    private val labelRequestMs = AtomicLong(NO_REQUEST)
+    private val stillGaveCode = AtomicBoolean()
+    private val picker = SharpestFramePicker<Candidate>()
+
+    /** Null with the held crop off, and after the detector failed. */
+    private var findHeld = findHeld
+    private val heldUploads = HeldUploads()
+    private val heldCounts = HeldCounts()
+    private var sentCrop = false
+    private val damageLog = DamageLog()
+    private val times = StepTimes()
+    private var seq = 0
+    private var lastSkip: UploadSkip? = null
+    private val failedSteps = HashSet<String>()
+
+    /** Call it for each frame, on one background thread. It blocks while ML Kit reads the frame. */
+    fun onFrame(frame: RawFrame) {
+        val nowMs = SystemClock.elapsedRealtime()
+        times.report(nowMs)?.let { line -> log(if (findHeld != null) "$line, ${heldCounts.takeLine()}" else line) }
+        val damaged = FrameDamage.isDamaged(frame.i420, frame.width, frame.height)
+        damageLog.onFrame(nowMs, damaged)?.let(log)
+        // The one NV21 copy of the frame. The steps for a region read the Y plane of the frame itself.
+        val hits = times.of("scan") {
+            reading("code scan", emptyList()) { scanner.scan(I420.toNv21(frame.i420, frame.width, frame.height), frame.width, frame.height) }
+        }
+        val kioskCodes = hits.filter { it.isQr }.mapNotNull { hit -> hit.text?.let(KioskCode::parse)?.let { SeenCode(it, hit.areaPx) } }
+        dwell.onFrame(nowMs, kioskCodes)?.let { onKioskText(KioskCode.format(it)) }
+        times.of("product") { readProduct(nowMs, frame, if (damaged) emptyList() else hits.filterNot { it.isQr }) }
+
+        val region = if (damaged) null else heldRegion(frame)
+        // The sharpness of a frame with a region is that of the region: the product counts, and not the room behind it.
+        val sharpness = if (region != null) Sharpness.of(frame.i420, frame.width, frame.height, region) else Sharpness.of(frame.i420, frame.width, frame.height)
+        val candidate = picker.offer(nowMs, Candidate(frame, region), sharpness, damaged, preferred = region != null) ?: return
+        val picked = candidate.frame
+
+        val skip = gate()
+        if (skip != lastSkip) {
+            log(if (skip == null) "upload on" else "upload off: $skip")
+            lastSkip = skip
+        }
+        if (skip != null) return
+
+        // Null with the held crop off: the full frame of each window goes out, with no view in its header.
+        val view = if (findHeld != null) heldUploads.next(nowMs, candidate.region != null) ?: return else null
+        val crop = if (view == FrameView.CROP) candidate.region?.let { HeldRegion.crop(it, picked.width, picked.height) } else null
+
+        // Face detection reads the full frame also for a crop: it finds a face that the crop cuts.
+        val faces = times.of("faces") { findFaces?.invoke(picked) ?: FaceResult.NotRun }
+        val prepared = times.of("pixelate") { if (crop != null) FramePrep.prepare(picked, faces, crop) else FramePrep.prepare(picked, faces) }
+        if (prepared == null) {
+            log("frame dropped: face detection failed")
+            return
+        }
+        val jpeg = times.of("jpeg") { jpegOf(prepared, if (crop != null) CROP_JPEG_QUALITY else JPEG_QUALITY) }
+        // Face detection gave a result for `prepared`, so the context image of the same frame is never null here.
+        val context = if (crop != null) times.of("context") { FramePrep.context(picked, faces)?.let { jpegOf(it, CONTEXT_JPEG_QUALITY) } } else null
+
+        seq = nextSeq?.invoke() ?: (seq + 1)
+        val header = FrameHeader(seq, System.currentTimeMillis(), prepared.width, prepared.height, prepared.blurred)
+        if (view == null) {
+            onUpload(header, jpeg, null)
+            return
+        }
+        heldCounts.onUpload(view, prepared.width, prepared.height)
+        if (crop != null && !sentCrop) {
+            sentCrop = true
+            log("first crop: seq=$seq ${crop.width}x${crop.height} at ${crop.left},${crop.top} of ${picked.width}x${picked.height}, ${jpeg.size} bytes, context ${context?.size ?: 0} bytes")
+        }
+        onUpload(header.withView(crop, picked.width, picked.height).copy(contextBytes = context?.size), jpeg, context)
+    }
+
+    private fun jpegOf(prepared: PreparedFrame, quality: Int): ByteArray {
+        val bitmap = Bitmap.createBitmap(prepared.argb, prepared.width, prepared.height, Bitmap.Config.ARGB_8888)
+        return ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray().also { bitmap.recycle() }
+    }
+
+    /**
+     * The region of the frame that can be a product in a hand, or null. A detector that fails turns the held
+     * crop off for this stream, with one log line: each window then uploads its full frame again.
+     */
+    private fun heldRegion(frame: RawFrame): RectPx? {
+        val find = findHeld ?: return null
+        val region = try {
+            times.of("detector") { find(frame) }
+        } catch (e: RuntimeException) {
+            findHeld = null
+            log("held crop off: the detector failed: ${e.message}")
+            return null
+        }
+        heldCounts.onFrame(region != null)
+        return region
+    }
+
+    /** The server asked for a still with `still.request`. The next frame gives the request to the label policy, with its time. */
+    fun requestLabelStill() = labelRequestMs.set(SystemClock.elapsedRealtime())
+
+    /** The phone read a code in the label still. The next frame tells the label policy. */
+    fun onLabelStillCode() = stillGaveCode.set(true)
+
+    fun close() {
+        log(damageLog.totalLine)
+        scanner.close()
+        digits.close()
+    }
+
+    private fun readProduct(nowMs: Long, frame: RawFrame, hits: List<CodeHit>) {
+        val productHits = hits.map { it.toProductHit() }
+        val decoded = CodeChoice.decoded(productHits)
+        val region = if (decoded != null) null else CodeChoice.region(productHits, frame.width, frame.height)
+        val read = when {
+            decoded != null -> CodeRead(decoded, BarcodeSource.BARCODE)
+            region != null -> readRegion(nowMs, frame, region)
+            else -> null
+        }
+        if (read != null && !vote.accepted) log("barcode read ${read.code} ${read.source.name.lowercase()}")
+        vote.onFrame(nowMs, read)?.let(onBarcode)
+        if (stillGaveCode.getAndSet(false)) label.onStillCode()
+        // A frame that waits in the socket is no reason to drop a still.
+        val canUpload = gate().let { it == null || it == UploadSkip.STILL_SENDING }
+        val requestMs = labelRequestMs.getAndSet(NO_REQUEST)
+        val requested = requestMs != NO_REQUEST
+        if (label.onFrame(nowMs, decoded != null || region != null, vote.accepted, requested, canUpload, holdStills(), requestMs)) {
+            // Why the still: a person who reads the log must see if the scanner or the server asked.
+            log("label still asked: " + if (requested) "server request" else "region $region in ${frame.width}x${frame.height}")
+            onLabelStill()
+        }
+    }
+
+    /** The second and the third way to read a code: the region in a larger scale, then the digits under the bars. */
+    private fun readRegion(nowMs: Long, frame: RawFrame, region: RectPx): CodeRead? {
+        val bars = BarcodeRegion.forDecode(region, frame.width, frame.height) ?: return null
+        val decoded = reading("region scan", emptyList()) { frame.regionBitmap(bars).use { scanner.scan(it) } }.firstNotNullOfOrNull { it.productCode }
+        if (decoded != null) return CodeRead(decoded, BarcodeSource.BARCODE)
+
+        if (!ocrPace.tryRun(nowMs)) return null
+        val withDigits = BarcodeRegion.forDigits(region, frame.width, frame.height) ?: return null
+        val words = reading("digit read", emptyList()) { frame.regionBitmap(withDigits).use { digits.read(it) } }
+        return CodeChoice.ofWords(words)
+    }
+
+    private fun <T> Bitmap.use(read: (Bitmap) -> T): T = try {
+        read(this)
+    } finally {
+        recycle()
+    }
+
+    /** A step of ML Kit that fails is a frame with no code. The upload of the frame does not depend on it. */
+    private fun <T> reading(step: String, fallback: T, read: () -> T): T = try {
+        read().also { failedSteps -= step }
+    } catch (e: ExecutionException) {
+        // One line for each row of failures of a step.
+        if (failedSteps.add(step)) log("$step failed: ${e.cause?.message ?: e.message}")
+        fallback
+    }
+
+    /** A frame of the window with the region that the detector found in it. */
+    private class Candidate(val frame: RawFrame, val region: RectPx?)
+
+    private companion object {
+        const val JPEG_QUALITY = 80
+
+        /**
+         * A crop keeps the small print of a package. Measured on 140 crops of 2026-11-14: a median of 37 kB for
+         * a crop of a 720 x 1280 frame, and 15 kB for a crop of a 504 x 896 frame.
+         */
+        const val CROP_JPEG_QUALITY = 92
+
+        /** The context image shows where the hand is, and no print. */
+        const val CONTEXT_JPEG_QUALITY = 70
+
+        /** `SystemClock.elapsedRealtime` never gives it. */
+        const val NO_REQUEST = -1L
+
+        /** OCR runs at most 3 times each second, because it takes longer than the scan of a frame. */
+        const val OCR_EVERY_MS = 333L
+    }
+}

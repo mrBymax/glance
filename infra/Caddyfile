@@ -1,0 +1,20 @@
+# Caddy gets the certificates by itself. It passes WebSocket upgrades and flushes event streams with no extra setting.
+{$DOMAIN} {
+	@server path /api/* /ws/* /healthz
+	handle @server {
+		reverse_proxy server:8080
+	}
+	handle {
+		root * /srv/website
+		encode zstd gzip
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+hud.{$DOMAIN} {
+	root * /srv/hud
+	encode zstd gzip
+	try_files {path} /index.html
+	file_server
+}

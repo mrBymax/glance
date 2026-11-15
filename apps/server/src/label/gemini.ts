@@ -1,0 +1,118 @@
+import { GoogleGenAI, type Part, PartMediaResolutionLevel } from '@google/genai';
+import { z } from 'zod';
+import { type EntriesSource, type StoreEntry, fromEntries } from '../products/storeEntries';
+import { type LabelReader, type LabelReference, NO_LABEL, parseLabelAnswer } from './reader';
+
+/** The path of the instruction file, from the working directory apps/server. */
+export const LABEL_TEMPLATE_PATH = '../../agents/label.md';
+
+const STORE_LIST_PLACEHOLDER = '{{storeList}}';
+
+/**
+ * Puts the store list into the instruction template, one line for each item.
+ * The brand and the pack size come from the store list, else from the details of the product database.
+ * The line holds no price: the model selects an item, and the price comes from the store list.
+ */
+export function buildLabelInstruction(template: string, entries: readonly StoreEntry[]): string {
+  if (!template.includes(STORE_LIST_PLACEHOLDER)) {
+    throw new Error(`The label instruction has no ${STORE_LIST_PLACEHOLDER} placeholder.`);
+  }
+  const lines = entries.map(({ item, details }) => {
+    const brand = item.brand ?? details?.brand ?? null;
+    const pack = item.packSize ?? details?.quantity ?? null;
+    return `- gtin: ${item.gtin} | name: ${item.name}${brand === null ? '' : ` | brand: ${brand}`}${pack === null ? '' : ` | pack: ${pack}`}`;
+  });
+  // A function as the replacement keeps a "$" of an item text as it is.
+  return template.replace(STORE_LIST_PLACEHOLDER, () => (lines.length > 0 ? lines.join('\n') : '(The store list is empty.)'));
+}
+
+/**
+ * The JSON Schema of the answer. `item` takes only a code of the store list, so the model cannot write a code outside it.
+ * The server still checks each field of the answer against the store list.
+ */
+export function labelResponseSchema(gtins: readonly string[]): unknown {
+  return z.toJSONSchema(z.object({
+    digits: z.array(z.string()),
+    brand: z.string().nullable(),
+    name: z.string().nullable(),
+    packSize: z.string().nullable(),
+    confidence: z.number().min(0).max(1),
+    item: gtins.length > 0 ? z.enum(gtins as [string, ...string[]]).nullable() : z.null(),
+    itemConfidence: z.number().min(0).max(1),
+  }));
+}
+
+export const jpegPart = (jpeg: Uint8Array): Part => ({ inlineData: { mimeType: 'image/jpeg', data: Buffer.from(jpeg).toString('base64') } });
+
+/**
+ * The image part of one reference picture. It has the low media resolution of its part (280 tokens for a Gemini 3
+ * model): the model compares the package as a whole and reads no small print in it.
+ */
+export const referencePicturePart = (jpeg: Uint8Array): Part => ({
+  ...jpegPart(jpeg), mediaResolution: { level: PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW },
+});
+
+/**
+ * The parts of one request. With reference pictures, each picture follows a text part that names its item, and the
+ * still is the last image. A picture that the Files API holds goes out as its file.
+ */
+export function labelParts(jpeg: Uint8Array, references: readonly LabelReference[]): Part[] {
+  if (references.length === 0) return [jpegPart(jpeg), { text: 'Read this label.' }];
+  return [
+    ...references.flatMap((reference): Part[] => [
+      { text: `Reference picture of item ${reference.gtin}: ${reference.name}` },
+      reference.file ?? referencePicturePart(reference.jpeg),
+    ]),
+    { text: 'The photo to read' },
+    jpegPart(jpeg),
+  ];
+}
+
+/**
+ * One generateContent call for each still of a label, with no state between the calls.
+ * The call shape matches the type definitions of @google/genai 3.3.0, as the recognition call does.
+ * The still keeps the default media resolution, because the digits under a barcode are small.
+ * The store list can change the size of the instruction, so the reader builds the instruction and the schema one time
+ * for each list. A function as `entries` gives the list as it is now, and a change of the list builds them again.
+ */
+export function createGeminiLabelReader(deps: {
+  apiKey: string; model: string;
+  /** The text of agents/label.md, with the placeholder for the store list. */
+  template: string;
+  /** The store list. A function gives it as it is now. */
+  entries: EntriesSource;
+  /** In place of the global fetch, for a test. */
+  fetch?: typeof fetch;
+}): LabelReader {
+  const ai = new GoogleGenAI({ apiKey: deps.apiKey, ...(deps.fetch ? { httpOptions: { fetch: deps.fetch } } : {}) });
+  const forStore = fromEntries(deps.entries, (entries) => ({
+    systemInstruction: buildLabelInstruction(deps.template, entries),
+    responseSchema: labelResponseSchema(entries.map((entry) => entry.item.gtin)),
+  }));
+
+  return {
+    async read(jpeg, opts) {
+      const { systemInstruction, responseSchema } = forStore();
+      const response = await ai.models.generateContent({
+        model: deps.model,
+        contents: labelParts(jpeg, opts.references ?? []),
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+          responseJsonSchema: responseSchema,
+          abortSignal: opts.signal,
+          // One attempt, and no `timeout`: the API rejects a server deadline below 10 seconds (see recognition/gemini.ts).
+          httpOptions: { retryOptions: { attempts: 1 } },
+        },
+      });
+
+      let raw: unknown;
+      try {
+        raw = JSON.parse(response.text ?? '');
+      } catch {
+        return NO_LABEL;
+      }
+      return parseLabelAnswer(raw);
+    },
+  };
+}

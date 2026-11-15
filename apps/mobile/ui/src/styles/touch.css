@@ -1,0 +1,17 @@
+/* Astryx controls are 28, 32, and 36 px high. Spec section 10 requires touch targets of 48 px or more. */
+:root {
+  --size-element-sm: 48px;
+  --size-element-md: 48px;
+  --size-element-lg: 56px;
+}
+.astryx-button {
+  min-inline-size: 48px;
+}
+/* The clear button of an input is 20 px high, and Astryx grows its hit area to 44 px at most. */
+.astryx-input-clear-button {
+  block-size: 48px;
+}
+/* A radio row is 32 px high, and Astryx grows its hit area to 44 px at most. */
+.astryx-radio-list-item {
+  min-block-size: var(--size-element-md);
+}

@@ -1,0 +1,31 @@
+{
+  "type": "kiosk.state",
+  "state": "connected",
+  "kiosk": {
+    "id": "kiosk-1",
+    "name": "Checkout 3",
+    "store": "Demo Market"
+  },
+  "code": "K3X7",
+  "cart": {
+    "items": [
+      {
+        "productId": "rye-bread",
+        "name": "Rye bread",
+        "packSize": "500 g",
+        "qty": 1,
+        "unitPriceCents": 260
+      },
+      {
+        "productId": "oat-drink-1l",
+        "name": "Oat drink",
+        "packSize": "1 L",
+        "qty": 1,
+        "unitPriceCents": 189
+      }
+    ],
+    "totalCents": 449
+  },
+  "totalCents": 449,
+  "receipt": null
+}

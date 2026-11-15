@@ -1,0 +1,12 @@
+[
+  { "afterMs": 1000, "event": { "type": "session.state", "phase": "shopping", "cameraOn": true } },
+  { "afterMs": 1200, "event": { "type": "caption", "id": "c-1", "text": "Camera on. Hold a product up to hear its price.", "lang": "en", "priority": "normal", "url": null } },
+  { "afterMs": 5000, "event": { "type": "glance.pending", "promptId": "p-0001", "kind": "new", "product": { "id": "rye-bread", "name": "Rye bread", "packSize": "500 g", "priceCents": 260 }, "warnings": [], "qtyInCart": 0 } },
+  { "afterMs": 5200, "event": { "type": "caption", "id": "c-2", "text": "Rye bread, five hundred grams, two sixty. Nod to add.", "lang": "en", "priority": "normal", "url": null } },
+  { "afterMs": 15000, "event": { "type": "glance.pending", "promptId": "p-0002", "kind": "new", "product": { "id": "oat-drink-1l", "name": "Oat drink", "packSize": "1 L", "priceCents": 189 }, "warnings": [{ "kind": "allergen", "allergens": ["gluten"] }], "qtyInCart": 0 } },
+  { "afterMs": 15200, "event": { "type": "caption", "id": "c-3", "text": "Oat drink, one litre, one eighty-nine. Warning: contains gluten.", "lang": "en", "priority": "normal", "url": null } },
+  { "afterMs": 25000, "event": { "type": "glance.unknown" } },
+  { "afterMs": 25200, "event": { "type": "caption", "id": "c-4", "text": "I do not know this product.", "lang": "en", "priority": "normal", "url": null } },
+  { "afterMs": 31000, "event": { "type": "session.state", "phase": "resting", "cameraOn": false } },
+  { "afterMs": 31200, "event": { "type": "caption", "id": "c-5", "text": "Camera off.", "lang": "en", "priority": "normal", "url": null } }
+]

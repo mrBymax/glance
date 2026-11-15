@@ -1,0 +1,129 @@
+# Integration tests
+
+Each script here starts the Glance server of `apps/server` in fake mode on `127.0.0.1` and a free port, runs one test against it, and stops it. No test calls Gemini, ElevenLabs, or Open Food Facts.
+
+`package.json` of this folder holds the tools of these scripts, so that no app gets a new dependency. The folder is not a workspace of the repository, so it needs its own install:
+
+```bash
+npm install                               # at the repository root
+npm install --prefix scripts/integration  # puppeteer-core, for the test of the web pages
+```
+
+| Command, at the repository root | Test |
+|---|---|
+| `node scripts/integration/server-kotlin.mjs` | The server and the Kotlin client of the Android app |
+| `node scripts/integration/android/run-spine.mjs --integration` | The Android app with mock glasses on the test phone: the spine, the device states, the phone UI in the WebView, the answers from the volume keys, the touchpad, and the voice, two extras (the fingerprint before a payment, and the still photo), and the barcode of a product |
+| `node scripts/integration/server-web.mjs` | The server, the phone UI with `BrowserBridge`, the kiosk page, and the mirror page |
+
+The exit code of each script is 0 for a pass and 1 for a fail, and the last line is `result: pass` or `result: fail`.
+
+The Android runner differs. It also starts the fake server of the app, `apps/mobile/android/tools/fake-server`, on a free port of `127.0.0.1`, for the messages that the server in fake mode cannot send on request. It uses port 8080 (or the port of `GLANCE_TEST_PORT`) and `adb reverse`, it needs the phone, `adb`, FFmpeg, and the JDK, and its last line starts with `PASS` or `FAIL`. The phone is the one of `ANDROID_SERIAL`, or the one attached phone. Its packages `qrcode` and `bwip-js` draw the codes of the camera feeds, and they are in the same `package.json`. It also sets `FAKE_PRODUCT_INFO=1`, so its server never calls Open Food Facts, and it stops when `GET /healthz` reports `fakeProductInfo: false`. `npm test` in this folder checks how the runner reads the serial, the port, and the fake switches, with no phone. It also checks the environment that `lib/server.mjs` gives the server. See "Instrumented tests" in `apps/mobile/android/README.md`.
+
+## The server and the Kotlin client
+
+`server-kotlin.mjs` needs `JAVA_HOME` with a JDK from 17 to 24. It runs the Gradle task `:core:integrationTest` of `apps/mobile/android` with the server address as `-Pglance.serverUrl`.
+
+The test is `ServerSpineTest` in `apps/mobile/android/core/src/integrationTest`. It uses the real `GlanceApi`, `DeviceSocket`, `Codec`, and `FrameCodec`, and it plays one shop:
+
+```mermaid
+sequenceDiagram
+    participant Test as ServerSpineTest
+    participant Server as Server in fake mode
+    Test->>Server: POST /api/sessions with the default profile
+    Test->>Server: open the device socket
+    Server-->>Test: snapshot
+    Test->>Server: device.state with the stream streaming
+    Server-->>Test: session.state, speak "Camera on."
+    Test->>Server: 3 frames
+    Server-->>Test: glance.pending, speak with a prompt ID
+    Test->>Server: prompt.done, intent yes from the head
+    Server-->>Test: glance.cleared, cart.updated, speak with the sound added
+    Test->>Server: kiosk.seen "GL1 K3X7"
+    Server-->>Test: session.state, checkout.offered, speak with a prompt ID
+    Test->>Server: prompt.done, intent yes from the head
+    Server-->>Test: checkout.paid, cart.updated, session.state, speak with the sound paid
+    Server-->>Test: session.end
+    Test->>Server: GET /api/sessions/:id
+```
+
+- The server plays `server-kotlin.fake-script.json`: the product `oat-drink-1l` is in view from 1.5 seconds after the socket opens.
+- The test fails when the Kotlin codec cannot decode an event of the server, when the socket drops a message, and when the socket goes down.
+- In fake mode the server logs the header of each frame that decodes. The script reads the log and fails when one of the 3 frames is missing.
+- The mock payment takes 300 ms (`PAYMENT_DELAY_MS`).
+
+## The server and the web pages
+
+`server-web.mjs` needs Google Chrome on the machine. `puppeteer-core` starts the installed Chrome with no window and downloads no browser. To use another browser of the Chromium family, set `CHROME_PATH` to its program file.
+
+The script starts three servers on free ports of `127.0.0.1`: the Glance server in fake mode, the Vite dev server of `apps/mobile/ui`, and the Vite dev server of `apps/website` with its `/api` proxy to the Glance server. Each dev server uses the `vite.config.ts` of its app. Then it plays one shop in three pages:
+
+```mermaid
+sequenceDiagram
+    participant Test as server-web.mjs
+    participant Kiosk as Kiosk page
+    participant Mirror as Mirror page
+    participant Phone as Phone UI with BrowserBridge
+    participant Server as Server in fake mode
+    Test->>Kiosk: open /kiosk?name=Checkout 7
+    Kiosk->>Server: POST /api/kiosks, then the event stream of the kiosk
+    Note over Kiosk: "Look at this code to pay", a new code
+    Test->>Mirror: open /mirror?latest=<demo key>, click Start mirror
+    Mirror->>Server: GET /api/demo/latest, each 2 seconds
+    Note over Mirror: "Waiting for a session on the phone."
+    Test->>Phone: open /?ready=1&api=<server address>
+    Note over Phone: setup screen at the step Ready
+    Test->>Phone: click Start shopping
+    Phone->>Server: POST /api/sessions, the event stream, the snapshot
+    Mirror->>Server: the event stream and the snapshot of the newest session
+    Server-->>Phone: glance.pending for the oat drink
+    Note over Phone: product card with the price
+    Note over Mirror: "Camera on.", an empty cart
+    Test->>Phone: click Add
+    Phone->>Server: POST .../intents yes
+    Server-->>Phone: cart.updated
+    Note over Phone: cart line and total
+    Note over Mirror: "Added ...", cart line and total
+    Note over Server: the script reports the barcode 8076800195057
+    Server-->>Phone: glance.pending for the spaghetti of the store list
+    Note over Phone: product card with the price of the store list
+    Test->>Phone: click Add
+    Phone->>Server: POST .../intents yes
+    Server-->>Phone: cart.updated
+    Note over Phone: two cart lines and the total
+    Note over Mirror: two cart lines and the total
+    Note over Server: the script shows the session the newest kiosk
+    Server-->>Phone: checkout.offered
+    Server-->>Kiosk: kiosk.state connected
+    Note over Phone: checkout sheet with the kiosk, the item count, the total
+    Note over Kiosk: "Waiting for your nod", the total, the cart line
+    Test->>Phone: click Pay
+    Phone->>Server: POST .../intents yes
+    Server-->>Phone: checkout.paid, cart.updated, session.state paid
+    Server-->>Kiosk: kiosk.state paid
+    Server-->>Phone: caption "Paid. ..."
+    Note over Phone: receipt with the order ID, and the line "Paid. ..." in the captions
+    Note over Kiosk: "Paid", the total, the receipt line
+    Note over Mirror: "Paid. ...", an empty cart
+    Test->>Server: GET /api/sessions/:id
+    Test->>Phone: click Done
+    Note over Phone: setup screen
+```
+
+- The server plays `server-web.fake-script.json`: the oat drink is in view from 1.5 to 5.5 seconds after the event stream of the session opens, the barcode of the Barilla spaghetti from second 7 to second 10, and the newest kiosk from second 12. The kiosk page registers the newest kiosk.
+- The spaghetti is an item of `apps/server/catalog/store-list.dev.json`, and the catalog does not hold it. So the test fails when the lookup of a barcode, the store list, or the fixtures of `FAKE_PRODUCT_INFO` fail.
+- The test reads the text that each page shows. For the events it reads the messages that `BrowserBridge` delivers to the page, through `window.glanceBridge`, which only the dev build has.
+- Each answer of the shopper is a click on a button of the phone UI: Start shopping, Add for each of the two products, Pay, and Done.
+- The mirror page follows the phone with the flag `latest`. The script gives the server a new `DEMO_KEY` for each run. In fake mode a caption has no clip, so the mirror plays no sound.
+- The last server check reads the snapshot: the phase `paid`, an empty cart, the receipt with the order ID of the page, and the caption "Paid. ...".
+- An error that a page throws fails the run.
+- Each wait checks its page each 100 ms. The default wait of Puppeteer checks at each animation frame, and Chrome gives no animation frame to a page that is not the front page. The kiosk page and the mirror page are not the front page while the phone UI is open.
+- The mock payment takes 300 ms (`PAYMENT_DELAY_MS`). One run takes about 25 seconds.
+- Each page loads two times. With an empty Vite cache, Vite can load a page again after the first load, and the second load keeps the page stable. So the kiosk page registers two kiosks, and the test uses the second one.
+- The script gives the `/api` proxy of each dev server an agent of `node:http`. With no agent, the proxy of Vite 8.3.8 on Node 26.12.1 and Windows lost about one call in four with `ECONNRESET`, also with a plain Node server as its target. With an agent, 80 calls of 80 arrived.
+- The server sends the caption "Paid. ..." after `session.state` with the phase `paid`. The test waits for that line in the captions of the phone UI, and then checks that `BrowserBridge` holds no session. The script has no list of known defects. It ignores the flag `--strict`, which an older version of the script had.
+
+## Shared code
+
+`lib/server.mjs` exports `startFakeServer`. It removes each server variable of the shell from the environment of the server, sets `FAKE_RECOGNITION`, `FAKE_SPEECH`, and `FAKE_PRODUCT_INFO`, and waits for `GET /healthz`. It throws when the answer does not show each of the three fake switches. So the server reads the dev catalog and the dev store list, also when the shell sets `STORE_LIST_PATH`. The store list is a copy in a temp folder, with an empty folder for reference pictures, so a test that adds a store item through `/api/store` writes no file of the repository. `stop` removes the folder. A script can give it the path of a `FAKE_RECOGNITION` script file and a `DEMO_KEY`.
+
+`lib/pages.mjs` exports `startDevServer`, `startBrowser`, `openPage`, and `waitForText` for a test with web pages.

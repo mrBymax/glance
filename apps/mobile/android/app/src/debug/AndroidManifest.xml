@@ -1,0 +1,28 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:usesCleartextTraffic="true">
+        <activity android:name=".probe.ProbeActivity" android:exported="true" android:label="Glance Probe"
+            android:icon="@mipmap/ic_launcher_probe" android:roundIcon="@mipmap/ic_launcher_probe"
+            android:screenOrientation="portrait" android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The two store screens of the mock menu. They are here and not in main, so the demo build has neither.
+             The keyboard makes the window smaller, so the status line and the focused field stay in view. -->
+        <activity android:name=".store.AddProductActivity" android:exported="false" android:label="Add product"
+            android:screenOrientation="portrait" android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity android:name=".store.StoreItemsActivity" android:exported="false" android:label="Store items"
+            android:screenOrientation="portrait" />
+
+        <!-- The camera app writes the photo of "Add product" into the cache of this app through this address. -->
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.storefiles"
+            android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/store_file_paths" />
+        </provider>
+
+        <!-- Google Play services downloads the scanner of "Add product" when the app is installed, and not at the first scan. -->
+        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />
+    </application>
+</manifest>

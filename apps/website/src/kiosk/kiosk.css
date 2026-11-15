@@ -1,0 +1,38 @@
+/*
+ * Sizes of the kiosk page, from spec section 12.
+ * The vh values give a total of 160 px and a row font of 48 px on a screen of 1080 px height, at each scale setting of the system.
+ * The code is 15 cm wide or more, with its quiet zone.
+ */
+.kiosk {
+  --kiosk-total-size: 14.9vh;
+  --kiosk-row-size: 4.5vh;
+  --kiosk-code-size: max(15cm, min(50vw, 92vh));
+  min-block-size: 100vh;
+  background: var(--color-background-body);
+}
+.kiosk-code { inline-size: var(--kiosk-code-size); block-size: var(--kiosk-code-size); flex: none; }
+/* A flex child does not go below the width of its longest word without this rule, and a long name would push the code. */
+.kiosk-panel { flex: 1; min-inline-size: 0; }
+.kiosk-total { font-size: var(--kiosk-total-size); line-height: 1; font-weight: 700; }
+.kiosk-row { font-size: var(--kiosk-row-size); line-height: 1.3; }
+/*
+ * A name from Open Food Facts can have 80 characters, which is four lines at this size.
+ * Seven such lines made the page 2232 px high on a 1080p screen, and the code moved. So a name keeps to one line.
+ */
+.kiosk-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kiosk h1 { font-size: calc(var(--kiosk-row-size) * 1.5); line-height: 1.2; }
+/*
+ * A portrait or narrow screen has no room for the code and the panel side by side: on 1080 x 1920 the panel kept 400 px
+ * and each word broke. There the code is above the panel.
+ * The sizes come from the width, so a 1080p screen keeps a total of 160 px and a row of 48 px after a turn of 90 degrees.
+ * The code takes 45 percent of the height at most, so a cart of seven lines fits below it.
+ */
+@media (orientation: portrait), (max-width: 60rem) {
+  .kiosk {
+    --kiosk-total-size: 14.9vw;
+    --kiosk-row-size: 4.5vw;
+    --kiosk-code-size: max(15cm, min(92vw, 45vh));
+    flex-direction: column;
+  }
+  .kiosk-panel { flex: none; align-self: stretch; }
+}

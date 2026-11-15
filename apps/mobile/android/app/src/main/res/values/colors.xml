@@ -1,0 +1,10 @@
+<resources>
+    <!-- The background layer of each launcher icon. Glance Mock and Glance Probe get their own color, so a tester tells
+         the three icons apart. -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="ic_launcher_mock_background">#1C2B33</color>
+    <color name="ic_launcher_probe_background">#FAE19E</color>
+    <!-- The canvas of the phone UI (the token color-background-body of Astryx Neutral), so the splash screen and the first paint
+         of the page have one color. -->
+    <color name="glance_canvas">#F1F1F1</color>
+</resources>

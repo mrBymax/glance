@@ -1,0 +1,18 @@
+{
+  "t": "profile",
+  "profile": {
+    "lang": "en",
+    "detail": "standard",
+    "speechRate": 1,
+    "speakPrices": true,
+    "headGestures": true,
+    "yesGesture": "nod",
+    "headWindowMs": 8000,
+    "haptics": true,
+    "mainYes": "head",
+    "allergens": [],
+    "vegan": false,
+    "vegetarian": false,
+    "budgetCents": null
+  }
+}

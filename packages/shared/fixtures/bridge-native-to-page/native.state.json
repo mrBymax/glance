@@ -1,0 +1,27 @@
+{
+  "t": "native.state",
+  "state": {
+    "metaAiInstalled": true,
+    "registration": "registered",
+    "cameraPermission": "granted",
+    "notificationPermission": "granted",
+    "device": {
+      "name": "Mock glasses",
+      "link": "connected",
+      "battery": 80,
+      "worn": true,
+      "hingeOpen": true,
+      "thermal": 0,
+      "updateRequired": false
+    },
+    "session": "started",
+    "stream": "streaming",
+    "network": "online",
+    "capabilities": {
+      "motion": true,
+      "inputs": true,
+      "speech": true
+    },
+    "mock": true
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "type": "error",
+  "code": "recognition.slow",
+  "message": "Recognition is slow right now."
+}

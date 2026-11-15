@@ -6,53 +6,190 @@
   <img alt="Glance logo" src="assets/Glance.png">
 </picture>
 
-> Monorepo for team **Meta Glance** at **HackJunction 2026**.
+Meta Glance is a protocol for acting in the real world with AI glasses. It is a proof of concept for the Meta challenge at Junction 2026.
 
-## Overview
+The loop is the same at each place: look at a Glance code, hear what it is and what it costs, and nod to confirm. A place is anything that shows a Glance code and acts on the result: a checkout, a bus, a gate, a vending machine.
 
-This repository is organized as an agentic-first monorepo hosting the applications, shared packages, AI agent definitions, skills, and documentation for Meta Glance.
+The first working demo is a store. A glance tells the name and the price of a product, a nod adds it to the cart, and a nod at the code of the checkout pays. The payment is a mock. No other place exists yet.
 
-## Repository Structure
+`docs/protocol.md` describes the protocol: the code, the session, the confirmation, and what a place must implement. The product site has its own branch, `feat/product-site`, and its own pull request.
 
-```text
-glance/
-├── apps/
-│   ├── website/        # Web application
-│   ├── mobile/         # Mobile application (iOS / Android)
-│   └── display-pow/    # Display Proof of Work / implementations
-├── packages/
-│   └── shared/         # Shared libraries, utilities, and schemas
-├── agents/             # AI agent definitions, personas, and prompts
-├── skills/             # Agentic workflows, playbooks, and capabilities
-├── docs/               # Architecture, hackathon submission, specifications
-├── .gitignore          # Comprehensive monorepo ignore rules
-└── README.md           # Project orientation and instructions
+The design of the store demo is in `docs/superpowers/specs/2026-11-13-meta-glance-design.md`, and the design of the barcode scan is in `docs/superpowers/specs/2026-11-14-barcode-lookup-design.md`. The implementation plans are in `docs/superpowers/plans/`. The architecture of the parts that exist is in `docs/architecture.md`.
+
+## State of the build
+
+The repository is one npm workspace with a Gradle project for the Android app. These parts exist and pass their tests:
+
+- The message contract.
+- The server, with fake modes that need no key and no database.
+- The barcode scan: the phone reads the barcode of a product, and the server finds the product in the store list, with the allergens and the diets of Open Food Facts.
+- The Android app with its probe screen and its mock mode, and the phone UI with its setup screen and its session screen.
+- The four pages of the website: the landing page, the privacy page, the kiosk page, and the mirror page.
+- The Display HUD mockup.
+
+One shop runs from the first glance to the mock payment with the fake server. One test with Ray-Ban Meta glasses ran on 2026-11-14, and the phone read no barcode at the length of an arm in it. The head gestures were made new after that test. The app reads a nod and a shake from the motion samples, also after a stall of the link. The server takes an answer that arrives late for that reason. These parts have tests with synthetic samples only. `docs/architecture.md` shows the parts, the messages between them, the parts that do not exist yet, and the checks that nobody did.
+
+## Folders
+
+| Path | Content |
+|---|---|
+| `packages/shared` | `@glance/shared`: the message types as zod schemas, the JSON fixtures, the money, kiosk code, and GTIN helpers, and the frame codec. |
+| `apps/server` | `@glance/server`: recognition, the lookup of a barcode in the store list, the cart rules, the spoken lines, the kiosks, and the mock payment. |
+| `apps/mobile/android` | The Android app `com.metaglance.android`: a Gradle project with the modules `core` and `app`, and a fake server in `tools/fake-server`. |
+| `apps/mobile/ui` | `@glance/phone-ui`: the phone UI that the Android app shows in a WebView. |
+| `apps/website` | `@glance/website`: the landing page, the privacy page, the kiosk page, and the mirror page. |
+| `apps/display-pow` | `@glance/display-pow`: the Display HUD mockup, one screen on the Display toolkit. It plays a recording, or it follows a live session. |
+| `agents` | `recognition.md`, the instruction for the recognition model, `answers.md`, the instruction for the model that answers a question, and `label.md`, the instruction for the model that reads the still of a barcode. `observe.md` and `verify.md` are the instructions of the observe pipeline, which is off by default. |
+| `infra` | The Docker image of the server and the Caddy proxy, for one machine with HTTPS. |
+| `scripts/integration` | The tests that run the apps against the server in fake mode. |
+| `skills` | The agent skills of the project (part "Agent Skills"). |
+| `scripts/hooks` | The pre-commit checks (part "Hooks"). |
+| `docs/architecture.md` | The parts, the path of one glance, the path of a barcode, the phases of a session, and the steps of a checkout. |
+| `docs/superpowers` | The design document and the implementation plans. |
+| `docs/overnight` | The log of the unattended build of 2026-11-14. |
+| `docs/research` | The research behind the design. |
+| `assets` | The logo files. |
+
+Each app and each package has a `README.md` with its settings, its checks, and its gotchas.
+
+## Tools
+
+For the TypeScript parts:
+
+- Node 22 or later, with npm. `.nvmrc` names the version. Do not use pnpm or yarn.
+- Git.
+
+For the Android app, also:
+
+- A JDK from 17 to 24. Set `JAVA_HOME`. Gradle 8.14.1 does not run on JDK 25 or later.
+- The Android SDK with Platform 36. Set `ANDROID_HOME` to its folder, or write `sdk.dir` in `apps/mobile/android/local.properties`.
+- A phone or an emulator with Android 10 or later, and `adb`, for the install only.
+
+The server needs no key and no database in fake mode. With real recognition and real speech it needs a Gemini key and an ElevenLabs key, and each call costs money. Open Food Facts needs no key. `apps/server/README.md` lists the settings.
+
+## Install, test, and lint
+
+Run each command at the repository root.
+
+```bash
+npm install          # installs each workspace and turns the pre-commit hook on
+npm test             # runs the tests of each workspace
+npm run typecheck    # runs the TypeScript compiler on each workspace, with no output files
+npm run lint         # runs ESLint on each JavaScript and TypeScript file
 ```
 
-### Directory Details
+To check one workspace, add its name: `npm test --workspace @glance/shared`. The names are `@glance/shared`, `@glance/server`, `@glance/phone-ui`, `@glance/website`, and `@glance/display-pow`.
 
-| Path               | Purpose                                                                          |
-| ------------------ | -------------------------------------------------------------------------------- |
-| `apps/website`     | Front-end web application                                                        |
-| `apps/mobile`      | Mobile application (React Native / Flutter / native)                             |
-| `apps/display-pow` | Display Proof of Work module and future implementations                          |
-| `packages/shared`  | Reusable utilities, shared types, and shared configurations                      |
-| `agents`           | System prompts, model configs, and agentic specifications                        |
-| `skills`           | Reusable task playbooks and tool skills for coding assistants and runtime agents |
-| `docs`             | Project architecture, design specs, and hackathon presentation material          |
+No test calls a vendor or Open Food Facts, and no test needs a key.
 
-## Getting Started
+`eslint.config.mjs` holds the lint rules for each workspace, and `tsconfig.base.json` holds the compiler options. A workspace package extends `tsconfig.base.json` and adds no ESLint of its own.
 
-1. **Clone the repository:**
+The Android project has its own checks. Run them in `apps/mobile/android`. PowerShell uses `.\gradlew.bat` in place of `./gradlew`.
 
-   ```bash
-   git clone https://github.com/mrBymax/glance.git
-   cd glance
+```bash
+./gradlew :core:test         # runs the unit tests of the pure Kotlin module
+./gradlew ktlintCheck        # checks the Kotlin style
+```
+
+## Run each part
+
+Run each `npm` command at the repository root, after `npm install`.
+
+### Server
+
+```bash
+npm run dev:fake --workspace @glance/server    # port 8080, no key, no database, no vendor call, no call to Open Food Facts
+curl http://localhost:8080/healthz
+# {"ok":true,"fakeRecognition":true,"fakeSpeech":true,"fakeProductInfo":true,"store":"memory","saveFrames":false}
+```
+
+- Set `PORT` for another port, for example `PORT=18473 npm run dev:fake --workspace @glance/server`.
+- In fake mode a script stands in for recognition, and the kiosk `Checkout 3` with the code `K3X7` exists from the start.
+- `npm run dev --workspace @glance/server` reads `apps/server/.env`. With both keys and no fake switch, each frame is one paid Gemini call, and each new line is one paid ElevenLabs call.
+- `STORE_LIST_PATH` is the file with the items that the store sells: the barcode, the price, and the name of each. The default is `catalog/store-list.dev.json`, as a path from `apps/server`. A barcode that the file does not hold gets the line "This product is not in this store."
+- `RECOGNITION_CONCURRENCY` is the number of recognition calls that one session runs at the same time, from 1 to 12. The default is 8. The rate limit of the Gemini key must allow that for each shopper.
+- `RECOGNITION_REFERENCES` is the number of reference pictures of one store item in each recognition call for a frame, from 0 to 3. The default is 3, and `0` means none.
+- `RECOGNITION_PIPELINE` is `frame` or `observe`. The default `frame` is the pipeline for the demo. `observe` describes the held product with a call that holds no store data, searches the store list, and verifies. See "The observe pipeline" in `apps/server/README.md`.
+- `LABEL_MIN_CONFIDENCE` is the confidence from which the server takes the store item that the label call chose, from 0 to 1. The default is 0.7.
+- `REFERENCE_DIR` is the folder with the reference pictures of the store items. The default is `catalog/reference`, as a path from `apps/server`.
+- `FAKE_PRODUCT_INFO=1` makes the server read the allergens and the diets of a scanned product from `apps/server/fixtures/product-info`, with no call to Open Food Facts. The flag `--fake` of `dev:fake` turns it on.
+
+### A barcode demo with the products at hand
+
+The server knows a barcode only when the store list holds it. `apps/server/catalog/store-list.dev.json` has 10 products of Italian supermarkets.
+
+The fast way to add a product needs the phone alone, and no restart: open "Glance Mock" on the phone, tap "Add or edit a product", scan the barcode, type the price, and take the pictures. `apps/mobile/android/README.md` has the steps, in "Add a product from the phone". The server writes the item into the file of `STORE_LIST_PATH`.
+
+To add the products on the table by hand:
+
+1. Open `apps/server/catalog/store-list.dev.json`.
+2. Add one entry for each product. `gtin` is the row of digits under the barcode: 8, 12, or 13 digits, with no space. `priceCents` is the price in cents. `name` is the name that the voice says.
+
+   ```json
+   { "gtin": "8076809513753", "priceCents": 289, "name": "Pesto alla genovese", "brand": "Barilla", "packSize": "190 g" }
    ```
 
-2. **Branching & Workflow:**
-   - Create feature branches off `main` (e.g. `feature/<name>` or `fix/<name>`).
-   - Keep empty target folders tracked with `.gitkeep` until initial project code is generated.
+3. Start the server again. The start log has `store list: catalog/store-list.dev.json, <n> items`. A wrong digit stops the start: the message names the entry and says that the check digit is wrong.
+4. Show the barcode to the glasses, or to the phone camera in mock mode.
+
+- `brand` and `packSize` are optional. With real recognition, the model gets each item of the list and chooses one by the meaning of the package text. So an item with an English name matches a package with Finnish or Swedish text.
+- With real recognition, start the server with the demo files: `CATALOG_PATH=catalog/catalog.demo.json STORE_LIST_PATH=catalog/store-list.demo.json npm run dev --workspace @glance/server`. The demo catalog holds no invented product, and the demo store list holds the products on the demo table, with invented prices. `apps/server/README.md` has the details, in "A demo with real products".
+- With `dev:fake` the server does not ask Open Food Facts. A product with no file in `apps/server/fixtures/product-info` then has no allergen data, and the voice says so to a shopper with an allergen or a diet in the profile.
+- `FAKE_PRODUCT_INFO=0 npm run dev:fake --workspace @glance/server` keeps recognition and speech fake, and reads the allergens and the diets from Open Food Facts. That call needs no key and costs no money. Open Food Facts allows 15 product reads each minute, and the server keeps each answer in `apps/server/.cache/products`.
+- The label call can compare a still with photos of the products. Take them through the glasses with `npm run reference --workspace @glance/server -- <gtin>`, one time for the front and one time for the barcode side. The server needs `DEMO_KEY`. A picture can show your room, and Git ignores the folder `apps/server/catalog/reference/`. `apps/server/README.md` has the steps, in "Reference pictures".
+- A test of the server wants a fixture for each item of `store-list.dev.json`. So do not commit the demo entries. For a list of your own, copy the file and give its path in `STORE_LIST_PATH`.
+- `apps/server/README.md` has the rules, in "Barcode scan".
+
+### Phone UI
+
+```bash
+npm run dev --workspace @glance/phone-ui      # dev server on port 5173
+npm run build --workspace @glance/phone-ui    # writes apps/mobile/ui/dist
+```
+
+Open `http://localhost:5173/?ready=1&api=/` in a browser to shop against the server on port 8080, with no phone. Open `http://localhost:5173/?replay=1` to see one recorded shop with no server.
+
+### Website
+
+```bash
+npm run dev --workspace @glance/website       # dev server on port 5174
+npm run build --workspace @glance/website     # writes apps/website/dist
+```
+
+Open `http://localhost:5174/kiosk` for a kiosk of the server on port 8080. Open `http://localhost:5174/kiosk?replay=1` for a recorded run with no server.
+
+Both dev servers send each `/api` request to `GLANCE_SERVER_ORIGIN`. The default is `http://localhost:8080`.
+
+### Display HUD
+
+```bash
+npm run dev --workspace @glance/display-pow -- --port 5175 --strictPort
+```
+
+Open `http://localhost:5175/` for a recording with no server. `apps/display-pow/README.md` shows how to follow a live session.
+
+### Android app
+
+Build the phone UI first, because the Gradle build copies `apps/mobile/ui/dist` into the APK and does not run npm. Then run these in `apps/mobile/android`:
+
+```bash
+./gradlew :app:assembleDebug    # builds app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:installDebug     # installs the debug build on each attached phone
+```
+
+- With more than one phone attached, set `ANDROID_SERIAL` to the serial of the test phone before `installDebug`.
+- The app reads the server address from `glance.serverUrl` in `local.properties`. The default is `http://10.0.2.2:8080`, which is the host machine as an emulator sees it.
+- A phone on USB reaches a server on this machine with `adb -s <serial> reverse tcp:8080 tcp:8080` and `glance.serverUrl=http://127.0.0.1:8080`.
+- The debug build has three screens: "Glance" with the phone UI, "Glance Mock" with the menu of mock mode, and "Glance Probe" with the checks for the glasses and for mock glasses.
+- "Glance Mock" also holds the settings of the app: the server address, and the two times of the still photo of a barcode (`Barcode wait (ms)` and `Still gap (ms)`). They need no new build, and they also count for real glasses.
+- `./gradlew :core:test :app:assembleDemo` builds the signed APK for the testers. It needs a keystore: see "The demo build" in `apps/mobile/android/README.md`.
+- `tools/fake-server` holds a small server for work on the app alone. Start it with `node server.mjs`, and test it with `npm test` in that folder.
+- `scripts/integration/android/run-spine.mjs` runs the instrumented tests on a phone with mock glasses, against `apps/server` with fake recognition, fake speech, and fake product details. Run `npm install` in `scripts/integration` one time, then `node android/run-spine.mjs --integration`. See "Instrumented tests" in `apps/mobile/android/README.md`.
+
+## Branches and commits
+
+- Do not commit on `main`. Work on a branch.
+- Each commit message is a conventional commit: `type(scope): description`.
 
 ## Hooks
 

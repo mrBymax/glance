@@ -74,3 +74,9 @@ assets/video-mockup/media
 
 # Preserve .gitkeep files across repository
 !.gitkeep
+
+# Logs and saved frames of local demo runs
+logs/
+
+# Reference pictures of the store items. A picture can show a room and people.
+apps/server/catalog/reference/
