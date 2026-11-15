@@ -31,6 +31,34 @@ async function open(url, viewport, scheme = 'light') {
   return page;
 }
 
+/*
+ * The deck sells a Fanta in place of the rye bread of the recorded runs (owner's decision, 15 November). The price
+ * stays 2.60, so the total stays 4.49. This map rewrites the text of the rendered page before each picture.
+ */
+const RENAMES = [
+  ['Rye bread', 'Fanta'],
+  ['500 g', '1.5 L'],
+  ['five hundred grams', 'one and a half litres'],
+  ['Demo payment. No money moved.', ''],
+];
+
+/** Rewrites the text nodes of the page with RENAMES and hides an element whose text becomes empty. */
+async function rename(page) {
+  await page.evaluate((pairs) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      let text = node.textContent;
+      for (const [from, to] of pairs) text = text.split(from).join(to);
+      if (text === node.textContent) continue;
+      node.textContent = text;
+      if (text.trim() === '' && node.parentElement) node.parentElement.style.display = 'none';
+    }
+  }, RENAMES);
+  await sleep(300);
+}
+
 /**
  * Takes one picture of each state of a recorded run. Each state is the moment its text shows on the page, plus a short
  * pause for the transition; the replays loop or run on timers, so a fixed time can land on the wrong state.
@@ -40,6 +68,7 @@ async function run(url, viewport, shots, scheme) {
   for (const [text, name] of shots) {
     await page.waitForFunction((value) => document.body.innerText.includes(value), { timeout: 40000 }, text);
     await sleep(900);
+    await rename(page);
     await page.screenshot({ path: `${outDir}${name}.png` });
   }
   return page;
@@ -85,19 +114,9 @@ if (want('phone')) await (await run(`${PHONE}/`, phone, [['Link glasses', 'phone
 if (want('kiosk')) {
   await (await run(`${KIOSK}/kiosk?replay=1`, { width: 1920, height: 1080, deviceScaleFactor: 1 }, [
     ['Waiting for your nod', 'kiosk-connected'],
-    ['No money moved', 'kiosk-paid'],
+    ['No money moved', 'kiosk-paid-clean'],
     ['Look at this code to pay', 'kiosk-idle'],
   ])).close();
-  // The paid state without its demo note: the page lays out the rest again, so nothing looks cut.
-  const page = await open(`${KIOSK}/kiosk?replay=1`, { width: 1920, height: 1080, deviceScaleFactor: 1 });
-  await page.waitForFunction(() => document.body.innerText.includes('No money moved'), { timeout: 40000 });
-  await page.evaluate(() => {
-    const note = [...document.querySelectorAll('*')].find((node) => node.childElementCount === 0 && node.textContent?.trim() === 'Demo payment. No money moved.');
-    if (note) note.style.display = 'none';
-  });
-  await sleep(300);
-  await page.screenshot({ path: `${outDir}kiosk-paid-clean.png` });
-  await page.close();
 }
 
 // The Display HUD mockup, on the 600 x 600 screen of Meta Ray-Ban Display.
