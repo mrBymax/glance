@@ -1,7 +1,9 @@
 // Starts the Glance server of apps/server in fake mode, for the integration tests.
 import { spawn } from 'node:child_process';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -20,13 +22,16 @@ const SERVER_VARIABLES = [
   'ELEVENLABS_API_KEY', 'ELEVENLABS_VOICE_EN', 'ELEVENLABS_VOICE_IT', 'SPEECH_CACHE_DIR', 'SAVE_FRAMES', 'PAYMENT_DELAY_MS',
   'SECOND_LOOK_WAIT_MS', 'DEMO_KEY', 'STORE_LIST_PATH', 'FAKE_PRODUCT_INFO', 'OFF_BASE_URL', 'PRODUCT_INFO_USER_AGENT', 'PRODUCT_CACHE_DIR',
   'LABEL_MIN_CONFIDENCE', 'REFERENCE_DIR', 'RECOGNITION_CONCURRENCY', 'RECOGNITION_REFERENCES', 'BIOMETRIC_ABOVE_CENTS',
+  'STORE_EDIT',
 ];
 
 /**
  * The environment of the server of a test: the shell environment with no server variable, and then the three fake switches.
  * So the server reads the dev catalog and the dev store list, and it calls no vendor and no Open Food Facts.
+ * `storeDir` is a folder of the test, or null. With it, the server reads the file `store-list.json` of the folder and
+ * keeps its reference pictures in `reference` below it, so a test that adds a store item writes no file of the repository.
  */
-export function fakeServerEnv(shell, { port, fakeScript, paymentDelayMs, demoKey }) {
+export function fakeServerEnv(shell, { port, fakeScript, paymentDelayMs, demoKey, storeDir = null }) {
   const env = { ...shell };
   for (const name of SERVER_VARIABLES) delete env[name];
   env.PORT = String(port);
@@ -35,6 +40,10 @@ export function fakeServerEnv(shell, { port, fakeScript, paymentDelayMs, demoKey
   env.FAKE_PRODUCT_INFO = '1';
   env.PAYMENT_DELAY_MS = String(paymentDelayMs);
   if (demoKey !== null) env.DEMO_KEY = demoKey;
+  if (storeDir !== null) {
+    env.STORE_LIST_PATH = join(storeDir, 'store-list.json');
+    env.REFERENCE_DIR = join(storeDir, 'reference');
+  }
   return env;
 }
 
@@ -61,12 +70,16 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
  * Starts the server with --fake on a free port and waits until GET /healthz answers.
  * `fakeScript` is the path of a FAKE_RECOGNITION script file. Without it the server plays its default script.
  * `demoKey` is the key of GET /api/demo/latest. Without it that path answers 404.
+ * The server gets a copy of the dev store list and an empty folder for reference pictures, both in a temp folder
+ * that `stop` removes. The paths under /api/store write there.
  * Returns the address, the demo key, the log lines so far, and `stop`.
  * Throws when the server does not start, or when one of its three fake switches is off.
  */
 export async function startFakeServer({ fakeScript, paymentDelayMs = 300, demoKey = null } = {}) {
   const port = await freePort();
-  const env = fakeServerEnv(process.env, { port, fakeScript: fakeScript ?? null, paymentDelayMs, demoKey });
+  const storeDir = mkdtempSync(join(tmpdir(), 'glance-integration-store-'));
+  copyFileSync(resolve(SERVER_DIR, 'catalog/store-list.dev.json'), join(storeDir, 'store-list.json'));
+  const env = fakeServerEnv(process.env, { port, fakeScript: fakeScript ?? null, paymentDelayMs, demoKey, storeDir });
 
   // node runs the server with no npm and no shell between, so `stop` ends the server process itself.
   const child = spawn(process.execPath, ['--import', 'tsx', 'src/main.ts', '--fake'], {
@@ -87,6 +100,7 @@ export async function startFakeServer({ fakeScript, paymentDelayMs = 300, demoKe
   const stop = async () => {
     if (child.exitCode === null && child.signalCode === null) child.kill();
     await exited;
+    rmSync(storeDir, { recursive: true, force: true });
   };
 
   const url = `http://${HOST}:${port}`;

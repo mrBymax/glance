@@ -124,6 +124,6 @@ sequenceDiagram
 
 ## Shared code
 
-`lib/server.mjs` exports `startFakeServer`. It removes each server variable of the shell from the environment of the server, sets `FAKE_RECOGNITION`, `FAKE_SPEECH`, and `FAKE_PRODUCT_INFO`, and waits for `GET /healthz`. It throws when the answer does not show each of the three fake switches. So the server reads the dev catalog and the dev store list, also when the shell sets `STORE_LIST_PATH`. A script can give it the path of a `FAKE_RECOGNITION` script file and a `DEMO_KEY`.
+`lib/server.mjs` exports `startFakeServer`. It removes each server variable of the shell from the environment of the server, sets `FAKE_RECOGNITION`, `FAKE_SPEECH`, and `FAKE_PRODUCT_INFO`, and waits for `GET /healthz`. It throws when the answer does not show each of the three fake switches. So the server reads the dev catalog and the dev store list, also when the shell sets `STORE_LIST_PATH`. The store list is a copy in a temp folder, with an empty folder for reference pictures, so a test that adds a store item through `/api/store` writes no file of the repository. `stop` removes the folder. A script can give it the path of a `FAKE_RECOGNITION` script file and a `DEMO_KEY`.
 
 `lib/pages.mjs` exports `startDevServer`, `startBrowser`, `openPage`, and `waitForText` for a test with web pages.
