@@ -4,21 +4,41 @@ This directory contains the canonical context documents for the Meta Glance 3-mi
 
 ## The deck of the final
 
-`Meta-Glance-pitch.pdf` is the deck of the final: 18 slides of 1920 x 1080, in the design of the site. It replaces the 5-slide outline of `00-master-deck.md`, which holds figures that nobody verified.
+`Meta-Glance-pitch.pdf` is the deck of the final: pages of 1920 x 1080, in the design of the site. It follows `script.md`, the pitch script of the owner: the 12 pitch pages of the script, a team page, a recap page, and backup pages B1 to B9 for questions. It replaces the 5-slide outline of `00-master-deck.md`, which holds figures that nobody verified.
 
 | File | Content |
 |---|---|
 | `Meta-Glance-pitch.pdf` | The deck |
-| `slides/` | One PNG of each slide, for the video editor |
-| `notes.md` | The speaker notes, and the places where the video cuts to footage |
+| `script.md` | The pitch script of the owner, word for word |
+| `slides/` | One PNG of each page, for the video editor |
+| `notes.md` | The script per page, with the cues for the footage |
 | `design.md` | The design decisions, the references, and the build steps |
-| `deck.src.html` | The source of the slides; `deck.html` is the built page |
-| `diagrams/` | The seven diagrams, each as a standalone page |
+| `deck.src.html` | The source of the pages; `deck.html` is the built page |
+| `diagrams/` | The six diagrams, each as a standalone page |
+| `assets/photos/` | The photos of the owner (see "Photo slots") |
 | `assets/screens/` | Screens of the app, the kiosk page, and the HUD mockup from their replay modes, and frames of the animation |
-| `assets/media/` | Team photos, the logo, and the crops that the slides use |
+| `assets/media/` | Team photos, the logo, the Glance code sticker, and the crops that the pages use |
 | `scripts/` | The capture and build scripts |
 
 To build again: `node docs/pitch/scripts/diagrams.mjs && node docs/pitch/scripts/build.mjs`. `design.md` has the full steps.
+
+### Photo slots
+
+Four pitch pages wait for a photo or a video frame of the owner. The titles and the captions are already on the page; only the image is missing. Each slot has one file with a fixed name:
+
+| File | Page | Shot |
+|---|---|---|
+| `assets/photos/checkout-queue.jpg` | 3, left | A queue at a checkout belt |
+| `assets/photos/one-hand-short.jpg` | 3, right | A shopper with a basket in one hand and a phone in the other |
+| `assets/photos/rye-bread.jpg` | 5 and 6 | First-person, two hands hold a rye bread |
+| `assets/photos/bus-door.jpg` | 11 | A bus door with a Glance code sticker |
+
+To fill a slot:
+
+1. Save the image as a JPEG with the name of the table in `docs/pitch/assets/photos/`. Landscape works best; the page crops it to fill the slot (`object-fit: cover`), so keep the subject near the center. The pages 5, 6, and 11 fill the whole page, so use at least 1920 x 1080 pixels there.
+2. Run `node docs/pitch/scripts/build.mjs`. The build uses each file that exists and keeps the framed slot for each file that does not. Its last line lists each slot as `photo` or `slot`.
+
+For the bus page, print the sticker of `assets/media/glance-sticker.svg` (or `.png`, 1200 x 1560 pixels). It holds a real QR code with the valid Glance code `GL1 BUS4`, in the style of the kiosk page. `node docs/pitch/scripts/sticker.mjs <code>` draws it for another code. No place has the code `BUS4` today.
 
 ## Structure and Pacing
 

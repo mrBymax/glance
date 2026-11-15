@@ -4,7 +4,9 @@ This file holds the decisions behind `deck.src.html` and the references for them
 
 ## Brief
 
-A 16:9 deck for the final of the Meta challenge at Junction 2026, and the base of a video that cuts between slides and real footage. The structure is the one the owner asked for: title, problem, solution, why now, our protocol as a use case, business model, competition, go-to-market, future vision, team, end. The use case gets 8 of the 18 slides. The deck uses the design language of the site and the app, and it says nothing that the repository or a fetched source does not support.
+A 16:9 deck for the final of the Meta challenge at Junction 2026, and the base of a video that cuts between pages and real footage. The deck follows `script.md`, the pitch script of the owner: 12 pitch pages with the wording of the script, a team page, a recap page, and backup pages B1 to B9 for the questions of the judges. The design language is that of the site and the app.
+
+The first version of the deck (18 slides in the order title, problem, solution, why now, use case, business model, competition, go-to-market, vision, team, end) is in the history of this folder. Its best pages are the backup pages now.
 
 ## Research
 
@@ -42,6 +44,11 @@ A 16:9 deck for the final of the Meta challenge at Junction 2026, and the base o
 | Go-to-market as three stages with what each one needs, marked "a plan" | `diagram-design` type Steps, owner truth rules | No date and no partner exist, so the path has no time axis. |
 | The future as a map of places around the loop; only the checkout is solid and marked "Built" | `docs/protocol.md` ("Built today, and enabled by the protocol") | The dashed cards are what the protocol enables; the slide says "not built" in its kicker and in its footer. |
 | The business slide as a layer stack and four reasons, the ask on a black band | Owner brief | The ask is the one call to action of the deck, so it takes the black of the one action. |
+| What the glasses say, in the captions window of the app (pages 1, 2, 5, 6, 7, 11) | The phone UI (`apps/mobile/ui`, the dark captions window), owner brief | The captions read as speech. The earlier line stays above in gray, as the app shows it, on each "same page, new caption" pair. |
+| Photo slots for the owner's photos (pages 3, 5, 6, 11), with the titles and captions already laid out | Owner brief: no stock or generated image | A missing photo shows as a framed dark slot with the shot description and the file name. `build.mjs` swaps in `assets/photos/<name>.jpg` when it exists. |
+| The Glance code sticker drawn as a real QR code (`GL1 BUS4`), error correction M and a quiet zone of 4 modules | `apps/website/src/kiosk/qr.ts`, `packages/shared/src/kioskCode.ts` | It can be printed for the bus shot. A check of the PNG against the QR matrix found no wrong module. |
+| Pages 7 and 8 from the replay of the kiosk page | `apps/website/src/kiosk/kioskRun.ts` | The replay shows the exact state of the script: Checkout 3, Demo Market, rye bread 2.60 and oat drink 1.89, 4.49 EUR, waiting for the nod, then paid. |
+| The head window drawn as built now: it opens 300 ms after the line of each prompt starts | `apps/mobile/android/README.md` (the head window, after commit `2a82c11`) | The first deck drew the older rule (1.2 s, product prompts only). |
 
 ## Tokens
 
@@ -63,8 +70,8 @@ The deck is HTML and CSS, printed by headless Chrome. Each script names its tool
 1. `scripts/capture-app.mjs`: the screens of the phone app, the kiosk page, and the HUD mockup, from the replay modes of the app checkout (three Vite dev servers on ports 18431 to 18433). No server and no vendor call.
 2. `scripts/capture-hero.mjs`: frames of the project animation (`assets/animation`), rendered with SwiftShader.
 3. `scripts/prepare-assets.mjs`: the team photos, the pixelated photo, and the logo of the site build, and the crops of the screens, into `assets/media`.
-4. `scripts/diagrams.mjs`: the seven diagrams as standalone pages in `diagrams/`.
-5. `scripts/build.mjs`: inlines the icons and the diagrams into `deck.html`, checks that nothing leaves its slide and that no text is under 24 px, and writes `Meta-Glance-pitch.pdf` and `slides/NN-name.png`.
+4. `scripts/diagrams.mjs`: the six diagrams as standalone pages in `diagrams/`. `scripts/sticker.mjs`: the Glance code sticker in `assets/media`.
+5. `scripts/build.mjs`: inlines the icons, the diagrams, and the photos of `assets/photos` (or their slots) into `deck.html`, checks that nothing leaves its slide and that no text is under 24 px, and writes `Meta-Glance-pitch.pdf` and `slides/NN-name.png`.
 
 The PDF keeps the text as text and the diagrams as vectors. Chrome embeds the variable font as Type 3 glyphs.
 

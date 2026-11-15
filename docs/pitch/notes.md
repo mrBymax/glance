@@ -1,131 +1,150 @@
 # Speaker notes of the pitch deck
 
-These notes go with `Meta-Glance-pitch.pdf` (18 slides). The deck is the base of the video pitch: each slide has the words to say, about 20 to 40 seconds of speech, and the places where the video cuts to real footage.
+These notes go with `Meta-Glance-pitch.pdf`. The spoken text of each page is the text of `script.md`, the script of the owner, word for word. These notes add only the cues for the footage of the video, marked **Footage**, and short pointers for the backup pages.
 
-Rules for the speaker:
+The pages of the PDF:
 
-- Say only what the slide and the repository support. The payment is a mock. No store, bus, or partner uses Glance today.
-- "Footage" means a cut to a real recording with the glasses. Each footage slot on a slide is a frame for that cut. Do not show the saved test frames of `logs/frames`: they show a venue and people.
-- A slide number in brackets is the slide on screen while you speak.
+- Pages 1 to 12: the pitch pages of the script.
+- Page 13: Team. Page 14: Recap. The script leaves both as TODO.
+- Page 15: Backup. Pages B1 to B9 after it, for the questions of the judges.
 
-Total: about 8 to 9 minutes at a calm pace. For a 3-minute cut, keep slides 1, 2, 3, 6, 7, 8, 9, 12, 13, 18, and say one sentence for each of the others.
+## Project name
 
-## 1. Title: "Look. Nod. Done."
+The recap page shows one name: "Meta Glance: Look, Nod, Done", because it matches the website. The owner picks one of the four names of the script:
 
-**Footage, before the title.** Five seconds, first person: a hand holds a product, a voice in the ear says the name and the price, the head nods. Then cut to the title.
+- Meta Glance: Glance, Nod, Go
+- Meta Glance: Look, Nod, Paid
+- Meta Glance: Look, Nod, Done
+- Meta Glance: Pay with a Nod
 
-> This is Meta Glance. A protocol for AI glasses. You look at a code, you hear what it is and what it costs, and you nod. That is the whole interface. We built it at Junction for the Meta challenge, on Ray-Ban Meta glasses. We are an independent team, and this is not a Meta product.
+## 0:00 Cold open: the first wow (10 s)
 
-About 20 seconds.
+No greeting, no names. Hold the carton up and look at it.
 
-## 2. Problem: "Checkouts, tickets, and gates ask for your hands and your eyes."
+**Footage.** First person through the glasses: the hand lifts the oat drink carton. Keep the real voice of the glasses on the audio track.
 
-> Every small transaction of the day asks for a screen. Take the phone out, unlock it, open an app, aim, read, tap. That is hard with bags in both hands, a child, a cane, or a stroller. And it is harder still if you cannot read the screen. The World Health Organization counts at least 2.2 billion people with a near or distance vision impairment. Small print and touchscreens shut many of them out.
+### Page 1
 
-About 30 seconds. The number is from the WHO fact sheet of 10 February 2026. Do not add other statistics.
+"Oat drink, one litre, one eighty-nine."
 
-## 3. Solution: "Meta Glance: look at a code, hear the offer, nod to confirm."
+Nod once, clearly.
 
-> Glance is one loop for every place that can show a code. One: look at a Glance code. Two: the voice says what it is and what a nod will do. Three: nod to confirm, or shake to say no. Four: the place gets the answer and acts on it. Two rules make it safe. You always hear what a nod does before it counts. And a nod counts only while you look at the code.
+**Footage.** The nod, from the side: the head moves, the phone stays in the pocket.
 
-About 30 seconds. Optional cut: a person looks at the kiosk code, the phone stays in the pocket.
+### Page 2
 
-## 4. Why now? "Meta asks for an everyday use of a first-person view."
+"Added. That carton is in my cart, and I never touched a phone."
 
-> Meta asked for exactly this: the best everyday use case for AI glasses, where a first-person view enables new or better interactions, hands-free and in the moment, beyond mirroring a phone. The timing is right. EssilorLuxottica reported AI glasses almost doubling in revenue in the second quarter of 2026. And Meta's Wearables Device Access Toolkit now gives a phone app the camera, the motion sensor, and the touchpad of the glasses. Everything Glance needs.
+## 0:10 The problem (50 s)
 
-About 30 seconds. Both quotes on the slide are word for word from the challenge text (CHALLENGE.md). The revenue quote is from the EssilorLuxottica Q2 and H1 2026 results, 28 July 2026.
+### Page 3
 
-## 5. Our protocol (1 of 8): "The Glance protocol links a person, a place, and a nod."
+Think about your last trip to the supermarket. You had two options, and both were bad.
 
-> Four parts. The glasses: their camera sees the code, their speakers play the voice, their motion sensor feels the nod. The phone app reads the code and pixelates faces. The Glance server links the wearer to the place, writes each spoken line, and decides if a nod counts. And the place: anything that shows a Glance code and acts on the result. A place registers once, shows its code, and follows one event stream. That is all a business has to build.
+Option one: the classic checkout. You queue. You take everything out of your basket, put it on the belt, and pack it all again.
 
-About 35 seconds.
+Option two: self-scanning. It is faster, but now you shop with one hand, because the other one holds a scanner or your phone. And at the end a touchscreen still waits for you.
 
-## 6. Our protocol (2 of 8): "Our use case: shop a store with your eyes, pay with a nod."
+**Footage.** The two photos of the page, or a short shot of each: a queue at a checkout belt, and a shopper with a basket in one hand and a phone in the other.
 
-> Our first use case is a store. In the aisle, you hold up a product and hear "Oat drink, one litre, one eighty-nine. Nod to add." You nod. At the checkout you look at the code on the screen and hear the store and the total. You nod, and it is paid. The phone stays locked in your pocket the whole time.
+### Page 4
 
-About 25 seconds. The four lines on the slide are the lines of the recorded demo run of the app.
+If you are blind or have low vision, neither option works. 83 percent of visually impaired shoppers cannot easily get the information on a package, and a touchscreen tells them nothing.
 
-## 7. Our protocol (3 of 8): "Hold a product up. Hear its name and its price."
+Stores tried to fix this with cameras in the ceiling. Every store needed a refit. Amazon took the system out of its Fresh stores in 2024.
 
-**Footage, in the slot.** First person through the glasses: a hand lifts the oat drink; the voice says its name and price. Keep the real audio.
+## 1:00 The solution: the second wow (70 s)
 
-> The glasses see what is in your hand. Glance knows the product by sight, from pictures of each item that the store sells, or by its barcode, from the list of the store. On the phone, the same line shows as text, with a warning when the product has an allergen from your profile. Here, gluten.
+### Page 5
 
-About 25 seconds.
+So we moved the camera. It sits on the shopper.
 
-## 8. Our protocol (4 of 8): "Nod to add. The nod counts while the voice still speaks."
+I pick up the next product and look at it. "Rye bread, two sixty." A look only tells me. Nothing enters my cart until I nod.
 
-**Footage, in the slot.** The wearer nods. The cart on the phone updates. Show the phone screen in the same shot, or as a split.
+Nod.
 
-> You do not have to wait for the voice to finish. For a product, the nod counts from 1.2 seconds into the line, and the line stops as soon as you nod. For a payment it is stricter: the nod counts only after the whole line has played. On real Ray-Ban Meta glasses, the phone reported a nod 300 to 430 milliseconds after it started.
+**Footage.** First person: two hands hold the rye bread; the voice says "Rye bread, two sixty. Nod to add." Then the nod.
 
-About 30 seconds. The 300 to 430 ms come from one wearer and three prompts on 14 November 2026 (`apps/mobile/android/README.md`, "The nods of the test of 2026-11-14"). Say it as one test, not as a benchmark.
+### Page 6
 
-## 9. Our protocol (5 of 8): "Look at the checkout code. Hear the total. Nod to pay."
+"Added. Total four forty-nine." Both hands stayed on my shopping. Now I am done, so I walk to the checkout and look at the code on its screen.
 
-**Footage, optional.** The wearer walks to the kiosk screen and looks at the code; the kiosk switches to "Waiting for your nod", then to "Paid".
+**Footage.** The walk to the checkout screen, first person, ending on the Glance code.
 
-> At the checkout, the kiosk shows a Glance code. You look at it, and the voice says: "Checkout 3 at Demo Market. Two items, four euros forty-nine. Nod to pay." You nod. The kiosk shows the result, and the receipt waits on your phone. In this demo the payment is a mock: no money moves.
+### Page 7
 
-About 25 seconds.
+"Checkout 3 at Demo Market. Two items, four euros forty-nine. Nod to pay."
 
-## 10. Our protocol (6 of 8): "Built for people with all abilities, not only for a demo."
+Nod.
 
-> Glance works without sight: every name, price, and warning is spoken. It works with full hands. And if you cannot nod, you double tap the glasses or press a button on the phone. You can swap nod and shake, and take 15 seconds or all the time you need. Set your allergens, diet, and budget once, and you hear a warning before you nod. In English and Italian.
+**Footage.** First person on the kiosk code while the voice plays, then the nod.
 
-About 30 seconds. Do not claim a certification or a WCAG conformance level.
+### Page 8
 
-## 11. Our protocol (7 of 8): "Nothing happens by accident, and nobody nearby is exposed."
+Paid. I unloaded nothing, I scanned nothing, I touched nothing.
 
-> Consent is built into the loop. A look alone changes nothing. A nod pays only while the code is in view, and only after you heard the amount. A shake cancels. A nod is consent, not identity, so the server can ask for a fingerprint above an amount. For the people around you, the phone pixelates every face before a frame leaves it. If face detection fails, the frame is dropped. The server writes no frame to disk.
+And the store installed nothing. It shared its price list, and it showed one code on a screen that it already had.
 
-About 35 seconds. The fingerprint check is a server setting that is off by default; say "can ask", not "asks".
+Stop. Count two seconds. Let the room react.
 
-## 12. Our protocol (8 of 8): "It runs on stock Ray-Ban Meta glasses, through Meta's own toolkit."
+**Footage.** The kiosk screen turns to "Paid. 4.49 EUR".
 
-**Footage, optional.** The phone goes into a pocket with the screen off; the shop goes on.
+## 2:10 The turn (15 s)
 
-> This is not a mockup. The phone takes the camera stream of the glasses at 7 frames a second and reads their head motion at 30 hertz. Naming a product by sight takes about 1.2 seconds per call. And we handled the hard parts the challenge asked for: permissions through the Meta AI app, a late nod after a stall of the link, the screen off in a pocket, lost glasses, and a spoken line for every error.
+### Page 9
 
-About 35 seconds. The 1.2 s is the median of one recognition call on 146 frames (`apps/server/README.md`). The screen-off session is built; the READMEs list what was not yet measured with the real glasses.
+Cool? Good. Now forget the supermarket.
 
-## 13. Business model: "For Meta: a reason to wear the glasses every day."
+Glance is not a shopping app. Glance is a protocol.
 
-> Why is this good for Meta? It works today, on your glasses, with your toolkit. It is a platform, not an app: any place plugs in with a code and an event stream, and the loop stays one. It turns the glasses into something you use many times a day: to pay, to board, to open a door. And it is inclusive from the first step. Our ask is simple: we want to keep building Glance, full time, with Meta.
+## 2:25 The protocol (75 s)
 
-About 35 seconds. No price, fee, revenue, or partner exists. Do not invent one.
+### Page 10
 
-## 14. Competition: "Others solve one part. Glance closes the loop."
+Look again at what happened at that checkout. A place showed a code. The glasses read it. A voice said what a nod would do. A nod confirmed, and the place got the answer.
 
-> Scan-and-go apps and self-checkouts still need your hands and your eyes. Amazon's Just Walk Out needs cameras across the store, and Amazon took it out of its US Fresh stores in 2024. Meta's own glasses can already describe a scene and call a volunteer, and Meta showed a "scan and pay" test in India. Glance is the piece in between: the place states its offer in your ear, and a nod counts only while you look at it. A protocol for any place, not one store system.
+Look, hear, nod, done. Not one of those steps is about groceries.
 
-About 35 seconds. Each row has its source in the footer of the slide.
+### Page 11
 
-## 15. Go-to-market: "Start at one checkout. Grow to every place that can show a code."
+This is a Glance code. It is a QR code. It goes on a screen, or on a sticker.
 
-> This is our plan, and nothing in it is agreed with a partner yet. First, a pilot at one store checkout, with a staffed lane beside it. We count the nods that pay, any yes by mistake, and the time to pay. That needs a payment provider. Second, places with a fixed offer: a bus fare, a gate, a vending machine. Third, the loop as a feature of the glasses themselves, with no phone app. The first wearers are the people who gain the most.
+Put it by the door of a bus. You board, you look at it, and you hear: "Line 4 to the harbor. Single ticket. Nod to buy." You nod and you sit down. No app to open, no card to tap.
 
-About 35 seconds.
+**Footage.** The printed sticker (`assets/media/glance-sticker.png`, the code `GL1 BUS4`) by a door, first person. The bus is a vision: no bus uses Glance, and today's server speaks no offer of a place other than the store checkout.
 
-## 16. Future vision: "Any code in the world, answered with a nod."
+### Page 12
 
-> The checkout is built. Everything around it is what the protocol enables: a bus ticket by the door, a ticket gate, a vending machine, an order at a restaurant table, the story of a painting. Same code, same rules, same nod. On glasses with a display, the same prompt appears in the lens; we have a mockup of that on the Display toolkit. The next part to build is a way for each place to state its own offer.
+Put it on a ticket gate, and a nod opens the gate. Put it on a vending machine or a parking meter, and a nod pays. Put it on a restaurant table, and it reads you the menu.
 
-About 30 seconds. Say clearly that only the checkout exists.
+Any place that can show a code can take a nod. The place registers with the Glance server and gets the result when you nod. That is the whole integration.
 
-## 17. Team: "Four builders who want to make this real."
+This is a vision that we have, where you can leave the phone at home.
 
-> We are Alessandro, Federico, Marco, and Michele. Software engineers and researchers in AI and cybersecurity, from the University of Udine, Klagenfurt, and ETH Zurich. We built this loop end to end at Junction, and we want to keep going.
+## Team presentation and recap
 
-About 20 seconds. Names and titles are as the owner gave them; check them before recording.
+The script leaves this part as TODO, so these two pages have no spoken text yet.
 
-## 18. End: "Look. Nod. Done."
+### Page 13: Team
 
-**Footage, after the end card.** The last nod at the kiosk, the "Paid" screen, the wearer walks out.
+The four people in alphabetical order, with their titles: Alessandro De Biasi, Federico Bertossi, Marco Ceccon, Michele Lizzit.
 
-> Look. Nod. Done. Let us build the loop into the glasses, together. Thank you.
+### Page 14: Recap
 
-About 10 seconds.
+The page shows the project name, the punchline of the script ("Glance tells, nod buys: a protocol for paying with your glasses."), and the ask: "Our ask: we want to keep building Glance, full time, with Meta."
+
+**Footage.** The last nod at the kiosk and the "Paid" screen, before the recap page.
+
+## Backup pages, for questions
+
+These pages are not part of the timed pitch.
+
+- **B1, the protocol.** The parts: glasses, phone, Glance server, recognition, and a place. The dashed path is the code that the camera sees.
+- **B2, Glance for stores.** The seven points of the script, as written.
+- **B3, under the hood.** The paragraph of the script, and three numbers: 7 frames each second, 30 Hz head motion, and 1.2 s for one recognition call (the median of 146 frames, 14 November 2026).
+- **B4, when a nod counts.** The head window opens 300 ms after the line of each prompt starts, for a product and for a payment, and a nod or a shake during the line stops the voice at once. The nod while the voice speaks and the session with the phone locked in a pocket ran on the real glasses on 14 November 2026.
+- **B5, consent and privacy.** A nod counts only for the line you hear, and at a checkout only while its code is in view. Faces are pixelated on the phone. The server writes no frame to disk.
+- **B6, why it matters to Meta, and the ask.**
+- **B7, competition.** Each row has its source in the footer.
+- **B8, go-to-market.** A roadmap: a store pilot, more places, the loop in the glasses.
+- **B9, Glance beyond stores.** The vision of the script. Only the checkout is built.
