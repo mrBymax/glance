@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meta Glance - Split-Screen Video Mockup PoC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Atkinson+Hyperlegible:wght@400;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="studio-shell" id="studio-shell">
+    <header class="studio-toolbar">
+      <div class="toolbar-row">
+        <div class="toolbar-group">
+          <button type="button" class="ctrl-btn" id="btn-play">Play</button>
+          <button type="button" class="ctrl-btn" id="btn-restart">Restart (R)</button>
+          <button type="button" class="ctrl-btn" id="btn-speed">1.0x</button>
+          <button type="button" class="ctrl-btn" id="btn-loop">Loop: On</button>
+          <button type="button" class="ctrl-btn" id="btn-clean">Clean View for Recording (H)</button>
+        </div>
+
+        <div class="toolbar-group">
+          <label class="ctrl-label">
+            Skin
+            <select class="ctrl-select" id="select-skin"></select>
+          </label>
+          <label class="ctrl-label">
+            Layout
+            <select class="ctrl-select" id="select-layout">
+              <option value="split-all">Split: Video + Phone + Backend (16:9)</option>
+              <option value="split-phone">Split: Video + Phone Only (16:9)</option>
+              <option value="right-both">Stage: Phone + Backend (Full)</option>
+              <option value="phone-only">Phone Mockup Only (Full)</option>
+              <option value="backend-only">Backend View Only (Full)</option>
+            </select>
+          </label>
+          <button type="button" class="ctrl-btn" id="btn-load-file">Load Video File</button>
+          <input type="file" id="file-input" accept="video/*" hidden>
+        </div>
+      </div>
+
+      <div class="toolbar-row">
+        <div class="toolbar-group" id="beat-bar"></div>
+      </div>
+
+      <div class="scrubber-row">
+        <input type="range" class="scrubber-input" id="scrubber" min="0" max="10.4" step="0.01" value="0">
+        <span class="time-readout" id="time-readout">00:00.00 / 00:10.40</span>
+      </div>
+    </header>
+
+    <main class="stage-wrap">
+      <div class="stage-canvas" id="stage-canvas" data-layout="split-all">
+        <div class="video-pane">
+          <video id="clip-video" playsinline preload="auto" muted></video>
+          <div class="video-error-banner" id="video-error" hidden>
+            <strong>Video could not load from ./media/glance_cereal_pickup.mp4</strong>
+            <span>If you opened this page via file://, start a local server from the repo root (python3 -m http.server 8765) or select the MP4 manually.</span>
+            <div>
+              <button type="button" class="ctrl-btn is-active" id="btn-load-inline">Load Video File</button>
+            </div>
+          </div>
+        </div>
+        <div class="mockup-pane" id="mockup-pane">
+          <div class="mockup-stage">
+            <div class="phone-device" aria-label="Android phone mockup">
+              <div class="phone-btn-vol-up"></div>
+              <div class="phone-btn-vol-down"></div>
+              <div class="phone-btn-power"></div>
+              <div class="phone-frame">
+                <div class="phone-bezel">
+                  <div class="phone-status-bar">
+                    <span class="phone-time">20:10</span>
+                    <div class="phone-notch-cam" aria-hidden="true"></div>
+                    <span class="phone-sys-icons">
+                      <span class="phone-net">5G</span>
+                      <span class="phone-bat">88%</span>
+                    </span>
+                  </div>
+                  <div class="phone-screen" id="phone-screen"></div>
+                  <div class="phone-gesture-bar" aria-hidden="true">
+                    <div class="phone-home-pill"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="backend-inspector" id="backend-inspector" data-phase="scanning" data-speaking="false" data-triggered="false">
+              <header class="bi-header">
+                <div class="bi-title-row">
+                  <span class="bi-live-dot" aria-hidden="true"></span>
+                  <span class="bi-title" id="bi-panel-title">BACKEND &amp; GLASSES PIPELINE</span>
+                  <div class="bi-view-switch" role="tablist" aria-label="Backend panel view">
+                    <button type="button" class="bi-view-btn is-active" id="btn-bi-pipeline" data-bi-view="pipeline" aria-selected="true">Pipeline</button>
+                    <button type="button" class="bi-view-btn" id="btn-bi-pr7" data-bi-view="pr7" aria-selected="false" title="PR #7 MirrorPage + Display HudPage">PR #7 UI</button>
+                  </div>
+                  <span class="bi-phase-badge" id="bi-phase-badge">SCANNING</span>
+                </div>
+                <div class="bi-meta" id="bi-device-meta">Ray-Ban Meta Gen 2 | 720x1280 @ 7fps | Blur ON</div>
+              </header>
+
+              <div class="bi-grid" id="bi-pipeline-view">
+                <section class="bi-card bi-card-vision">
+                  <div class="bi-card-head">
+                    <span>1. EDGE VISION + WS EVENT</span>
+                    <span class="bi-tag-ok" id="bi-vision-tag">0 FRAMES STORED</span>
+                  </div>
+                  <div class="bi-crop-box" id="bi-crop-box" data-status="none">
+                    <span class="bi-crop-label" id="bi-crop-label">CROP 80% x 70%</span>
+                    <span class="bi-crop-sub" id="bi-crop-sub">Seq #1</span>
+                  </div>
+                  <pre class="bi-json-box" id="bi-json-box"></pre>
+                </section>
+
+                <section class="bi-card bi-card-audio">
+                  <div class="bi-card-head">
+                    <span>2. ELEVENLABS OPEN-EAR TTS</span>
+                    <span class="bi-badge" id="bi-audio-state">STANDBY</span>
+                  </div>
+                  <div class="bi-audio-bars" id="bi-audio-bars" aria-hidden="true">
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                  </div>
+                  <p class="bi-audio-cue" id="bi-audio-cue">Listening for shelf scan</p>
+                </section>
+
+                <section class="bi-card bi-card-imu">
+                  <div class="bi-card-head">
+                    <span>3. DAT HEAD IMU (PITCH)</span>
+                    <span class="bi-imu-val" id="bi-imu-val">+0.0 deg/s</span>
+                  </div>
+                  <svg class="bi-imu-svg" id="bi-imu-svg" viewBox="0 0 240 60" preserveAspectRatio="none">
+                    <line x1="0" y1="15" x2="240" y2="15" class="bi-imu-thresh"></line>
+                    <line x1="0" y1="30" x2="240" y2="30" class="bi-imu-zero"></line>
+                    <line x1="0" y1="45" x2="240" y2="45" class="bi-imu-thresh"></line>
+                    <polyline id="bi-imu-line" class="bi-imu-line" points="0,30 240,30"></polyline>
+                  </svg>
+                  <div class="bi-imu-foot">
+                    <span id="bi-imu-gate">GATE: LOCKED</span>
+                    <span id="bi-imu-window">THRESH +/-18 deg/s</span>
+                  </div>
+                </section>
+
+                <section class="bi-card bi-card-cart">
+                  <div class="bi-card-head">
+                    <span>4. MONGODB ATLAS SESSION CART</span>
+                    <span class="bi-cart-total" id="bi-cart-total">6.40 EUR</span>
+                  </div>
+                  <div class="bi-cart-list" id="bi-cart-list"></div>
+                </section>
+              </div>
+
+              <div class="bi-pr7-view" id="backend-pr7-view" hidden>
+                <section class="mrbd-hud-frame" aria-label="Ray-Ban Display HudPage preview">
+                  <div class="mrbd-page-header">
+                    <span class="mrbd-header-title">Glance</span>
+                    <span class="mrbd-header-meta" id="pr7-hud-camera">Camera on</span>
+                  </div>
+                  <div class="mrbd-panel">
+                    <div class="mrbd-fact-group">
+                      <span class="mrbd-label">PRODUCT</span>
+                      <div class="mrbd-body-emph" id="pr7-hud-title">No product in view</div>
+                      <div class="mrbd-body-emph" id="pr7-hud-price" hidden></div>
+                      <div class="mrbd-body-warn" id="pr7-hud-warning" hidden></div>
+                      <div class="mrbd-body" id="pr7-hud-prompt">Hold a product up to hear its price.</div>
+                    </div>
+                    <div class="mrbd-fact-group">
+                      <span class="mrbd-label">TOTAL</span>
+                      <div class="mrbd-meta" id="pr7-hud-total">6.40 EUR, 3 items</div>
+                    </div>
+                    <div class="mrbd-fact-group">
+                      <span class="mrbd-label">CAPTION, RECORDED</span>
+                      <div class="mrbd-meta" id="pr7-hud-caption">Camera on. Hold a product up to hear its price.</div>
+                    </div>
+                  </div>
+                  <div class="mrbd-action-dock" id="pr7-hud-dock" hidden>
+                    <button type="button" class="mrbd-btn mrbd-btn-primary" id="pr7-hud-yes" disabled>Add</button>
+                    <button type="button" class="mrbd-btn" id="pr7-hud-no" disabled>Skip</button>
+                  </div>
+                </section>
+
+                <section class="mirror-preview-card" data-astryx-theme="neutral" aria-label="PR 7 MirrorPage preview">
+                  <div class="mirror-preview-voice">
+                    <h2 class="astryx-heading" data-level="1">Mirror</h2>
+                    <p class="astryx-text" data-type="supporting">Demo mirror. It shows what the glasses say.</p>
+                    <ul class="mirror-captions-list" id="pr7-mirror-captions"></ul>
+                  </div>
+                  <div class="mirror-preview-cart">
+                    <h3 class="astryx-heading" data-level="2">Cart</h3>
+                    <ul class="mirror-cart-list" id="pr7-mirror-cart"></ul>
+                    <div class="mirror-total-row">
+                      <span>Total</span>
+                      <span id="pr7-mirror-total">6.40 EUR</span>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <button type="button" class="clean-hint" id="clean-hint" hidden>Show Controls (H)</button>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

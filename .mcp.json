@@ -3,6 +3,10 @@
     "wearables-dat": {
       "type": "http",
       "url": "https://mcp.developer.meta.com/wearables"
+    },
+    "raylight": {
+      "type": "http",
+      "url": "https://api.raylight.app/mcp"
     }
   }
 }
