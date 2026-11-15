@@ -46,9 +46,11 @@ async function run(url, viewport, shots, scheme) {
 }
 
 const phone = { width: 390, height: 844, deviceScaleFactor: 3 };
+// ONLY=phone, ONLY=kiosk, or ONLY=hud takes one group of captures; with no ONLY, each group runs.
+const want = (group) => !process.env.ONLY || process.env.ONLY === group;
 
 // The recorded shop of the phone app (apps/mobile/ui/src/debug/demoRun.ts): start, product prompt, added, pay prompt, paid.
-await (await run(`${PHONE}/?replay=1&ready=1`, phone, [
+if (want('phone')) await (await run(`${PHONE}/?replay=1&ready=1`, phone, [
   ['Nod to add.', 'phone-prompt'],
   ['Added oat drink.', 'phone-added'],
   ['Checkout 3 at Demo Market', 'phone-checkout'],
@@ -56,7 +58,7 @@ await (await run(`${PHONE}/?replay=1&ready=1`, phone, [
 ])).close();
 
 // The settings: the inputs of the head and the time to answer.
-{
+if (want('phone')) {
   const page = await open(`${PHONE}/?replay=1&ready=1`, phone);
   await sleep(1500);
   await page.click('button[aria-label="Settings"]');
@@ -77,17 +79,29 @@ await (await run(`${PHONE}/?replay=1&ready=1`, phone, [
 }
 
 // The setup screen: the glasses link through the Meta AI app, then the camera and the notifications.
-await (await run(`${PHONE}/`, phone, [['Link glasses', 'phone-setup']])).close();
+if (want('phone')) await (await run(`${PHONE}/`, phone, [['Link glasses', 'phone-setup']])).close();
 
 // The kiosk page (apps/website/src/kiosk/kioskRun.ts): waiting for the nod, paid, then the idle code.
-await (await run(`${KIOSK}/kiosk?replay=1`, { width: 1920, height: 1080, deviceScaleFactor: 1 }, [
-  ['Waiting for your nod', 'kiosk-connected'],
-  ['No money moved', 'kiosk-paid'],
-  ['Look at this code to pay', 'kiosk-idle'],
-])).close();
+if (want('kiosk')) {
+  await (await run(`${KIOSK}/kiosk?replay=1`, { width: 1920, height: 1080, deviceScaleFactor: 1 }, [
+    ['Waiting for your nod', 'kiosk-connected'],
+    ['No money moved', 'kiosk-paid'],
+    ['Look at this code to pay', 'kiosk-idle'],
+  ])).close();
+  // The paid state without its demo note: the page lays out the rest again, so nothing looks cut.
+  const page = await open(`${KIOSK}/kiosk?replay=1`, { width: 1920, height: 1080, deviceScaleFactor: 1 });
+  await page.waitForFunction(() => document.body.innerText.includes('No money moved'), { timeout: 40000 });
+  await page.evaluate(() => {
+    const note = [...document.querySelectorAll('*')].find((node) => node.childElementCount === 0 && node.textContent?.trim() === 'Demo payment. No money moved.');
+    if (note) note.style.display = 'none';
+  });
+  await sleep(300);
+  await page.screenshot({ path: `${outDir}kiosk-paid-clean.png` });
+  await page.close();
+}
 
 // The Display HUD mockup, on the 600 x 600 screen of Meta Ray-Ban Display.
-await (await run(`${HUD}/`, { width: 600, height: 600, deviceScaleFactor: 2 }, [['Add to cart?', 'hud-prompt']], 'dark')).close();
+if (want('hud')) await (await run(`${HUD}/`, { width: 600, height: 600, deviceScaleFactor: 2 }, [['Add to cart?', 'hud-prompt']], 'dark')).close();
 
 await browser.close();
 console.log(`wrote the captures into ${outDir}`);
